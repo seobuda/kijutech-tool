@@ -2,6 +2,7 @@ import { checkoutAction } from '@/lib/payments/actions';
 import { Check } from 'lucide-react';
 import { getStripePrices, getStripeProducts } from '@/lib/payments/stripe';
 import { SubmitButton } from './submit-button';
+export const dynamic = 'force-dynamic';
 
 // Prices are fresh for one hour max
 export const revalidate = 3600;

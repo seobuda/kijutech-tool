@@ -1,0 +1,21 @@
+FROM node:24-alpine
+
+RUN apk add --no-cache libc6-compat
+
+WORKDIR /app
+
+RUN npm install -g pnpm
+
+COPY package.json pnpm-lock.yaml ./
+
+RUN pnpm install --ignore-scripts
+RUN pnpm approve-builds --yes || true
+RUN pnpm rebuild
+
+COPY . .
+
+RUN pnpm build
+
+EXPOSE 3000
+
+CMD ["pnpm", "start"]

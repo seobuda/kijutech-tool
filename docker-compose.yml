@@ -1,0 +1,35 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: kijutech_db
+    environment:
+      POSTGRES_USER: kijutech
+      POSTGRES_PASSWORD: kijutech2024
+      POSTGRES_DB: kijutech_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - kijutech_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kijutech -d kijutech_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: kijutech_app
+    ports:
+      - "3000:3000"
+    environment:
+      POSTGRES_URL: postgresql://kijutech:kijutech2024@postgres:5432/kijutech_db
+      AUTH_SECRET: super-secret-key-local-development-only-change-in-production
+      BASE_URL: http://localhost:3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  kijutech_pgdata:
