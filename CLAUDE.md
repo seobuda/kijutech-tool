@@ -76,19 +76,19 @@ Completado:
 
 \- ✅ Auth verificada de extremo a extremo (registro, hash bcrypt, sesión JWT, panel protegido)
 
+\- ✅ Esquema núcleo añadido de forma aditiva: tablas `tenants`, `roles`, `user\_roles`, `projects`, más `users.tenant\_id` (`teams`/`team\_members` se mantienen intactas sin usar, pendientes de limpieza en una migración futura)
 
+\- ✅ Tenant "Kijutech" creado, con los 4 roles fijos del sistema (`super\_admin`/`admin`/`editor`/`lector`); `team\_members` migrado a `user\_roles`
 
-Pendiente (orden de trabajo):
-
-1\. Renombrar `teams` → `tenants` y `team\_members` → `user\_roles` en una migración de Drizzle, añadiendo las columnas que falten para el esquema completo del núcleo
-
-2\. Crear a mano el primer tenant "Kijutech"
-
-3\. Construir la pantalla de lista de proyectos + botón "nuevo proyecto"
+\- ✅ Pantalla de lista de proyectos + botón "nuevo proyecto" (`/dashboard/projects`)
 
 
 
-No construyas nada fuera de esta lista sin confirmarlo antes — es fácil derivar hacia "mejorar" cosas que no tocan en esta fase.
+Pendiente: sin próximos pasos definidos todavía — pregúntale a Enric antes de asumir el siguiente bloque de trabajo de la Fase A.
+
+
+
+No construyas nada fuera de lo que se confirme explícitamente — es fácil derivar hacia "mejorar" cosas que no tocan en esta fase.
 
 
 
