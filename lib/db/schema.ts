@@ -6,6 +6,8 @@ import {
   text,
   timestamp,
   integer,
+  boolean,
+  unique,
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
@@ -52,6 +54,29 @@ export const projects = pgTable('projects', {
     .notNull()
     .references(() => users.id),
 });
+
+export const modules = pgTable('modules', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  key: varchar('key', { length: 50 }).notNull().unique(),
+  name: varchar('name', { length: 100 }).notNull(),
+  version: varchar('version', { length: 20 }),
+  active: boolean('active').notNull().default(true),
+});
+
+export const projectModules = pgTable(
+  'project_modules',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id),
+    moduleKey: varchar('module_key', { length: 50 })
+      .notNull()
+      .references(() => modules.key),
+    activatedAt: timestamp('activated_at').notNull().defaultNow(),
+  },
+  (table) => [unique().on(table.projectId, table.moduleKey)]
+);
 
 export const userRoles = pgTable('user_roles', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -148,6 +173,22 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
     references: [users.id],
   }),
   userRoles: many(userRoles),
+  projectModules: many(projectModules),
+}));
+
+export const modulesRelations = relations(modules, ({ many }) => ({
+  projectModules: many(projectModules),
+}));
+
+export const projectModulesRelations = relations(projectModules, ({ one }) => ({
+  project: one(projects, {
+    fields: [projectModules.projectId],
+    references: [projects.id],
+  }),
+  module: one(modules, {
+    fields: [projectModules.moduleKey],
+    references: [modules.key],
+  }),
 }));
 
 export const userRolesRelations = relations(userRoles, ({ one }) => ({
@@ -216,6 +257,10 @@ export type Project = typeof projects.$inferSelect;
 export type NewProject = typeof projects.$inferInsert;
 export type UserRole = typeof userRoles.$inferSelect;
 export type NewUserRole = typeof userRoles.$inferInsert;
+export type Module = typeof modules.$inferSelect;
+export type NewModule = typeof modules.$inferInsert;
+export type ProjectModule = typeof projectModules.$inferSelect;
+export type NewProjectModule = typeof projectModules.$inferInsert;
 export type TeamDataWithMembers = Team & {
   teamMembers: (TeamMember & {
     user: Pick<User, 'id' | 'name' | 'email'>;

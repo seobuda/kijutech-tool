@@ -15,6 +15,13 @@
       "when": 1786827995395,
       "tag": "0001_handy_naoko",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786835685909,
+      "tag": "0002_common_sasquatch",
+      "breakpoints": true
     }
   ]
 }
