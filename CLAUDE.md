@@ -102,3 +102,41 @@ No construyas nada fuera de esta lista sin confirmarlo antes — es fácil deriv
 
 \- No rompas lo que ya funciona: la auth end-to-end verificada es la base de todo lo demás
 
+
+
+\## Reglas de autonomía (cuándo pedir aprobación y cuándo no)
+
+
+
+A partir de la migración del esquema del núcleo (2026-08-16), el flujo de trabajo se relaja para tareas de bajo riesgo. La regla:
+
+
+
+\*\*Puede trabajar en modo automático (auto mode), sin pedir aprobación paso a paso:\*\*
+
+\- Crear componentes React, rutas nuevas, formularios
+
+\- Estilos, maquetación, ajustes visuales
+
+\- Cualquier cosa que no toque una tabla existente ni datos ya guardados en producción
+
+
+
+\*\*Debe pedir aprobación explícita SIEMPRE, sin excepción, antes de:\*\*
+
+\- Tocar `lib/db/schema.ts` o generar/aplicar cualquier migración de Drizzle
+
+\- Modificar cualquier archivo dentro de `app/(login)/` o `lib/auth/` (todo lo relacionado con login y sesión)
+
+\- Hacer `git push` a `origin main` (el commit local sí puede hacerlo sin preguntar, pero el push siempre se confirma)
+
+\- Modificar `docker-compose.yml` o `Dockerfile.dev`
+
+\- Borrar cualquier dato, tabla o archivo existente
+
+\- Instalar una dependencia nueva (`pnpm add`)
+
+
+
+Si tienes dudas sobre si una tarea entra en la segunda lista, pregunta antes de actuar — es preferible una pregunta de más que un cambio no revisado en algo crítico.
+
