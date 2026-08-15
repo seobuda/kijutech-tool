@@ -42,3 +42,6 @@ postgres_data/
 
 # pnpm
 .pnpm-store/
+
+# backups locales
+backup_*.sql
