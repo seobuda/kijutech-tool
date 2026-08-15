@@ -140,3 +140,39 @@ A partir de la migración del esquema del núcleo (2026-08-16), el flujo de trab
 
 Si tienes dudas sobre si una tarea entra en la segunda lista, pregunta antes de actuar — es preferible una pregunta de más que un cambio no revisado en algo crítico.
 
+
+
+\## Backup obligatorio antes de migrar un módulo nuevo
+
+
+
+Regla permanente, no solo para el módulo SEO: antes de aplicar cualquier migración de Drizzle que introduzca las tablas de un módulo nuevo, son obligatorios estos dos pasos:
+
+
+
+\- \*\*Backup de Postgres con `pg\_dump`\*\*, ejecutado dentro del contenedor y volcado al host (el contenedor `kijutech\_db` no tiene bind mount al repo, así que hay que redirigir la salida, no dejarla dentro del contenedor):
+
+
+
+  ```
+
+  docker exec kijutech\_db pg\_dump -U kijutech -d kijutech\_db > backups/backup\_pre\_<modulo>\_<fecha>.sql
+
+  ```
+
+
+
+  (`<modulo>` = nombre del módulo, ej. `seo`; `<fecha>` = fecha en formato `YYYYMMDD`, ej. `20260816`). La carpeta `backups/` no está versionada — `.gitignore` ya excluye `backup\_\*.sql`, no hace falta tocar la configuración.
+
+
+
+  Para restaurar si algo sale mal: `docker exec -i kijutech\_db psql -U kijutech -d kijutech\_db < backups/backup\_pre\_<modulo>\_<fecha>.sql` (sobre una BD limpia — el dump no usa `IF NOT EXISTS`).
+
+
+
+\- \*\*Rama de Git separada\*\* para el trabajo del módulo (ej. `feature/fase-b-seo`), nunca migrar directamente sobre `main`.
+
+
+
+Estos dos pasos van antes del `docker exec kijutech\_app pnpm db:migrate` de la sección de Docker de arriba, no lo sustituyen.
+
