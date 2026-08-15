@@ -9,6 +9,7 @@ import {
   teams,
   teamMembers,
   activityLogs,
+  tenants,
   type NewUser,
   type NewTeam,
   type NewTeamMember,
@@ -125,7 +126,22 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
 
   const passwordHash = await hashPassword(password);
 
+  const [kijutechTenant] = await db
+    .select()
+    .from(tenants)
+    .where(eq(tenants.slug, 'kijutech'))
+    .limit(1);
+
+  if (!kijutechTenant) {
+    return {
+      error: 'Failed to create user. Please try again.',
+      email,
+      password
+    };
+  }
+
   const newUser: NewUser = {
+    tenantId: kijutechTenant.id,
     email,
     passwordHash,
     role: 'owner' // Default role, will be overridden if there's an invitation

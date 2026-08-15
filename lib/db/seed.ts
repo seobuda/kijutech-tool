@@ -1,6 +1,7 @@
+import { eq } from 'drizzle-orm';
 import { stripe } from '../payments/stripe';
 import { db } from './drizzle';
-import { users, teams, teamMembers } from './schema';
+import { users, teams, teamMembers, tenants } from './schema';
 import { hashPassword } from '@/lib/auth/session';
 
 async function createStripeProducts() {
@@ -44,10 +45,26 @@ async function seed() {
   const password = 'admin123';
   const passwordHash = await hashPassword(password);
 
+  const [existingTenant] = await db
+    .select()
+    .from(tenants)
+    .where(eq(tenants.slug, 'kijutech'))
+    .limit(1);
+
+  const tenant =
+    existingTenant ??
+    (
+      await db
+        .insert(tenants)
+        .values({ name: 'Kijutech', slug: 'kijutech' })
+        .returning()
+    )[0];
+
   const [user] = await db
     .insert(users)
     .values([
       {
+        tenantId: tenant.id,
         email: email,
         passwordHash: passwordHash,
         role: "owner",
