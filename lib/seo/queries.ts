@@ -1,6 +1,12 @@
 import { asc, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { seoKnowledgeCards, type SeoKnowledgeCard } from '@/lib/db/schema';
+import {
+  seoAuditFindings,
+  seoKickoffAnswers,
+  seoKnowledgeCards,
+  seoStageProgress,
+  type SeoKnowledgeCard
+} from '@/lib/db/schema';
 
 export async function getKnowledgeCardsByStage() {
   const cards = await db
@@ -27,4 +33,25 @@ export async function getKnowledgeCardById(id: string) {
     .limit(1);
 
   return card ?? null;
+}
+
+export async function getStageProgress(projectId: string) {
+  return db
+    .select()
+    .from(seoStageProgress)
+    .where(eq(seoStageProgress.projectId, projectId));
+}
+
+export async function getKickoffAnswers(projectId: string) {
+  return db
+    .select()
+    .from(seoKickoffAnswers)
+    .where(eq(seoKickoffAnswers.projectId, projectId));
+}
+
+export async function getAuditFindings(projectId: string) {
+  return db
+    .select()
+    .from(seoAuditFindings)
+    .where(eq(seoAuditFindings.projectId, projectId));
 }

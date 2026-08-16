@@ -29,6 +29,13 @@
       "when": 1786838886782,
       "tag": "0003_peaceful_archangel",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1786840419992,
+      "tag": "0004_perpetual_norrin_radd",
+      "breakpoints": true
     }
   ]
 }

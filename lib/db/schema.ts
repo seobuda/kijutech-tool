@@ -115,19 +115,23 @@ export const seoKickoffAnswers = pgTable(
   (table) => [unique().on(table.projectId, table.questionKey)]
 );
 
-export const seoAuditFindings = pgTable('seo_audit_findings', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  projectId: uuid('project_id')
-    .notNull()
-    .references(() => projects.id, { onDelete: 'cascade' }),
-  area: varchar('area', { length: 100 }).notNull(),
-  checkPoint: varchar('check_point', { length: 100 }).notNull(),
-  status: varchar('status', { length: 20 }).notNull(),
-  finding: text('finding'),
-  priority: varchar('priority', { length: 20 }),
-  recommendedAction: text('recommended_action'),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-});
+export const seoAuditFindings = pgTable(
+  'seo_audit_findings',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    area: varchar('area', { length: 100 }).notNull(),
+    checkPoint: varchar('check_point', { length: 100 }).notNull(),
+    status: varchar('status', { length: 20 }),
+    finding: text('finding'),
+    priority: varchar('priority', { length: 20 }),
+    recommendedAction: text('recommended_action'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [unique().on(table.projectId, table.area, table.checkPoint)]
+);
 
 export const userRoles = pgTable('user_roles', {
   id: uuid('id').primaryKey().defaultRandom(),
