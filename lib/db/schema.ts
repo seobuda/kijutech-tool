@@ -133,6 +133,20 @@ export const seoAuditFindings = pgTable(
   (table) => [unique().on(table.projectId, table.area, table.checkPoint)]
 );
 
+export const seoOnboardingChecklist = pgTable(
+  'seo_onboarding_checklist',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    itemKey: varchar('item_key', { length: 50 }).notNull(),
+    checked: boolean('checked').notNull().default(false),
+    checkedAt: timestamp('checked_at'),
+  },
+  (table) => [unique().on(table.projectId, table.itemKey)]
+);
+
 export const userRoles = pgTable('user_roles', {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: integer('user_id')
@@ -232,6 +246,7 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
   seoStageProgress: many(seoStageProgress),
   seoKickoffAnswers: many(seoKickoffAnswers),
   seoAuditFindings: many(seoAuditFindings),
+  seoOnboardingChecklist: many(seoOnboardingChecklist),
 }));
 
 export const modulesRelations = relations(modules, ({ many }) => ({
@@ -269,6 +284,16 @@ export const seoAuditFindingsRelations = relations(seoAuditFindings, ({ one }) =
     references: [projects.id],
   }),
 }));
+
+export const seoOnboardingChecklistRelations = relations(
+  seoOnboardingChecklist,
+  ({ one }) => ({
+    project: one(projects, {
+      fields: [seoOnboardingChecklist.projectId],
+      references: [projects.id],
+    }),
+  })
+);
 
 export const userRolesRelations = relations(userRoles, ({ one }) => ({
   user: one(users, {
@@ -348,6 +373,8 @@ export type SeoKickoffAnswer = typeof seoKickoffAnswers.$inferSelect;
 export type NewSeoKickoffAnswer = typeof seoKickoffAnswers.$inferInsert;
 export type SeoAuditFinding = typeof seoAuditFindings.$inferSelect;
 export type NewSeoAuditFinding = typeof seoAuditFindings.$inferInsert;
+export type SeoOnboardingChecklistItem = typeof seoOnboardingChecklist.$inferSelect;
+export type NewSeoOnboardingChecklistItem = typeof seoOnboardingChecklist.$inferInsert;
 export type TeamDataWithMembers = Team & {
   teamMembers: (TeamMember & {
     user: Pick<User, 'id' | 'name' | 'email'>;

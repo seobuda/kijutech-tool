@@ -4,6 +4,7 @@ import {
   seoAuditFindings,
   seoKickoffAnswers,
   seoKnowledgeCards,
+  seoOnboardingChecklist,
   seoStageProgress,
   type SeoKnowledgeCard
 } from '@/lib/db/schema';
@@ -54,4 +55,11 @@ export async function getAuditFindings(projectId: string) {
     .select()
     .from(seoAuditFindings)
     .where(eq(seoAuditFindings.projectId, projectId));
+}
+
+export async function getOnboardingChecklist(projectId: string) {
+  return db
+    .select()
+    .from(seoOnboardingChecklist)
+    .where(eq(seoOnboardingChecklist.projectId, projectId));
 }

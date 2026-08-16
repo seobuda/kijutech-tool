@@ -6,6 +6,7 @@ import {
   projects,
   seoAuditFindings,
   seoKickoffAnswers,
+  seoOnboardingChecklist,
   seoStageProgress
 } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
@@ -135,4 +136,28 @@ export async function ensureStageInProgress(projectId: string, stageKey: string)
   if (!current || current.status === 'pending') {
     await markStageInProgress(projectId, stageKey);
   }
+}
+
+export async function toggleOnboardingChecklistItem(
+  projectId: string,
+  itemKey: string,
+  checked: boolean
+) {
+  await assertUserInProjectTenant(projectId);
+
+  await db
+    .insert(seoOnboardingChecklist)
+    .values({
+      projectId,
+      itemKey,
+      checked,
+      checkedAt: checked ? new Date() : null
+    })
+    .onConflictDoUpdate({
+      target: [seoOnboardingChecklist.projectId, seoOnboardingChecklist.itemKey],
+      set: {
+        checked,
+        checkedAt: checked ? new Date() : null
+      }
+    });
 }
