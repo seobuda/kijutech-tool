@@ -1,6 +1,14 @@
 import { desc, and, eq, isNull } from 'drizzle-orm';
 import { db } from './drizzle';
-import { activityLogs, projects, teamMembers, teams, users } from './schema';
+import {
+  activityLogs,
+  projects,
+  roles,
+  teamMembers,
+  teams,
+  userRoles,
+  users
+} from './schema';
 import { cookies } from 'next/headers';
 import { verifyToken } from '@/lib/auth/session';
 
@@ -110,6 +118,16 @@ export async function getProjectsForUser() {
     .from(projects)
     .where(eq(projects.tenantId, user.tenantId))
     .orderBy(desc(projects.createdAt));
+}
+
+export async function getUserTenantRoleNames(userId: number) {
+  const result = await db
+    .select({ name: roles.name })
+    .from(userRoles)
+    .innerJoin(roles, eq(userRoles.roleId, roles.id))
+    .where(and(eq(userRoles.userId, userId), isNull(userRoles.projectId)));
+
+  return result.map((r) => r.name);
 }
 
 export async function getTeamForUser() {
