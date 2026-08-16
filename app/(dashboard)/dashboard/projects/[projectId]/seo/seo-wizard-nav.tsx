@@ -21,6 +21,7 @@ const fetcher = (url: string) => fetch(url).then((res) => res.json());
 type StageProgressRow = {
   stageKey: string;
   status: string;
+  createdAt: string | Date;
   completedAt: string | Date | null;
 };
 
@@ -97,7 +98,7 @@ export function SeoWizardNav({ projectId, stages, initialProgress }: Props) {
                 <span>{stage.name}</span>
               </div>
             </Link>
-            {status === 'completed' && stageProgress?.completedAt && (
+            {stageProgress && status !== 'pending' && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
@@ -105,11 +106,16 @@ export function SeoWizardNav({ projectId, stages, initialProgress }: Props) {
                     className="mr-3 shrink-0 text-muted-foreground hover:text-foreground"
                   >
                     <Info className="h-3.5 w-3.5" />
-                    <span className="sr-only">Fecha de completado</span>
+                    <span className="sr-only">Fechas de la etapa</span>
                   </button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  Completada el {formatCompletedAt(stageProgress.completedAt)}
+                  <p>Iniciada el {formatCompletedAt(stageProgress.createdAt)}</p>
+                  {status === 'completed' && stageProgress.completedAt && (
+                    <p>
+                      Completada el {formatCompletedAt(stageProgress.completedAt)}
+                    </p>
+                  )}
                 </TooltipContent>
               </Tooltip>
             )}

@@ -87,6 +87,7 @@ export const seoStageProgress = pgTable(
       .references(() => projects.id, { onDelete: 'cascade' }),
     stageKey: varchar('stage_key', { length: 50 }).notNull(),
     status: varchar('status', { length: 20 }).notNull().default('pending'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
     completedAt: timestamp('completed_at'),
   },
   (table) => [unique().on(table.projectId, table.stageKey)]

@@ -60,12 +60,17 @@ export function OnboardingChecklist({ projectId, initialChecklist }: Props) {
   }
 
   function handleComplete() {
+    if (!allChecked) {
+      return;
+    }
     startTransition(async () => {
       await markStageComplete(projectId, 'onboarding');
       mutate(seoProgressSwrKey(projectId));
       setCompleted(true);
     });
   }
+
+  const allChecked = CHECKLIST_ITEMS.every((item) => checked[item.itemKey]);
 
   return (
     <Card>
@@ -91,7 +96,7 @@ export function OnboardingChecklist({ projectId, initialChecklist }: Props) {
         </ul>
         <Button
           onClick={handleComplete}
-          disabled={isPending}
+          disabled={isPending || !allChecked}
           className="bg-orange-500 hover:bg-orange-600 text-white"
         >
           {completed ? (
@@ -103,6 +108,11 @@ export function OnboardingChecklist({ projectId, initialChecklist }: Props) {
             'Marcar etapa como completada'
           )}
         </Button>
+        {!allChecked && (
+          <p className="text-sm text-muted-foreground mt-2">
+            Marca todos los ítems de la checklist para poder completar la etapa.
+          </p>
+        )}
       </CardContent>
     </Card>
   );

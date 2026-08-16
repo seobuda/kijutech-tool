@@ -43,6 +43,13 @@
       "when": 1786870801112,
       "tag": "0005_messy_exiles",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1786871732311,
+      "tag": "0006_rainy_vapor",
+      "breakpoints": true
     }
   ]
 }
