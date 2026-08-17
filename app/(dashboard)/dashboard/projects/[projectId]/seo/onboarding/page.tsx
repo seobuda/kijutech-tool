@@ -1,5 +1,5 @@
 import { getKnowledgeCardsByStage, getOnboardingChecklist, getStageProgress } from '@/lib/seo/queries';
-import { ensureStageInProgress } from '@/lib/seo/actions';
+import { ensureOnboardingInitialized } from '@/lib/seo/actions';
 import { SeoStageLayout } from '../seo-stage-layout';
 import { OnboardingChecklist } from './onboarding-checklist';
 
@@ -9,7 +9,7 @@ export default async function OnboardingStagePage({
   params: Promise<{ projectId: string }>;
 }) {
   const { projectId } = await params;
-  await ensureStageInProgress(projectId, 'onboarding');
+  await ensureOnboardingInitialized(projectId);
 
   const cardsByStage = await getKnowledgeCardsByStage();
   const cards = cardsByStage['onboarding'] ?? [];

@@ -9,21 +9,30 @@ import { Loader2, CheckCircle2, X } from 'lucide-react';
 import {
   addCustomChecklistItem,
   markStageComplete,
-  removeCustomChecklistItem,
+  removeChecklistItem,
   resetOnboardingStage,
   toggleOnboardingChecklistItem
 } from '@/lib/seo/actions';
 import { seoProgressSwrKey } from '@/lib/seo/client-keys';
-import { ONBOARDING_CHECKLIST_ITEMS as CHECKLIST_ITEMS } from '@/lib/seo/onboarding-checklist-items';
+import { ONBOARDING_CHECKLIST_ITEMS } from '@/lib/seo/onboarding-checklist-items';
 import { useSeoAssistantFocus } from '../seo-assistant-context';
 import type { SeoOnboardingChecklistItem } from '@/lib/db/schema';
 
-function labelFromItemKey(itemKey: string) {
-  return itemKey
-    .split('_')
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ');
+const FIXED_LABELS: Record<string, string> = Object.fromEntries(
+  ONBOARDING_CHECKLIST_ITEMS.map((item) => [item.itemKey, item.label])
+);
+
+function labelForItem(itemKey: string) {
+  return (
+    FIXED_LABELS[itemKey] ??
+    itemKey
+      .split('_')
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ')
+  );
 }
+
+type ChecklistItemState = { itemKey: string; checked: boolean };
 
 type Props = {
   projectId: string;
@@ -38,21 +47,11 @@ export function OnboardingChecklist({
 }: Props) {
   const setFocusedKey = useSeoAssistantFocus();
 
-  const initialMap = Object.fromEntries(
-    initialChecklist.map((item) => [item.itemKey, item.checked])
-  );
-  const [checked, setChecked] = useState<Record<string, boolean>>(
-    Object.fromEntries(
-      CHECKLIST_ITEMS.map((item) => [
-        item.itemKey,
-        initialMap[item.itemKey] ?? false
-      ])
-    )
-  );
-  const [customItems, setCustomItems] = useState(
-    initialChecklist
-      .filter((item) => item.isCustom)
-      .map((item) => ({ itemKey: item.itemKey, checked: item.checked }))
+  const [items, setItems] = useState<ChecklistItemState[]>(
+    initialChecklist.map((item) => ({
+      itemKey: item.itemKey,
+      checked: item.checked
+    }))
   );
   const [newToolLabel, setNewToolLabel] = useState('');
   const [savingKey, setSavingKey] = useState<string | null>(null);
@@ -61,19 +60,9 @@ export function OnboardingChecklist({
   const [localStatus, setLocalStatus] = useState(stageStatus);
 
   function toggle(itemKey: string) {
-    const newValue = !checked[itemKey];
-    setChecked((prev) => ({ ...prev, [itemKey]: newValue }));
-    setSavingKey(itemKey);
-    startTransition(async () => {
-      await toggleOnboardingChecklistItem(projectId, itemKey, newValue);
-      setSavingKey(null);
-    });
-  }
-
-  function toggleCustom(itemKey: string) {
-    const current = customItems.find((item) => item.itemKey === itemKey);
+    const current = items.find((item) => item.itemKey === itemKey);
     const newValue = !current?.checked;
-    setCustomItems((prev) =>
+    setItems((prev) =>
       prev.map((item) =>
         item.itemKey === itemKey ? { ...item, checked: newValue } : item
       )
@@ -91,24 +80,21 @@ export function OnboardingChecklist({
       return;
     }
     const itemKey = label.toLowerCase().replace(/\s+/g, '_');
-    const alreadyExists =
-      CHECKLIST_ITEMS.some((item) => item.itemKey === itemKey) ||
-      customItems.some((item) => item.itemKey === itemKey);
-    if (alreadyExists) {
+    if (items.some((item) => item.itemKey === itemKey)) {
       setNewToolLabel('');
       return;
     }
-    setCustomItems((prev) => [...prev, { itemKey, checked: false }]);
+    setItems((prev) => [...prev, { itemKey, checked: false }]);
     setNewToolLabel('');
     startTransition(async () => {
       await addCustomChecklistItem(projectId, label);
     });
   }
 
-  function handleRemoveCustom(itemKey: string) {
-    setCustomItems((prev) => prev.filter((item) => item.itemKey !== itemKey));
+  function handleRemove(itemKey: string) {
+    setItems((prev) => prev.filter((item) => item.itemKey !== itemKey));
     startTransition(async () => {
-      await removeCustomChecklistItem(projectId, itemKey);
+      await removeChecklistItem(projectId, itemKey);
     });
   }
 
@@ -133,20 +119,14 @@ export function OnboardingChecklist({
     setIsResetting(true);
     startTransition(async () => {
       await resetOnboardingStage(projectId);
-      setChecked(
-        Object.fromEntries(CHECKLIST_ITEMS.map((item) => [item.itemKey, false]))
-      );
-      setCustomItems((prev) => prev.map((item) => ({ ...item, checked: false })));
+      setItems((prev) => prev.map((item) => ({ ...item, checked: false })));
       setLocalStatus('pending');
       mutate(seoProgressSwrKey(projectId));
       setIsResetting(false);
     });
   }
 
-  const allChecked =
-    CHECKLIST_ITEMS.every((item) => checked[item.itemKey]) &&
-    customItems.every((item) => item.checked);
-
+  const allChecked = items.length > 0 && items.every((item) => item.checked);
   const canReset = localStatus === 'completed' || localStatus === 'in_progress';
 
   return (
@@ -155,48 +135,38 @@ export function OnboardingChecklist({
         <CardTitle>Checklist de herramientas</CardTitle>
       </CardHeader>
       <CardContent>
-        <ul className="space-y-2 mb-4">
-          {CHECKLIST_ITEMS.map((item) => (
-            <li key={item.itemKey} className="flex items-center space-x-2">
-              <input
-                type="checkbox"
-                checked={checked[item.itemKey] ?? false}
-                onChange={() => toggle(item.itemKey)}
-                onFocus={() => setFocusedKey(item.itemKey)}
-                onBlur={() => setFocusedKey(null)}
-                className="h-4 w-4 rounded border-input"
-              />
-              <span className="text-sm">{item.label}</span>
-              {savingKey === item.itemKey && (
-                <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
-              )}
-            </li>
-          ))}
-          {customItems.map((item) => (
-            <li key={item.itemKey} className="flex items-center space-x-2">
-              <input
-                type="checkbox"
-                checked={item.checked}
-                onChange={() => toggleCustom(item.itemKey)}
-                onFocus={() => setFocusedKey(item.itemKey)}
-                onBlur={() => setFocusedKey(null)}
-                className="h-4 w-4 rounded border-input"
-              />
-              <span className="text-sm">{labelFromItemKey(item.itemKey)}</span>
-              {savingKey === item.itemKey && (
-                <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
-              )}
-              <button
-                type="button"
-                onClick={() => handleRemoveCustom(item.itemKey)}
-                className="text-muted-foreground hover:text-red-600"
-                aria-label={`Eliminar ${labelFromItemKey(item.itemKey)}`}
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </li>
-          ))}
-        </ul>
+        {items.length > 0 ? (
+          <ul className="space-y-2 mb-4">
+            {items.map((item) => (
+              <li key={item.itemKey} className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  checked={item.checked}
+                  onChange={() => toggle(item.itemKey)}
+                  onFocus={() => setFocusedKey(item.itemKey)}
+                  onBlur={() => setFocusedKey(null)}
+                  className="h-4 w-4 rounded border-input"
+                />
+                <span className="text-sm">{labelForItem(item.itemKey)}</span>
+                {savingKey === item.itemKey && (
+                  <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                )}
+                <button
+                  type="button"
+                  onClick={() => handleRemove(item.itemKey)}
+                  className="text-muted-foreground hover:text-red-600"
+                  aria-label={`Eliminar ${labelForItem(item.itemKey)}`}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-muted-foreground mb-4">
+            Sin herramientas en la checklist. Añade una abajo.
+          </p>
+        )}
 
         <div className="flex items-center space-x-2 mb-6">
           <Input
@@ -244,7 +214,7 @@ export function OnboardingChecklist({
             </Button>
           )}
         </div>
-        {!allChecked && (
+        {!allChecked && items.length > 0 && (
           <p className="text-sm text-muted-foreground mt-2">
             Marca todos los ítems de la checklist para poder completar la etapa.
           </p>

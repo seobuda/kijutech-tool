@@ -11,6 +11,7 @@ import {
 } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
 import { getStageProgress } from '@/lib/seo/queries';
+import { ONBOARDING_CHECKLIST_ITEMS } from '@/lib/seo/onboarding-checklist-items';
 
 async function assertUserInProjectTenant(projectId: string) {
   const user = await getUser();
@@ -138,6 +139,31 @@ export async function ensureStageInProgress(projectId: string, stageKey: string)
   }
 }
 
+export async function ensureOnboardingInitialized(projectId: string) {
+  const progress = await getStageProgress(projectId);
+  const current = progress.find((p) => p.stageKey === 'onboarding');
+
+  if (!current) {
+    // Primera visita a Onboarding para este proyecto: siembra los items
+    // fijos una única vez. A partir de aquí, si el usuario elimina uno,
+    // no debe volver a aparecer — por eso esto no se repite en visitas
+    // posteriores ni tras un "Reiniciar etapa" (que conserva esta fila).
+    await db
+      .insert(seoOnboardingChecklist)
+      .values(
+        ONBOARDING_CHECKLIST_ITEMS.map((item) => ({
+          projectId,
+          itemKey: item.itemKey,
+          isCustom: false,
+          checked: false
+        }))
+      )
+      .onConflictDoNothing();
+  }
+
+  await ensureStageInProgress(projectId, 'onboarding');
+}
+
 export async function toggleOnboardingChecklistItem(
   projectId: string,
   itemKey: string,
@@ -196,10 +222,7 @@ export async function addCustomChecklistItem(projectId: string, label: string) {
     .onConflictDoNothing();
 }
 
-export async function removeCustomChecklistItem(
-  projectId: string,
-  itemKey: string
-) {
+export async function removeChecklistItem(projectId: string, itemKey: string) {
   await assertUserInProjectTenant(projectId);
 
   await db
@@ -207,8 +230,7 @@ export async function removeCustomChecklistItem(
     .where(
       and(
         eq(seoOnboardingChecklist.projectId, projectId),
-        eq(seoOnboardingChecklist.itemKey, itemKey),
-        eq(seoOnboardingChecklist.isCustom, true)
+        eq(seoOnboardingChecklist.itemKey, itemKey)
       )
     );
 }
