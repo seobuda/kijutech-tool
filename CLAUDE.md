@@ -232,3 +232,30 @@ Si no hay nada: "Ninguno."
 - Estos archivos se suben al proyecto de Claude (chat) para mantener
   el historial técnico accesible entre sesiones
 
+## Regla de UX mínima — pensar antes de construir
+
+Antes de construir cualquier pantalla o funcionalidad nueva, Claude Code
+debe hacerse estas preguntas y resolverlas en el diseño, sin que Enric
+tenga que pedirlo explícitamente:
+
+**Flujos básicos que toda entidad necesita:**
+- ¿Se puede crear? → botón "Nuevo/Añadir" visible
+- ¿Se puede editar? → botón "Editar" accesible desde la lista y desde el detalle
+- ¿Se puede eliminar? → botón "Eliminar" con confirmación previa
+- ¿Se puede archivar/pausar sin eliminar? → si la entidad tiene estados, debe poder cambiar de estado
+- ¿Se puede resetear? → si hay progreso o datos acumulados, debe haber forma de volver al inicio
+- ¿Se puede guardar sin completar? → guardar borrador siempre separado de "marcar como completado"
+
+**Flujos de lista:**
+- ¿Qué pasa si la lista está vacía? → estado vacío con mensaje claro y botón de acción
+- ¿Cómo vuelve el usuario a la lista desde el detalle? → breadcrumb o botón "Volver" siempre presente
+- ¿El usuario sabe dónde está? → título de página claro, navegación activa marcada
+
+**Flujos de formulario:**
+- ¿Qué pasa si el usuario cierra sin guardar? → los datos no se pierden (autoguardado) o hay aviso
+- ¿Qué campos son obligatorios y cuáles opcionales? → indicado visualmente
+- ¿Qué pasa después de guardar? → redirección clara, no pantalla en blanco
+
+**Regla general:** si un usuario puede quedarse atascado sin saber qué hacer
+a continuación, falta un botón o un mensaje. Añadirlo es parte del trabajo,
+no un extra que Enric tiene que pedir.
