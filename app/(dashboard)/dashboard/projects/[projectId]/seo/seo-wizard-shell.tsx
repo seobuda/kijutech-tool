@@ -35,10 +35,15 @@ export function SeoWizardShell({
   const pathname = usePathname();
   const [focusedKey, setFocusedKey] = useState<string | null>(null);
 
-  const currentStageKey = stages.find(
-    (stage) => pathname === `/dashboard/projects/${projectId}/seo/${stage.key}`
-  )?.key;
-  const cards = currentStageKey ? (cardsByStage[currentStageKey] ?? []) : [];
+  const currentStage = stages.find((stage) => {
+    const href = `/dashboard/projects/${projectId}/seo/${stage.path ?? stage.key}`;
+    return pathname === href || pathname.startsWith(`${href}/`);
+  });
+  // Keyword Research tiene su propio nav de sub-pasos + asistente anidado
+  // (ver keyword-research/kw-wizard-shell.tsx) — el asistente de aquí se
+  // oculta para no duplicarlo.
+  const hasOwnNestedAssistant = currentStage?.key === 'keyword_research';
+  const cards = currentStage ? (cardsByStage[currentStage.key] ?? []) : [];
 
   return (
     <SeoAssistantContext.Provider value={{ setFocusedKey }}>
@@ -49,7 +54,9 @@ export function SeoWizardShell({
             stages={stages}
             initialProgress={initialProgress}
           />
-          <SeoAssistantPanel cards={cards} focusedKey={focusedKey} tutorUrl={tutorUrl} />
+          {!hasOwnNestedAssistant && (
+            <SeoAssistantPanel cards={cards} focusedKey={focusedKey} tutorUrl={tutorUrl} />
+          )}
         </div>
         <div className="flex-1 min-w-0">{children}</div>
       </div>

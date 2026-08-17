@@ -14,7 +14,7 @@ import { seoProgressSwrKey } from '@/lib/seo/client-keys';
 import { formatCompletedAt } from '@/lib/seo/format';
 import type { SeoManifestStage } from '@/lib/seo/manifest';
 
-const FUNCTIONAL_STAGES = ['onboarding', 'kickoff', 'audit'];
+const FUNCTIONAL_STAGES = ['onboarding', 'kickoff', 'audit', 'keyword_research'];
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -52,8 +52,8 @@ export function SeoWizardNav({ projectId, stages, initialProgress }: Props) {
         const isFunctional = FUNCTIONAL_STAGES.includes(stage.key);
         const stageProgress = progressByStage.get(stage.key);
         const status = stageProgress?.status ?? 'pending';
-        const href = `/dashboard/projects/${projectId}/seo/${stage.key}`;
-        const isActive = pathname === href;
+        const href = `/dashboard/projects/${projectId}/seo/${stage.path ?? stage.key}`;
+        const isActive = pathname === href || pathname.startsWith(`${href}/`);
 
         const Icon =
           status === 'completed'

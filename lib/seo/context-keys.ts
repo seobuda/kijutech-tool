@@ -22,7 +22,11 @@ export const CONTEXT_KEYS_BY_STAGE: Record<string, ContextKeyOption[]> = {
       key: cp,
       label: `${AUDIT_AREA_LABELS[area]} — ${formatCheckPointLabel(cp)}`
     }))
-  )
+  ),
+  keyword_research: [
+    { key: 'target_keyword', label: 'Paso 1 — Keyword objetivo' },
+    { key: 'kw_import', label: 'Paso 2 — Importar keywords' }
+  ]
 };
 
 export function getContextKeyOptions(stageKey: string): ContextKeyOption[] {

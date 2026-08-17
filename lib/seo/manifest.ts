@@ -5,6 +5,7 @@ export type SeoManifestStage = {
   order: number;
   key: string;
   name: string;
+  path?: string;
 };
 
 export type SeoManifest = {

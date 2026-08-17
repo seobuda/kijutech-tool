@@ -159,6 +159,86 @@ export const seoOnboardingChecklist = pgTable(
   (table) => [unique().on(table.projectId, table.itemKey)]
 );
 
+export const seoKwCompetitors = pgTable('seo_kw_competitors', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  projectId: uuid('project_id')
+    .notNull()
+    .references(() => projects.id, { onDelete: 'cascade' }),
+  name: varchar('name', { length: 255 }).notNull(),
+  url: varchar('url', { length: 500 }).notNull(),
+  targetKeyword: varchar('target_keyword', { length: 255 }).notNull(),
+  position: integer('position'),
+  order: integer('order').notNull().default(0),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+export const seoKwRaw = pgTable('seo_kw_raw', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  projectId: uuid('project_id')
+    .notNull()
+    .references(() => projects.id, { onDelete: 'cascade' }),
+  keyword: varchar('keyword', { length: 255 }).notNull(),
+  monthlyVolume: integer('monthly_volume'),
+  assigned: boolean('assigned').notNull().default(false),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+export const seoKwClusters = pgTable('seo_kw_clusters', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  projectId: uuid('project_id')
+    .notNull()
+    .references(() => projects.id, { onDelete: 'cascade' }),
+  title: varchar('title', { length: 200 }).notNull(),
+  targetUrl: varchar('target_url', { length: 500 }),
+  status: varchar('status', { length: 20 }).notNull().default('pending'),
+  priority: integer('priority').notNull().default(0),
+  difficulty: varchar('difficulty', { length: 20 }),
+  clientNote: text('client_note'),
+  notes: text('notes'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+export const seoKwClusterKeywords = pgTable('seo_kw_cluster_keywords', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  clusterId: uuid('cluster_id')
+    .notNull()
+    .references(() => seoKwClusters.id, { onDelete: 'cascade' }),
+  keyword: varchar('keyword', { length: 255 }).notNull(),
+  monthlyVolume: integer('monthly_volume'),
+  difficulty: integer('difficulty'),
+  isPrimary: boolean('is_primary').notNull().default(false),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+export const seoShareTokens = pgTable('seo_share_tokens', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  projectId: uuid('project_id')
+    .notNull()
+    .unique()
+    .references(() => projects.id, { onDelete: 'cascade' }),
+  token: varchar('token', { length: 255 }).notNull().unique(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+export const seoKwProgress = pgTable(
+  'seo_kw_progress',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    step: varchar('step', { length: 20 }).notNull(),
+    status: varchar('status', { length: 20 }).notNull().default('pending'),
+    targetKeyword: varchar('target_keyword', { length: 255 }),
+    notes: text('notes'),
+    instructionsText: text('instructions_text'),
+    tutorText: text('tutor_text'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    completedAt: timestamp('completed_at'),
+  },
+  (table) => [unique().on(table.projectId, table.step)]
+);
+
 export const userRoles = pgTable('user_roles', {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: integer('user_id')
@@ -259,6 +339,10 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
   seoKickoffAnswers: many(seoKickoffAnswers),
   seoAuditFindings: many(seoAuditFindings),
   seoOnboardingChecklist: many(seoOnboardingChecklist),
+  seoKwCompetitors: many(seoKwCompetitors),
+  seoKwRaw: many(seoKwRaw),
+  seoKwClusters: many(seoKwClusters),
+  seoKwProgress: many(seoKwProgress),
 }));
 
 export const modulesRelations = relations(modules, ({ many }) => ({
@@ -293,6 +377,52 @@ export const seoKickoffAnswersRelations = relations(seoKickoffAnswers, ({ one })
 export const seoAuditFindingsRelations = relations(seoAuditFindings, ({ one }) => ({
   project: one(projects, {
     fields: [seoAuditFindings.projectId],
+    references: [projects.id],
+  }),
+}));
+
+export const seoKwCompetitorsRelations = relations(seoKwCompetitors, ({ one }) => ({
+  project: one(projects, {
+    fields: [seoKwCompetitors.projectId],
+    references: [projects.id],
+  }),
+}));
+
+export const seoKwRawRelations = relations(seoKwRaw, ({ one }) => ({
+  project: one(projects, {
+    fields: [seoKwRaw.projectId],
+    references: [projects.id],
+  }),
+}));
+
+export const seoKwClustersRelations = relations(seoKwClusters, ({ one, many }) => ({
+  project: one(projects, {
+    fields: [seoKwClusters.projectId],
+    references: [projects.id],
+  }),
+  keywords: many(seoKwClusterKeywords),
+}));
+
+export const seoKwClusterKeywordsRelations = relations(
+  seoKwClusterKeywords,
+  ({ one }) => ({
+    cluster: one(seoKwClusters, {
+      fields: [seoKwClusterKeywords.clusterId],
+      references: [seoKwClusters.id],
+    }),
+  })
+);
+
+export const seoShareTokensRelations = relations(seoShareTokens, ({ one }) => ({
+  project: one(projects, {
+    fields: [seoShareTokens.projectId],
+    references: [projects.id],
+  }),
+}));
+
+export const seoKwProgressRelations = relations(seoKwProgress, ({ one }) => ({
+  project: one(projects, {
+    fields: [seoKwProgress.projectId],
     references: [projects.id],
   }),
 }));
@@ -389,6 +519,18 @@ export type SeoOnboardingChecklistItem = typeof seoOnboardingChecklist.$inferSel
 export type NewSeoOnboardingChecklistItem = typeof seoOnboardingChecklist.$inferInsert;
 export type SeoSetting = typeof seoSettings.$inferSelect;
 export type NewSeoSetting = typeof seoSettings.$inferInsert;
+export type SeoKwCompetitor = typeof seoKwCompetitors.$inferSelect;
+export type NewSeoKwCompetitor = typeof seoKwCompetitors.$inferInsert;
+export type SeoKwRaw = typeof seoKwRaw.$inferSelect;
+export type NewSeoKwRaw = typeof seoKwRaw.$inferInsert;
+export type SeoKwCluster = typeof seoKwClusters.$inferSelect;
+export type NewSeoKwCluster = typeof seoKwClusters.$inferInsert;
+export type SeoKwClusterKeyword = typeof seoKwClusterKeywords.$inferSelect;
+export type NewSeoKwClusterKeyword = typeof seoKwClusterKeywords.$inferInsert;
+export type SeoShareToken = typeof seoShareTokens.$inferSelect;
+export type NewSeoShareToken = typeof seoShareTokens.$inferInsert;
+export type SeoKwProgress = typeof seoKwProgress.$inferSelect;
+export type NewSeoKwProgress = typeof seoKwProgress.$inferInsert;
 export type TeamDataWithMembers = Team & {
   teamMembers: (TeamMember & {
     user: Pick<User, 'id' | 'name' | 'email'>;

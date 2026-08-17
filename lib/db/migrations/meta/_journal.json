@@ -64,6 +64,13 @@
       "when": 1786982389291,
       "tag": "0008_third_puff_adder",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1787008082366,
+      "tag": "0009_burly_princess_powerful",
+      "breakpoints": true
     }
   ]
 }
