@@ -47,7 +47,7 @@ export function SeoWizardNav({ projectId, stages, initialProgress }: Props) {
   );
 
   return (
-    <nav className="w-full lg:w-64 shrink-0 space-y-1">
+    <nav className="w-full space-y-1">
       {stages.map((stage) => {
         const isFunctional = FUNCTIONAL_STAGES.includes(stage.key);
         const stageProgress = progressByStage.get(stage.key);

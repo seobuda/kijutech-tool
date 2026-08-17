@@ -4,8 +4,8 @@ import { db } from '@/lib/db/drizzle';
 import { projects } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
 import { getSeoManifest } from '@/lib/seo/manifest';
-import { getStageProgress } from '@/lib/seo/queries';
-import { SeoWizardNav } from './seo-wizard-nav';
+import { getKnowledgeCardsByStage, getStageProgress } from '@/lib/seo/queries';
+import { SeoWizardShell } from './seo-wizard-shell';
 
 export default async function SeoWizardLayout({
   children,
@@ -37,6 +37,7 @@ export default async function SeoWizardLayout({
 
   const manifest = getSeoManifest();
   const initialProgress = await getStageProgress(projectId);
+  const cardsByStage = await getKnowledgeCardsByStage();
 
   return (
     <section className="flex-1 p-4 lg:p-8">
@@ -44,14 +45,14 @@ export default async function SeoWizardLayout({
         <p className="text-sm text-muted-foreground">Proyecto</p>
         <h1 className="text-lg lg:text-2xl font-medium">{project.name}</h1>
       </div>
-      <div className="flex flex-col lg:flex-row gap-6">
-        <SeoWizardNav
-          projectId={projectId}
-          stages={manifest.stages}
-          initialProgress={initialProgress}
-        />
-        <div className="flex-1 min-w-0">{children}</div>
-      </div>
+      <SeoWizardShell
+        projectId={projectId}
+        stages={manifest.stages}
+        initialProgress={initialProgress}
+        cardsByStage={cardsByStage}
+      >
+        {children}
+      </SeoWizardShell>
     </section>
   );
 }

@@ -60,15 +60,15 @@ export function SeoAssistantPanel({ cards, focusedKey }: Props) {
   const showCarouselControls = !contextualCard && genericCards.length > 1;
 
   return (
-    <div className="flex flex-col items-center lg:sticky lg:top-6">
-      <div className="text-5xl leading-none mb-2" aria-hidden="true">
+    <div className="flex flex-col items-center border-t pt-4">
+      <div className="text-4xl leading-none mb-2" aria-hidden="true">
         🤖
       </div>
       <p className="text-sm font-medium text-muted-foreground mb-4">
         Asistente Kijutech
       </p>
 
-      <div className="relative w-full max-w-sm">
+      <div className="relative w-full">
         <div
           className={`absolute -top-2 left-8 h-4 w-4 rotate-45 border-t-2 border-l-2 ${style.border} ${style.bg}`}
           aria-hidden="true"
