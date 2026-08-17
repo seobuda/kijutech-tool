@@ -1,0 +1,2 @@
+ALTER TABLE "seo_audit_findings" ALTER COLUMN "status" DROP NOT NULL;--> statement-breakpoint
+ALTER TABLE "seo_audit_findings" ADD CONSTRAINT "seo_audit_findings_project_id_area_check_point_unique" UNIQUE("project_id","area","check_point");

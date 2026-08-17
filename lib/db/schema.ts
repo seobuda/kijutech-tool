@@ -78,6 +78,78 @@ export const projectModules = pgTable(
   (table) => [unique().on(table.projectId, table.moduleKey)]
 );
 
+export const seoStageProgress = pgTable(
+  'seo_stage_progress',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    stageKey: varchar('stage_key', { length: 50 }).notNull(),
+    status: varchar('status', { length: 20 }).notNull().default('pending'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    completedAt: timestamp('completed_at'),
+  },
+  (table) => [unique().on(table.projectId, table.stageKey)]
+);
+
+export const seoKnowledgeCards = pgTable('seo_knowledge_cards', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  stageKey: varchar('stage_key', { length: 50 }).notNull(),
+  order: integer('order').notNull(),
+  title: varchar('title', { length: 200 }).notNull(),
+  content: text('content').notNull(),
+  cardType: varchar('card_type', { length: 30 }).notNull(),
+  contextKey: varchar('context_key', { length: 100 }),
+});
+
+export const seoKickoffAnswers = pgTable(
+  'seo_kickoff_answers',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    questionKey: varchar('question_key', { length: 100 }).notNull(),
+    answer: text('answer'),
+    answeredAt: timestamp('answered_at'),
+  },
+  (table) => [unique().on(table.projectId, table.questionKey)]
+);
+
+export const seoAuditFindings = pgTable(
+  'seo_audit_findings',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    area: varchar('area', { length: 100 }).notNull(),
+    checkPoint: varchar('check_point', { length: 100 }).notNull(),
+    status: varchar('status', { length: 20 }),
+    finding: text('finding'),
+    priority: varchar('priority', { length: 20 }),
+    recommendedAction: text('recommended_action'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [unique().on(table.projectId, table.area, table.checkPoint)]
+);
+
+export const seoOnboardingChecklist = pgTable(
+  'seo_onboarding_checklist',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    itemKey: varchar('item_key', { length: 50 }).notNull(),
+    checked: boolean('checked').notNull().default(false),
+    checkedAt: timestamp('checked_at'),
+    isCustom: boolean('is_custom').notNull().default(false),
+  },
+  (table) => [unique().on(table.projectId, table.itemKey)]
+);
+
 export const userRoles = pgTable('user_roles', {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: integer('user_id')
@@ -174,6 +246,10 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
   }),
   userRoles: many(userRoles),
   projectModules: many(projectModules),
+  seoStageProgress: many(seoStageProgress),
+  seoKickoffAnswers: many(seoKickoffAnswers),
+  seoAuditFindings: many(seoAuditFindings),
+  seoOnboardingChecklist: many(seoOnboardingChecklist),
 }));
 
 export const modulesRelations = relations(modules, ({ many }) => ({
@@ -190,6 +266,37 @@ export const projectModulesRelations = relations(projectModules, ({ one }) => ({
     references: [modules.key],
   }),
 }));
+
+export const seoStageProgressRelations = relations(seoStageProgress, ({ one }) => ({
+  project: one(projects, {
+    fields: [seoStageProgress.projectId],
+    references: [projects.id],
+  }),
+}));
+
+export const seoKickoffAnswersRelations = relations(seoKickoffAnswers, ({ one }) => ({
+  project: one(projects, {
+    fields: [seoKickoffAnswers.projectId],
+    references: [projects.id],
+  }),
+}));
+
+export const seoAuditFindingsRelations = relations(seoAuditFindings, ({ one }) => ({
+  project: one(projects, {
+    fields: [seoAuditFindings.projectId],
+    references: [projects.id],
+  }),
+}));
+
+export const seoOnboardingChecklistRelations = relations(
+  seoOnboardingChecklist,
+  ({ one }) => ({
+    project: one(projects, {
+      fields: [seoOnboardingChecklist.projectId],
+      references: [projects.id],
+    }),
+  })
+);
 
 export const userRolesRelations = relations(userRoles, ({ one }) => ({
   user: one(users, {
@@ -261,6 +368,16 @@ export type Module = typeof modules.$inferSelect;
 export type NewModule = typeof modules.$inferInsert;
 export type ProjectModule = typeof projectModules.$inferSelect;
 export type NewProjectModule = typeof projectModules.$inferInsert;
+export type SeoStageProgress = typeof seoStageProgress.$inferSelect;
+export type NewSeoStageProgress = typeof seoStageProgress.$inferInsert;
+export type SeoKnowledgeCard = typeof seoKnowledgeCards.$inferSelect;
+export type NewSeoKnowledgeCard = typeof seoKnowledgeCards.$inferInsert;
+export type SeoKickoffAnswer = typeof seoKickoffAnswers.$inferSelect;
+export type NewSeoKickoffAnswer = typeof seoKickoffAnswers.$inferInsert;
+export type SeoAuditFinding = typeof seoAuditFindings.$inferSelect;
+export type NewSeoAuditFinding = typeof seoAuditFindings.$inferInsert;
+export type SeoOnboardingChecklistItem = typeof seoOnboardingChecklist.$inferSelect;
+export type NewSeoOnboardingChecklistItem = typeof seoOnboardingChecklist.$inferInsert;
 export type TeamDataWithMembers = Team & {
   teamMembers: (TeamMember & {
     user: Pick<User, 'id' | 'name' | 'email'>;

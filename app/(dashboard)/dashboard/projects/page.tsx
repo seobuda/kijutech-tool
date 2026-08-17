@@ -46,9 +46,16 @@ export default async function ProjectsPage() {
                       {project.clientName || '—'} · {project.domain || '—'}
                     </p>
                   </div>
-                  <p className="text-sm text-muted-foreground capitalize">
-                    {project.status}
-                  </p>
+                  <div className="flex items-center space-x-4">
+                    <p className="text-sm text-muted-foreground capitalize">
+                      {project.status}
+                    </p>
+                    <Link href={`/dashboard/projects/${project.id}/seo`}>
+                      <Button variant="outline" size="sm">
+                        Abrir SEO
+                      </Button>
+                    </Link>
+                  </div>
                 </li>
               ))}
             </ul>

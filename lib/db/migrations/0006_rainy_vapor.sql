@@ -1,0 +1,1 @@
+ALTER TABLE "seo_stage_progress" ADD COLUMN "created_at" timestamp DEFAULT now() NOT NULL;
