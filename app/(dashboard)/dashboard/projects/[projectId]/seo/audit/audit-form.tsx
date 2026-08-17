@@ -6,7 +6,11 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, CheckCircle2 } from 'lucide-react';
-import { saveAuditFindings, markStageComplete } from '@/lib/seo/actions';
+import {
+  saveAuditFindings,
+  markStageComplete,
+  resetAuditStage
+} from '@/lib/seo/actions';
 import { seoProgressSwrKey } from '@/lib/seo/client-keys';
 import {
   AUDIT_CHECKPOINTS,
@@ -36,12 +40,28 @@ function rowKey(area: string, checkPoint: string) {
   return `${area}:${checkPoint}`;
 }
 
+function emptyRows(): Record<string, RowState> {
+  const initial: Record<string, RowState> = {};
+  for (const [area, checkpoints] of Object.entries(AUDIT_CHECKPOINTS)) {
+    for (const cp of checkpoints) {
+      initial[rowKey(area, cp)] = {
+        status: '',
+        finding: '',
+        priority: '',
+        recommendedAction: ''
+      };
+    }
+  }
+  return initial;
+}
+
 type Props = {
   projectId: string;
   existingFindings: SeoAuditFinding[];
+  stageStatus: string;
 };
 
-export function AuditForm({ projectId, existingFindings }: Props) {
+export function AuditForm({ projectId, existingFindings, stageStatus }: Props) {
   const setFocusedKey = useSeoAssistantFocus();
   const existingMap = new Map(
     existingFindings.map((f) => [rowKey(f.area, f.checkPoint), f])
@@ -65,7 +85,8 @@ export function AuditForm({ projectId, existingFindings }: Props) {
 
   const [isPending, startTransition] = useTransition();
   const [saved, setSaved] = useState(false);
-  const [completed, setCompleted] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+  const [localStatus, setLocalStatus] = useState(stageStatus);
 
   function updateRow(
     area: string,
@@ -102,9 +123,29 @@ export function AuditForm({ projectId, existingFindings }: Props) {
     startTransition(async () => {
       await markStageComplete(projectId, 'audit');
       mutate(seoProgressSwrKey(projectId));
-      setCompleted(true);
+      setLocalStatus('completed');
     });
   }
+
+  function handleReset() {
+    const confirmed = window.confirm(
+      '¿Seguro que quieres reiniciar esta etapa? Se borrará toda la radiografía guardada.'
+    );
+    if (!confirmed) {
+      return;
+    }
+    setIsResetting(true);
+    startTransition(async () => {
+      await resetAuditStage(projectId);
+      setRows(emptyRows());
+      setSaved(false);
+      setLocalStatus('pending');
+      mutate(seoProgressSwrKey(projectId));
+      setIsResetting(false);
+    });
+  }
+
+  const canReset = localStatus === 'completed' || localStatus === 'in_progress';
 
   return (
     <div className="space-y-6">
@@ -208,7 +249,7 @@ export function AuditForm({ projectId, existingFindings }: Props) {
           disabled={isPending}
           className="bg-orange-500 hover:bg-orange-600 text-white"
         >
-          {completed ? (
+          {localStatus === 'completed' ? (
             <>
               <CheckCircle2 className="mr-2 h-4 w-4" />
               Etapa completada
@@ -217,6 +258,17 @@ export function AuditForm({ projectId, existingFindings }: Props) {
             'Marcar etapa como completada'
           )}
         </Button>
+        {canReset && (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleReset}
+            disabled={isResetting}
+          >
+            {isResetting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Reiniciar etapa
+          </Button>
+        )}
       </div>
       {saved && <p className="text-green-500 text-sm">Radiografía guardada.</p>}
     </div>

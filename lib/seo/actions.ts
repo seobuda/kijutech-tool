@@ -212,3 +212,23 @@ export async function removeCustomChecklistItem(
       )
     );
 }
+
+export async function resetKickoffStage(projectId: string) {
+  await assertUserInProjectTenant(projectId);
+
+  await upsertStageStatus(projectId, 'kickoff', 'pending');
+
+  await db
+    .delete(seoKickoffAnswers)
+    .where(eq(seoKickoffAnswers.projectId, projectId));
+}
+
+export async function resetAuditStage(projectId: string) {
+  await assertUserInProjectTenant(projectId);
+
+  await upsertStageStatus(projectId, 'audit', 'pending');
+
+  await db
+    .delete(seoAuditFindings)
+    .where(eq(seoAuditFindings.projectId, projectId));
+}

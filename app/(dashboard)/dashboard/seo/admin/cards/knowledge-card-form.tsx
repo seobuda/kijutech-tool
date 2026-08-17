@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,6 +11,7 @@ import {
   updateKnowledgeCard,
   type ActionState
 } from '@/lib/seo/admin-actions';
+import { getContextKeyOptions } from '@/lib/seo/context-keys';
 import type { SeoKnowledgeCard } from '@/lib/db/schema';
 import type { SeoManifestStage } from '@/lib/seo/manifest';
 
@@ -35,6 +36,22 @@ export function KnowledgeCardForm({ stages, card }: KnowledgeCardFormProps) {
     {}
   );
 
+  const [stageKey, setStageKey] = useState(card?.stageKey ?? stages[0]?.key ?? '');
+  const [contextKey, setContextKey] = useState(card?.contextKey ?? '');
+
+  const contextOptions = getContextKeyOptions(stageKey);
+  const hasUnknownContextKey =
+    contextKey.length > 0 &&
+    !contextOptions.some((opt) => opt.key === contextKey);
+
+  function handleStageChange(newStageKey: string) {
+    setStageKey(newStageKey);
+    const newOptions = getContextKeyOptions(newStageKey);
+    if (!newOptions.some((opt) => opt.key === contextKey)) {
+      setContextKey('');
+    }
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -50,7 +67,8 @@ export function KnowledgeCardForm({ stages, card }: KnowledgeCardFormProps) {
             <select
               id="stageKey"
               name="stageKey"
-              defaultValue={card?.stageKey ?? stages[0]?.key}
+              value={stageKey}
+              onChange={(e) => handleStageChange(e.target.value)}
               required
               className={selectClassName}
             >
@@ -121,21 +139,27 @@ export function KnowledgeCardForm({ stages, card }: KnowledgeCardFormProps) {
             <Label htmlFor="contextKey" className="mb-2">
               Asociar a input específico (opcional)
             </Label>
-            <Input
+            <select
               id="contextKey"
               name="contextKey"
-              placeholder="Ej: servicio_rentable, titles..."
-              defaultValue={card?.contextKey ?? ''}
-            />
+              value={contextKey}
+              onChange={(e) => setContextKey(e.target.value)}
+              className={selectClassName}
+            >
+              <option value="">(Ninguno — mostrar siempre)</option>
+              {hasUnknownContextKey && (
+                <option value={contextKey}>{contextKey} (personalizado)</option>
+              )}
+              {contextOptions.map((opt) => (
+                <option key={opt.key} value={opt.key}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
             <p className="text-xs text-muted-foreground mt-1">
-              Deja vacío para mostrar siempre. Escribe el question_key o
-              check_point exacto para mostrar solo cuando ese campo esté
-              activo.
-              <br />
-              Kickoff: servicio_rentable, cliente_no_deseado,
-              zona_geografica...
-              <br />
-              Radiografía: titles, meta_descriptions, core_web_vitals...
+              {contextOptions.length === 0
+                ? 'Esta etapa todavía no tiene inputs registrados — la tarjeta se mostrará siempre.'
+                : 'Elige "Ninguno" para mostrar la tarjeta siempre en esta etapa, o el campo concreto del formulario para el que debe aparecer al hacer foco en él.'}
             </p>
           </div>
           {state.error && <p className="text-red-500 text-sm">{state.error}</p>}

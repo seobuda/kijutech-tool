@@ -6,7 +6,11 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, CheckCircle2 } from 'lucide-react';
-import { saveKickoffAnswers, markStageComplete } from '@/lib/seo/actions';
+import {
+  saveKickoffAnswers,
+  markStageComplete,
+  resetKickoffStage
+} from '@/lib/seo/actions';
 import { seoProgressSwrKey } from '@/lib/seo/client-keys';
 import { KICKOFF_QUESTIONS } from '@/lib/seo/kickoff-questions';
 import { useSeoAssistantFocus } from '../seo-assistant-context';
@@ -18,9 +22,10 @@ const textareaClassName =
 type Props = {
   projectId: string;
   existingAnswers: SeoKickoffAnswer[];
+  stageStatus: string;
 };
 
-export function KickoffForm({ projectId, existingAnswers }: Props) {
+export function KickoffForm({ projectId, existingAnswers, stageStatus }: Props) {
   const setFocusedKey = useSeoAssistantFocus();
   const answersMap = Object.fromEntries(
     existingAnswers.map((a) => [a.questionKey, a.answer ?? ''])
@@ -32,7 +37,8 @@ export function KickoffForm({ projectId, existingAnswers }: Props) {
   );
   const [isPending, startTransition] = useTransition();
   const [saved, setSaved] = useState(false);
-  const [completed, setCompleted] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+  const [localStatus, setLocalStatus] = useState(stageStatus);
 
   function handleSave() {
     startTransition(async () => {
@@ -49,9 +55,31 @@ export function KickoffForm({ projectId, existingAnswers }: Props) {
     startTransition(async () => {
       await markStageComplete(projectId, 'kickoff');
       mutate(seoProgressSwrKey(projectId));
-      setCompleted(true);
+      setLocalStatus('completed');
     });
   }
+
+  function handleReset() {
+    const confirmed = window.confirm(
+      '¿Seguro que quieres reiniciar esta etapa? Se borrarán todas las respuestas guardadas.'
+    );
+    if (!confirmed) {
+      return;
+    }
+    setIsResetting(true);
+    startTransition(async () => {
+      await resetKickoffStage(projectId);
+      setValues(
+        Object.fromEntries(KICKOFF_QUESTIONS.map((q) => [q.questionKey, '']))
+      );
+      setSaved(false);
+      setLocalStatus('pending');
+      mutate(seoProgressSwrKey(projectId));
+      setIsResetting(false);
+    });
+  }
+
+  const canReset = localStatus === 'completed' || localStatus === 'in_progress';
 
   return (
     <Card>
@@ -90,7 +118,7 @@ export function KickoffForm({ projectId, existingAnswers }: Props) {
             disabled={isPending}
             className="bg-orange-500 hover:bg-orange-600 text-white"
           >
-            {completed ? (
+            {localStatus === 'completed' ? (
               <>
                 <CheckCircle2 className="mr-2 h-4 w-4" />
                 Etapa completada
@@ -99,6 +127,17 @@ export function KickoffForm({ projectId, existingAnswers }: Props) {
               'Marcar etapa como completada'
             )}
           </Button>
+          {canReset && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleReset}
+              disabled={isResetting}
+            >
+              {isResetting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Reiniciar etapa
+            </Button>
+          )}
         </div>
         {saved && <p className="text-green-500 text-sm">Respuestas guardadas.</p>}
       </CardContent>
