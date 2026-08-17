@@ -1,5 +1,9 @@
-export function buildSeRankingInstructions(urls: string[]): string {
+export function buildSeRankingInstructions(
+  urls: string[],
+  location: string | null
+): string {
   const urlLines = urls.map((url, i) => `${i + 1}. ${url}`).join('\n');
+  const locationLabel = location?.trim() ? location.trim() : '[ubicación del proyecto]';
 
   return `URLs a analizar en SE Ranking:
 ${urlLines}
@@ -7,7 +11,7 @@ ${urlLines}
 Pasos a seguir:
 1. Entra en SE Ranking → Investigación de competidores
 2. Pega cada URL y exporta las top 50 keywords en CSV
-3. Anota el volumen mensual de cada keyword para [ubicación del proyecto]
+3. Anota el volumen mensual de cada keyword para ${locationLabel}
 4. Vuelve aquí con los datos para continuar al paso 2`;
 }
 

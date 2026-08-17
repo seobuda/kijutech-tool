@@ -122,6 +122,21 @@ export async function getProjectsForUser() {
     .orderBy(desc(projects.createdAt));
 }
 
+export async function getProjectById(projectId: string) {
+  const user = await getUser();
+  if (!user) {
+    throw new Error('User not authenticated');
+  }
+
+  const [project] = await db
+    .select()
+    .from(projects)
+    .where(and(eq(projects.id, projectId), eq(projects.tenantId, user.tenantId)))
+    .limit(1);
+
+  return project ?? null;
+}
+
 export async function getArchivedProjectsForUser() {
   const user = await getUser();
   if (!user) {

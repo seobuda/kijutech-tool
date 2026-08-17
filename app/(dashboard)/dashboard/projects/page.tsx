@@ -6,7 +6,7 @@ import {
   CardTitle
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Archive, PlusCircle } from 'lucide-react';
+import { Archive, Pencil, PlusCircle } from 'lucide-react';
 import { getProjectsForUser, getUser, getUserTenantRoleNames } from '@/lib/db/queries';
 import { ArchiveProjectButton } from './archive-project-button';
 
@@ -68,6 +68,11 @@ export default async function ProjectsPage() {
                     <p className="text-sm text-muted-foreground capitalize">
                       {project.status}
                     </p>
+                    <Link href={`/dashboard/projects/${project.id}/edit`}>
+                      <Button variant="outline" size="sm">
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                    </Link>
                     <Link href={`/dashboard/projects/${project.id}/seo`}>
                       <Button variant="outline" size="sm">
                         Abrir SEO

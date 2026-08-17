@@ -48,6 +48,7 @@ export const projects = pgTable('projects', {
   name: varchar('name', { length: 200 }).notNull(),
   clientName: varchar('client_name', { length: 200 }),
   domain: varchar('domain', { length: 255 }),
+  location: varchar('location', { length: 255 }),
   status: varchar('status', { length: 20 }).notNull().default('active'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   createdBy: integer('created_by')

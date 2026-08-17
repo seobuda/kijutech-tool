@@ -4,6 +4,7 @@ import { randomUUID } from 'crypto';
 import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import {
+  projects,
   seoKwClusterKeywords,
   seoKwClusters,
   seoKwCompetitors,
@@ -175,7 +176,16 @@ export async function completeStep1(projectId: string) {
     throw new Error('Necesitas al menos 3 competidores para completar este paso');
   }
 
-  const instructionsText = buildSeRankingInstructions(competitors.map((c) => c.url));
+  const [project] = await db
+    .select({ location: projects.location })
+    .from(projects)
+    .where(eq(projects.id, projectId))
+    .limit(1);
+
+  const instructionsText = buildSeRankingInstructions(
+    competitors.map((c) => c.url),
+    project?.location ?? null
+  );
   await setKwStepStatus(projectId, 'competitors', 'completed', { instructionsText });
 
   return { instructionsText };
