@@ -176,3 +176,57 @@ Regla permanente, no solo para el módulo SEO: antes de aplicar cualquier migrac
 
 Estos dos pasos van antes del `docker exec kijutech\_app pnpm db:migrate` de la sección de Docker de arriba, no lo sustituyen.
 
+## Documentación automática de sesión
+
+Antes de hacer el commit final de cada sesión, genera un archivo de
+documentación en `/docs/sessions/` con el siguiente nombre:
+
+  YYYY-MM-DD-[descripcion-corta-en-kebab-case].md
+
+Ejemplo: `2026-08-17-fase-b-ajustes-ux.md`
+
+Genera el archivo ANTES del commit, para que quede versionado en git
+junto al código que describe.
+
+### Estructura obligatoria del archivo
+
+```markdown
+# [Descripción corta de la sesión]
+**Fecha:** YYYY-MM-DD  
+**Rama:** nombre-de-la-rama  
+**Commit:** hash (se rellena después del commit)
+
+## Qué se construyó
+Lista de archivos nuevos y modificados relevantes, con una línea
+explicando qué hace cada uno.
+
+## Migraciones aplicadas
+Para cada migración: nombre del archivo .sql y el SQL completo aplicado.
+Si no hubo migraciones: "Ninguna."
+
+## Decisiones técnicas tomadas en auto mode
+Decisiones que Claude Code tomó por su cuenta durante la sesión
+(no las pedidas explícitamente en el prompt) — qué problema encontró,
+qué decidió y por qué. Si no hubo ninguna: "Ninguna."
+
+## Qué verificar manualmente
+Lista concreta de cosas que el usuario debe comprobar en el navegador
+o en la base de datos para validar que todo funciona.
+
+## Pendientes detectados
+Cosas que Claude Code identificó durante la sesión que podrían necesitar
+atención futura — bugs potenciales, mejoras obvias, deuda técnica.
+Si no hay nada: "Ninguno."
+```
+
+### Reglas
+- El archivo lo genera Claude Code, no el usuario — nunca pedirlo
+  explícitamente, hacerlo siempre como parte del cierre de sesión
+- Si la sesión tiene varios commits intermedios, el documento describe
+  el trabajo completo de la sesión, no cada commit por separado
+- El hash del commit se añade al campo "Commit" justo después de hacer
+  el commit final
+- La carpeta /docs/sessions/ se crea si no existe
+- Estos archivos se suben al proyecto de Claude (chat) para mantener
+  el historial técnico accesible entre sesiones
+
