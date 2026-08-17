@@ -6,6 +6,7 @@ import { redirect } from 'next/navigation';
 import { db } from '@/lib/db/drizzle';
 import {
   seoKnowledgeCards,
+  seoSettings,
   userRoles,
   roles,
   type NewSeoKnowledgeCard
@@ -15,16 +16,29 @@ import { validatedActionWithUser } from '@/lib/auth/middleware';
 
 const ADMIN_ROLES = ['admin', 'super_admin'];
 
-async function assertSeoAdmin(userId: number) {
-  const assignedRoles = await db
+async function getAssignedTenantRoles(userId: number) {
+  return db
     .select({ name: roles.name })
     .from(userRoles)
     .innerJoin(roles, eq(userRoles.roleId, roles.id))
     .where(and(eq(userRoles.userId, userId), isNull(userRoles.projectId)));
+}
+
+async function assertSeoAdmin(userId: number) {
+  const assignedRoles = await getAssignedTenantRoles(userId);
 
   const isAdmin = assignedRoles.some((r) => ADMIN_ROLES.includes(r.name));
   if (!isAdmin) {
     throw new Error('No autorizado: se requiere rol admin o super_admin');
+  }
+}
+
+async function assertSuperAdmin(userId: number) {
+  const assignedRoles = await getAssignedTenantRoles(userId);
+
+  const isSuperAdmin = assignedRoles.some((r) => r.name === 'super_admin');
+  if (!isSuperAdmin) {
+    throw new Error('No autorizado: se requiere rol super_admin');
   }
 }
 
@@ -103,4 +117,17 @@ export async function reorderKnowledgeCard(id: string, newOrder: number) {
     .update(seoKnowledgeCards)
     .set({ order: newOrder })
     .where(eq(seoKnowledgeCards.id, id));
+}
+
+export async function updateSeoSetting(key: string, value: string) {
+  const user = await getUser();
+  if (!user) {
+    throw new Error('No autenticado');
+  }
+  await assertSuperAdmin(user.id);
+
+  await db
+    .update(seoSettings)
+    .set({ value, updatedAt: new Date() })
+    .where(eq(seoSettings.key, key));
 }

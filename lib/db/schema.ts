@@ -103,6 +103,15 @@ export const seoKnowledgeCards = pgTable('seo_knowledge_cards', {
   contextKey: varchar('context_key', { length: 100 }),
 });
 
+export const seoSettings = pgTable('seo_settings', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  key: varchar('key', { length: 100 }).notNull().unique(),
+  value: text('value'),
+  label: varchar('label', { length: 200 }).notNull(),
+  description: text('description'),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
 export const seoKickoffAnswers = pgTable(
   'seo_kickoff_answers',
   {
@@ -378,6 +387,8 @@ export type SeoAuditFinding = typeof seoAuditFindings.$inferSelect;
 export type NewSeoAuditFinding = typeof seoAuditFindings.$inferInsert;
 export type SeoOnboardingChecklistItem = typeof seoOnboardingChecklist.$inferSelect;
 export type NewSeoOnboardingChecklistItem = typeof seoOnboardingChecklist.$inferInsert;
+export type SeoSetting = typeof seoSettings.$inferSelect;
+export type NewSeoSetting = typeof seoSettings.$inferInsert;
 export type TeamDataWithMembers = Team & {
   teamMembers: (TeamMember & {
     user: Pick<User, 'id' | 'name' | 'email'>;

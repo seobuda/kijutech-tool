@@ -5,6 +5,7 @@ import {
   seoKickoffAnswers,
   seoKnowledgeCards,
   seoOnboardingChecklist,
+  seoSettings,
   seoStageProgress,
   type SeoKnowledgeCard
 } from '@/lib/db/schema';
@@ -62,4 +63,18 @@ export async function getOnboardingChecklist(projectId: string) {
     .select()
     .from(seoOnboardingChecklist)
     .where(eq(seoOnboardingChecklist.projectId, projectId));
+}
+
+export async function getAllSeoSettings() {
+  return db.select().from(seoSettings).orderBy(asc(seoSettings.label));
+}
+
+export async function getSeoSettingValue(key: string) {
+  const [setting] = await db
+    .select({ value: seoSettings.value })
+    .from(seoSettings)
+    .where(eq(seoSettings.key, key))
+    .limit(1);
+
+  return setting?.value ?? null;
 }

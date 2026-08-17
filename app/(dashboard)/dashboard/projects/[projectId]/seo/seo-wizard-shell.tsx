@@ -20,6 +20,7 @@ type Props = {
   stages: SeoManifestStage[];
   initialProgress: StageProgressRow[];
   cardsByStage: Record<string, SeoKnowledgeCard[]>;
+  tutorUrl: string;
   children: React.ReactNode;
 };
 
@@ -28,6 +29,7 @@ export function SeoWizardShell({
   stages,
   initialProgress,
   cardsByStage,
+  tutorUrl,
   children
 }: Props) {
   const pathname = usePathname();
@@ -47,7 +49,7 @@ export function SeoWizardShell({
             stages={stages}
             initialProgress={initialProgress}
           />
-          <SeoAssistantPanel cards={cards} focusedKey={focusedKey} />
+          <SeoAssistantPanel cards={cards} focusedKey={focusedKey} tutorUrl={tutorUrl} />
         </div>
         <div className="flex-1 min-w-0">{children}</div>
       </div>

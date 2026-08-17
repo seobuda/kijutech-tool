@@ -12,7 +12,8 @@ import {
   Activity,
   Menu,
   FolderKanban,
-  BookOpen
+  BookOpen,
+  SlidersHorizontal
 } from 'lucide-react';
 
 const ADMIN_ROLES = ['admin', 'super_admin'];
@@ -31,6 +32,7 @@ export default function DashboardLayout({
     fetcher
   );
   const isSeoAdmin = rolesData?.roles?.some((r) => ADMIN_ROLES.includes(r)) ?? false;
+  const isSuperAdmin = rolesData?.roles?.includes('super_admin') ?? false;
 
   const navItems = [
     { href: '/dashboard', icon: Users, label: 'Team' },
@@ -44,6 +46,15 @@ export default function DashboardLayout({
             href: '/dashboard/seo/admin/cards',
             icon: BookOpen,
             label: 'Admin SEO'
+          }
+        ]
+      : []),
+    ...(isSuperAdmin
+      ? [
+          {
+            href: '/dashboard/seo/admin/settings',
+            icon: SlidersHorizontal,
+            label: 'Configuración SEO'
           }
         ]
       : [])

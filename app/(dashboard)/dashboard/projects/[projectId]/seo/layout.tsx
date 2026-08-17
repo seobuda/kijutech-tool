@@ -4,7 +4,7 @@ import { db } from '@/lib/db/drizzle';
 import { projects } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
 import { getSeoManifest } from '@/lib/seo/manifest';
-import { getKnowledgeCardsByStage, getStageProgress } from '@/lib/seo/queries';
+import { getKnowledgeCardsByStage, getSeoSettingValue, getStageProgress } from '@/lib/seo/queries';
 import { SeoWizardShell } from './seo-wizard-shell';
 
 export default async function SeoWizardLayout({
@@ -38,6 +38,7 @@ export default async function SeoWizardLayout({
   const manifest = getSeoManifest();
   const initialProgress = await getStageProgress(projectId);
   const cardsByStage = await getKnowledgeCardsByStage();
+  const tutorUrl = (await getSeoSettingValue('tutor_url')) ?? 'https://claude.ai';
 
   return (
     <section className="flex-1 p-4 lg:p-8">
@@ -50,6 +51,7 @@ export default async function SeoWizardLayout({
         stages={manifest.stages}
         initialProgress={initialProgress}
         cardsByStage={cardsByStage}
+        tutorUrl={tutorUrl}
       >
         {children}
       </SeoWizardShell>

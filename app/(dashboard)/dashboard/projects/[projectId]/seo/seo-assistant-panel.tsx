@@ -17,9 +17,10 @@ const DEFAULT_STYLE = { border: 'border-gray-300', bg: 'bg-gray-50' };
 type Props = {
   cards: SeoKnowledgeCard[];
   focusedKey: string | null;
+  tutorUrl: string;
 };
 
-export function SeoAssistantPanel({ cards, focusedKey }: Props) {
+export function SeoAssistantPanel({ cards, focusedKey, tutorUrl }: Props) {
   const genericCards = useMemo(
     () => cards.filter((c) => !c.contextKey),
     [cards]
@@ -84,11 +85,7 @@ export function SeoAssistantPanel({ cards, focusedKey }: Props) {
                 {displayedCard.content}
               </div>
               {displayedCard.cardType === 'tutor_reminder' && (
-                <a
-                  href="https://claude.ai"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
+                <a href={tutorUrl} target="_blank" rel="noopener noreferrer">
                   <Button variant="outline" size="sm" className="mt-3">
                     <ExternalLink className="mr-2 h-4 w-4" />
                     Abrir Tutor Claude
