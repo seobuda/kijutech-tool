@@ -6,22 +6,40 @@ import {
   CardTitle
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { PlusCircle } from 'lucide-react';
-import { getProjectsForUser } from '@/lib/db/queries';
+import { Archive, PlusCircle } from 'lucide-react';
+import { getProjectsForUser, getUser, getUserTenantRoleNames } from '@/lib/db/queries';
+import { ArchiveProjectButton } from './archive-project-button';
+
+const MANAGE_ROLES = ['admin', 'super_admin'];
 
 export default async function ProjectsPage() {
-  const projects = await getProjectsForUser();
+  const user = await getUser();
+  const [projects, roleNames] = await Promise.all([
+    getProjectsForUser(),
+    user ? getUserTenantRoleNames(user.id) : Promise.resolve([])
+  ]);
+  const canManage = roleNames.some((r) => MANAGE_ROLES.includes(r));
 
   return (
     <section className="flex-1 p-4 lg:p-8">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-lg lg:text-2xl font-medium">Proyectos</h1>
-        <Link href="/dashboard/projects/new">
-          <Button className="bg-orange-500 hover:bg-orange-600 text-white">
-            <PlusCircle className="mr-2 h-4 w-4" />
-            Nuevo proyecto
-          </Button>
-        </Link>
+        <div className="flex items-center space-x-2">
+          {canManage && (
+            <Link href="/dashboard/projects/archived">
+              <Button variant="outline">
+                <Archive className="mr-2 h-4 w-4" />
+                Proyectos archivados
+              </Button>
+            </Link>
+          )}
+          <Link href="/dashboard/projects/new">
+            <Button className="bg-orange-500 hover:bg-orange-600 text-white">
+              <PlusCircle className="mr-2 h-4 w-4" />
+              Nuevo proyecto
+            </Button>
+          </Link>
+        </div>
       </div>
 
       <Card>
@@ -55,6 +73,9 @@ export default async function ProjectsPage() {
                         Abrir SEO
                       </Button>
                     </Link>
+                    {canManage && (
+                      <ArchiveProjectButton projectId={project.id} />
+                    )}
                   </div>
                 </li>
               ))}

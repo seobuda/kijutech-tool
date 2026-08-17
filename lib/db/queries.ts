@@ -1,4 +1,4 @@
-import { desc, and, eq, isNull } from 'drizzle-orm';
+import { desc, and, eq, isNull, ne } from 'drizzle-orm';
 import { db } from './drizzle';
 import {
   activityLogs,
@@ -116,7 +116,24 @@ export async function getProjectsForUser() {
   return await db
     .select()
     .from(projects)
-    .where(eq(projects.tenantId, user.tenantId))
+    .where(
+      and(eq(projects.tenantId, user.tenantId), ne(projects.status, 'archived'))
+    )
+    .orderBy(desc(projects.createdAt));
+}
+
+export async function getArchivedProjectsForUser() {
+  const user = await getUser();
+  if (!user) {
+    throw new Error('User not authenticated');
+  }
+
+  return await db
+    .select()
+    .from(projects)
+    .where(
+      and(eq(projects.tenantId, user.tenantId), eq(projects.status, 'archived'))
+    )
     .orderBy(desc(projects.createdAt));
 }
 
