@@ -13,6 +13,7 @@ import {
   AUDIT_AREA_LABELS,
   formatCheckPointLabel
 } from '@/lib/seo/audit-checkpoints';
+import { useSeoAssistantFocus } from '../seo-assistant-context';
 import type { SeoAuditFinding } from '@/lib/db/schema';
 
 const STATUS_OPTIONS = ['bien', 'mejorable', 'critico'] as const;
@@ -41,6 +42,7 @@ type Props = {
 };
 
 export function AuditForm({ projectId, existingFindings }: Props) {
+  const setFocusedKey = useSeoAssistantFocus();
   const existingMap = new Map(
     existingFindings.map((f) => [rowKey(f.area, f.checkPoint), f])
   );
@@ -131,6 +133,8 @@ export function AuditForm({ projectId, existingFindings }: Props) {
                         onChange={(e) =>
                           updateRow(area, cp, 'status', e.target.value)
                         }
+                        onFocus={() => setFocusedKey(cp)}
+                        onBlur={() => setFocusedKey(null)}
                         className={selectClassName}
                       >
                         <option value="">Sin revisar</option>
@@ -148,6 +152,8 @@ export function AuditForm({ projectId, existingFindings }: Props) {
                         onChange={(e) =>
                           updateRow(area, cp, 'priority', e.target.value)
                         }
+                        onFocus={() => setFocusedKey(cp)}
+                        onBlur={() => setFocusedKey(null)}
                         className={selectClassName}
                       >
                         <option value="">—</option>
@@ -166,6 +172,8 @@ export function AuditForm({ projectId, existingFindings }: Props) {
                       onChange={(e) =>
                         updateRow(area, cp, 'finding', e.target.value)
                       }
+                      onFocus={() => setFocusedKey(cp)}
+                      onBlur={() => setFocusedKey(null)}
                       rows={2}
                       className={textareaClassName}
                     />
@@ -177,6 +185,8 @@ export function AuditForm({ projectId, existingFindings }: Props) {
                       onChange={(e) =>
                         updateRow(area, cp, 'recommendedAction', e.target.value)
                       }
+                      onFocus={() => setFocusedKey(cp)}
+                      onBlur={() => setFocusedKey(null)}
                       rows={2}
                       className={textareaClassName}
                     />

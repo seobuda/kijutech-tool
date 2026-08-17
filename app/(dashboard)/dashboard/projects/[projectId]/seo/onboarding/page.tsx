@@ -1,6 +1,6 @@
-import { getKnowledgeCardsByStage, getOnboardingChecklist } from '@/lib/seo/queries';
+import { getKnowledgeCardsByStage, getOnboardingChecklist, getStageProgress } from '@/lib/seo/queries';
 import { ensureStageInProgress } from '@/lib/seo/actions';
-import { KnowledgeCardsSection } from '../knowledge-cards-section';
+import { SeoStageLayout } from '../seo-stage-layout';
 import { OnboardingChecklist } from './onboarding-checklist';
 
 export default async function OnboardingStagePage({
@@ -14,12 +14,18 @@ export default async function OnboardingStagePage({
   const cardsByStage = await getKnowledgeCardsByStage();
   const cards = cardsByStage['onboarding'] ?? [];
   const initialChecklist = await getOnboardingChecklist(projectId);
+  const progress = await getStageProgress(projectId);
+  const stageStatus =
+    progress.find((p) => p.stageKey === 'onboarding')?.status ?? 'pending';
 
   return (
-    <div className="space-y-6">
+    <SeoStageLayout cards={cards}>
       <h2 className="text-lg font-medium">Onboarding y Medición</h2>
-      <KnowledgeCardsSection cards={cards} />
-      <OnboardingChecklist projectId={projectId} initialChecklist={initialChecklist} />
-    </div>
+      <OnboardingChecklist
+        projectId={projectId}
+        initialChecklist={initialChecklist}
+        stageStatus={stageStatus}
+      />
+    </SeoStageLayout>
   );
 }

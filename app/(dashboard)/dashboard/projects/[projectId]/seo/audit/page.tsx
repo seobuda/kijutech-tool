@@ -1,6 +1,6 @@
 import { getKnowledgeCardsByStage, getAuditFindings } from '@/lib/seo/queries';
 import { ensureStageInProgress } from '@/lib/seo/actions';
-import { KnowledgeCardsSection } from '../knowledge-cards-section';
+import { SeoStageLayout } from '../seo-stage-layout';
 import { AuditForm } from './audit-form';
 
 export default async function AuditStagePage({
@@ -16,10 +16,9 @@ export default async function AuditStagePage({
   const existingFindings = await getAuditFindings(projectId);
 
   return (
-    <div className="space-y-6">
+    <SeoStageLayout cards={cards}>
       <h2 className="text-lg font-medium">Radiografía Inicial</h2>
-      <KnowledgeCardsSection cards={cards} />
       <AuditForm projectId={projectId} existingFindings={existingFindings} />
-    </div>
+    </SeoStageLayout>
   );
 }

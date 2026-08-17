@@ -50,6 +50,13 @@
       "when": 1786871732311,
       "tag": "0006_rainy_vapor",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1786977243087,
+      "tag": "0007_steady_leo",
+      "breakpoints": true
     }
   ]
 }

@@ -100,6 +100,7 @@ export const seoKnowledgeCards = pgTable('seo_knowledge_cards', {
   title: varchar('title', { length: 200 }).notNull(),
   content: text('content').notNull(),
   cardType: varchar('card_type', { length: 30 }).notNull(),
+  contextKey: varchar('context_key', { length: 100 }),
 });
 
 export const seoKickoffAnswers = pgTable(
@@ -144,6 +145,7 @@ export const seoOnboardingChecklist = pgTable(
     itemKey: varchar('item_key', { length: 50 }).notNull(),
     checked: boolean('checked').notNull().default(false),
     checkedAt: timestamp('checked_at'),
+    isCustom: boolean('is_custom').notNull().default(false),
   },
   (table) => [unique().on(table.projectId, table.itemKey)]
 );

@@ -117,6 +117,27 @@ export function KnowledgeCardForm({ stages, card }: KnowledgeCardFormProps) {
               ))}
             </select>
           </div>
+          <div>
+            <Label htmlFor="contextKey" className="mb-2">
+              Asociar a input específico (opcional)
+            </Label>
+            <Input
+              id="contextKey"
+              name="contextKey"
+              placeholder="Ej: servicio_rentable, titles..."
+              defaultValue={card?.contextKey ?? ''}
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Deja vacío para mostrar siempre. Escribe el question_key o
+              check_point exacto para mostrar solo cuando ese campo esté
+              activo.
+              <br />
+              Kickoff: servicio_rentable, cliente_no_deseado,
+              zona_geografica...
+              <br />
+              Radiografía: titles, meta_descriptions, core_web_vitals...
+            </p>
+          </div>
           {state.error && <p className="text-red-500 text-sm">{state.error}</p>}
           {state.success && (
             <p className="text-green-500 text-sm">{state.success}</p>

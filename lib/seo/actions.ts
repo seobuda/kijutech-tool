@@ -1,6 +1,6 @@
 'use server';
 
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import {
   projects,
@@ -160,4 +160,55 @@ export async function toggleOnboardingChecklistItem(
         checkedAt: checked ? new Date() : null
       }
     });
+}
+
+export async function resetOnboardingStage(projectId: string) {
+  await assertUserInProjectTenant(projectId);
+
+  await upsertStageStatus(projectId, 'onboarding', 'pending');
+
+  await db
+    .update(seoOnboardingChecklist)
+    .set({ checked: false, checkedAt: null })
+    .where(eq(seoOnboardingChecklist.projectId, projectId));
+}
+
+function normalizeItemKey(label: string) {
+  return label.trim().toLowerCase().replace(/\s+/g, '_');
+}
+
+export async function addCustomChecklistItem(projectId: string, label: string) {
+  await assertUserInProjectTenant(projectId);
+
+  const itemKey = normalizeItemKey(label);
+  if (!itemKey) {
+    throw new Error('El nombre de la herramienta no puede estar vacío');
+  }
+
+  await db
+    .insert(seoOnboardingChecklist)
+    .values({
+      projectId,
+      itemKey,
+      isCustom: true,
+      checked: false
+    })
+    .onConflictDoNothing();
+}
+
+export async function removeCustomChecklistItem(
+  projectId: string,
+  itemKey: string
+) {
+  await assertUserInProjectTenant(projectId);
+
+  await db
+    .delete(seoOnboardingChecklist)
+    .where(
+      and(
+        eq(seoOnboardingChecklist.projectId, projectId),
+        eq(seoOnboardingChecklist.itemKey, itemKey),
+        eq(seoOnboardingChecklist.isCustom, true)
+      )
+    );
 }

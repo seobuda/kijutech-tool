@@ -9,6 +9,7 @@ import { Loader2, CheckCircle2 } from 'lucide-react';
 import { saveKickoffAnswers, markStageComplete } from '@/lib/seo/actions';
 import { seoProgressSwrKey } from '@/lib/seo/client-keys';
 import { KICKOFF_QUESTIONS } from '@/lib/seo/kickoff-questions';
+import { useSeoAssistantFocus } from '../seo-assistant-context';
 import type { SeoKickoffAnswer } from '@/lib/db/schema';
 
 const textareaClassName =
@@ -20,6 +21,7 @@ type Props = {
 };
 
 export function KickoffForm({ projectId, existingAnswers }: Props) {
+  const setFocusedKey = useSeoAssistantFocus();
   const answersMap = Object.fromEntries(
     existingAnswers.map((a) => [a.questionKey, a.answer ?? ''])
   );
@@ -72,6 +74,8 @@ export function KickoffForm({ projectId, existingAnswers }: Props) {
                   [q.questionKey]: e.target.value
                 }))
               }
+              onFocus={() => setFocusedKey(q.questionKey)}
+              onBlur={() => setFocusedKey(null)}
               className={textareaClassName}
             />
           </div>

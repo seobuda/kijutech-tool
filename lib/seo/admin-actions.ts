@@ -38,7 +38,12 @@ const cardSchema = z.object({
   order: z.coerce.number().int(),
   title: z.string().min(1, 'El título es obligatorio').max(200),
   content: z.string().min(1, 'El contenido es obligatorio'),
-  cardType: z.enum(['concept', 'tip', 'warning', 'tutor_reminder'])
+  cardType: z.enum(['concept', 'tip', 'warning', 'tutor_reminder']),
+  contextKey: z
+    .string()
+    .max(100)
+    .optional()
+    .transform((v) => (v && v.trim().length > 0 ? v.trim() : null))
 });
 
 export const createKnowledgeCard = validatedActionWithUser(
