@@ -1,7 +1,7 @@
 # Fase B — Mejoras de UX del wizard SEO (reset, checklist, asistente contextual)
 **Fecha:** 2026-08-17  
 **Rama:** feature/fase-b-seo  
-**Commit:** e08ca49d
+**Commit:** 9642e70b
 
 ## Qué se construyó
 

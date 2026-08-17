@@ -194,7 +194,7 @@ junto al código que describe.
 # [Descripción corta de la sesión]
 **Fecha:** YYYY-MM-DD  
 **Rama:** nombre-de-la-rama  
-**Commit:** hash (se rellena después del commit)
+**Commit:** hash del último commit sustantivo de la sesión (se rellena antes de commitear este documento)
 
 ## Qué se construyó
 Lista de archivos nuevos y modificados relevantes, con una línea
@@ -224,8 +224,10 @@ Si no hay nada: "Ninguno."
   explícitamente, hacerlo siempre como parte del cierre de sesión
 - Si la sesión tiene varios commits intermedios, el documento describe
   el trabajo completo de la sesión, no cada commit por separado
-- El hash del commit se añade al campo "Commit" justo después de hacer
-  el commit final
+- El campo "Commit" lleva el hash del último commit sustantivo de la
+  sesión (el de código, no el del propio documento). Se rellena ANTES
+  de hacer el commit del documento, no después — así el hash siempre
+  referencia un commit que ya existe
 - La carpeta /docs/sessions/ se crea si no existe
 - Estos archivos se suben al proyecto de Claude (chat) para mantener
   el historial técnico accesible entre sesiones
