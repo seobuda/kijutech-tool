@@ -77,7 +77,7 @@ export default function DashboardLayout({
         </Button>
       </div>
 
-      <div className="flex flex-1 overflow-hidden h-full">
+      <div className="flex flex-1 h-full">
         {/* Sidebar */}
         <aside
           className={`w-64 bg-white lg:bg-gray-50 border-r border-gray-200 lg:block ${
@@ -105,7 +105,7 @@ export default function DashboardLayout({
         </aside>
 
         {/* Main content */}
-        <main className="flex-1 overflow-y-auto p-0 lg:p-6">{children}</main>
+        <main className="flex-1 p-0 lg:p-6">{children}</main>
       </div>
     </div>
   );
