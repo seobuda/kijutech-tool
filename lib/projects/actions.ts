@@ -20,23 +20,58 @@ const emptyToUndefined = (v: unknown) => (v === '' ? undefined : v);
 const createProjectSchema = z.object({
   name: z.string().min(1, 'El nombre es obligatorio').max(200),
   clientName: z.preprocess(emptyToUndefined, z.string().max(200).optional()),
-  domain: z.preprocess(emptyToUndefined, z.string().max(255).optional())
+  domain: z.preprocess(emptyToUndefined, z.string().max(255).optional()),
+  location: z.preprocess(emptyToUndefined, z.string().max(255).optional())
 });
 
 export const createProject = validatedActionWithUser(
   createProjectSchema,
   async (data, _, user) => {
-    const { name, clientName, domain } = data;
+    const { name, clientName, domain, location } = data;
 
     const newProject: NewProject = {
       tenantId: user.tenantId,
       name,
       clientName: clientName ?? null,
       domain: domain ?? null,
+      location: location ?? null,
       createdBy: user.id
     };
 
     await db.insert(projects).values(newProject);
+
+    redirect('/dashboard/projects');
+  }
+);
+
+const updateProjectSchema = createProjectSchema.extend({
+  id: z.string().min(1)
+});
+
+export const updateProject = validatedActionWithUser(
+  updateProjectSchema,
+  async (data, _, user) => {
+    const { id, name, clientName, domain, location } = data;
+
+    const [project] = await db
+      .select()
+      .from(projects)
+      .where(eq(projects.id, id))
+      .limit(1);
+
+    if (!project || project.tenantId !== user.tenantId) {
+      return { error: 'Proyecto no encontrado' };
+    }
+
+    await db
+      .update(projects)
+      .set({
+        name,
+        clientName: clientName ?? null,
+        domain: domain ?? null,
+        location: location ?? null
+      })
+      .where(eq(projects.id, id));
 
     redirect('/dashboard/projects');
   }

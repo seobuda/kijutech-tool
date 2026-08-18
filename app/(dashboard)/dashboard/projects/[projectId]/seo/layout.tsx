@@ -5,6 +5,7 @@ import { projects } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
 import { getSeoManifest } from '@/lib/seo/manifest';
 import { getKnowledgeCardsByStage, getSeoSettingValue, getStageProgress } from '@/lib/seo/queries';
+import { getKwCompetitors, getKwProgress, getKwRawStats } from '@/lib/seo/kw-queries';
 import { SeoWizardShell } from './seo-wizard-shell';
 
 export default async function SeoWizardLayout({
@@ -36,12 +37,18 @@ export default async function SeoWizardLayout({
   }
 
   const manifest = getSeoManifest();
-  const initialProgress = await getStageProgress(projectId);
-  const cardsByStage = await getKnowledgeCardsByStage();
-  const tutorUrl = (await getSeoSettingValue('tutor_url')) ?? 'https://claude.ai';
+  const [initialProgress, cardsByStage, tutorUrl, kwProgress, kwCompetitors, kwRawStats] =
+    await Promise.all([
+      getStageProgress(projectId),
+      getKnowledgeCardsByStage(),
+      getSeoSettingValue('tutor_url').then((v) => v ?? 'https://claude.ai'),
+      getKwProgress(projectId),
+      getKwCompetitors(projectId),
+      getKwRawStats(projectId)
+    ]);
 
   return (
-    <section className="flex-1 p-4 lg:p-8">
+    <section className="flex-1 p-4 lg:py-6 lg:px-0">
       <div className="mb-6">
         <p className="text-sm text-muted-foreground">Proyecto</p>
         <h1 className="text-lg lg:text-2xl font-medium">{project.name}</h1>
@@ -52,6 +59,11 @@ export default async function SeoWizardLayout({
         initialProgress={initialProgress}
         cardsByStage={cardsByStage}
         tutorUrl={tutorUrl}
+        kwSubStepsData={{
+          initialProgress: kwProgress,
+          competitorsCount: kwCompetitors.length,
+          rawCount: kwRawStats.total
+        }}
       >
         {children}
       </SeoWizardShell>

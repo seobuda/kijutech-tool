@@ -8,7 +8,7 @@
     { "order": 0, "key": "onboarding", "name": "Onboarding y Medición" },
     { "order": 1, "key": "kickoff", "name": "Kickoff" },
     { "order": 2, "key": "audit", "name": "Radiografía Inicial" },
-    { "order": 3, "key": "keyword_research", "name": "Keyword Research" },
+    { "order": 3, "key": "keyword_research", "name": "Keyword Research", "path": "keyword-research" },
     { "order": 4, "key": "strategy", "name": "Estrategia" },
     { "order": 5, "key": "execution", "name": "Ejecución" },
     { "order": 6, "key": "reporting", "name": "Reporting" },

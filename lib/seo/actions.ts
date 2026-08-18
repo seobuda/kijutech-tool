@@ -13,7 +13,7 @@ import { getUser } from '@/lib/db/queries';
 import { getStageProgress } from '@/lib/seo/queries';
 import { ONBOARDING_CHECKLIST_ITEMS } from '@/lib/seo/onboarding-checklist-items';
 
-async function assertUserInProjectTenant(projectId: string) {
+export async function assertUserInProjectTenant(projectId: string) {
   const user = await getUser();
   if (!user) {
     throw new Error('No autenticado');
@@ -99,7 +99,7 @@ export async function saveAuditFindings(
   }
 }
 
-async function upsertStageStatus(
+export async function upsertStageStatus(
   projectId: string,
   stageKey: string,
   status: string
