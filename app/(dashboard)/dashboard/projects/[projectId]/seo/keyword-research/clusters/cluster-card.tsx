@@ -15,7 +15,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
-import { MoreVertical, Plus, X, Star, Pencil } from 'lucide-react';
+import { MoreVertical, Plus, X, Star, Pencil, Search, TrendingUp } from 'lucide-react';
 import {
   updateKwClusterStatus,
   deleteKwCluster,
@@ -173,8 +173,8 @@ export function ClusterCard({ cluster, onUpdated, onDeleted }: Props) {
   const difficulty = cluster.difficulty ? DIFFICULTY_LABEL[cluster.difficulty] : null;
 
   return (
-    <Card>
-      <CardContent className="pt-6 space-y-3">
+    <Card className="py-0 gap-0 h-full min-h-[320px] w-full max-w-[320px] flex flex-col">
+      <CardContent className="p-4 flex-1 flex flex-col gap-3">
         <div className="flex items-start justify-between">
           <span
             className={`text-xs px-2 py-0.5 rounded-full font-medium ${
@@ -222,9 +222,9 @@ export function ClusterCard({ cluster, onUpdated, onDeleted }: Props) {
         </div>
 
         <div>
-          <p className="font-medium">{cluster.title}</p>
+          <p className="text-lg font-semibold leading-snug">{cluster.title}</p>
           {cluster.targetUrl && (
-            <p className="text-sm text-muted-foreground">{cluster.targetUrl}</p>
+            <p className="text-sm text-muted-foreground truncate">{cluster.targetUrl}</p>
           )}
         </div>
 
@@ -235,7 +235,7 @@ export function ClusterCard({ cluster, onUpdated, onDeleted }: Props) {
           </p>
         )}
 
-        <div className="border-t pt-3 space-y-1">
+        <div className="border-t pt-3 space-y-2">
           {cluster.keywords.map((k) => (
             <div key={k.id} className="flex items-center justify-between text-sm">
               <span className="flex items-center gap-1 truncate">
@@ -303,12 +303,20 @@ export function ClusterCard({ cluster, onUpdated, onDeleted }: Props) {
           )}
         </div>
 
-        <div className="border-t pt-3 text-sm text-muted-foreground space-y-1">
-          <p>📊 {totalVolume} búsquedas/mes totales</p>
-          <p>🎯 ~{estimatedTraffic} visitas est. (posición 1)</p>
+        <div className="border-t pt-3 flex items-center gap-4">
+          <div className="flex items-center gap-1.5">
+            <Search className="h-4 w-4 text-muted-foreground shrink-0" />
+            <span className="text-lg font-semibold leading-none">{totalVolume}</span>
+            <span className="text-xs text-muted-foreground">búsq./mes</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <TrendingUp className="h-4 w-4 text-muted-foreground shrink-0" />
+            <span className="text-lg font-semibold leading-none">~{estimatedTraffic}</span>
+            <span className="text-xs text-muted-foreground">visitas (pos. 1)</span>
+          </div>
         </div>
 
-        <div className="border-t pt-3">
+        <div className="border-t pt-3 mt-auto">
           <Label className="mb-1 text-xs text-muted-foreground">
             Nota para el cliente
           </Label>

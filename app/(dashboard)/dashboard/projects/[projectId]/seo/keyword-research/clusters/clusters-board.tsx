@@ -198,7 +198,7 @@ export function ClustersBoard({
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 grid-cols-[repeat(auto-fill,minmax(280px,1fr))]">
           {filteredClusters.map((cluster) => (
             <ClusterCard
               key={cluster.id}

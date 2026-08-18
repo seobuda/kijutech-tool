@@ -61,7 +61,7 @@ export function SeoWizardShell({
     <SeoAssistantContext.Provider value={{ setFocusedKey }}>
       <div className="flex flex-col lg:flex-row gap-6">
         <div
-          className={`w-full ${collapsed ? 'lg:w-12' : 'lg:w-72'} shrink-0 space-y-6 lg:sticky lg:top-6 lg:self-start transition-all duration-200`}
+          className={`w-full ${collapsed ? 'lg:w-12' : 'lg:w-[220px]'} shrink-0 space-y-6 lg:sticky lg:top-6 lg:self-start transition-all duration-200`}
         >
           <SeoWizardNav
             projectId={projectId}
