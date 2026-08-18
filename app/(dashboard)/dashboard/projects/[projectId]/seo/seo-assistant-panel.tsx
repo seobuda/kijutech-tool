@@ -61,7 +61,7 @@ export function SeoAssistantPanel({ cards, focusedKey, tutorUrl }: Props) {
   const showCarouselControls = !contextualCard && genericCards.length > 1;
 
   return (
-    <div className="flex flex-col items-center border-t pt-4">
+    <div className="flex flex-col items-center">
       <div className="text-4xl leading-none mb-2" aria-hidden="true">
         🤖
       </div>
