@@ -1,3 +1,6 @@
+export const SERANKING_EXACT_URL_NOTE =
+  'Importante en SE Ranking: al analizar cada URL, selecciona el tipo "URL exacta" (no "Dominio") para obtener solo las keywords de esa página concreta, no de todo el sitio web.';
+
 export function buildSeRankingInstructions(
   urls: string[],
   location: string | null
@@ -7,6 +10,8 @@ export function buildSeRankingInstructions(
 
   return `URLs a analizar en SE Ranking:
 ${urlLines}
+
+⚠️ ${SERANKING_EXACT_URL_NOTE}
 
 Pasos a seguir:
 1. Entra en SE Ranking → Investigación de competidores

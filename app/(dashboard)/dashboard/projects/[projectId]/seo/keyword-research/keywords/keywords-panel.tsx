@@ -1,21 +1,41 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useRef, useState, useTransition, type ChangeEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, CheckCircle2, Trash2, Copy, Plus, X } from 'lucide-react';
+import { Loader2, CheckCircle2, Trash2, Copy, Plus, X, Upload } from 'lucide-react';
 import {
   importKwRaw,
+  importKwRawFromCSV,
   addKwRawManual,
   deleteKwRaw,
   updateKwRawVolume,
   completeStep2,
-  resetStep2
+  resetStep2,
+  type SeRankingCsvRow
 } from '@/lib/seo/kw-actions';
+import {
+  parseCSV,
+  isSeRankingCsvHeader,
+  parseSeRankingCsvRows
+} from '@/lib/seo/csv-parse';
+import { SERANKING_EXACT_URL_NOTE } from '@/lib/seo/kw-instructions';
 import { useSeoAssistantFocus } from '../../seo-assistant-context';
 import type { SeoKwRaw } from '@/lib/db/schema';
+
+function difficultyStyle(difficulty: number) {
+  if (difficulty <= 3) return { label: 'Fácil', className: 'bg-green-100 text-green-700' };
+  if (difficulty <= 6) return { label: 'Media', className: 'bg-yellow-100 text-yellow-700' };
+  return { label: 'Difícil', className: 'bg-red-100 text-red-700' };
+}
+
+function mergeRawKeywords(prev: SeoKwRaw[], upserted: SeoKwRaw[]) {
+  const byId = new Map(upserted.map((r) => [r.id, r]));
+  const remaining = prev.filter((r) => !byId.has(r.id));
+  return [...upserted, ...remaining];
+}
 
 type Props = {
   projectId: string;
@@ -46,6 +66,11 @@ export function KeywordsPanel({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [csvError, setCsvError] = useState<string | null>(null);
+  const [csvPreview, setCsvPreview] = useState<SeRankingCsvRow[] | null>(null);
+  const [isImportingCsv, setIsImportingCsv] = useState(false);
+
   const canComplete = rawKeywords.length >= 10;
   const assignedCount = rawKeywords.filter((k) => k.assigned).length;
 
@@ -57,6 +82,58 @@ export function KeywordsPanel({
       setBulkText('');
       router.refresh();
     });
+  }
+
+  function handleCsvButtonClick() {
+    fileInputRef.current?.click();
+  }
+
+  function handleCsvFileChange(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    setCsvError(null);
+    setCsvPreview(null);
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = String(reader.result ?? '');
+      const rows = parseCSV(text);
+      if (rows.length === 0 || !isSeRankingCsvHeader(rows[0])) {
+        setCsvError(
+          'Este archivo no parece ser un CSV de SE Ranking. Comprueba que exportaste desde Investigación de la Competencia.'
+        );
+        return;
+      }
+      const parsed = parseSeRankingCsvRows(rows).filter((r) => r.keyword.length > 0);
+      if (parsed.length === 0) {
+        setCsvError('El archivo no contiene ninguna keyword.');
+        return;
+      }
+      setCsvPreview(parsed);
+    };
+    reader.onerror = () => {
+      setCsvError('No se pudo leer el archivo.');
+    };
+    reader.readAsText(file);
+  }
+
+  function handleConfirmCsvImport() {
+    if (!csvPreview) return;
+    setIsImportingCsv(true);
+    startTransition(async () => {
+      const upserted = await importKwRawFromCSV(projectId, csvPreview);
+      setRawKeywords((prev) => mergeRawKeywords(prev, upserted));
+      setCsvPreview(null);
+      setIsImportingCsv(false);
+      router.refresh();
+    });
+  }
+
+  function handleCancelCsvPreview() {
+    setCsvPreview(null);
+    setCsvError(null);
   }
 
   function handleAddManual() {
@@ -174,8 +251,79 @@ export function KeywordsPanel({
           >
             Importar keywords
           </Button>
+
+          <div className="mt-6 border-t pt-4">
+            <p className="text-sm text-muted-foreground mb-2">
+              ⚠️ {SERANKING_EXACT_URL_NOTE}
+            </p>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv"
+              className="hidden"
+              onChange={handleCsvFileChange}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleCsvButtonClick}
+              disabled={isPending}
+            >
+              <Upload className="mr-2 h-4 w-4" />
+              Importar CSV de SE Ranking
+            </Button>
+            {csvError && <p className="text-red-500 text-sm mt-2">{csvError}</p>}
+          </div>
         </CardContent>
       </Card>
+
+      {csvPreview && (
+        <Card className="border-l-4 border-l-blue-400">
+          <CardHeader>
+            <CardTitle>
+              Se van a importar {csvPreview.length} keywords desde SE Ranking. ¿Confirmar?
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-1 mb-4 max-h-64 overflow-y-auto text-sm">
+              {csvPreview.map((row, i) => (
+                <li
+                  key={`${row.keyword}-${i}`}
+                  className="flex items-center justify-between border-b border-gray-100 pb-1 last:border-b-0"
+                >
+                  <span>{row.keyword}</span>
+                  <span className="text-muted-foreground">
+                    {row.volume != null ? `${row.volume}/mes` : '—'}
+                    {row.position != null ? ` · Pos. ${row.position}` : ''}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <div className="flex items-center space-x-2">
+              <Button
+                type="button"
+                onClick={handleConfirmCsvImport}
+                disabled={isImportingCsv}
+                className="bg-orange-500 hover:bg-orange-600 text-white"
+              >
+                {isImportingCsv ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  'Confirmar importación'
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleCancelCsvPreview}
+                disabled={isImportingCsv}
+              >
+                Cancelar
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
@@ -193,19 +341,49 @@ export function KeywordsPanel({
             </p>
           ) : (
             <ul className="space-y-2 mb-4 max-h-96 overflow-y-auto">
-              {rawKeywords.map((k) => (
+              {rawKeywords.map((k) => {
+                const fromCsv = k.source === 'seranking_csv';
+                const difficulty =
+                  fromCsv && k.serankingDifficulty != null
+                    ? difficultyStyle(k.serankingDifficulty)
+                    : null;
+
+                return (
                 <li
                   key={k.id}
                   className="flex items-center justify-between border-b border-gray-100 pb-2 last:border-b-0"
                 >
-                  <span className="text-sm">
-                    {k.keyword}
-                    {k.assigned && (
-                      <span className="ml-2 text-xs text-green-600">
-                        asignada
-                      </span>
+                  <div className="text-sm">
+                    <div>
+                      {k.keyword}
+                      {fromCsv && (
+                        <span className="ml-2 text-xs px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">
+                          SE Ranking
+                        </span>
+                      )}
+                      {k.assigned && (
+                        <span className="ml-2 text-xs text-green-600">
+                          asignada
+                        </span>
+                      )}
+                    </div>
+                    {fromCsv && (
+                      <div className="flex items-center gap-2 mt-1">
+                        {k.serankingPosition != null && (
+                          <span className="text-xs text-muted-foreground">
+                            Pos. {k.serankingPosition}
+                          </span>
+                        )}
+                        {difficulty && (
+                          <span
+                            className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${difficulty.className}`}
+                          >
+                            {difficulty.label}
+                          </span>
+                        )}
+                      </div>
                     )}
-                  </span>
+                  </div>
                   <div className="flex items-center space-x-2">
                     <Input
                       type="number"
@@ -224,7 +402,8 @@ export function KeywordsPanel({
                     </Button>
                   </div>
                 </li>
-              ))}
+                );
+              })}
             </ul>
           )}
 

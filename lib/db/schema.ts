@@ -173,16 +173,26 @@ export const seoKwCompetitors = pgTable('seo_kw_competitors', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
-export const seoKwRaw = pgTable('seo_kw_raw', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  projectId: uuid('project_id')
-    .notNull()
-    .references(() => projects.id, { onDelete: 'cascade' }),
-  keyword: varchar('keyword', { length: 255 }).notNull(),
-  monthlyVolume: integer('monthly_volume'),
-  assigned: boolean('assigned').notNull().default(false),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-});
+export const seoKwRaw = pgTable(
+  'seo_kw_raw',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    keyword: varchar('keyword', { length: 255 }).notNull(),
+    monthlyVolume: integer('monthly_volume'),
+    assigned: boolean('assigned').notNull().default(false),
+    serankingPosition: integer('seranking_position'),
+    serankingPrevPosition: integer('seranking_prev_position'),
+    serankingDifficulty: integer('seranking_difficulty'),
+    serankingUrl: varchar('seranking_url', { length: 500 }),
+    serankingSerpFeatures: text('seranking_serp_features'),
+    source: varchar('source', { length: 20 }).notNull().default('manual'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [unique().on(table.projectId, table.keyword)]
+);
 
 export const seoKwClusters = pgTable('seo_kw_clusters', {
   id: uuid('id').primaryKey().defaultRandom(),

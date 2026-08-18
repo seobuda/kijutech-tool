@@ -249,6 +249,54 @@ export async function importKwRaw(projectId: string, rawText: string) {
   return inserted;
 }
 
+export type SeRankingCsvRow = {
+  keyword: string;
+  difficulty: number | null;
+  position: number | null;
+  prevPosition: number | null;
+  volume: number | null;
+  serpFeatures: string | null;
+  url: string | null;
+};
+
+export async function importKwRawFromCSV(projectId: string, rows: SeRankingCsvRow[]) {
+  await assertUserInProjectTenant(projectId);
+
+  const inserted: (typeof seoKwRaw.$inferSelect)[] = [];
+
+  for (const row of rows) {
+    const keyword = row.keyword.trim();
+    if (!keyword) {
+      continue;
+    }
+
+    const values = {
+      monthlyVolume: row.volume,
+      serankingPosition: row.position,
+      serankingPrevPosition: row.prevPosition,
+      serankingDifficulty: row.difficulty,
+      serankingUrl: row.url,
+      serankingSerpFeatures: row.serpFeatures,
+      source: 'seranking_csv'
+    };
+
+    const [result] = await db
+      .insert(seoKwRaw)
+      .values({ projectId, keyword, ...values })
+      .onConflictDoUpdate({
+        target: [seoKwRaw.projectId, seoKwRaw.keyword],
+        set: values
+      })
+      .returning();
+
+    inserted.push(result);
+  }
+
+  await ensureKwStepInProgress(projectId, 'keywords');
+
+  return inserted;
+}
+
 export async function addKwRawManual(
   projectId: string,
   keyword: string,
