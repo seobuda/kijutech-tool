@@ -22,14 +22,9 @@ import {
   parseSeRankingCsvRows
 } from '@/lib/seo/csv-parse';
 import { SERANKING_EXACT_URL_NOTE } from '@/lib/seo/kw-instructions';
+import { keywordDifficultyLabel } from '@/lib/seo/format';
 import { useSeoAssistantFocus } from '../../seo-assistant-context';
 import type { SeoKwRaw } from '@/lib/db/schema';
-
-function difficultyStyle(difficulty: number) {
-  if (difficulty <= 3) return { label: 'Fácil', className: 'bg-green-100 text-green-700' };
-  if (difficulty <= 6) return { label: 'Media', className: 'bg-yellow-100 text-yellow-700' };
-  return { label: 'Difícil', className: 'bg-red-100 text-red-700' };
-}
 
 function mergeRawKeywords(prev: SeoKwRaw[], upserted: SeoKwRaw[]) {
   const byId = new Map(upserted.map((r) => [r.id, r]));
@@ -345,7 +340,7 @@ export function KeywordsPanel({
                 const fromCsv = k.source === 'seranking_csv';
                 const difficulty =
                   fromCsv && k.serankingDifficulty != null
-                    ? difficultyStyle(k.serankingDifficulty)
+                    ? keywordDifficultyLabel(k.serankingDifficulty)
                     : null;
 
                 return (

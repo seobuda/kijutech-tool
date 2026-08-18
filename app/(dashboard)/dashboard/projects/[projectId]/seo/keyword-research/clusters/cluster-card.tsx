@@ -25,6 +25,7 @@ import {
   updateClientNote
 } from '@/lib/seo/kw-actions';
 import { estimateTrafficAtPositionOne } from '@/lib/seo/kw-instructions';
+import { keywordDifficultyLabel } from '@/lib/seo/format';
 import { ClusterForm, type ClusterFormValues } from './cluster-form';
 import type { SeoKwClusterWithKeywords } from '@/lib/seo/kw-queries';
 
@@ -236,13 +237,24 @@ export function ClusterCard({ cluster, onUpdated, onDeleted }: Props) {
         )}
 
         <div className="border-t pt-3 space-y-2">
-          {cluster.keywords.map((k) => (
+          {cluster.keywords.map((k) => {
+            const difficulty =
+              k.difficulty != null ? keywordDifficultyLabel(k.difficulty) : null;
+
+            return (
             <div key={k.id} className="flex items-center justify-between text-sm">
               <span className="flex items-center gap-1 truncate">
                 {k.isPrimary && (
                   <Star className="h-3 w-3 text-orange-500 shrink-0" fill="currentColor" />
                 )}
                 {k.keyword}
+                {difficulty && (
+                  <span
+                    className={`ml-1 text-xs px-1.5 py-0.5 rounded-full font-medium shrink-0 ${difficulty.className}`}
+                  >
+                    {difficulty.label}
+                  </span>
+                )}
               </span>
               <span className="flex items-center gap-2 shrink-0">
                 <span className="text-muted-foreground">
@@ -258,7 +270,8 @@ export function ClusterCard({ cluster, onUpdated, onDeleted }: Props) {
                 </button>
               </span>
             </div>
-          ))}
+            );
+          })}
 
           {isAddingKeyword ? (
             <div className="space-y-2 pt-2">

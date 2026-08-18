@@ -73,21 +73,18 @@ export async function ensureKwStepInProgress(
   }
 }
 
-async function markRawKeywordAssigned(projectId: string, keywordText: string) {
+async function findRawKeywordMatch(projectId: string, keywordText: string) {
   const normalized = keywordText.trim().toLowerCase();
   if (!normalized) {
-    return;
+    return null;
   }
 
   const rows = await db
-    .select({ id: seoKwRaw.id, keyword: seoKwRaw.keyword })
+    .select()
     .from(seoKwRaw)
     .where(eq(seoKwRaw.projectId, projectId));
 
-  const match = rows.find((r) => r.keyword.trim().toLowerCase() === normalized);
-  if (match) {
-    await db.update(seoKwRaw).set({ assigned: true }).where(eq(seoKwRaw.id, match.id));
-  }
+  return rows.find((r) => r.keyword.trim().toLowerCase() === normalized) ?? null;
 }
 
 // ---------------------------------------------------------------------------
@@ -461,6 +458,7 @@ export async function addClusterKeyword(
   data: { keyword: string; monthlyVolume: number | null; isPrimary: boolean }
 ) {
   const cluster = await assertClusterAccess(clusterId);
+  const rawMatch = await findRawKeywordMatch(cluster.projectId, data.keyword);
 
   const keyword = await db.transaction(async (tx) => {
     if (data.isPrimary) {
@@ -475,13 +473,16 @@ export async function addClusterKeyword(
         clusterId,
         keyword: data.keyword,
         monthlyVolume: data.monthlyVolume,
-        isPrimary: data.isPrimary
+        isPrimary: data.isPrimary,
+        difficulty: rawMatch?.serankingDifficulty ?? null
       })
       .returning();
     return row;
   });
 
-  await markRawKeywordAssigned(cluster.projectId, data.keyword);
+  if (rawMatch) {
+    await db.update(seoKwRaw).set({ assigned: true }).where(eq(seoKwRaw.id, rawMatch.id));
+  }
 
   return keyword;
 }
@@ -491,6 +492,7 @@ export async function updateClusterKeyword(
   data: { keyword: string; monthlyVolume: number | null; isPrimary: boolean }
 ) {
   const { row, cluster } = await assertClusterKeywordAccess(id);
+  const rawMatch = await findRawKeywordMatch(cluster.projectId, data.keyword);
 
   const updated = await db.transaction(async (tx) => {
     if (data.isPrimary) {
@@ -501,13 +503,15 @@ export async function updateClusterKeyword(
     }
     const [updatedRow] = await tx
       .update(seoKwClusterKeywords)
-      .set(data)
+      .set({ ...data, difficulty: rawMatch?.serankingDifficulty ?? null })
       .where(eq(seoKwClusterKeywords.id, id))
       .returning();
     return updatedRow;
   });
 
-  await markRawKeywordAssigned(cluster.projectId, data.keyword);
+  if (rawMatch) {
+    await db.update(seoKwRaw).set({ assigned: true }).where(eq(seoKwRaw.id, rawMatch.id));
+  }
 
   return updated;
 }

@@ -1,4 +1,5 @@
 import { estimateTrafficAtPositionOne } from '@/lib/seo/kw-instructions';
+import { keywordDifficultyLabel } from '@/lib/seo/format';
 import type { SeoKwClusterWithKeywords } from '@/lib/seo/kw-queries';
 
 const STATUS_BADGE: Record<string, string> = {
@@ -51,7 +52,18 @@ export function PublicClusterCard({
           Dificultad: {difficulty.label}
         </p>
       )}
-      {primary && <p className="text-sm font-medium">★ {primary.keyword}</p>}
+      {primary && (
+        <p className="text-sm font-medium flex items-center gap-2">
+          <span>★ {primary.keyword}</span>
+          {primary.difficulty != null && (
+            <span
+              className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${keywordDifficultyLabel(primary.difficulty).className}`}
+            >
+              {keywordDifficultyLabel(primary.difficulty).label}
+            </span>
+          )}
+        </p>
+      )}
       <div className="text-sm text-muted-foreground space-y-1 border-t pt-3">
         <p>📊 {totalVolume} búsquedas/mes totales</p>
         <p>🎯 ~{estimatedTraffic} visitas est. (posición 1)</p>
