@@ -1,12 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { SeoAssistantContext } from './seo-assistant-context';
 import { SeoAssistantPanel } from './seo-assistant-panel';
-import { SeoWizardNav } from './seo-wizard-nav';
+import { SeoWizardNav, type KwSubStepsData } from './seo-wizard-nav';
 import type { SeoManifestStage } from '@/lib/seo/manifest';
 import type { SeoKnowledgeCard } from '@/lib/db/schema';
+
+const COLLAPSE_STORAGE_KEY = 'seo-wizard-nav-collapsed';
 
 type StageProgressRow = {
   stageKey: string;
@@ -21,6 +23,7 @@ type Props = {
   initialProgress: StageProgressRow[];
   cardsByStage: Record<string, SeoKnowledgeCard[]>;
   tutorUrl: string;
+  kwSubStepsData: KwSubStepsData;
   children: React.ReactNode;
 };
 
@@ -30,31 +33,45 @@ export function SeoWizardShell({
   initialProgress,
   cardsByStage,
   tutorUrl,
+  kwSubStepsData,
   children
 }: Props) {
   const pathname = usePathname();
   const [focusedKey, setFocusedKey] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem(COLLAPSE_STORAGE_KEY);
+    if (saved === '1') {
+      setCollapsed(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem(COLLAPSE_STORAGE_KEY, collapsed ? '1' : '0');
+  }, [collapsed]);
 
   const currentStage = stages.find((stage) => {
     const href = `/dashboard/projects/${projectId}/seo/${stage.path ?? stage.key}`;
     return pathname === href || pathname.startsWith(`${href}/`);
   });
-  // Keyword Research tiene su propio nav de sub-pasos + asistente anidado
-  // (ver keyword-research/kw-wizard-shell.tsx) — el asistente de aquí se
-  // oculta para no duplicarlo.
-  const hasOwnNestedAssistant = currentStage?.key === 'keyword_research';
   const cards = currentStage ? (cardsByStage[currentStage.key] ?? []) : [];
 
   return (
     <SeoAssistantContext.Provider value={{ setFocusedKey }}>
       <div className="flex flex-col lg:flex-row gap-6">
-        <div className="w-full lg:w-72 shrink-0 space-y-6 lg:sticky lg:top-6 lg:self-start">
+        <div
+          className={`w-full ${collapsed ? 'lg:w-12' : 'lg:w-72'} shrink-0 space-y-6 lg:sticky lg:top-6 lg:self-start transition-all duration-200`}
+        >
           <SeoWizardNav
             projectId={projectId}
             stages={stages}
             initialProgress={initialProgress}
+            collapsed={collapsed}
+            onToggleCollapse={() => setCollapsed((c) => !c)}
+            kwSubStepsData={kwSubStepsData}
           />
-          {!hasOwnNestedAssistant && (
+          {!collapsed && (
             <SeoAssistantPanel cards={cards} focusedKey={focusedKey} tutorUrl={tutorUrl} />
           )}
         </div>
