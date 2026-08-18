@@ -144,7 +144,7 @@ export function ClusteringPanel({
           {localStatus === 'completed' ? (
             <>
               <CheckCircle2 className="mr-2 h-4 w-4" />
-              Paso completado
+              Marcar paso como completado
             </>
           ) : (
             'Marcar paso como completado'

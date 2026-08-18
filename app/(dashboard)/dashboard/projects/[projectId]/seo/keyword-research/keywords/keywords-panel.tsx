@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, useTransition, type ChangeEvent } from 'react';
+import { useMemo, useRef, useState, useTransition, type ChangeEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -30,6 +30,20 @@ function mergeRawKeywords(prev: SeoKwRaw[], upserted: SeoKwRaw[]) {
   const byId = new Map(upserted.map((r) => [r.id, r]));
   const remaining = prev.filter((r) => !byId.has(r.id));
   return [...upserted, ...remaining];
+}
+
+// Más volumen primero; en empate, mejor posición (más baja) primero;
+// sin volumen, al final.
+function compareRawKeywords(a: SeoKwRaw, b: SeoKwRaw) {
+  if (a.monthlyVolume == null && b.monthlyVolume == null) return 0;
+  if (a.monthlyVolume == null) return 1;
+  if (b.monthlyVolume == null) return -1;
+  if (a.monthlyVolume !== b.monthlyVolume) return b.monthlyVolume - a.monthlyVolume;
+
+  if (a.serankingPosition == null && b.serankingPosition == null) return 0;
+  if (a.serankingPosition == null) return 1;
+  if (b.serankingPosition == null) return -1;
+  return a.serankingPosition - b.serankingPosition;
 }
 
 type Props = {
@@ -68,6 +82,10 @@ export function KeywordsPanel({
 
   const canComplete = rawKeywords.length >= 10;
   const assignedCount = rawKeywords.filter((k) => k.assigned).length;
+  const sortedKeywords = useMemo(
+    () => [...rawKeywords].sort(compareRawKeywords),
+    [rawKeywords]
+  );
 
   function handleImport() {
     if (!bulkText.trim()) return;
@@ -336,7 +354,7 @@ export function KeywordsPanel({
             </p>
           ) : (
             <ul className="space-y-2 mb-4 max-h-96 overflow-y-auto">
-              {rawKeywords.map((k) => {
+              {sortedKeywords.map((k) => {
                 const fromCsv = k.source === 'seranking_csv';
                 const difficulty =
                   fromCsv && k.serankingDifficulty != null
@@ -461,7 +479,7 @@ export function KeywordsPanel({
           {localStatus === 'completed' ? (
             <>
               <CheckCircle2 className="mr-2 h-4 w-4" />
-              Paso completado
+              Marcar paso como completado
             </>
           ) : (
             'Marcar paso como completado'
