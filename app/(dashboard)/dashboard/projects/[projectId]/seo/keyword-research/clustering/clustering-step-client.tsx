@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Loader2, Sparkles, ChevronDown, ChevronRight } from 'lucide-react';
@@ -35,6 +35,14 @@ type Props = {
   manualPanelProps: ManualPanelProps;
 };
 
+function getAnalyzingMessage(seconds: number): string {
+  if (seconds < 5) return 'Analizando keywords...';
+  if (seconds < 30) return 'Procesando con IA... esto puede tardar unos segundos';
+  if (seconds < 60) return 'Agrupando por intención de búsqueda...';
+  if (seconds < 90) return 'Generando clasificación estratégica...';
+  return 'Casi listo, finalizando el análisis...';
+}
+
 export function ClusteringStepClient({
   projectId,
   activeProvider,
@@ -46,6 +54,19 @@ export function ClusteringStepClient({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [manualExpanded, setManualExpanded] = useState(!activeProvider);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  // Feedback visual progresivo mientras dura la llamada (hasta 180s de
+  // timeout en el gateway) — solo un contador local, sin llamadas al
+  // servidor.
+  useEffect(() => {
+    if (view !== 'analyzing') return;
+    setElapsedSeconds(0);
+    const interval = setInterval(() => {
+      setElapsedSeconds((s) => s + 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [view]);
 
   function handleAnalyze() {
     setView('analyzing');
@@ -106,7 +127,7 @@ export function ClusteringStepClient({
               {view === 'analyzing' ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Analizando keywords...
+                  {getAnalyzingMessage(elapsedSeconds)}
                 </>
               ) : view === 'error' ? (
                 'Reintentar'

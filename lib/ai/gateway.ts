@@ -15,7 +15,7 @@ const ADAPTERS: Record<string, AIAdapter> = {
   deepseek: deepseekAdapter,
 };
 
-const CALL_TIMEOUT_MS = 60_000;
+const CALL_TIMEOUT_MS = 180_000;
 
 type CallAIParams = {
   tenantId: string;
