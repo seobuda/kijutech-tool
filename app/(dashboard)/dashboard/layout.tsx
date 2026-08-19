@@ -13,7 +13,8 @@ import {
   Menu,
   FolderKanban,
   BookOpen,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Sparkles
 } from 'lucide-react';
 
 const ADMIN_ROLES = ['admin', 'super_admin'];
@@ -27,12 +28,15 @@ export default function DashboardLayout({
 }) {
   const pathname = usePathname();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const { data: rolesData } = useSWR<{ roles: string[] }>(
+  const { data: rolesData } = useSWR<{ roles: string[]; aiKeyModeAllowed: string }>(
     '/api/user/roles',
     fetcher
   );
   const isSeoAdmin = rolesData?.roles?.some((r) => ADMIN_ROLES.includes(r)) ?? false;
   const isSuperAdmin = rolesData?.roles?.includes('super_admin') ?? false;
+  const isTenantAdmin = rolesData?.roles?.includes('admin') ?? false;
+  const isByokTenant = (rolesData?.aiKeyModeAllowed ?? 'platform_only') !== 'platform_only';
+  const canAccessAi = isSuperAdmin || (isTenantAdmin && isByokTenant);
 
   const navItems = [
     { href: '/dashboard', icon: Users, label: 'Team' },
@@ -55,6 +59,15 @@ export default function DashboardLayout({
             href: '/dashboard/seo/admin/settings',
             icon: SlidersHorizontal,
             label: 'Configuración SEO'
+          }
+        ]
+      : []),
+    ...(canAccessAi
+      ? [
+          {
+            href: isSuperAdmin ? '/dashboard/ai/settings' : '/dashboard/ai/my-keys',
+            icon: Sparkles,
+            label: 'IA & Modelos'
           }
         ]
       : [])

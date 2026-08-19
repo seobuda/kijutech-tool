@@ -7,6 +7,9 @@ import {
   timestamp,
   integer,
   boolean,
+  jsonb,
+  date,
+  decimal,
   unique,
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
@@ -17,6 +20,9 @@ export const tenants = pgTable('tenants', {
   slug: varchar('slug', { length: 100 }).notNull().unique(),
   plan: varchar('plan', { length: 20 }).notNull().default('internal'),
   status: varchar('status', { length: 20 }).notNull().default('active'),
+  aiKeyModeAllowed: varchar('ai_key_mode_allowed', { length: 20 })
+    .notNull()
+    .default('platform_only'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
@@ -54,6 +60,80 @@ export const projects = pgTable('projects', {
   createdBy: integer('created_by')
     .notNull()
     .references(() => users.id),
+});
+
+export const aiProviderSettings = pgTable(
+  'ai_provider_settings',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    provider: varchar('provider', { length: 20 }).notNull(),
+    apiKeyEncrypted: text('api_key_encrypted'),
+    apiKeyIv: text('api_key_iv'),
+    model: varchar('model', { length: 100 }).notNull(),
+    isActive: boolean('is_active').notNull().default(false),
+    isDefault: boolean('is_default').notNull().default(false),
+    keyMode: varchar('key_mode', { length: 20 }).notNull().default('platform'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [unique().on(table.tenantId, table.provider)]
+);
+
+export const aiModelPricing = pgTable(
+  'ai_model_pricing',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    provider: varchar('provider', { length: 20 }).notNull(),
+    model: varchar('model', { length: 100 }).notNull(),
+    inputCostPer1k: decimal('input_cost_per_1k', { precision: 10, scale: 6 })
+      .notNull()
+      .default('0'),
+    outputCostPer1k: decimal('output_cost_per_1k', { precision: 10, scale: 6 })
+      .notNull()
+      .default('0'),
+    effectiveFrom: date('effective_from').notNull().defaultNow(),
+    effectiveTo: date('effective_to'),
+  },
+  (table) => [unique().on(table.provider, table.model, table.effectiveFrom)]
+);
+
+export const aiJobs = pgTable('ai_jobs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: uuid('tenant_id')
+    .notNull()
+    .references(() => tenants.id, { onDelete: 'cascade' }),
+  projectId: uuid('project_id').references(() => projects.id, {
+    onDelete: 'set null',
+  }),
+  function: varchar('function', { length: 50 }).notNull(),
+  status: varchar('status', { length: 20 }).notNull().default('processing'),
+  input: jsonb('input').notNull().default({}),
+  output: jsonb('output'),
+  error: text('error'),
+  provider: varchar('provider', { length: 20 }),
+  model: varchar('model', { length: 100 }),
+  keyModeUsed: varchar('key_mode_used', { length: 20 }),
+  inputTokens: integer('input_tokens'),
+  outputTokens: integer('output_tokens'),
+  estimatedCost: decimal('estimated_cost', { precision: 10, scale: 6 }),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  completedAt: timestamp('completed_at'),
+});
+
+export const aiPrompts = pgTable('ai_prompts', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  key: varchar('key', { length: 100 }).notNull().unique(),
+  name: varchar('name', { length: 255 }).notNull(),
+  description: text('description'),
+  systemPrompt: text('system_prompt').notNull(),
+  userPromptTemplate: text('user_prompt_template').notNull(),
+  isActive: boolean('is_active').notNull().default(true),
+  version: integer('version').notNull().default(1),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  updatedBy: integer('updated_by').references(() => users.id, { onDelete: 'set null' }),
 });
 
 export const modules = pgTable('modules', {
@@ -329,6 +409,33 @@ export const usersRelations = relations(users, ({ one, many }) => ({
 export const tenantsRelations = relations(tenants, ({ many }) => ({
   users: many(users),
   projects: many(projects),
+  aiProviderSettings: many(aiProviderSettings),
+  aiJobs: many(aiJobs),
+}));
+
+export const aiProviderSettingsRelations = relations(aiProviderSettings, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [aiProviderSettings.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const aiJobsRelations = relations(aiJobs, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [aiJobs.tenantId],
+    references: [tenants.id],
+  }),
+  project: one(projects, {
+    fields: [aiJobs.projectId],
+    references: [projects.id],
+  }),
+}));
+
+export const aiPromptsRelations = relations(aiPrompts, ({ one }) => ({
+  updatedByUser: one(users, {
+    fields: [aiPrompts.updatedBy],
+    references: [users.id],
+  }),
 }));
 
 export const rolesRelations = relations(roles, ({ many }) => ({
@@ -354,6 +461,7 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
   seoKwRaw: many(seoKwRaw),
   seoKwClusters: many(seoKwClusters),
   seoKwProgress: many(seoKwProgress),
+  aiJobs: many(aiJobs),
 }));
 
 export const modulesRelations = relations(modules, ({ many }) => ({
@@ -542,6 +650,14 @@ export type SeoShareToken = typeof seoShareTokens.$inferSelect;
 export type NewSeoShareToken = typeof seoShareTokens.$inferInsert;
 export type SeoKwProgress = typeof seoKwProgress.$inferSelect;
 export type NewSeoKwProgress = typeof seoKwProgress.$inferInsert;
+export type AiProviderSetting = typeof aiProviderSettings.$inferSelect;
+export type NewAiProviderSetting = typeof aiProviderSettings.$inferInsert;
+export type AiModelPricing = typeof aiModelPricing.$inferSelect;
+export type NewAiModelPricing = typeof aiModelPricing.$inferInsert;
+export type AiJob = typeof aiJobs.$inferSelect;
+export type NewAiJob = typeof aiJobs.$inferInsert;
+export type AiPrompt = typeof aiPrompts.$inferSelect;
+export type NewAiPrompt = typeof aiPrompts.$inferInsert;
 export type TeamDataWithMembers = Team & {
   teamMembers: (TeamMember & {
     user: Pick<User, 'id' | 'name' | 'email'>;
