@@ -1,9 +1,10 @@
 'use server';
 
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import {
   aiModelPricing,
+  aiPrompts,
   aiProviderSettings,
   roles,
   tenants,
@@ -315,6 +316,86 @@ export async function updateTenantAiMode(
     .update(tenants)
     .set({ aiKeyModeAllowed: mode })
     .where(eq(tenants.id, tenantId));
+
+  return { success: true };
+}
+
+type SaveAiPromptData = {
+  name: string;
+  description: string;
+  systemPrompt: string;
+  userPromptTemplate: string;
+  isActive: boolean;
+};
+
+export async function saveAiPrompt(
+  key: string,
+  data: SaveAiPromptData
+): Promise<ActionResult> {
+  const user = await getUser();
+  if (!user) {
+    return { error: 'No autenticado' };
+  }
+  if (!(await isSuperAdmin(user.id))) {
+    return { error: 'No autorizado: se requiere rol super_admin' };
+  }
+
+  const name = data.name.trim();
+  if (!name) {
+    return { error: 'El nombre no puede estar vacío' };
+  }
+  const systemPrompt = data.systemPrompt.trim();
+  if (!systemPrompt) {
+    return { error: 'El system prompt no puede estar vacío' };
+  }
+  const userPromptTemplate = data.userPromptTemplate.trim();
+  if (!userPromptTemplate) {
+    return { error: 'El user prompt template no puede estar vacío' };
+  }
+
+  await db
+    .insert(aiPrompts)
+    .values({
+      key,
+      name,
+      description: data.description.trim() || null,
+      systemPrompt,
+      userPromptTemplate,
+      isActive: data.isActive,
+      version: 1,
+      updatedAt: new Date(),
+      updatedBy: user.id,
+    })
+    .onConflictDoUpdate({
+      target: aiPrompts.key,
+      set: {
+        name,
+        description: data.description.trim() || null,
+        systemPrompt,
+        userPromptTemplate,
+        isActive: data.isActive,
+        version: sql`${aiPrompts.version} + 1`,
+        updatedAt: new Date(),
+        updatedBy: user.id,
+      },
+    });
+
+  return { success: true };
+}
+
+export async function toggleAiPrompt(key: string, isActive: boolean): Promise<ActionResult> {
+  const user = await getUser();
+  if (!user) {
+    return { error: 'No autenticado' };
+  }
+  if (!(await isSuperAdmin(user.id))) {
+    return { error: 'No autorizado: se requiere rol super_admin' };
+  }
+
+  await db
+    .update(aiPrompts)
+    .set({ isActive, updatedAt: new Date(), updatedBy: user.id })
+    .where(eq(aiPrompts.key, key));
 
   return { success: true };
 }

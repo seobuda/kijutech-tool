@@ -1,6 +1,6 @@
 import { and, desc, eq, gte, isNull, lte, or } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { aiJobs, aiModelPricing, aiProviderSettings, tenants } from '@/lib/db/schema';
+import { aiJobs, aiModelPricing, aiPrompts, aiProviderSettings, tenants } from '@/lib/db/schema';
 import { decrypt } from '@/lib/ai/encryption';
 import { anthropicAdapter } from '@/lib/ai/adapters/anthropic';
 import { openaiAdapter } from '@/lib/ai/adapters/openai';
@@ -23,7 +23,27 @@ type CallAIParams = {
   function: string;
   messages: AIMessage[];
   preferredProvider?: string;
+  promptKey?: string;
 };
+
+export async function getPrompt(
+  key: string
+): Promise<{ system_prompt: string; user_prompt_template: string } | null> {
+  const [row] = await db
+    .select({
+      systemPrompt: aiPrompts.systemPrompt,
+      userPromptTemplate: aiPrompts.userPromptTemplate,
+    })
+    .from(aiPrompts)
+    .where(and(eq(aiPrompts.key, key), eq(aiPrompts.isActive, true)))
+    .limit(1);
+
+  if (!row) {
+    return null;
+  }
+
+  return { system_prompt: row.systemPrompt, user_prompt_template: row.userPromptTemplate };
+}
 
 async function findProviderSetting(
   tenantId: string,
@@ -121,7 +141,13 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 export async function callAI(
   params: CallAIParams
 ): Promise<AIResponse & { jobId: string }> {
-  const { tenantId, projectId, function: fn, messages, preferredProvider } = params;
+  const { tenantId, projectId, function: fn, messages, preferredProvider, promptKey } = params;
+
+  // Si se pasa promptKey, se carga aquí únicamente para dejar constancia
+  // en el job de qué prompt estaba activo en el momento de la llamada —
+  // el contenido del prompt ya viene incorporado en `messages`, construido
+  // por quien llama (ver lib/seo/kw-ai-actions.ts).
+  const promptUsed = promptKey ? await getPrompt(promptKey) : null;
 
   const [job] = await db
     .insert(aiJobs)
@@ -130,7 +156,12 @@ export async function callAI(
       projectId: projectId ?? null,
       function: fn,
       status: 'processing',
-      input: { messages, preferredProvider: preferredProvider ?? null },
+      input: {
+        messages,
+        preferredProvider: preferredProvider ?? null,
+        promptKey: promptKey ?? null,
+        promptFoundActive: promptKey ? Boolean(promptUsed) : null,
+      },
     })
     .returning();
 

@@ -123,6 +123,19 @@ export const aiJobs = pgTable('ai_jobs', {
   completedAt: timestamp('completed_at'),
 });
 
+export const aiPrompts = pgTable('ai_prompts', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  key: varchar('key', { length: 100 }).notNull().unique(),
+  name: varchar('name', { length: 255 }).notNull(),
+  description: text('description'),
+  systemPrompt: text('system_prompt').notNull(),
+  userPromptTemplate: text('user_prompt_template').notNull(),
+  isActive: boolean('is_active').notNull().default(true),
+  version: integer('version').notNull().default(1),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  updatedBy: integer('updated_by').references(() => users.id, { onDelete: 'set null' }),
+});
+
 export const modules = pgTable('modules', {
   id: uuid('id').primaryKey().defaultRandom(),
   key: varchar('key', { length: 50 }).notNull().unique(),
@@ -418,6 +431,13 @@ export const aiJobsRelations = relations(aiJobs, ({ one }) => ({
   }),
 }));
 
+export const aiPromptsRelations = relations(aiPrompts, ({ one }) => ({
+  updatedByUser: one(users, {
+    fields: [aiPrompts.updatedBy],
+    references: [users.id],
+  }),
+}));
+
 export const rolesRelations = relations(roles, ({ many }) => ({
   userRoles: many(userRoles),
 }));
@@ -636,6 +656,8 @@ export type AiModelPricing = typeof aiModelPricing.$inferSelect;
 export type NewAiModelPricing = typeof aiModelPricing.$inferInsert;
 export type AiJob = typeof aiJobs.$inferSelect;
 export type NewAiJob = typeof aiJobs.$inferInsert;
+export type AiPrompt = typeof aiPrompts.$inferSelect;
+export type NewAiPrompt = typeof aiPrompts.$inferInsert;
 export type TeamDataWithMembers = Team & {
   teamMembers: (TeamMember & {
     user: Pick<User, 'id' | 'name' | 'email'>;
