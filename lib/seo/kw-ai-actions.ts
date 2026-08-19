@@ -10,7 +10,11 @@ import { getKwRaw } from '@/lib/seo/kw-queries';
 import { completeStep3 } from '@/lib/seo/kw-actions';
 import { callAI, getPrompt } from '@/lib/ai/gateway';
 import { buildClusteringPrompt } from '@/lib/ai/prompts/cluster-keywords';
-import { parseClusteringResponse, type ParsedCluster } from '@/lib/ai/parsers/cluster-keywords';
+import {
+  parseClusteringResponse,
+  type ParsedCluster,
+  type ParsedReasonedItem,
+} from '@/lib/ai/parsers/cluster-keywords';
 
 // Estas 3 acciones viven en lib/seo/ (no en lib/ai/actions.ts, aunque el
 // pedido original las situaba ahí) porque leen y escriben tablas del
@@ -23,7 +27,8 @@ type AnalyzeResult =
   | { error: string }
   | {
       clusters: ParsedCluster[];
-      unassigned: string[];
+      unassigned: ParsedReasonedItem[];
+      irrelevant: ParsedReasonedItem[];
       jobId: string;
       estimatedCost: number | null;
       providerUsed: string;
@@ -101,6 +106,7 @@ export async function analyzeKeywordsWithAI(projectId: string): Promise<AnalyzeR
   return {
     clusters: parsed.clusters,
     unassigned: parsed.unassigned,
+    irrelevant: parsed.irrelevant,
     jobId: response.jobId,
     estimatedCost: job?.estimatedCost != null ? Number(job.estimatedCost) : null,
     providerUsed: response.provider,
@@ -112,7 +118,16 @@ type ConfirmClusterInput = {
   title: string;
   targetUrl: string | null;
   difficulty: 'easy' | 'medium' | 'hard' | null;
-  keywords: Array<{ keyword: string; monthlyVolume: number | null; isPrimary: boolean }>;
+  urlType: string | null;
+  isAiSuggested: boolean;
+  reasoning: string | null;
+  lowVolume: boolean;
+  keywords: Array<{
+    keyword: string;
+    monthlyVolume: number | null;
+    isPrimary: boolean;
+    pendingVerification: boolean;
+  }>;
 };
 
 // No devuelve en el camino feliz: redirige al paso 4 (throw interno de
@@ -152,6 +167,10 @@ export async function confirmAIClusters(
             targetUrl: cluster.targetUrl?.trim() || null,
             difficulty: cluster.difficulty,
             priority: 0,
+            urlType: cluster.urlType,
+            isAiSuggested: cluster.isAiSuggested,
+            reasoning: cluster.reasoning,
+            lowVolume: cluster.lowVolume,
           })
           .returning();
 
@@ -164,6 +183,7 @@ export async function confirmAIClusters(
             monthlyVolume: kw.monthlyVolume,
             isPrimary: kw.isPrimary,
             difficulty: rawMatch?.serankingDifficulty ?? null,
+            pendingVerification: kw.pendingVerification,
           });
 
           if (rawMatch) {

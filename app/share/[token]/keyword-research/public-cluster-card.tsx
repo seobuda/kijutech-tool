@@ -1,5 +1,5 @@
 import { estimateTrafficAtPositionOne } from '@/lib/seo/kw-instructions';
-import { keywordDifficultyLabel } from '@/lib/seo/format';
+import { keywordDifficultyLabel, urlTypeLabel } from '@/lib/seo/format';
 import type { SeoKwClusterWithKeywords } from '@/lib/seo/kw-queries';
 
 const STATUS_BADGE: Record<string, string> = {
@@ -30,6 +30,7 @@ export function PublicClusterCard({
   const estimatedTraffic = estimateTrafficAtPositionOne(totalVolume);
   const difficulty = cluster.difficulty ? DIFFICULTY_LABEL[cluster.difficulty] : null;
   const primary = cluster.keywords.find((k) => k.isPrimary);
+  const urlType = urlTypeLabel(cluster.urlType);
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-3">
@@ -44,6 +45,13 @@ export function PublicClusterCard({
         <p className="font-medium text-lg">{cluster.title}</p>
         {cluster.targetUrl && (
           <p className="text-sm text-muted-foreground">{cluster.targetUrl}</p>
+        )}
+        {urlType && (
+          <span
+            className={`inline-block mt-1.5 text-xs px-2 py-0.5 rounded-full font-medium ${urlType.className}`}
+          >
+            {urlType.label}
+          </span>
         )}
       </div>
       {difficulty && (

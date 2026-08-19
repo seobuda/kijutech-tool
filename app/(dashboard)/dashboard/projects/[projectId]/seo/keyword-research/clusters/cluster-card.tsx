@@ -25,7 +25,7 @@ import {
   updateClientNote
 } from '@/lib/seo/kw-actions';
 import { estimateTrafficAtPositionOne } from '@/lib/seo/kw-instructions';
-import { keywordDifficultyLabel } from '@/lib/seo/format';
+import { keywordDifficultyLabel, urlTypeLabel } from '@/lib/seo/format';
 import { ClusterForm, type ClusterFormValues } from './cluster-form';
 import type { SeoKwClusterWithKeywords } from '@/lib/seo/kw-queries';
 
@@ -172,6 +172,7 @@ export function ClusterCard({ cluster, onUpdated, onDeleted }: Props) {
   }
 
   const difficulty = cluster.difficulty ? DIFFICULTY_LABEL[cluster.difficulty] : null;
+  const urlType = urlTypeLabel(cluster.urlType);
 
   return (
     <Card className="py-0 gap-0 h-full min-h-[320px] w-full max-w-[320px] flex flex-col">
@@ -185,7 +186,16 @@ export function ClusterCard({ cluster, onUpdated, onDeleted }: Props) {
             {STATUS_OPTIONS.find((s) => s.value === cluster.status)?.label ??
               cluster.status}
           </span>
-          <DropdownMenu>
+          <div className="flex items-center gap-1.5">
+            {cluster.isAiSuggested && (
+              <span
+                className="text-xs font-medium bg-yellow-200/80 text-yellow-900 px-2 py-0.5 rounded-full"
+                title="Cluster sugerido por IA"
+              >
+                ✨ IA
+              </span>
+            )}
+            <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
@@ -219,13 +229,21 @@ export function ClusterCard({ cluster, onUpdated, onDeleted }: Props) {
                 Eliminar
               </DropdownMenuItem>
             </DropdownMenuContent>
-          </DropdownMenu>
+            </DropdownMenu>
+          </div>
         </div>
 
         <div>
           <p className="text-lg font-semibold leading-snug">{cluster.title}</p>
           {cluster.targetUrl && (
             <p className="text-sm text-muted-foreground truncate">{cluster.targetUrl}</p>
+          )}
+          {urlType && (
+            <span
+              className={`inline-block mt-1 text-xs px-2 py-0.5 rounded-full font-medium ${urlType.className}`}
+            >
+              {urlType.label}
+            </span>
           )}
         </div>
 
@@ -257,9 +275,18 @@ export function ClusterCard({ cluster, onUpdated, onDeleted }: Props) {
                 )}
               </span>
               <span className="flex items-center gap-2 shrink-0">
-                <span className="text-muted-foreground">
-                  {k.monthlyVolume ?? '—'}/mes
-                </span>
+                {k.pendingVerification ? (
+                  <span
+                    className="text-muted-foreground flex items-center gap-1"
+                    title="Verificar volumen en SE Ranking"
+                  >
+                    —/mes ⚠️
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground">
+                    {k.monthlyVolume ?? '—'}/mes
+                  </span>
+                )}
                 <button
                   type="button"
                   onClick={() => handleDeleteKeyword(k.id, k.isPrimary)}
