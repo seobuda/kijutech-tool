@@ -14,6 +14,10 @@ export type ParsedCluster = {
   is_ai_suggested: boolean;
   reasoning: string | null;
   low_volume: boolean;
+  destination: string | null;
+  content_type: string | null;
+  search_intent: string | null;
+  strategy_note: string | null;
   keywords: ParsedClusterKeyword[];
 };
 
@@ -89,6 +93,10 @@ function parseClusterList(
       is_ai_suggested: isAiSuggested,
       reasoning: typeof c.reasoning === 'string' ? c.reasoning : null,
       low_volume: c.low_volume === true,
+      destination: typeof c.destination === 'string' ? c.destination : null,
+      content_type: typeof c.content_type === 'string' ? c.content_type : null,
+      search_intent: typeof c.search_intent === 'string' ? c.search_intent : null,
+      strategy_note: typeof c.strategy_note === 'string' ? c.strategy_note : null,
       keywords,
     });
   }

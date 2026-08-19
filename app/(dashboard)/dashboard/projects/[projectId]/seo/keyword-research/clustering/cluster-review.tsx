@@ -9,6 +9,7 @@ import { Loader2, Search, X, Bot, Copy, ChevronDown, ChevronRight, AlertTriangle
 import { confirmAIClusters } from '@/lib/seo/kw-ai-actions';
 import type { ParsedCluster, ParsedReasonedItem } from '@/lib/ai/parsers/cluster-keywords';
 import { URL_TYPE_META } from '@/lib/seo/format';
+import { StrategyBadges, type StrategyField } from '../strategy-badges';
 
 const DIFFICULTY_OPTIONS = [
   { value: '', label: '—' },
@@ -37,6 +38,10 @@ type EditableCluster = {
   isAiSuggested: boolean;
   reasoning: string | null;
   lowVolume: boolean;
+  destination: string | null;
+  contentType: string | null;
+  searchIntent: string | null;
+  strategyNote: string | null;
   keywords: EditableKeyword[];
 };
 
@@ -50,6 +55,10 @@ function toEditable(clusters: ParsedCluster[]): EditableCluster[] {
     isAiSuggested: c.is_ai_suggested,
     reasoning: c.reasoning,
     lowVolume: c.low_volume,
+    destination: c.destination,
+    contentType: c.content_type,
+    searchIntent: c.search_intent,
+    strategyNote: c.strategy_note,
     keywords: c.keywords.map((k) => ({
       keyword: k.keyword,
       monthlyVolume: k.monthly_volume,
@@ -87,6 +96,16 @@ export function ClusterReview({ projectId, analysis, existingClustersCount, onDi
 
   function updateCluster(uid: string, patch: Partial<EditableCluster>) {
     setClusters((prev) => prev.map((c) => (c.uid === uid ? { ...c, ...patch } : c)));
+  }
+
+  function updateClusterStrategyField(uid: string, field: StrategyField, value: string) {
+    const patch: Partial<EditableCluster> =
+      field === 'destination'
+        ? { destination: value }
+        : field === 'content_type'
+          ? { contentType: value }
+          : { searchIntent: value };
+    updateCluster(uid, patch);
   }
 
   function toggleKeywordExcluded(clusterUid: string, index: number) {
@@ -157,6 +176,10 @@ export function ClusterReview({ projectId, analysis, existingClustersCount, onDi
         isAiSuggested: c.isAiSuggested,
         reasoning: c.reasoning,
         lowVolume: c.lowVolume,
+        destination: c.destination,
+        contentType: c.contentType,
+        searchIntent: c.searchIntent,
+        strategyNote: c.strategyNote,
         keywords: c.keywords
           .filter((k) => !k.excluded)
           .map((k) => ({
@@ -293,6 +316,18 @@ export function ClusterReview({ projectId, analysis, existingClustersCount, onDi
                   {!cluster.isAiSuggested && cluster.reasoning && (
                     <p className="text-xs text-muted-foreground">{cluster.reasoning}</p>
                   )}
+
+                  <StrategyBadges
+                    values={{
+                      destination: cluster.destination,
+                      contentType: cluster.contentType,
+                      searchIntent: cluster.searchIntent,
+                    }}
+                    strategyNote={cluster.strategyNote}
+                    onChange={(field, value) =>
+                      updateClusterStrategyField(cluster.uid, field, value)
+                    }
+                  />
 
                   <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground">URL destino</Label>

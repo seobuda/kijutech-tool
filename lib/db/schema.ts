@@ -290,6 +290,10 @@ export const seoKwClusters = pgTable('seo_kw_clusters', {
   isAiSuggested: boolean('is_ai_suggested').notNull().default(false),
   reasoning: text('reasoning'),
   lowVolume: boolean('low_volume').notNull().default(false),
+  destination: varchar('destination', { length: 20 }),
+  contentType: varchar('content_type', { length: 30 }),
+  searchIntent: varchar('search_intent', { length: 20 }),
+  strategyNote: text('strategy_note'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 

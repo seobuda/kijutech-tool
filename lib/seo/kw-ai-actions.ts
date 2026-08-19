@@ -122,6 +122,10 @@ type ConfirmClusterInput = {
   isAiSuggested: boolean;
   reasoning: string | null;
   lowVolume: boolean;
+  destination: string | null;
+  contentType: string | null;
+  searchIntent: string | null;
+  strategyNote: string | null;
   keywords: Array<{
     keyword: string;
     monthlyVolume: number | null;
@@ -171,6 +175,10 @@ export async function confirmAIClusters(
             isAiSuggested: cluster.isAiSuggested,
             reasoning: cluster.reasoning,
             lowVolume: cluster.lowVolume,
+            destination: cluster.destination,
+            contentType: cluster.contentType,
+            searchIntent: cluster.searchIntent,
+            strategyNote: cluster.strategyNote,
           })
           .returning();
 
