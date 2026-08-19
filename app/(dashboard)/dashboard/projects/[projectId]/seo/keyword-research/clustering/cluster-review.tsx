@@ -5,9 +5,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
-import { Loader2, Search, X, Bot } from 'lucide-react';
+import { Loader2, Search, X, Bot, Copy, ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react';
 import { confirmAIClusters } from '@/lib/seo/kw-ai-actions';
-import type { ParsedCluster } from '@/lib/ai/parsers/cluster-keywords';
+import type { ParsedCluster, ParsedReasonedItem } from '@/lib/ai/parsers/cluster-keywords';
+import { URL_TYPE_META } from '@/lib/seo/format';
 
 const DIFFICULTY_OPTIONS = [
   { value: '', label: '—' },
@@ -24,6 +25,7 @@ type EditableKeyword = {
   monthlyVolume: number | null;
   isPrimary: boolean;
   excluded: boolean;
+  pendingVerification: boolean;
 };
 
 type EditableCluster = {
@@ -31,6 +33,10 @@ type EditableCluster = {
   title: string;
   targetUrl: string;
   difficulty: string;
+  urlType: string | null;
+  isAiSuggested: boolean;
+  reasoning: string | null;
+  lowVolume: boolean;
   keywords: EditableKeyword[];
 };
 
@@ -40,11 +46,16 @@ function toEditable(clusters: ParsedCluster[]): EditableCluster[] {
     title: c.title,
     targetUrl: c.target_url ?? '',
     difficulty: c.difficulty ?? '',
+    urlType: c.url_type,
+    isAiSuggested: c.is_ai_suggested,
+    reasoning: c.reasoning,
+    lowVolume: c.low_volume,
     keywords: c.keywords.map((k) => ({
       keyword: k.keyword,
       monthlyVolume: k.monthly_volume,
       isPrimary: k.is_primary,
       excluded: false,
+      pendingVerification: k.pending_verification,
     })),
   }));
 }
@@ -53,7 +64,8 @@ type Props = {
   projectId: string;
   analysis: {
     clusters: ParsedCluster[];
-    unassigned: string[];
+    unassigned: ParsedReasonedItem[];
+    irrelevant: ParsedReasonedItem[];
     estimatedCost: number | null;
     providerUsed: string;
     modelUsed: string;
@@ -64,10 +76,14 @@ type Props = {
 
 export function ClusterReview({ projectId, analysis, existingClustersCount, onDiscard }: Props) {
   const [clusters, setClusters] = useState<EditableCluster[]>(() => toEditable(analysis.clusters));
-  const [unassigned, setUnassigned] = useState<string[]>(analysis.unassigned);
+  const [unassigned, setUnassigned] = useState<ParsedReasonedItem[]>(analysis.unassigned);
   const [showModeChoice, setShowModeChoice] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [irrelevantExpanded, setIrrelevantExpanded] = useState(false);
+  const [copyConfirmation, setCopyConfirmation] = useState<string | null>(null);
+
+  const hasSuggestedClusters = clusters.some((c) => c.isAiSuggested);
 
   function updateCluster(uid: string, patch: Partial<EditableCluster>) {
     setClusters((prev) => prev.map((c) => (c.uid === uid ? { ...c, ...patch } : c)));
@@ -103,12 +119,32 @@ export function ClusterReview({ projectId, analysis, existingClustersCount, onDi
               ...c,
               keywords: [
                 ...c.keywords,
-                { keyword, monthlyVolume: null, isPrimary: false, excluded: false },
+                {
+                  keyword,
+                  monthlyVolume: null,
+                  isPrimary: false,
+                  excluded: false,
+                  pendingVerification: false,
+                },
               ],
             }
       )
     );
-    setUnassigned((prev) => prev.filter((k) => k !== keyword));
+    setUnassigned((prev) => prev.filter((k) => k.keyword !== keyword));
+  }
+
+  async function handleCopySuggested() {
+    const suggestedKeywords = clusters
+      .filter((c) => c.isAiSuggested)
+      .flatMap((c) => c.keywords.map((k) => k.keyword));
+
+    if (suggestedKeywords.length === 0) return;
+
+    await navigator.clipboard.writeText(suggestedKeywords.join('\n'));
+    setCopyConfirmation(
+      `${suggestedKeywords.length} keywords copiadas. Pégalas en SE Ranking para verificar sus volúmenes.`
+    );
+    setTimeout(() => setCopyConfirmation(null), 4000);
   }
 
   function buildPayload() {
@@ -117,12 +153,17 @@ export function ClusterReview({ projectId, analysis, existingClustersCount, onDi
         title: c.title.trim(),
         targetUrl: c.targetUrl.trim() || null,
         difficulty: (c.difficulty || null) as 'easy' | 'medium' | 'hard' | null,
+        urlType: c.urlType,
+        isAiSuggested: c.isAiSuggested,
+        reasoning: c.reasoning,
+        lowVolume: c.lowVolume,
         keywords: c.keywords
           .filter((k) => !k.excluded)
           .map((k) => ({
             keyword: k.keyword,
             monthlyVolume: k.monthlyVolume,
             isPrimary: k.isPrimary,
+            pendingVerification: k.pendingVerification,
           })),
       }))
       .filter((c) => c.title && c.keywords.length > 0);
@@ -172,6 +213,18 @@ export function ClusterReview({ projectId, analysis, existingClustersCount, onDi
         </span>
       </div>
 
+      {hasSuggestedClusters && (
+        <div>
+          <Button type="button" variant="outline" size="sm" onClick={handleCopySuggested}>
+            <Copy className="h-4 w-4" />
+            Copiar keywords sugeridas para SE Ranking
+          </Button>
+          {copyConfirmation && (
+            <p className="text-xs text-green-600 mt-1.5">{copyConfirmation}</p>
+          )}
+        </div>
+      )}
+
       {clusters.length === 0 ? (
         <Card>
           <CardContent className="pt-6">
@@ -187,10 +240,24 @@ export function ClusterReview({ projectId, analysis, existingClustersCount, onDi
             const totalVolume = cluster.keywords
               .filter((k) => !k.excluded)
               .reduce((sum, k) => sum + (k.monthlyVolume ?? 0), 0);
+            const urlTypeMeta = cluster.urlType ? URL_TYPE_META[cluster.urlType] : null;
 
             return (
-              <Card key={cluster.uid} className="bg-blue-50/60 border-blue-200">
+              <Card
+                key={cluster.uid}
+                className={
+                  cluster.isAiSuggested
+                    ? 'bg-yellow-50 border-yellow-300'
+                    : 'bg-blue-50/60 border-blue-200'
+                }
+              >
                 <CardContent className="p-4 space-y-3">
+                  {cluster.isAiSuggested && (
+                    <span className="inline-flex items-center gap-1 text-xs font-medium bg-yellow-200/70 text-yellow-900 px-2 py-1 rounded-full">
+                      ✨ Sugerido por IA · Verificar volumen
+                    </span>
+                  )}
+
                   <div className="flex items-start justify-between gap-2">
                     <Input
                       value={cluster.title}
@@ -206,6 +273,26 @@ export function ClusterReview({ projectId, analysis, existingClustersCount, onDi
                       <X className="h-4 w-4" />
                     </button>
                   </div>
+
+                  {!cluster.isAiSuggested && (urlTypeMeta || cluster.lowVolume) && (
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {urlTypeMeta && (
+                        <span
+                          className={`text-xs px-2 py-0.5 rounded-full font-medium ${urlTypeMeta.className}`}
+                        >
+                          {urlTypeMeta.label}
+                        </span>
+                      )}
+                      {cluster.lowVolume && (
+                        <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-yellow-100 text-yellow-800">
+                          Volumen bajo
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {!cluster.isAiSuggested && cluster.reasoning && (
+                    <p className="text-xs text-muted-foreground">{cluster.reasoning}</p>
+                  )}
 
                   <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground">URL destino</Label>
@@ -250,9 +337,18 @@ export function ClusterReview({ projectId, analysis, existingClustersCount, onDi
                           {k.isPrimary && <span className="text-orange-500">★</span>}
                           {k.keyword}
                         </span>
-                        <span className="text-muted-foreground text-xs shrink-0">
-                          {k.monthlyVolume ?? '—'}/mes
-                        </span>
+                        {k.pendingVerification ? (
+                          <span
+                            className="text-muted-foreground text-xs shrink-0"
+                            title="Volumen pendiente de verificar en SE Ranking"
+                          >
+                            —/mes
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground text-xs shrink-0">
+                            {k.monthlyVolume ?? '—'}/mes
+                          </span>
+                        )}
                       </label>
                     ))}
                   </div>
@@ -274,12 +370,17 @@ export function ClusterReview({ projectId, analysis, existingClustersCount, onDi
           <CardContent className="pt-6 space-y-2">
             <p className="text-sm font-medium">{unassigned.length} keywords sin clasificar</p>
             <div className="space-y-1.5">
-              {unassigned.map((keyword) => (
-                <div key={keyword} className="flex items-center justify-between gap-2 text-sm">
-                  <span className="truncate">{keyword}</span>
+              {unassigned.map((item) => (
+                <div key={item.keyword} className="flex items-center justify-between gap-2 text-sm">
+                  <span className="truncate">
+                    {item.keyword}
+                    {item.reason && (
+                      <span className="text-muted-foreground text-xs"> — {item.reason}</span>
+                    )}
+                  </span>
                   <select
                     defaultValue=""
-                    onChange={(e) => assignUnassignedKeyword(keyword, e.target.value)}
+                    onChange={(e) => assignUnassignedKeyword(item.keyword, e.target.value)}
                     className={selectClassName}
                   >
                     <option value="">Añadir al cluster...</option>
@@ -296,12 +397,51 @@ export function ClusterReview({ projectId, analysis, existingClustersCount, onDi
         </Card>
       )}
 
+      {analysis.irrelevant.length > 0 && (
+        <Card>
+          <CardContent className="pt-6 space-y-2">
+            <button
+              type="button"
+              onClick={() => setIrrelevantExpanded((v) => !v)}
+              className="flex items-center gap-1.5 text-sm font-medium w-full text-left"
+            >
+              {irrelevantExpanded ? (
+                <ChevronDown className="h-4 w-4" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
+              )}
+              Keywords descartadas por la IA ({analysis.irrelevant.length})
+            </button>
+            {irrelevantExpanded && (
+              <div className="space-y-2 pt-2">
+                <p className="text-xs text-muted-foreground">
+                  La IA consideró estas keywords fuera del sector o sin valor estratégico.
+                  Si crees que alguna debe incluirse, añádela manualmente al cluster
+                  correcto.
+                </p>
+                <div className="space-y-1">
+                  {analysis.irrelevant.map((item) => (
+                    <p key={item.keyword} className="text-sm">
+                      <span className="font-medium">{item.keyword}</span>
+                      {item.reason && (
+                        <span className="text-muted-foreground"> — {item.reason}</span>
+                      )}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       {showModeChoice ? (
         <Card className="border-amber-300 bg-amber-50/60">
           <CardContent className="pt-6 space-y-3">
-            <p className="text-sm">
+            <p className="text-sm flex items-center gap-1.5">
+              <AlertTriangle className="h-4 w-4 text-amber-600" />
               Ya tienes {existingClustersCount} clusters en este proyecto. ¿Qué quieres hacer?
             </p>
             <div className="flex flex-wrap items-center gap-2">

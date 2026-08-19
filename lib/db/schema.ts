@@ -286,6 +286,10 @@ export const seoKwClusters = pgTable('seo_kw_clusters', {
   difficulty: varchar('difficulty', { length: 20 }),
   clientNote: text('client_note'),
   notes: text('notes'),
+  urlType: varchar('url_type', { length: 50 }),
+  isAiSuggested: boolean('is_ai_suggested').notNull().default(false),
+  reasoning: text('reasoning'),
+  lowVolume: boolean('low_volume').notNull().default(false),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
@@ -298,6 +302,7 @@ export const seoKwClusterKeywords = pgTable('seo_kw_cluster_keywords', {
   monthlyVolume: integer('monthly_volume'),
   difficulty: integer('difficulty'),
   isPrimary: boolean('is_primary').notNull().default(false),
+  pendingVerification: boolean('pending_verification').notNull().default(false),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 

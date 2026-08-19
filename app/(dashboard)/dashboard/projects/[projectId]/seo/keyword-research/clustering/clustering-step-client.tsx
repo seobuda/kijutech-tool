@@ -6,13 +6,14 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Loader2, Sparkles, ChevronDown, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { analyzeKeywordsWithAI } from '@/lib/seo/kw-ai-actions';
-import type { ParsedCluster } from '@/lib/ai/parsers/cluster-keywords';
+import type { ParsedCluster, ParsedReasonedItem } from '@/lib/ai/parsers/cluster-keywords';
 import { ClusteringPanel } from './clustering-panel';
 import { ClusterReview } from './cluster-review';
 
 type AnalysisResult = {
   clusters: ParsedCluster[];
-  unassigned: string[];
+  unassigned: ParsedReasonedItem[];
+  irrelevant: ParsedReasonedItem[];
   jobId: string;
   estimatedCost: number | null;
   providerUsed: string;

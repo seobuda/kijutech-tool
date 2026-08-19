@@ -33,3 +33,18 @@ export function keywordDifficultyLabel(difficulty: number): {
   if (difficulty <= 6) return { label: 'Media', className: 'bg-yellow-100 text-yellow-700' };
   return { label: 'Difícil', className: 'bg-red-100 text-red-700' };
 }
+
+// Tipo de página destino de un cluster, propuesto por el clustering con IA.
+// Mismos colores en la pantalla de revisión, el paso 4 y el mapa público.
+export const URL_TYPE_META: Record<string, { label: string; className: string }> = {
+  landing_servicio: { label: 'Landing Servicio', className: 'bg-gray-100 text-gray-700' },
+  landing_local: { label: 'Landing Local', className: 'bg-blue-100 text-blue-700' },
+  articulo_satelite: { label: 'Artículo Satélite', className: 'bg-green-100 text-green-700' },
+  comparativa_competidores: { label: 'Comparativa', className: 'bg-orange-100 text-orange-700' },
+  blog_informacional: { label: 'Blog', className: 'bg-purple-100 text-purple-700' },
+};
+
+export function urlTypeLabel(urlType: string | null): { label: string; className: string } | null {
+  if (!urlType) return null;
+  return URL_TYPE_META[urlType] ?? null;
+}
