@@ -52,6 +52,8 @@ export function ClusteringStepClient({
 }: Props) {
   const [view, setView] = useState<'idle' | 'analyzing' | 'error' | 'review'>('idle');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [errorRawResponse, setErrorRawResponse] = useState<string | null>(null);
+  const [rawResponseExpanded, setRawResponseExpanded] = useState(false);
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [manualExpanded, setManualExpanded] = useState(!activeProvider);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -71,9 +73,12 @@ export function ClusteringStepClient({
   function handleAnalyze() {
     setView('analyzing');
     setErrorMsg(null);
+    setErrorRawResponse(null);
+    setRawResponseExpanded(false);
     analyzeKeywordsWithAI(projectId).then((result) => {
       if ('error' in result) {
         setErrorMsg(result.error);
+        setErrorRawResponse(result.rawResponse ?? null);
         setView('error');
         return;
       }
@@ -115,7 +120,38 @@ export function ClusteringStepClient({
             </p>
 
             {view === 'error' && errorMsg && (
-              <p className="text-sm text-red-600">{errorMsg}</p>
+              errorRawResponse ? (
+                <div className="rounded-md border border-red-300 bg-red-50 p-3 space-y-2">
+                  <p className="text-sm font-medium text-red-800">
+                    Error al procesar la respuesta de la IA
+                  </p>
+                  <p className="text-sm text-red-700">{errorMsg}</p>
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => setRawResponseExpanded((v) => !v)}
+                      className="flex items-center gap-1 text-xs font-medium text-red-800 hover:text-red-900"
+                    >
+                      {rawResponseExpanded ? (
+                        <ChevronDown className="h-3.5 w-3.5" />
+                      ) : (
+                        <ChevronRight className="h-3.5 w-3.5" />
+                      )}
+                      Ver respuesta raw
+                    </button>
+                    {rawResponseExpanded && (
+                      <textarea
+                        readOnly
+                        value={errorRawResponse}
+                        rows={10}
+                        className="mt-2 w-full rounded-md border border-red-200 bg-white p-2 font-mono text-xs text-gray-700"
+                      />
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-red-600">{errorMsg}</p>
+              )
             )}
 
             <Button

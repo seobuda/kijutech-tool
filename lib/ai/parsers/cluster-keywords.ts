@@ -32,6 +32,27 @@ export type ParsedClusteringResult = {
   irrelevant: ParsedReasonedItem[];
 };
 
+// Lleva la respuesta cruda de la IA adjunta, para poder mostrarla en un
+// panel de diagnóstico en la UI cuando el parseo falla — el mensaje solo
+// ("no es JSON válido") no basta para saber qué devolvió realmente el
+// modelo.
+export class ClusterParseError extends Error {
+  rawResponse: string;
+
+  constructor(message: string, rawResponse: string) {
+    super(message);
+    this.name = 'ClusterParseError';
+    this.rawResponse = rawResponse;
+  }
+}
+
+function throwParseError(message: string, rawText: string): never {
+  console.error('=== AI RAW RESPONSE (parsing failed) ===');
+  console.error(rawText);
+  console.error('=== END RAW RESPONSE ===');
+  throw new ClusterParseError(message, rawText);
+}
+
 // Los modelos a veces envuelven el JSON en markdown o añaden texto antes
 // o después pese a que el prompt lo prohíbe explícitamente. Se intentan
 // varias estrategias de extracción en orden, de la más estricta a la más
@@ -69,7 +90,7 @@ function extractJson(raw: string): unknown {
   }
 
   // 4. Ninguna estrategia funcionó.
-  throw new Error('La respuesta de la IA no es JSON válido');
+  return throwParseError('La respuesta de la IA no es JSON válido', raw);
 }
 
 function parseClusterList(
@@ -170,8 +191,9 @@ export function parseClusteringResponse(raw: string): ParsedClusteringResult {
     data === null ||
     !Array.isArray((data as Record<string, unknown>).clusters)
   ) {
-    throw new Error(
-      'La respuesta de la IA no tiene la estructura esperada (falta "clusters")'
+    throwParseError(
+      'La respuesta de la IA no tiene la estructura esperada (falta "clusters")',
+      raw
     );
   }
 

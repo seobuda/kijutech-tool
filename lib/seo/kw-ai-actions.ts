@@ -12,6 +12,7 @@ import { callAI, getPrompt } from '@/lib/ai/gateway';
 import { buildClusteringPrompt } from '@/lib/ai/prompts/cluster-keywords';
 import {
   parseClusteringResponse,
+  ClusterParseError,
   type ParsedCluster,
   type ParsedReasonedItem,
 } from '@/lib/ai/parsers/cluster-keywords';
@@ -24,7 +25,7 @@ import {
 // depende de la infraestructura de IA (callAI/getPrompt), no al revés.
 
 type AnalyzeResult =
-  | { error: string }
+  | { error: string; rawResponse?: string | null }
   | {
       clusters: ParsedCluster[];
       unassigned: ParsedReasonedItem[];
@@ -94,6 +95,7 @@ export async function analyzeKeywordsWithAI(projectId: string): Promise<AnalyzeR
   } catch (err) {
     return {
       error: err instanceof Error ? err.message : 'No se pudo interpretar la respuesta de la IA',
+      rawResponse: err instanceof ClusterParseError ? err.rawResponse : null,
     };
   }
 
