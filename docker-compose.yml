@@ -27,6 +27,7 @@ services:
       POSTGRES_URL: postgresql://kijutech:kijutech2024@postgres:5432/kijutech_db
       AUTH_SECRET: super-secret-key-local-development-only-change-in-production
       BASE_URL: http://localhost:3000
+      AI_ENCRYPTION_KEY: e90acf0978876f19768b99a69e00c1c6652b94fb93d765146f51543900e81714
     depends_on:
       postgres:
         condition: service_healthy
