@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { Loader2, Search, X, Bot, Copy, ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react';
 import { confirmAIClusters } from '@/lib/seo/kw-ai-actions';
-import type { ParsedCluster, ParsedReasonedItem } from '@/lib/ai/parsers/cluster-keywords';
+import type { ClusterProposal, ReasonedItem } from '@/lib/ai/clustering/types';
 import { URL_TYPE_META } from '@/lib/seo/format';
 import { StrategyBadges, type StrategyField } from '../strategy-badges';
 
@@ -29,6 +29,20 @@ type EditableKeyword = {
   pendingVerification: boolean;
 };
 
+// Snapshot inmutable de los valores propuestos por la IA, para poder
+// distinguir al confirmar si el usuario dejó el cluster tal cual
+// ('confirmed') o lo tocó ('edited') — ese matiz alimenta el feedback
+// del RAG (lib/ai/clustering/feedback/capture.ts).
+type OriginalSnapshot = {
+  title: string;
+  targetUrl: string;
+  difficulty: string;
+  destination: string | null;
+  contentType: string | null;
+  searchIntent: string | null;
+  keywordCount: number;
+};
+
 type EditableCluster = {
   uid: string;
   title: string;
@@ -43,9 +57,10 @@ type EditableCluster = {
   searchIntent: string | null;
   strategyNote: string | null;
   keywords: EditableKeyword[];
+  original: OriginalSnapshot;
 };
 
-function toEditable(clusters: ParsedCluster[]): EditableCluster[] {
+function toEditable(clusters: ClusterProposal[]): EditableCluster[] {
   return clusters.map((c) => ({
     uid: crypto.randomUUID(),
     title: c.title,
@@ -66,15 +81,38 @@ function toEditable(clusters: ParsedCluster[]): EditableCluster[] {
       excluded: false,
       pendingVerification: k.pending_verification,
     })),
+    original: {
+      title: c.title,
+      targetUrl: c.target_url ?? '',
+      difficulty: c.difficulty ?? '',
+      destination: c.destination,
+      contentType: c.content_type,
+      searchIntent: c.search_intent,
+      keywordCount: c.keywords.length,
+    },
   }));
+}
+
+function computeFeedbackType(cluster: EditableCluster): 'confirmed' | 'edited' {
+  const activeKeywordCount = cluster.keywords.filter((k) => !k.excluded).length;
+  const unchanged =
+    cluster.title === cluster.original.title &&
+    cluster.targetUrl === cluster.original.targetUrl &&
+    cluster.difficulty === cluster.original.difficulty &&
+    cluster.destination === cluster.original.destination &&
+    cluster.contentType === cluster.original.contentType &&
+    cluster.searchIntent === cluster.original.searchIntent &&
+    activeKeywordCount === cluster.original.keywordCount;
+  return unchanged ? 'confirmed' : 'edited';
 }
 
 type Props = {
   projectId: string;
   analysis: {
-    clusters: ParsedCluster[];
-    unassigned: ParsedReasonedItem[];
-    irrelevant: ParsedReasonedItem[];
+    clusters: ClusterProposal[];
+    unassigned: ReasonedItem[];
+    irrelevant: ReasonedItem[];
+    jobId: string;
     estimatedCost: number | null;
     providerUsed: string;
     modelUsed: string;
@@ -85,7 +123,7 @@ type Props = {
 
 export function ClusterReview({ projectId, analysis, existingClustersCount, onDiscard }: Props) {
   const [clusters, setClusters] = useState<EditableCluster[]>(() => toEditable(analysis.clusters));
-  const [unassigned, setUnassigned] = useState<ParsedReasonedItem[]>(analysis.unassigned);
+  const [unassigned, setUnassigned] = useState<ReasonedItem[]>(analysis.unassigned);
   const [showModeChoice, setShowModeChoice] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -180,6 +218,7 @@ export function ClusterReview({ projectId, analysis, existingClustersCount, onDi
         contentType: c.contentType,
         searchIntent: c.searchIntent,
         strategyNote: c.strategyNote,
+        feedbackType: computeFeedbackType(c),
         keywords: c.keywords
           .filter((k) => !k.excluded)
           .map((k) => ({
@@ -200,7 +239,7 @@ export function ClusterReview({ projectId, analysis, existingClustersCount, onDi
       return;
     }
     startTransition(async () => {
-      const result = await confirmAIClusters(projectId, payload, mode);
+      const result = await confirmAIClusters(projectId, payload, mode, analysis.jobId);
       if (result && 'error' in result) {
         setError(result.error);
       }

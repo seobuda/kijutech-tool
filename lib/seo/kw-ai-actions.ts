@@ -8,28 +8,26 @@ import { getUser } from '@/lib/db/queries';
 import { assertUserInProjectTenant } from '@/lib/seo/actions';
 import { getKwRaw } from '@/lib/seo/kw-queries';
 import { completeStep3 } from '@/lib/seo/kw-actions';
-import { callAI, getPrompt } from '@/lib/ai/gateway';
+import { callAI, resolveActiveProvider } from '@/lib/ai/gateway';
 import { buildClusteringPrompt } from '@/lib/ai/prompts/cluster-keywords';
-import {
-  parseClusteringResponse,
-  ClusterParseError,
-  type ParsedCluster,
-  type ParsedReasonedItem,
-} from '@/lib/ai/parsers/cluster-keywords';
+import { clusterKeywords } from '@/lib/ai/clustering/pipeline';
+import { captureClusteringFeedback } from '@/lib/ai/clustering/feedback/capture';
+import type { KeywordInput, ClusterProposal, ReasonedItem } from '@/lib/ai/clustering/types';
 
-// Estas 3 acciones viven en lib/seo/ (no en lib/ai/actions.ts, aunque el
+// Estas acciones viven en lib/seo/ (no en lib/ai/actions.ts, aunque el
 // pedido original las situaba ahí) porque leen y escriben tablas del
 // módulo SEO (seo_kw_raw, seo_kw_clusters, seo_kw_cluster_keywords).
 // lib/ai/ solo conoce tablas núcleo + ai_*, igual que un módulo nunca
 // importa a otro módulo directamente — aquí es el módulo SEO el que
-// depende de la infraestructura de IA (callAI/getPrompt), no al revés.
+// depende de la infraestructura de IA (clusterKeywords/callAI), no al
+// revés.
 
 type AnalyzeResult =
   | { error: string; rawResponse?: string | null }
   | {
-      clusters: ParsedCluster[];
-      unassigned: ParsedReasonedItem[];
-      irrelevant: ParsedReasonedItem[];
+      clusters: ClusterProposal[];
+      unassigned: ReasonedItem[];
+      irrelevant: ReasonedItem[];
       jobId: string;
       estimatedCost: number | null;
       providerUsed: string;
@@ -58,61 +56,49 @@ export async function analyzeKeywordsWithAI(projectId: string): Promise<AnalyzeR
     return { error: 'Necesitas al menos 3 keywords para analizar con IA' };
   }
 
-  const keywordsForPrompt = rawKeywords.map((k) => ({
+  let activeProvider;
+  try {
+    activeProvider = await resolveActiveProvider(auth.user.tenantId);
+  } catch (err) {
+    return {
+      error: err instanceof Error ? err.message : 'No hay ningún proveedor de IA activo',
+    };
+  }
+
+  const keywordsInput: KeywordInput[] = rawKeywords.map((k) => ({
     keyword: k.keyword,
     volume: k.monthlyVolume,
     position: k.serankingPosition,
     difficulty: k.serankingDifficulty,
+    serp_features: k.serankingSerpFeatures,
+    url: k.serankingUrl,
   }));
 
-  const dbPrompt = await getPrompt('cluster_keywords');
-  const { system, user } = dbPrompt
-    ? {
-        system: dbPrompt.system_prompt,
-        user: buildClusteringPrompt(keywordsForPrompt, dbPrompt.user_prompt_template).user,
-      }
-    : buildClusteringPrompt(keywordsForPrompt);
-
-  let response;
+  let result;
   try {
-    response = await callAI({
-      tenantId: auth.user.tenantId,
+    result = await clusterKeywords({
       projectId,
-      function: 'cluster_keywords',
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: user },
-      ],
-      promptKey: 'cluster_keywords',
+      tenantId: auth.user.tenantId,
+      keywords: keywordsInput,
+      provider: activeProvider.provider,
+      model: activeProvider.model,
+      apiKey: activeProvider.apiKey,
     });
   } catch (err) {
-    return { error: err instanceof Error ? err.message : 'La llamada a la IA falló' };
+    return { error: err instanceof Error ? err.message : 'El análisis con IA falló' };
   }
-
-  let parsed;
-  try {
-    parsed = parseClusteringResponse(response.content);
-  } catch (err) {
-    return {
-      error: err instanceof Error ? err.message : 'No se pudo interpretar la respuesta de la IA',
-      rawResponse: err instanceof ClusterParseError ? err.rawResponse : null,
-    };
-  }
-
-  const [job] = await db
-    .select({ estimatedCost: aiJobs.estimatedCost })
-    .from(aiJobs)
-    .where(eq(aiJobs.id, response.jobId))
-    .limit(1);
 
   return {
-    clusters: parsed.clusters,
-    unassigned: parsed.unassigned,
-    irrelevant: parsed.irrelevant,
-    jobId: response.jobId,
-    estimatedCost: job?.estimatedCost != null ? Number(job.estimatedCost) : null,
-    providerUsed: response.provider,
-    modelUsed: response.model,
+    // La pantalla de revisión espera un único array de clusters, donde
+    // is_ai_suggested distingue los reales de los sugeridos — el
+    // pipeline los separa en dos, se fusionan aquí para no tocar la UI.
+    clusters: [...result.clusters, ...result.suggested],
+    unassigned: result.unassigned,
+    irrelevant: result.irrelevant,
+    jobId: result.metadata.job_id,
+    estimatedCost: result.metadata.embeddings_cost + result.metadata.llm_cost,
+    providerUsed: activeProvider.provider,
+    modelUsed: activeProvider.model,
   };
 }
 
@@ -128,6 +114,12 @@ type ConfirmClusterInput = {
   contentType: string | null;
   searchIntent: string | null;
   strategyNote: string | null;
+  // 'confirmed' si el usuario no tocó nada de lo que propuso la IA,
+  // 'edited' si cambió título/badges/keywords — lo calcula la pantalla
+  // de revisión comparando contra el snapshot original. Ausente para
+  // clusters creados a mano (paso 4, "Nuevo cluster"), que no pasan por
+  // el feedback de RAG.
+  feedbackType?: 'confirmed' | 'edited';
   keywords: Array<{
     keyword: string;
     monthlyVolume: number | null;
@@ -141,7 +133,8 @@ type ConfirmClusterInput = {
 export async function confirmAIClusters(
   projectId: string,
   clusters: ConfirmClusterInput[],
-  mode: 'add' | 'replace' = 'add'
+  mode: 'add' | 'replace' = 'add',
+  jobId?: string | null
 ): Promise<{ error: string }> {
   const auth = await safeAssertUserInProjectTenant(projectId);
   if (!auth.ok) {
@@ -209,6 +202,54 @@ export async function confirmAIClusters(
     return {
       error: err instanceof Error ? err.message : 'No se pudieron crear los clusters',
     };
+  }
+
+  // Feedback para el RAG de la Capa 4 — best-effort, en background, solo
+  // si esta confirmación viene del pipeline de IA (jobId presente; los
+  // clusters creados a mano en el paso 4 no tienen uno). No se espera
+  // (sin `await`) para no retrasar la redirección al paso 4.
+  if (jobId) {
+    void resolveActiveProvider(auth.user.tenantId)
+      .then((provider) =>
+        Promise.all(
+          validClusters.map((cluster) => {
+            const proposal: ClusterProposal = {
+              title: cluster.title.trim(),
+              target_url: cluster.targetUrl?.trim() || null,
+              url_type: cluster.urlType,
+              destination: cluster.destination,
+              content_type: cluster.contentType,
+              search_intent: cluster.searchIntent,
+              difficulty: cluster.difficulty,
+              low_volume: cluster.lowVolume,
+              reasoning: cluster.reasoning,
+              strategy_note: cluster.strategyNote,
+              is_ai_suggested: cluster.isAiSuggested,
+              primary_keyword: cluster.keywords.find((k) => k.isPrimary)?.keyword ?? cluster.keywords[0].keyword,
+              keywords: cluster.keywords.map((k) => ({
+                keyword: k.keyword,
+                monthly_volume: k.monthlyVolume,
+                is_primary: k.isPrimary,
+                pending_verification: k.pendingVerification,
+              })),
+            };
+
+            return captureClusteringFeedback(
+              auth.user.tenantId,
+              projectId,
+              jobId,
+              proposal,
+              proposal,
+              cluster.feedbackType ?? 'confirmed',
+              provider.provider,
+              provider.apiKey
+            );
+          })
+        )
+      )
+      .catch((err) => {
+        console.error('Feedback de clustering en background falló (ignorado):', err);
+      });
   }
 
   try {
