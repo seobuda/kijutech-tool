@@ -5,6 +5,7 @@ import { getModelPricing } from '@/lib/ai/gateway';
 import { normalizeByIntent } from './layers/0-intent-normalizer';
 import { embedKeywords } from './layers/1-embeddings';
 import { groupByHdbscan } from './layers/2-hdbscan';
+import { assignOrphans } from './layers/2b-orphan-assignment';
 import { analyzeSerpSignals } from './layers/3-serp-signals';
 import { classifyStrategically } from './layers/4-strategic-classifier';
 import { findSimilarExamples } from './feedback/retrieval';
@@ -85,8 +86,20 @@ export async function clusterKeywords(
   const { groups: rawGroups, noise } = await groupByHdbscan(embedded, cfg);
   layersUsed.push('hdbscan');
 
+  // Capa 2b — orphan assignment (sin IA): rescata keywords marcadas como
+  // noise por HDBSCAN cuyo embedding cae cerca del centroide de un grupo
+  // ya formado (ej. marcas/nombres propios sin suficiente masa crítica de
+  // vecinos). Lo que sigue aislado de verdad pasa a orphanUnassigned.
+  const embeddingMap = new Map(embedded.map((e) => [e.keyword.keyword, e.embedding]));
+  const { groups: rescuedGroups, unassigned: orphanUnassigned } = assignOrphans(
+    rawGroups,
+    noise,
+    embeddingMap
+  );
+  layersUsed.push('orphan_assignment');
+
   // Capa 3 — señales SERP (sin IA)
-  const groups = analyzeSerpSignals(rawGroups);
+  const groups = analyzeSerpSignals(rescuedGroups);
   layersUsed.push('serp_signals');
 
   // RAG — ejemplos similares ya validados por humanos, si hay suficientes
@@ -178,7 +191,7 @@ export async function clusterKeywords(
     });
 
     const unassigned = [
-      ...noise.map((k) => ({
+      ...orphanUnassigned.map((k) => ({
         keyword: k.keyword,
         reason: 'No se agrupó con ninguna otra keyword por similitud semántica',
       })),

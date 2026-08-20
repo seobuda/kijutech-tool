@@ -97,7 +97,7 @@ export type PipelineConfig = {
 export const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
   embedding_model: 'text-embedding-3-small',
   embedding_dimensions: 1536,
-  min_cluster_size: 2,
+  min_cluster_size: 1,
   min_samples: 1,
   max_suggested_clusters: 5,
 };
