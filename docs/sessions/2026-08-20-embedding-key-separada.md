@@ -1,7 +1,7 @@
 # Embedding key separada del proveedor de chat
 **Fecha:** 2026-08-20
 **Rama:** feature/clustering-pipeline
-**Commit:** 223983c6
+**Commit:** 7de32914
 
 ## Qué se construyó
 
@@ -15,6 +15,7 @@
 - `lib/ai/clustering/feedback/capture.ts` y `lib/seo/kw-ai-actions.ts` — tanto el análisis con IA como la captura de feedback en background (confirmación de clusters) ahora resuelven la config de embeddings vía `getEmbeddingConfig()` en vez de asumir el proveedor de chat.
 - `app/(dashboard)/dashboard/ai/provider-settings-section.tsx` — subsección expandible "Configuración de embeddings (opcional)" en cada tarjeta de proveedor (select de proveedor de embeddings, campo de modelo con placeholder dinámico, campo de key solo visible si el proveedor difiere del chat).
 - `app/(dashboard)/dashboard/ai/settings/page.tsx` y `.../ai/my-keys/page.tsx` — pasan los nuevos campos de embeddings a `ProviderRowData`.
+- **Actualización posterior en la misma sesión**: `DEFAULT_EMBEDDING_MODEL['gemini']` pasó de `text-embedding-004` (deprecado por Google) a `gemini-embedding-001`. Este modelo soporta Matryoshka Representation Learning, así que `embedBatchGemini` (`lib/ai/clustering/layers/1-embeddings.ts`) ahora manda `outputDimensionality: 1536` en la llamada a `embedContent`, pidiendo el vector completo de 1536 dimensiones directamente en vez de recibir 768 y rellenar con ceros. El padding con ceros (`padToTargetDimensions`) sigue existiendo porque Voyage (1024 dims) todavía lo necesita — para Gemini pasa a ser un no-op.
 
 ## Migraciones aplicadas
 
