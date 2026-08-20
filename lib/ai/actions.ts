@@ -12,7 +12,7 @@ import {
 } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
 import { encrypt } from '@/lib/ai/encryption';
-import { AI_PROVIDERS, type AiProviderKey } from '@/lib/ai/provider-meta';
+import { AI_PROVIDERS, EMBEDDING_PROVIDERS, type AiProviderKey } from '@/lib/ai/provider-meta';
 import { anthropicAdapter } from '@/lib/ai/adapters/anthropic';
 import { openaiAdapter } from '@/lib/ai/adapters/openai';
 import { geminiAdapter } from '@/lib/ai/adapters/gemini';
@@ -62,6 +62,12 @@ type SaveProviderSettingsParams = {
   isDefault: boolean;
   keyMode: 'platform' | 'byok';
   tenantId: string;
+  // Embeddings (opcional) — embeddingProvider null/undefined significa
+  // "mismo que chat". embeddingApiKey solo se manda cuando el usuario
+  // escribe una key nueva (igual que apiKey arriba).
+  embeddingProvider?: string | null;
+  embeddingModel?: string;
+  embeddingApiKey?: string;
 };
 
 export async function saveProviderSettings(
@@ -146,6 +152,22 @@ export async function saveProviderSettings(
     apiKeyIv = encryptedKey.iv;
   }
 
+  const embeddingProvider = params.embeddingProvider?.trim() || null;
+  if (embeddingProvider && !(EMBEDDING_PROVIDERS as readonly string[]).includes(embeddingProvider)) {
+    return { error: `Proveedor de embeddings desconocido: ${embeddingProvider}` };
+  }
+  const embeddingModel = embeddingProvider ? params.embeddingModel?.trim() || null : null;
+
+  let embeddingApiKeyEncrypted: string | undefined;
+  let embeddingApiKeyIv: string | undefined;
+  const newEmbeddingKey = params.embeddingApiKey?.trim();
+
+  if (embeddingProvider && newEmbeddingKey) {
+    const encryptedEmbeddingKey = encrypt(newEmbeddingKey);
+    embeddingApiKeyEncrypted = encryptedEmbeddingKey.encrypted;
+    embeddingApiKeyIv = encryptedEmbeddingKey.iv;
+  }
+
   if (params.isDefault) {
     await db
       .update(aiProviderSettings)
@@ -164,6 +186,10 @@ export async function saveProviderSettings(
       keyMode: params.keyMode,
       apiKeyEncrypted: apiKeyEncrypted ?? null,
       apiKeyIv: apiKeyIv ?? null,
+      embeddingProvider,
+      embeddingModel,
+      embeddingApiKeyEncrypted: embeddingApiKeyEncrypted ?? null,
+      embeddingApiKeyIv: embeddingApiKeyIv ?? null,
     })
     .onConflictDoUpdate({
       target: [aiProviderSettings.tenantId, aiProviderSettings.provider],
@@ -174,6 +200,19 @@ export async function saveProviderSettings(
         keyMode: params.keyMode,
         updatedAt: new Date(),
         ...(apiKeyEncrypted && apiKeyIv ? { apiKeyEncrypted, apiKeyIv } : {}),
+        embeddingProvider,
+        embeddingModel,
+        // Si se desactiva el override (embeddingProvider null) se borra
+        // también la key guardada — igual que hace deleteProviderKey()
+        // con la key principal. Si sigue habiendo un proveedor distinto
+        // pero no llegó una key nueva, se deja la columna intacta (se
+        // sigue usando la key ya guardada, o la principal como fallback
+        // en getEmbeddingConfig si nunca hubo una).
+        ...(embeddingProvider
+          ? embeddingApiKeyEncrypted && embeddingApiKeyIv
+            ? { embeddingApiKeyEncrypted, embeddingApiKeyIv }
+            : {}
+          : { embeddingApiKeyEncrypted: null, embeddingApiKeyIv: null }),
       },
     });
 

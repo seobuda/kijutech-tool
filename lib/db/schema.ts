@@ -11,6 +11,7 @@ import {
   date,
   decimal,
   unique,
+  vector,
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
@@ -76,6 +77,14 @@ export const aiProviderSettings = pgTable(
     isActive: boolean('is_active').notNull().default(false),
     isDefault: boolean('is_default').notNull().default(false),
     keyMode: varchar('key_mode', { length: 20 }).notNull().default('platform'),
+    // Proveedor/modelo/key de embeddings, independientes del proveedor de
+    // chat de esta fila. embeddingProvider null → usa el mismo proveedor
+    // (y su apiKeyEncrypted) también para embeddings; ver getEmbeddingConfig()
+    // en lib/ai/gateway.ts.
+    embeddingApiKeyEncrypted: text('embedding_api_key_encrypted'),
+    embeddingApiKeyIv: text('embedding_api_key_iv'),
+    embeddingProvider: varchar('embedding_provider', { length: 20 }),
+    embeddingModel: varchar('embedding_model', { length: 100 }),
     createdAt: timestamp('created_at').notNull().defaultNow(),
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
   },
@@ -134,6 +143,28 @@ export const aiPrompts = pgTable('ai_prompts', {
   version: integer('version').notNull().default(1),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
   updatedBy: integer('updated_by').references(() => users.id, { onDelete: 'set null' }),
+});
+
+export const aiClusteringExamples = pgTable('ai_clustering_examples', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: uuid('tenant_id')
+    .notNull()
+    .references(() => tenants.id, { onDelete: 'cascade' }),
+  projectId: uuid('project_id')
+    .notNull()
+    .references(() => projects.id, { onDelete: 'cascade' }),
+  keywords: jsonb('keywords').notNull(),
+  serpSignals: jsonb('serp_signals').notNull().default([]),
+  clusterTitle: varchar('cluster_title').notNull(),
+  targetUrl: varchar('target_url'),
+  searchIntent: varchar('search_intent'),
+  contentType: varchar('content_type'),
+  destination: varchar('destination'),
+  urlType: varchar('url_type'),
+  embedding: vector('embedding', { dimensions: 1536 }),
+  feedbackType: varchar('feedback_type').notNull().default('confirmed'),
+  sourceJobId: uuid('source_job_id').references(() => aiJobs.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
 export const modules = pgTable('modules', {
@@ -269,6 +300,7 @@ export const seoKwRaw = pgTable(
     serankingUrl: varchar('seranking_url', { length: 500 }),
     serankingSerpFeatures: text('seranking_serp_features'),
     source: varchar('source', { length: 20 }).notNull().default('manual'),
+    embedding: vector('embedding', { dimensions: 1536 }),
     createdAt: timestamp('created_at').notNull().defaultNow(),
   },
   (table) => [unique().on(table.projectId, table.keyword)]
@@ -290,6 +322,11 @@ export const seoKwClusters = pgTable('seo_kw_clusters', {
   isAiSuggested: boolean('is_ai_suggested').notNull().default(false),
   reasoning: text('reasoning'),
   lowVolume: boolean('low_volume').notNull().default(false),
+  destination: varchar('destination', { length: 20 }),
+  contentType: varchar('content_type', { length: 30 }),
+  searchIntent: varchar('search_intent', { length: 20 }),
+  strategyNote: text('strategy_note'),
+  embedding: vector('embedding', { dimensions: 1536 }),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
@@ -663,6 +700,8 @@ export type AiJob = typeof aiJobs.$inferSelect;
 export type NewAiJob = typeof aiJobs.$inferInsert;
 export type AiPrompt = typeof aiPrompts.$inferSelect;
 export type NewAiPrompt = typeof aiPrompts.$inferInsert;
+export type AiClusteringExample = typeof aiClusteringExamples.$inferSelect;
+export type NewAiClusteringExample = typeof aiClusteringExamples.$inferInsert;
 export type TeamDataWithMembers = Team & {
   teamMembers: (TeamMember & {
     user: Pick<User, 'id' | 'name' | 'email'>;

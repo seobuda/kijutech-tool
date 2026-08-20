@@ -259,3 +259,40 @@ tenga que pedirlo explícitamente:
 **Regla general:** si un usuario puede quedarse atascado sin saber qué hacer
 a continuación, falta un botón o un mensaje. Añadirlo es parte del trabajo,
 no un extra que Enric tiene que pedir.
+
+## Directiva de optimización de IA
+
+Antes de implementar cualquier función que use la API de IA
+(llamadas de completado, generación de texto, análisis), Claude Code debe
+evaluar si existe una solución más eficiente y escalar mejor que una
+llamada de completado directa.
+
+Preguntas obligatorias antes de implementar cualquier función de IA:
+
+1. ¿Esta tarea requiere razonamiento o solo similitud/clasificación?
+   - Si es similitud → considerar embeddings + clustering matemático
+   - Si es razonamiento → llamada de completado normal
+
+2. ¿El output puede ser muy largo y cortarse?
+   - Si sí → considerar embeddings + completado corto final
+   - O dividir en llamadas pequeñas con contexto compartido
+
+3. ¿Hay una solución matemática/algorítmica que evite llamar
+   a la IA completamente?
+   - Ejemplo: deduplicación, ordenación, filtrado → no necesitan IA
+
+4. ¿El mismo resultado se puede conseguir con un modelo más
+   pequeño y barato?
+   - Tareas simples de clasificación → Haiku o GPT-4o-mini
+   - Tareas complejas de razonamiento → Sonnet o GPT-4o
+
+Si Claude Code detecta una oportunidad de optimización de este
+tipo durante el desarrollo, debe señalarla explícitamente antes
+de implementar la solución obvia, aunque no haya sido pedida.
+Ejemplos de lo que hay que señalar:
+- "Esta función podría usar embeddings en vez de completado,
+   ahorrando un 95% del coste — ¿lo implementamos así?"
+- "Este análisis podría hacerse con un modelo más pequeño
+   sin perder calidad — ¿usamos Haiku aquí?"
+- "Esta tarea no necesita IA — un algoritmo simple lo resuelve
+   igual de bien y gratis — ¿lo hacemos sin IA?"

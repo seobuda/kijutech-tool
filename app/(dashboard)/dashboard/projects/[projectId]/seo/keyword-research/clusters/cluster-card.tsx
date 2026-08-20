@@ -22,11 +22,13 @@ import {
   updateKwCluster,
   addClusterKeyword,
   deleteClusterKeyword,
-  updateClientNote
+  updateClientNote,
+  updateClusterStrategy
 } from '@/lib/seo/kw-actions';
 import { estimateTrafficAtPositionOne } from '@/lib/seo/kw-instructions';
 import { keywordDifficultyLabel, urlTypeLabel } from '@/lib/seo/format';
 import { ClusterForm, type ClusterFormValues } from './cluster-form';
+import { StrategyBadges, type StrategyField } from '../strategy-badges';
 import type { SeoKwClusterWithKeywords } from '@/lib/seo/kw-queries';
 
 const STATUS_OPTIONS = [
@@ -63,6 +65,7 @@ export function ClusterCard({ cluster, onUpdated, onDeleted }: Props) {
   const [newIsPrimary, setNewIsPrimary] = useState(false);
   const [clientNote, setClientNote] = useState(cluster.clientNote ?? '');
   const [noteSaved, setNoteSaved] = useState(true);
+  const [strategyError, setStrategyError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const totalVolume = cluster.keywords.reduce(
@@ -137,6 +140,20 @@ export function ClusterCard({ cluster, onUpdated, onDeleted }: Props) {
         ...cluster,
         keywords: cluster.keywords.filter((k) => k.id !== id)
       });
+    });
+  }
+
+  function handleStrategyChange(field: StrategyField, value: string) {
+    setStrategyError(null);
+    startTransition(async () => {
+      const result = await updateClusterStrategy(cluster.id, field, value);
+      if ('error' in result) {
+        setStrategyError(result.error);
+        return;
+      }
+      const key =
+        field === 'destination' ? 'destination' : field === 'content_type' ? 'contentType' : 'searchIntent';
+      onUpdated({ ...cluster, [key]: value });
     });
   }
 
@@ -245,6 +262,19 @@ export function ClusterCard({ cluster, onUpdated, onDeleted }: Props) {
               {urlType.label}
             </span>
           )}
+        </div>
+
+        <div>
+          <StrategyBadges
+            values={{
+              destination: cluster.destination,
+              contentType: cluster.contentType,
+              searchIntent: cluster.searchIntent
+            }}
+            strategyNote={cluster.strategyNote}
+            onChange={handleStrategyChange}
+          />
+          {strategyError && <p className="text-xs text-red-600 mt-1">{strategyError}</p>}
         </div>
 
         {difficulty && (

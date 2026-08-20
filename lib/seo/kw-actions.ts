@@ -438,6 +438,42 @@ export async function updateClientNote(clusterId: string, note: string) {
   await db.update(seoKwClusters).set({ clientNote: note }).where(eq(seoKwClusters.id, clusterId));
 }
 
+const STRATEGY_FIELD_COLUMNS = {
+  destination: 'destination',
+  content_type: 'contentType',
+  search_intent: 'searchIntent',
+} as const;
+type StrategyField = keyof typeof STRATEGY_FIELD_COLUMNS;
+
+// A diferencia del resto de acciones de este archivo, esta devuelve un
+// resultado en vez de lanzar: Next.js sustituye el mensaje de los `throw`
+// de Server Actions por un texto genérico en el build de producción (visto
+// en el Bloque 2 del AI Gateway), y este badge se edita inline sin recargar
+// la página — si falla, el usuario necesita saber por qué.
+export async function updateClusterStrategy(
+  clusterId: string,
+  field: string,
+  value: string
+): Promise<{ error: string } | { success: true }> {
+  if (!(field in STRATEGY_FIELD_COLUMNS)) {
+    return { error: `Campo desconocido: ${field}` };
+  }
+
+  try {
+    await assertClusterAccess(clusterId);
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'No autorizado' };
+  }
+
+  const column = STRATEGY_FIELD_COLUMNS[field as StrategyField];
+  await db
+    .update(seoKwClusters)
+    .set({ [column]: value })
+    .where(eq(seoKwClusters.id, clusterId));
+
+  return { success: true };
+}
+
 async function assertClusterKeywordAccess(id: string) {
   const [row] = await db
     .select()

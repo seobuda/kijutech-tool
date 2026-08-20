@@ -7,9 +7,16 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Loader2, Check, Trash2 } from 'lucide-react';
+import { ChevronDown, Loader2, Check, Trash2 } from 'lucide-react';
 import { saveProviderSettings, deleteProviderKey } from '@/lib/ai/actions';
-import { AI_PROVIDER_META, type AiProviderKey } from '@/lib/ai/provider-meta';
+import {
+  AI_PROVIDER_META,
+  EMBEDDING_PROVIDERS,
+  EMBEDDING_PROVIDER_META,
+  DEFAULT_EMBEDDING_MODEL,
+  type AiProviderKey,
+  type EmbeddingProviderKey,
+} from '@/lib/ai/provider-meta';
 
 export type ProviderRowData = {
   provider: AiProviderKey;
@@ -17,7 +24,12 @@ export type ProviderRowData = {
   isActive: boolean;
   isDefault: boolean;
   hasKey: boolean;
+  embeddingProvider: string | null;
+  embeddingModel: string;
+  hasEmbeddingKey: boolean;
 };
+
+const SAME_AS_CHAT = 'same_as_chat';
 
 type Props = {
   tenantId: string;
@@ -69,6 +81,19 @@ function ProviderRow({
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [embeddingsOpen, setEmbeddingsOpen] = useState(false);
+  const [embeddingProvider, setEmbeddingProvider] = useState<string>(
+    row.embeddingProvider ?? SAME_AS_CHAT
+  );
+  const [embeddingModel, setEmbeddingModel] = useState(row.embeddingModel);
+  const [embeddingApiKey, setEmbeddingApiKey] = useState('');
+  const [hasEmbeddingKey, setHasEmbeddingKey] = useState(row.hasEmbeddingKey);
+
+  const embeddingModelPlaceholder =
+    embeddingProvider === SAME_AS_CHAT
+      ? ''
+      : DEFAULT_EMBEDDING_MODEL[embeddingProvider] ?? '';
+
   function handleDefaultChange(checked: boolean) {
     setIsDefault(checked);
     if (checked) {
@@ -88,12 +113,19 @@ function ProviderRow({
         isDefault,
         keyMode,
         tenantId,
+        embeddingProvider: embeddingProvider === SAME_AS_CHAT ? null : embeddingProvider,
+        embeddingModel: embeddingModel.trim() ? embeddingModel.trim() : undefined,
+        embeddingApiKey: embeddingApiKey.trim() ? embeddingApiKey.trim() : undefined,
       });
       if ('error' in result) {
         setError(result.error);
         return;
       }
       setApiKey('');
+      setEmbeddingApiKey('');
+      setHasEmbeddingKey(
+        embeddingProvider !== SAME_AS_CHAT && (Boolean(embeddingApiKey.trim()) || hasEmbeddingKey)
+      );
       setSaved(true);
       router.refresh();
     });
@@ -175,6 +207,89 @@ function ProviderRow({
             />
             <Label htmlFor={`${row.provider}-default`}>Por defecto</Label>
           </div>
+        </div>
+
+        <div className="border-t pt-4">
+          <button
+            type="button"
+            onClick={() => setEmbeddingsOpen((prev) => !prev)}
+            className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground"
+          >
+            <ChevronDown
+              className={`h-4 w-4 transition-transform ${embeddingsOpen ? 'rotate-180' : ''}`}
+            />
+            Configuración de embeddings (opcional)
+          </button>
+
+          {embeddingsOpen && (
+            <div className="mt-3 space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Por defecto usa el mismo proveedor que el chat. Configura esto solo si
+                quieres usar un proveedor diferente para embeddings (ej: Voyage AI con
+                Anthropic, o Gemini con cualquier proveedor).
+              </p>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor={`${row.provider}-embedding-provider`}>
+                    Proveedor de embeddings
+                  </Label>
+                  <select
+                    id={`${row.provider}-embedding-provider`}
+                    value={embeddingProvider}
+                    onChange={(e) => {
+                      setEmbeddingProvider(e.target.value);
+                      setSaved(false);
+                    }}
+                    className="border-input focus-visible:border-ring focus-visible:ring-ring/50 flex h-9 w-full items-center rounded-md border bg-transparent px-3 py-1 text-base shadow-xs outline-none focus-visible:ring-[3px] md:text-sm dark:bg-input/30"
+                  >
+                    <option value={SAME_AS_CHAT}>Mismo que chat</option>
+                    {EMBEDDING_PROVIDERS.map((key) => (
+                      <option key={key} value={key}>
+                        {EMBEDDING_PROVIDER_META[key as EmbeddingProviderKey].label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor={`${row.provider}-embedding-model`}>
+                    Modelo de embeddings
+                  </Label>
+                  <Input
+                    id={`${row.provider}-embedding-model`}
+                    value={embeddingModel}
+                    onChange={(e) => {
+                      setEmbeddingModel(e.target.value);
+                      setSaved(false);
+                    }}
+                    placeholder={embeddingModelPlaceholder}
+                    disabled={embeddingProvider === SAME_AS_CHAT}
+                  />
+                </div>
+              </div>
+
+              {embeddingProvider !== SAME_AS_CHAT && (
+                <div className="space-y-1.5">
+                  <Label htmlFor={`${row.provider}-embedding-key`}>
+                    API key de embeddings
+                  </Label>
+                  <Input
+                    id={`${row.provider}-embedding-key`}
+                    type="password"
+                    value={embeddingApiKey}
+                    onChange={(e) => {
+                      setEmbeddingApiKey(e.target.value);
+                      setSaved(false);
+                    }}
+                    placeholder={
+                      hasEmbeddingKey ? '••••••••' : 'Deja vacío para usar la misma key del chat'
+                    }
+                  />
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-2">

@@ -2,6 +2,7 @@ import { and, desc, eq, gte, isNull, lte, or } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { aiJobs, aiModelPricing, aiPrompts, aiProviderSettings, tenants } from '@/lib/db/schema';
 import { decrypt } from '@/lib/ai/encryption';
+import { DEFAULT_EMBEDDING_MODEL } from '@/lib/ai/provider-meta';
 import { anthropicAdapter } from '@/lib/ai/adapters/anthropic';
 import { openaiAdapter } from '@/lib/ai/adapters/openai';
 import { geminiAdapter } from '@/lib/ai/adapters/gemini';
@@ -15,7 +16,11 @@ const ADAPTERS: Record<string, AIAdapter> = {
   deepseek: deepseekAdapter,
 };
 
-const CALL_TIMEOUT_MS = 60_000;
+export function getAdapter(provider: string): AIAdapter | null {
+  return ADAPTERS[provider] ?? null;
+}
+
+export const CALL_TIMEOUT_MS = 180_000;
 
 type CallAIParams = {
   tenantId: string;
@@ -99,7 +104,7 @@ async function resolveProviderSetting(
   return platform;
 }
 
-async function getModelPricing(provider: string, model: string) {
+export async function getModelPricing(provider: string, model: string) {
   const today = new Date().toISOString().slice(0, 10);
 
   const rows = await db
@@ -119,7 +124,7 @@ async function getModelPricing(provider: string, model: string) {
   return rows[0] ?? null;
 }
 
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+export function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(
       () => reject(new Error(`Llamada a la IA superó el timeout de ${ms / 1000}s`)),
@@ -136,6 +141,91 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
       }
     );
   });
+}
+
+// Resuelve qué proveedor/modelo/key usar para un tenant y descifra la
+// key, sin crear ningún ai_job — lo usa callAI() internamente, y
+// también el pipeline de clustering (lib/ai/clustering/), que necesita
+// la key ya resuelta para pasarla tanto a la Capa 1 (embeddings) como a
+// la Capa 4 (LLM) sin resolverla dos veces.
+export async function resolveActiveProvider(
+  tenantId: string,
+  preferredProvider?: string
+): Promise<{ provider: string; model: string; apiKey: string; keyMode: string }> {
+  const [tenant] = await db
+    .select({ aiKeyModeAllowed: tenants.aiKeyModeAllowed })
+    .from(tenants)
+    .where(eq(tenants.id, tenantId))
+    .limit(1);
+
+  if (!tenant) {
+    throw new Error('Tenant no encontrado');
+  }
+
+  const setting = await resolveProviderSetting(tenantId, tenant.aiKeyModeAllowed, preferredProvider);
+
+  if (!setting.apiKeyEncrypted || !setting.apiKeyIv) {
+    throw new Error(
+      `La configuración de ${setting.provider} no tiene una API key cifrada válida`
+    );
+  }
+
+  return {
+    provider: setting.provider,
+    model: setting.model,
+    apiKey: decrypt(setting.apiKeyEncrypted, setting.apiKeyIv),
+    keyMode: setting.keyMode,
+  };
+}
+
+// Resuelve el proveedor/modelo/key a usar para EMBEDDINGS, que puede ser
+// distinto del proveedor de chat resuelto por resolveActiveProvider().
+// Recibe el keyMode ya resuelto (devuelto por resolveActiveProvider) en
+// vez de volver a mirar tenants.aiKeyModeAllowed, para no resolver el
+// tenant dos veces — ver el pipeline de clustering (lib/seo/kw-ai-actions.ts),
+// que llama a ambas en la misma petición.
+export async function getEmbeddingConfig(
+  tenantId: string,
+  keyMode: 'platform' | 'byok'
+): Promise<{ provider: string; model: string; apiKey: string }> {
+  const setting = await findProviderSetting(tenantId, keyMode);
+  if (!setting) {
+    throw new Error('No hay ninguna configuración de IA activa para este tenant');
+  }
+  if (!setting.apiKeyEncrypted || !setting.apiKeyIv) {
+    throw new Error(
+      `La configuración de ${setting.provider} no tiene una API key cifrada válida`
+    );
+  }
+
+  // Sin proveedor de embeddings propio configurado → usa el proveedor de
+  // chat también para embeddings, con su modelo de embeddings por
+  // defecto (nunca el modelo de CHAT configurado — p.ej. "claude-sonnet-4-6"
+  // no es un modelo de embeddings válido para la API de Voyage).
+  if (!setting.embeddingProvider) {
+    const model = DEFAULT_EMBEDDING_MODEL[setting.provider];
+    if (!model) {
+      throw new Error(
+        `${setting.provider} no tiene un modelo de embeddings por defecto — configura un proveedor de embeddings específico en IA & Modelos`
+      );
+    }
+    return {
+      provider: setting.provider,
+      model,
+      apiKey: decrypt(setting.apiKeyEncrypted, setting.apiKeyIv),
+    };
+  }
+
+  const apiKey =
+    setting.embeddingApiKeyEncrypted && setting.embeddingApiKeyIv
+      ? decrypt(setting.embeddingApiKeyEncrypted, setting.embeddingApiKeyIv)
+      : decrypt(setting.apiKeyEncrypted, setting.apiKeyIv);
+
+  return {
+    provider: setting.embeddingProvider,
+    model: setting.embeddingModel || DEFAULT_EMBEDDING_MODEL[setting.embeddingProvider],
+    apiKey,
+  };
 }
 
 export async function callAI(
@@ -166,29 +256,7 @@ export async function callAI(
     .returning();
 
   try {
-    const [tenant] = await db
-      .select({ aiKeyModeAllowed: tenants.aiKeyModeAllowed })
-      .from(tenants)
-      .where(eq(tenants.id, tenantId))
-      .limit(1);
-
-    if (!tenant) {
-      throw new Error('Tenant no encontrado');
-    }
-
-    const setting = await resolveProviderSetting(
-      tenantId,
-      tenant.aiKeyModeAllowed,
-      preferredProvider
-    );
-
-    if (!setting.apiKeyEncrypted || !setting.apiKeyIv) {
-      throw new Error(
-        `La configuración de ${setting.provider} no tiene una API key cifrada válida`
-      );
-    }
-
-    const apiKey = decrypt(setting.apiKeyEncrypted, setting.apiKeyIv);
+    const setting = await resolveActiveProvider(tenantId, preferredProvider);
 
     const adapter = ADAPTERS[setting.provider];
     if (!adapter) {
@@ -196,7 +264,7 @@ export async function callAI(
     }
 
     const response = await withTimeout(
-      adapter.sendMessage(messages, setting.model, apiKey),
+      adapter.sendMessage(messages, setting.model, setting.apiKey),
       CALL_TIMEOUT_MS
     );
 

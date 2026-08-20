@@ -1,19 +1,19 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Loader2, Sparkles, ChevronDown, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { analyzeKeywordsWithAI } from '@/lib/seo/kw-ai-actions';
-import type { ParsedCluster, ParsedReasonedItem } from '@/lib/ai/parsers/cluster-keywords';
+import type { ClusterProposal, ReasonedItem } from '@/lib/ai/clustering/types';
 import { ClusteringPanel } from './clustering-panel';
 import { ClusterReview } from './cluster-review';
 
 type AnalysisResult = {
-  clusters: ParsedCluster[];
-  unassigned: ParsedReasonedItem[];
-  irrelevant: ParsedReasonedItem[];
+  clusters: ClusterProposal[];
+  unassigned: ReasonedItem[];
+  irrelevant: ReasonedItem[];
   jobId: string;
   estimatedCost: number | null;
   providerUsed: string;
@@ -35,6 +35,14 @@ type Props = {
   manualPanelProps: ManualPanelProps;
 };
 
+function getAnalyzingMessage(seconds: number): string {
+  if (seconds < 5) return 'Analizando keywords...';
+  if (seconds < 30) return 'Procesando con IA... esto puede tardar unos segundos';
+  if (seconds < 60) return 'Agrupando por intención de búsqueda...';
+  if (seconds < 90) return 'Generando clasificación estratégica...';
+  return 'Casi listo, finalizando el análisis...';
+}
+
 export function ClusteringStepClient({
   projectId,
   activeProvider,
@@ -44,15 +52,33 @@ export function ClusteringStepClient({
 }: Props) {
   const [view, setView] = useState<'idle' | 'analyzing' | 'error' | 'review'>('idle');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [errorRawResponse, setErrorRawResponse] = useState<string | null>(null);
+  const [rawResponseExpanded, setRawResponseExpanded] = useState(false);
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [manualExpanded, setManualExpanded] = useState(!activeProvider);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  // Feedback visual progresivo mientras dura la llamada (hasta 180s de
+  // timeout en el gateway) — solo un contador local, sin llamadas al
+  // servidor.
+  useEffect(() => {
+    if (view !== 'analyzing') return;
+    setElapsedSeconds(0);
+    const interval = setInterval(() => {
+      setElapsedSeconds((s) => s + 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [view]);
 
   function handleAnalyze() {
     setView('analyzing');
     setErrorMsg(null);
+    setErrorRawResponse(null);
+    setRawResponseExpanded(false);
     analyzeKeywordsWithAI(projectId).then((result) => {
       if ('error' in result) {
         setErrorMsg(result.error);
+        setErrorRawResponse(result.rawResponse ?? null);
         setView('error');
         return;
       }
@@ -94,7 +120,38 @@ export function ClusteringStepClient({
             </p>
 
             {view === 'error' && errorMsg && (
-              <p className="text-sm text-red-600">{errorMsg}</p>
+              errorRawResponse ? (
+                <div className="rounded-md border border-red-300 bg-red-50 p-3 space-y-2">
+                  <p className="text-sm font-medium text-red-800">
+                    Error al procesar la respuesta de la IA
+                  </p>
+                  <p className="text-sm text-red-700">{errorMsg}</p>
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => setRawResponseExpanded((v) => !v)}
+                      className="flex items-center gap-1 text-xs font-medium text-red-800 hover:text-red-900"
+                    >
+                      {rawResponseExpanded ? (
+                        <ChevronDown className="h-3.5 w-3.5" />
+                      ) : (
+                        <ChevronRight className="h-3.5 w-3.5" />
+                      )}
+                      Ver respuesta raw
+                    </button>
+                    {rawResponseExpanded && (
+                      <textarea
+                        readOnly
+                        value={errorRawResponse}
+                        rows={10}
+                        className="mt-2 w-full rounded-md border border-red-200 bg-white p-2 font-mono text-xs text-gray-700"
+                      />
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-red-600">{errorMsg}</p>
+              )
             )}
 
             <Button
@@ -106,7 +163,7 @@ export function ClusteringStepClient({
               {view === 'analyzing' ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Analizando keywords...
+                  {getAnalyzingMessage(elapsedSeconds)}
                 </>
               ) : view === 'error' ? (
                 'Reintentar'
