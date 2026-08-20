@@ -1,3 +1,4 @@
+import { DEFAULT_EMBEDDING_MODEL } from '@/lib/ai/provider-meta';
 import type { KeywordInput, PipelineConfig } from '../types';
 
 const BATCH_SIZE = 100;
@@ -21,11 +22,15 @@ function padToTargetDimensions(vector: number[]): number[] {
   return [...vector, ...new Array(TARGET_DIMENSIONS - vector.length).fill(0)];
 }
 
-async function embedBatchVoyage(texts: string[], apiKey: string): Promise<number[][]> {
+async function embedBatchVoyage(
+  texts: string[],
+  apiKey: string,
+  model: string
+): Promise<number[][]> {
   const res = await fetch('https://api.voyageai.com/v1/embeddings', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({ input: texts, model: 'voyage-3' }),
+    body: JSON.stringify({ input: texts, model }),
   });
   if (!res.ok) {
     throw new Error(`Voyage AI embeddings error (${res.status}): ${await res.text()}`);
@@ -34,11 +39,15 @@ async function embedBatchVoyage(texts: string[], apiKey: string): Promise<number
   return data.data.map((d: { embedding: number[] }) => d.embedding);
 }
 
-async function embedBatchOpenAI(texts: string[], apiKey: string): Promise<number[][]> {
+async function embedBatchOpenAI(
+  texts: string[],
+  apiKey: string,
+  model: string
+): Promise<number[][]> {
   const res = await fetch('https://api.openai.com/v1/embeddings', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({ input: texts, model: 'text-embedding-3-small' }),
+    body: JSON.stringify({ input: texts, model }),
   });
   if (!res.ok) {
     throw new Error(`OpenAI embeddings error (${res.status}): ${await res.text()}`);
@@ -47,13 +56,17 @@ async function embedBatchOpenAI(texts: string[], apiKey: string): Promise<number
   return data.data.map((d: { embedding: number[] }) => d.embedding);
 }
 
-async function embedBatchGemini(texts: string[], apiKey: string): Promise<number[][]> {
+async function embedBatchGemini(
+  texts: string[],
+  apiKey: string,
+  model: string
+): Promise<number[][]> {
   // La API de Gemini (embedContent) no tiene endpoint de lote como
   // Voyage/OpenAI — un texto por llamada, paralelizadas dentro del lote.
   const results = await Promise.all(
     texts.map(async (text) => {
       const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${apiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:embedContent?key=${apiKey}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -70,15 +83,21 @@ async function embedBatchGemini(texts: string[], apiKey: string): Promise<number
   return results;
 }
 
+// `provider` aquí es el proveedor de EMBEDDINGS ya resuelto por
+// getEmbeddingConfig() (lib/ai/gateway.ts) — puede ser 'voyage' explícito
+// (elegido en la subsección de embeddings de la UI) o 'anthropic' cuando
+// el tenant no configuró un proveedor de embeddings propio (fallback:
+// mismo proveedor que el chat, y Anthropic no tiene API de embeddings
+// propia, así que ese fallback también usa Voyage).
 function getEmbedBatchFn(provider: string) {
   if (provider === 'deepseek') {
     throw new Error(
-      'DeepSeek no tiene API de embeddings propia. Esta llamada no recibió una key de OpenAI de respaldo — configúrala en IA & Modelos.'
+      'DeepSeek no tiene API de embeddings propia. Configura un proveedor de embeddings específico (OpenAI, Gemini o Voyage AI) en IA & Modelos.'
     );
   }
 
   const embedBatch =
-    provider === 'anthropic'
+    provider === 'anthropic' || provider === 'voyage'
       ? embedBatchVoyage
       : provider === 'openai'
         ? embedBatchOpenAI
@@ -101,14 +120,15 @@ function getEmbedBatchFn(provider: string) {
 export async function embedTexts(
   texts: string[],
   provider: string,
-  apiKey: string
+  apiKey: string,
+  model: string = DEFAULT_EMBEDDING_MODEL[provider] ?? ''
 ): Promise<number[][]> {
   const embedBatch = getEmbedBatchFn(provider);
   const results: number[][] = [];
 
   for (let i = 0; i < texts.length; i += BATCH_SIZE) {
     const batch = texts.slice(i, i + BATCH_SIZE);
-    const embeddings = await embedBatch(batch, apiKey);
+    const embeddings = await embedBatch(batch, apiKey, model);
     embeddings.forEach((e) => results.push(padToTargetDimensions(e)));
   }
 
@@ -119,12 +139,14 @@ export async function embedKeywords(
   keywords: KeywordInput[],
   provider: string,
   apiKey: string,
+  model: string,
   _config: PipelineConfig
 ): Promise<Array<{ keyword: KeywordInput; embedding: number[] }>> {
   const embeddings = await embedTexts(
     keywords.map((k) => k.keyword),
     provider,
-    apiKey
+    apiKey,
+    model
   );
 
   return keywords.map((keyword, idx) => ({ keyword, embedding: embeddings[idx] }));

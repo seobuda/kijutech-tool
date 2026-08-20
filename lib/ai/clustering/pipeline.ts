@@ -10,22 +10,16 @@ import { findSimilarExamples } from './feedback/retrieval';
 import { DEFAULT_PIPELINE_CONFIG } from './types';
 import type { ClusteringInput, ClusteringOutput, PipelineConfig } from './types';
 
-// Nombre del modelo de embeddings usado por cada proveedor — solo para
-// consultar su precio en ai_model_pricing. Si nadie ha añadido una fila
-// de precio para el modelo de embeddings (pestaña "Precios por modelo"
-// en IA & Modelos), embeddings_cost sale en 0 — no bloquea el pipeline
-// por falta de un dato administrativo.
-const EMBEDDING_MODEL_BY_PROVIDER: Record<string, string> = {
-  anthropic: 'voyage-3',
-  openai: 'text-embedding-3-small',
-  gemini: 'text-embedding-004',
-};
-
-async function estimateEmbeddingsCost(provider: string, keywordCount: number): Promise<number> {
-  const modelName = EMBEDDING_MODEL_BY_PROVIDER[provider];
-  if (!modelName) return 0;
-
-  const pricing = await getModelPricing(provider, modelName);
+// Consulta el precio del modelo de embeddings realmente usado (Capa 1) en
+// ai_model_pricing. Si nadie ha añadido una fila de precio para ese
+// modelo (pestaña "Precios por modelo" en IA & Modelos), embeddings_cost
+// sale en 0 — no bloquea el pipeline por falta de un dato administrativo.
+async function estimateEmbeddingsCost(
+  provider: string,
+  model: string,
+  keywordCount: number
+): Promise<number> {
+  const pricing = await getModelPricing(provider, model);
   if (!pricing) return 0;
 
   // Estimación aproximada de tokens (keywords son textos muy cortos):
@@ -45,9 +39,19 @@ export async function clusterKeywords(
   const layersUsed: string[] = [];
 
   // Capa 1 — embeddings
-  const embedded = await embedKeywords(input.keywords, input.provider, input.apiKey, cfg);
+  const embedded = await embedKeywords(
+    input.keywords,
+    input.embeddingProvider,
+    input.embeddingApiKey,
+    input.embeddingModel,
+    cfg
+  );
   layersUsed.push('embeddings');
-  const embeddingsCost = await estimateEmbeddingsCost(input.provider, input.keywords.length);
+  const embeddingsCost = await estimateEmbeddingsCost(
+    input.embeddingProvider,
+    input.embeddingModel,
+    input.keywords.length
+  );
 
   // Capa 2 — HDBSCAN
   const { groups: rawGroups, noise } = await groupByHdbscan(embedded, cfg);

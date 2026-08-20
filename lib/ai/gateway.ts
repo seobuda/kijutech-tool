@@ -2,6 +2,7 @@ import { and, desc, eq, gte, isNull, lte, or } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { aiJobs, aiModelPricing, aiPrompts, aiProviderSettings, tenants } from '@/lib/db/schema';
 import { decrypt } from '@/lib/ai/encryption';
+import { DEFAULT_EMBEDDING_MODEL } from '@/lib/ai/provider-meta';
 import { anthropicAdapter } from '@/lib/ai/adapters/anthropic';
 import { openaiAdapter } from '@/lib/ai/adapters/openai';
 import { geminiAdapter } from '@/lib/ai/adapters/gemini';
@@ -174,6 +175,56 @@ export async function resolveActiveProvider(
     model: setting.model,
     apiKey: decrypt(setting.apiKeyEncrypted, setting.apiKeyIv),
     keyMode: setting.keyMode,
+  };
+}
+
+// Resuelve el proveedor/modelo/key a usar para EMBEDDINGS, que puede ser
+// distinto del proveedor de chat resuelto por resolveActiveProvider().
+// Recibe el keyMode ya resuelto (devuelto por resolveActiveProvider) en
+// vez de volver a mirar tenants.aiKeyModeAllowed, para no resolver el
+// tenant dos veces — ver el pipeline de clustering (lib/seo/kw-ai-actions.ts),
+// que llama a ambas en la misma petición.
+export async function getEmbeddingConfig(
+  tenantId: string,
+  keyMode: 'platform' | 'byok'
+): Promise<{ provider: string; model: string; apiKey: string }> {
+  const setting = await findProviderSetting(tenantId, keyMode);
+  if (!setting) {
+    throw new Error('No hay ninguna configuración de IA activa para este tenant');
+  }
+  if (!setting.apiKeyEncrypted || !setting.apiKeyIv) {
+    throw new Error(
+      `La configuración de ${setting.provider} no tiene una API key cifrada válida`
+    );
+  }
+
+  // Sin proveedor de embeddings propio configurado → usa el proveedor de
+  // chat también para embeddings, con su modelo de embeddings por
+  // defecto (nunca el modelo de CHAT configurado — p.ej. "claude-sonnet-4-6"
+  // no es un modelo de embeddings válido para la API de Voyage).
+  if (!setting.embeddingProvider) {
+    const model = DEFAULT_EMBEDDING_MODEL[setting.provider];
+    if (!model) {
+      throw new Error(
+        `${setting.provider} no tiene un modelo de embeddings por defecto — configura un proveedor de embeddings específico en IA & Modelos`
+      );
+    }
+    return {
+      provider: setting.provider,
+      model,
+      apiKey: decrypt(setting.apiKeyEncrypted, setting.apiKeyIv),
+    };
+  }
+
+  const apiKey =
+    setting.embeddingApiKeyEncrypted && setting.embeddingApiKeyIv
+      ? decrypt(setting.embeddingApiKeyEncrypted, setting.embeddingApiKeyIv)
+      : decrypt(setting.apiKeyEncrypted, setting.apiKeyIv);
+
+  return {
+    provider: setting.embeddingProvider,
+    model: setting.embeddingModel || DEFAULT_EMBEDDING_MODEL[setting.embeddingProvider],
+    apiKey,
   };
 }
 

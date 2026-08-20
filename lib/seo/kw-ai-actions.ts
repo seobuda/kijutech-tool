@@ -8,7 +8,7 @@ import { getUser } from '@/lib/db/queries';
 import { assertUserInProjectTenant } from '@/lib/seo/actions';
 import { getKwRaw } from '@/lib/seo/kw-queries';
 import { completeStep3 } from '@/lib/seo/kw-actions';
-import { callAI, resolveActiveProvider } from '@/lib/ai/gateway';
+import { callAI, resolveActiveProvider, getEmbeddingConfig } from '@/lib/ai/gateway';
 import { buildClusteringPrompt } from '@/lib/ai/prompts/cluster-keywords';
 import { clusterKeywords } from '@/lib/ai/clustering/pipeline';
 import { captureClusteringFeedback } from '@/lib/ai/clustering/feedback/capture';
@@ -57,8 +57,10 @@ export async function analyzeKeywordsWithAI(projectId: string): Promise<AnalyzeR
   }
 
   let activeProvider;
+  let embeddingConfig;
   try {
     activeProvider = await resolveActiveProvider(auth.user.tenantId);
+    embeddingConfig = await getEmbeddingConfig(auth.user.tenantId, activeProvider.keyMode as 'platform' | 'byok');
   } catch (err) {
     return {
       error: err instanceof Error ? err.message : 'No hay ningún proveedor de IA activo',
@@ -83,6 +85,9 @@ export async function analyzeKeywordsWithAI(projectId: string): Promise<AnalyzeR
       provider: activeProvider.provider,
       model: activeProvider.model,
       apiKey: activeProvider.apiKey,
+      embeddingProvider: embeddingConfig.provider,
+      embeddingModel: embeddingConfig.model,
+      embeddingApiKey: embeddingConfig.apiKey,
     });
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'El análisis con IA falló' };
@@ -210,7 +215,8 @@ export async function confirmAIClusters(
   // (sin `await`) para no retrasar la redirección al paso 4.
   if (jobId) {
     void resolveActiveProvider(auth.user.tenantId)
-      .then((provider) =>
+      .then((provider) => getEmbeddingConfig(auth.user.tenantId, provider.keyMode as 'platform' | 'byok'))
+      .then((embeddingConfig) =>
         Promise.all(
           validClusters.map((cluster) => {
             const proposal: ClusterProposal = {
@@ -241,8 +247,9 @@ export async function confirmAIClusters(
               proposal,
               proposal,
               cluster.feedbackType ?? 'confirmed',
-              provider.provider,
-              provider.apiKey
+              embeddingConfig.provider,
+              embeddingConfig.apiKey,
+              embeddingConfig.model
             );
           })
         )

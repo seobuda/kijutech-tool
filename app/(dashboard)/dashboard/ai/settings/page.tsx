@@ -46,6 +46,9 @@ export default async function AiSettingsPage() {
       isActive: existing?.isActive ?? false,
       isDefault: existing?.isDefault ?? false,
       hasKey: Boolean(existing?.apiKeyEncrypted),
+      embeddingProvider: existing?.embeddingProvider ?? null,
+      embeddingModel: existing?.embeddingModel ?? '',
+      hasEmbeddingKey: Boolean(existing?.embeddingApiKeyEncrypted),
     };
   });
 

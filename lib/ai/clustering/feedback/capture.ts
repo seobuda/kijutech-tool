@@ -13,7 +13,8 @@ export async function captureClusteringFeedback(
   confirmedCluster: ClusterProposal,
   feedbackType: 'confirmed' | 'edited' | 'deleted',
   embeddingProvider: string,
-  embeddingApiKey: string
+  embeddingApiKey: string,
+  embeddingModel: string
 ): Promise<void> {
   if (feedbackType === 'deleted') {
     return;
@@ -21,7 +22,7 @@ export async function captureClusteringFeedback(
 
   try {
     const text = `${confirmedCluster.title}: ${confirmedCluster.keywords.map((k) => k.keyword).join(', ')}`;
-    const [embedding] = await embedTexts([text], embeddingProvider, embeddingApiKey);
+    const [embedding] = await embedTexts([text], embeddingProvider, embeddingApiKey, embeddingModel);
 
     // ClusterProposal.keywords no lleva position/difficulty/serp_features
     // (esos campos viven en seo_kw_raw, no en la propuesta ya clasificada)

@@ -77,6 +77,14 @@ export const aiProviderSettings = pgTable(
     isActive: boolean('is_active').notNull().default(false),
     isDefault: boolean('is_default').notNull().default(false),
     keyMode: varchar('key_mode', { length: 20 }).notNull().default('platform'),
+    // Proveedor/modelo/key de embeddings, independientes del proveedor de
+    // chat de esta fila. embeddingProvider null → usa el mismo proveedor
+    // (y su apiKeyEncrypted) también para embeddings; ver getEmbeddingConfig()
+    // en lib/ai/gateway.ts.
+    embeddingApiKeyEncrypted: text('embedding_api_key_encrypted'),
+    embeddingApiKeyIv: text('embedding_api_key_iv'),
+    embeddingProvider: varchar('embedding_provider', { length: 20 }),
+    embeddingModel: varchar('embedding_model', { length: 100 }),
     createdAt: timestamp('created_at').notNull().defaultNow(),
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
   },

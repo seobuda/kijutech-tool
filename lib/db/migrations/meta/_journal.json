@@ -127,6 +127,13 @@
       "when": 1787180807561,
       "tag": "0017_loose_mongoose",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1787210247134,
+      "tag": "0018_happy_barracuda",
+      "breakpoints": true
     }
   ]
 }

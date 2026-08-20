@@ -41,6 +41,12 @@ export type ClusteringInput = {
   provider: string;
   model: string;
   apiKey: string;
+  // Proveedor/modelo/key de embeddings (Capa 1) — puede ser distinto del
+  // proveedor de chat de arriba (usado por la Capa 4). Resueltos con
+  // getEmbeddingConfig() en lib/ai/gateway.ts antes de llamar al pipeline.
+  embeddingProvider: string;
+  embeddingModel: string;
+  embeddingApiKey: string;
 };
 
 export type ReasonedItem = { keyword: string; reason: string };
