@@ -14,7 +14,8 @@ import {
   FolderKanban,
   BookOpen,
   SlidersHorizontal,
-  Sparkles
+  Sparkles,
+  Brain
 } from 'lucide-react';
 
 const ADMIN_ROLES = ['admin', 'super_admin'];
@@ -68,6 +69,15 @@ export default function DashboardLayout({
             href: isSuperAdmin ? '/dashboard/ai/settings' : '/dashboard/ai/my-keys',
             icon: Sparkles,
             label: 'IA & Modelos'
+          }
+        ]
+      : []),
+    ...(isSuperAdmin
+      ? [
+          {
+            href: '/dashboard/ai/brain',
+            icon: Brain,
+            label: 'Cerebro'
           }
         ]
       : [])
