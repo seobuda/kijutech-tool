@@ -1,3 +1,5 @@
+# IDIOMA: Responde siempre en español, sin excepciones.
+
 \# CLAUDE.md — kijutech-tool
 
 
