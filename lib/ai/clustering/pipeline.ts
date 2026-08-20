@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { aiJobs } from '@/lib/db/schema';
 import { getModelPricing } from '@/lib/ai/gateway';
+import { normalizeByIntent } from './layers/0-intent-normalizer';
 import { embedKeywords } from './layers/1-embeddings';
 import { groupByHdbscan } from './layers/2-hdbscan';
 import { analyzeSerpSignals } from './layers/3-serp-signals';
@@ -38,6 +39,17 @@ export async function clusterKeywords(
   const cfg: PipelineConfig = { ...DEFAULT_PIPELINE_CONFIG, ...config };
   const layersUsed: string[] = [];
 
+  // Capa 0 — normalización por intención (raíz + modificador). Va antes de
+  // los embeddings porque su resultado (qué keywords comparten raíz) se
+  // usa para forzar su agrupación después de la Capa 1 — ver más abajo.
+  const normalizedGroups = await normalizeByIntent(
+    input.keywords,
+    input.provider,
+    input.model,
+    input.apiKey
+  );
+  layersUsed.push('intent_normalizer');
+
   // Capa 1 — embeddings
   const embedded = await embedKeywords(
     input.keywords,
@@ -52,6 +64,22 @@ export async function clusterKeywords(
     input.embeddingModel,
     input.keywords.length
   );
+
+  // Truco técnico: las keywords que la Capa 0 agrupó bajo una misma raíz
+  // por intención comparten literalmente el embedding de esa raíz, para
+  // que HDBSCAN las agrupe siempre juntas sin depender de que la
+  // similitud semántica pura alcance el umbral.
+  const embeddingByKeyword = new Map(embedded.map((e) => [e.keyword.keyword, e.embedding]));
+  for (const group of normalizedGroups) {
+    const rootEmbedding = embeddingByKeyword.get(group.root_keyword.keyword);
+    if (!rootEmbedding) continue;
+    for (const entry of embedded) {
+      if (entry.keyword.keyword === group.root_keyword.keyword) continue;
+      if (group.keywords.some((k) => k.keyword === entry.keyword.keyword)) {
+        entry.embedding = rootEmbedding;
+      }
+    }
+  }
 
   // Capa 2 — HDBSCAN
   const { groups: rawGroups, noise } = await groupByHdbscan(embedded, cfg);

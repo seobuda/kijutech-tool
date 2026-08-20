@@ -557,6 +557,54 @@ export async function deleteClusterKeyword(id: string) {
   await db.delete(seoKwClusterKeywords).where(eq(seoKwClusterKeywords.id, id));
 }
 
+export async function moveKeywordBetweenClusters(
+  keywordId: string,
+  newClusterId: string
+): Promise<{ error: string } | { success: true }> {
+  try {
+    const { row, cluster: originCluster } = await assertClusterKeywordAccess(keywordId);
+    const destCluster = await assertClusterAccess(newClusterId);
+
+    if (destCluster.projectId !== originCluster.projectId) {
+      return { error: 'El cluster destino no pertenece al mismo proyecto' };
+    }
+    if (destCluster.id === originCluster.id) {
+      return { success: true };
+    }
+
+    await db.transaction(async (tx) => {
+      await tx
+        .update(seoKwClusterKeywords)
+        .set({ clusterId: newClusterId, isPrimary: false })
+        .where(eq(seoKwClusterKeywords.id, keywordId));
+
+      // Si la keyword movida era la principal del cluster de origen, la
+      // siguiente por volumen la sustituye — un cluster nunca se queda sin
+      // principal mientras tenga keywords.
+      if (row.isPrimary) {
+        const remaining = await tx
+          .select()
+          .from(seoKwClusterKeywords)
+          .where(eq(seoKwClusterKeywords.clusterId, originCluster.id));
+
+        const next = [...remaining].sort(
+          (a, b) => (b.monthlyVolume ?? 0) - (a.monthlyVolume ?? 0)
+        )[0];
+        if (next) {
+          await tx
+            .update(seoKwClusterKeywords)
+            .set({ isPrimary: true })
+            .where(eq(seoKwClusterKeywords.id, next.id));
+        }
+      }
+    });
+
+    return { success: true };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'No se pudo mover la keyword' };
+  }
+}
+
 export async function completeStep4(projectId: string) {
   await assertUserInProjectTenant(projectId);
   await setKwStepStatus(projectId, 'clusters', 'completed');

@@ -203,8 +203,10 @@ export function ClustersBoard({
             <ClusterCard
               key={cluster.id}
               cluster={cluster}
+              otherClusters={clusters.filter((c) => c.id !== cluster.id)}
               onUpdated={handleUpdated}
               onDeleted={handleDeleted}
+              onKeywordMoved={() => router.refresh()}
             />
           ))}
         </div>
