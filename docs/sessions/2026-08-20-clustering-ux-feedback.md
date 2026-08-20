@@ -1,7 +1,7 @@
 # Feedback UX del clustering: modificadores de intención, mover keywords y captura de feedback
 **Fecha:** 2026-08-20
-**Rama:** feature/clustering-ux-feedback
-**Commit:** d49ea9ff
+**Rama:** feature/clustering-ux-feedback (fusionada a `main`, rama borrada)
+**Commit:** a7fce7bf (merge commit en `main`)
 
 ## Qué se construyó
 
@@ -14,6 +14,8 @@
 - `lib/seo/kw-feedback-actions.ts` (nuevo) — `recordClusterFeedback()`, best-effort/silenciosa, escribe en `ai_clustering_feedback`; si el feedback es `intent_changed`, intenta corregir en `ai_intent_modifiers` el modificador que distinguía las keywords del cluster (si venía de IA sin confirmar).
 - `app/.../clustering/cluster-review.tsx` (paso 3) — botón "Mover →" por keyword con select a otro cluster propuesto (recalcula principal si aplica); captura feedback en: eliminar cluster, confirmar sin cambios, cambiar intención/tipo de contenido, mover keyword, desmarcar keyword.
 - `app/.../clusters/cluster-card.tsx` y `clusters-board.tsx` (paso 4) — mismo botón "Mover →" contra la BD real (`moveKeywordBetweenClusters`); captura feedback en cambios de badge de intención/tipo de contenido y en mover keyword.
+- **Ampliación del catálogo de `ai_intent_modifiers`**: se inyectaron 104 modificadores adicionales (`human_confirmed`, confidence 100) organizados en 11 categorías — precio/valor, calidad/reputación, contacto/localización, disponibilidad/tiempo, público específico, modalidad, contenido informacional, comparativa/decisión, sector legal/admin, urgencia específica, ecommerce/producto. Total en tabla: **142 modificadores** (38 de la semilla original + 104 nuevos). Aplicado directamente contra la BD vía `psql`, fuera del flujo de migraciones versionadas (es contenido de catálogo, no esquema).
+- `CLAUDE.md` — se añadió como primera línea del archivo: `# IDIOMA: Responde siempre en español, sin excepciones.`
 
 ### Ya estaba construido — verificado, sin cambios
 
@@ -28,6 +30,8 @@ No se tocó nada de esto — solo se confirma aquí para que quede constancia de
 `lib/db/migrations/0019_misty_roughhouse.sql` — `ai_intent_modifiers`, `ai_clustering_feedback` (con FKs a `tenants`, `projects`, `ai_jobs`, `seo_kw_clusters`) + el `INSERT` de los 38 modificadores semilla. SQL completo mostrado y confirmado por Enric antes de aplicar con `pnpm db:migrate`.
 
 Nota técnica: el archivo de migración se generó con `drizzle-kit generate` (solo el DDL) y el `INSERT` se añadió a mano después — como el contenedor no tiene bind mount al repo, ese `INSERT` no llegó a ejecutarse vía `db:migrate` (drizzle solo vio la copia sin editar, ya horneada en la imagen). Se aplicó el `INSERT` directamente con `psql` para que el estado de la BD coincidiera con el archivo de migración ya corregido en el repo — si alguien re-ejecuta esta migración desde cero (BD nueva), el archivo en el repo ya es correcto y no hará falta este paso manual.
+
+**Ampliación de 104 modificadores (fuera de archivo de migración)**: aplicada directamente con `psql` a petición de Enric, con confirmación del resultado (`SELECT COUNT(*)`). El lote incluía `'certificado'` dos veces con efectos contradictorios (`same_intent` en la categoría de calidad, `different_intent` en la de sector legal) — por `ON CONFLICT (modifier, language) DO NOTHING`, solo se insertó la primera ocurrencia (`same_intent`); la segunda se descartó en silencio. Se avisó a Enric antes de ejecutar y confirmó dejarlo así. Resultado: 104 de 105 filas insertadas, total 142 en la tabla.
 
 ## Decisiones técnicas tomadas en auto mode
 
