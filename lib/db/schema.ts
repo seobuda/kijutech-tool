@@ -167,6 +167,39 @@ export const aiClusteringExamples = pgTable('ai_clustering_examples', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
+export const aiIntentModifiers = pgTable(
+  'ai_intent_modifiers',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    modifier: varchar('modifier', { length: 100 }).notNull(),
+    effect: varchar('effect', { length: 20 }).notNull(),
+    confidence: integer('confidence').notNull().default(70),
+    source: varchar('source', { length: 20 }).notNull().default('ai_classified'),
+    timesSeen: integer('times_seen').notNull().default(1),
+    language: varchar('language', { length: 5 }).notNull().default('es'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [unique().on(table.modifier, table.language)]
+);
+
+export const aiClusteringFeedback = pgTable('ai_clustering_feedback', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: uuid('tenant_id')
+    .notNull()
+    .references(() => tenants.id, { onDelete: 'cascade' }),
+  projectId: uuid('project_id')
+    .notNull()
+    .references(() => projects.id, { onDelete: 'cascade' }),
+  jobId: uuid('job_id').references(() => aiJobs.id, { onDelete: 'set null' }),
+  feedbackType: varchar('feedback_type', { length: 30 }).notNull(),
+  originalValue: jsonb('original_value'),
+  correctedValue: jsonb('corrected_value'),
+  clusterId: uuid('cluster_id').references(() => seoKwClusters.id, { onDelete: 'set null' }),
+  keyword: varchar('keyword'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
 export const modules = pgTable('modules', {
   id: uuid('id').primaryKey().defaultRandom(),
   key: varchar('key', { length: 50 }).notNull().unique(),
@@ -702,6 +735,10 @@ export type AiPrompt = typeof aiPrompts.$inferSelect;
 export type NewAiPrompt = typeof aiPrompts.$inferInsert;
 export type AiClusteringExample = typeof aiClusteringExamples.$inferSelect;
 export type NewAiClusteringExample = typeof aiClusteringExamples.$inferInsert;
+export type AiIntentModifier = typeof aiIntentModifiers.$inferSelect;
+export type NewAiIntentModifier = typeof aiIntentModifiers.$inferInsert;
+export type AiClusteringFeedback = typeof aiClusteringFeedback.$inferSelect;
+export type NewAiClusteringFeedback = typeof aiClusteringFeedback.$inferInsert;
 export type TeamDataWithMembers = Team & {
   teamMembers: (TeamMember & {
     user: Pick<User, 'id' | 'name' | 'email'>;

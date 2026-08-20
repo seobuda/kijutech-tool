@@ -15,7 +15,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
-import { MoreVertical, Plus, X, Star, Pencil, Search, TrendingUp } from 'lucide-react';
+import { MoreVertical, Plus, X, Star, Pencil, Search, TrendingUp, ArrowRight } from 'lucide-react';
 import {
   updateKwClusterStatus,
   deleteKwCluster,
@@ -23,8 +23,10 @@ import {
   addClusterKeyword,
   deleteClusterKeyword,
   updateClientNote,
-  updateClusterStrategy
+  updateClusterStrategy,
+  moveKeywordBetweenClusters
 } from '@/lib/seo/kw-actions';
+import { recordClusterFeedback } from '@/lib/seo/kw-feedback-actions';
 import { estimateTrafficAtPositionOne } from '@/lib/seo/kw-instructions';
 import { keywordDifficultyLabel, urlTypeLabel } from '@/lib/seo/format';
 import { ClusterForm, type ClusterFormValues } from './cluster-form';
@@ -53,11 +55,13 @@ const DIFFICULTY_LABEL: Record<string, { label: string; color: string }> = {
 
 type Props = {
   cluster: SeoKwClusterWithKeywords;
+  otherClusters: SeoKwClusterWithKeywords[];
   onUpdated: (cluster: SeoKwClusterWithKeywords) => void;
   onDeleted: (id: string) => void;
+  onKeywordMoved: () => void;
 };
 
-export function ClusterCard({ cluster, onUpdated, onDeleted }: Props) {
+export function ClusterCard({ cluster, otherClusters, onUpdated, onDeleted, onKeywordMoved }: Props) {
   const [isEditing, setIsEditing] = useState(false);
   const [isAddingKeyword, setIsAddingKeyword] = useState(false);
   const [newKeyword, setNewKeyword] = useState('');
@@ -66,6 +70,7 @@ export function ClusterCard({ cluster, onUpdated, onDeleted }: Props) {
   const [clientNote, setClientNote] = useState(cluster.clientNote ?? '');
   const [noteSaved, setNoteSaved] = useState(true);
   const [strategyError, setStrategyError] = useState<string | null>(null);
+  const [movingKeywordId, setMovingKeywordId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const totalVolume = cluster.keywords.reduce(
@@ -145,15 +150,57 @@ export function ClusterCard({ cluster, onUpdated, onDeleted }: Props) {
 
   function handleStrategyChange(field: StrategyField, value: string) {
     setStrategyError(null);
+    const key =
+      field === 'destination' ? 'destination' : field === 'content_type' ? 'contentType' : 'searchIntent';
+    const previousValue = cluster[key];
+
     startTransition(async () => {
       const result = await updateClusterStrategy(cluster.id, field, value);
       if ('error' in result) {
         setStrategyError(result.error);
         return;
       }
-      const key =
-        field === 'destination' ? 'destination' : field === 'content_type' ? 'contentType' : 'searchIntent';
       onUpdated({ ...cluster, [key]: value });
+
+      if (field === 'search_intent') {
+        void recordClusterFeedback({
+          projectId: cluster.projectId,
+          feedbackType: 'intent_changed',
+          originalValue: { search_intent: previousValue },
+          correctedValue: { search_intent: value },
+          clusterId: cluster.id,
+        });
+      } else if (field === 'content_type') {
+        void recordClusterFeedback({
+          projectId: cluster.projectId,
+          feedbackType: 'content_type_changed',
+          originalValue: { content_type: previousValue },
+          correctedValue: { content_type: value },
+          clusterId: cluster.id,
+        });
+      }
+    });
+  }
+
+  function handleMoveKeyword(keywordId: string, keyword: string, targetClusterId: string) {
+    if (!targetClusterId) return;
+    const targetCluster = otherClusters.find((c) => c.id === targetClusterId);
+    setMovingKeywordId(null);
+    startTransition(async () => {
+      const result = await moveKeywordBetweenClusters(keywordId, targetClusterId);
+      if ('error' in result) {
+        setStrategyError(result.error);
+        return;
+      }
+      void recordClusterFeedback({
+        projectId: cluster.projectId,
+        feedbackType: 'keyword_moved',
+        originalValue: { cluster_origen: cluster.title, keyword },
+        correctedValue: { cluster_destino: targetCluster?.title ?? null },
+        clusterId: cluster.id,
+        keyword,
+      });
+      onKeywordMoved();
     });
   }
 
@@ -290,42 +337,72 @@ export function ClusterCard({ cluster, onUpdated, onDeleted }: Props) {
               k.difficulty != null ? keywordDifficultyLabel(k.difficulty) : null;
 
             return (
-            <div key={k.id} className="flex items-center justify-between text-sm">
-              <span className="flex items-center gap-1 truncate">
-                {k.isPrimary && (
-                  <Star className="h-3 w-3 text-orange-500 shrink-0" fill="currentColor" />
-                )}
-                {k.keyword}
-                {difficulty && (
-                  <span
-                    className={`ml-1 text-xs px-1.5 py-0.5 rounded-full font-medium shrink-0 ${difficulty.className}`}
+            <div key={k.id} className="text-sm">
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-1 truncate">
+                  {k.isPrimary && (
+                    <Star className="h-3 w-3 text-orange-500 shrink-0" fill="currentColor" />
+                  )}
+                  {k.keyword}
+                  {difficulty && (
+                    <span
+                      className={`ml-1 text-xs px-1.5 py-0.5 rounded-full font-medium shrink-0 ${difficulty.className}`}
+                    >
+                      {difficulty.label}
+                    </span>
+                  )}
+                </span>
+                <span className="flex items-center gap-2 shrink-0">
+                  {k.pendingVerification ? (
+                    <span
+                      className="text-muted-foreground flex items-center gap-1"
+                      title="Verificar volumen en SE Ranking"
+                    >
+                      —/mes ⚠️
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">
+                      {k.monthlyVolume ?? '—'}/mes
+                    </span>
+                  )}
+                  {otherClusters.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setMovingKeywordId((v) => (v === k.id ? null : k.id))}
+                      className="text-muted-foreground hover:text-foreground"
+                      aria-label={`Mover ${k.keyword} a otro cluster`}
+                      title="Mover a otro cluster"
+                    >
+                      <ArrowRight className="h-3 w-3" />
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteKeyword(k.id, k.isPrimary)}
+                    className="text-muted-foreground hover:text-red-600"
+                    aria-label={`Eliminar ${k.keyword}`}
                   >
-                    {difficulty.label}
-                  </span>
-                )}
-              </span>
-              <span className="flex items-center gap-2 shrink-0">
-                {k.pendingVerification ? (
-                  <span
-                    className="text-muted-foreground flex items-center gap-1"
-                    title="Verificar volumen en SE Ranking"
-                  >
-                    —/mes ⚠️
-                  </span>
-                ) : (
-                  <span className="text-muted-foreground">
-                    {k.monthlyVolume ?? '—'}/mes
-                  </span>
-                )}
-                <button
-                  type="button"
-                  onClick={() => handleDeleteKeyword(k.id, k.isPrimary)}
-                  className="text-muted-foreground hover:text-red-600"
-                  aria-label={`Eliminar ${k.keyword}`}
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              </div>
+              {movingKeywordId === k.id && (
+                <select
+                  autoFocus
+                  defaultValue=""
+                  onChange={(e) => handleMoveKeyword(k.id, k.keyword, e.target.value)}
+                  className="mt-1 flex h-7 w-full rounded-md border border-input bg-transparent px-2 text-xs shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
                 >
-                  <X className="h-3 w-3" />
-                </button>
-              </span>
+                  <option value="" disabled>
+                    Mover a...
+                  </option>
+                  {otherClusters.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.title}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
             );
           })}

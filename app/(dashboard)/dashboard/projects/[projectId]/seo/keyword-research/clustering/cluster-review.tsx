@@ -5,8 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
-import { Loader2, Search, X, Bot, Copy, ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react';
+import { Loader2, Search, X, Bot, Copy, ChevronDown, ChevronRight, AlertTriangle, ArrowRight } from 'lucide-react';
 import { confirmAIClusters } from '@/lib/seo/kw-ai-actions';
+import { recordClusterFeedback } from '@/lib/seo/kw-feedback-actions';
 import type { ClusterProposal, ReasonedItem } from '@/lib/ai/clustering/types';
 import { URL_TYPE_META } from '@/lib/seo/format';
 import { StrategyBadges, type StrategyField } from '../strategy-badges';
@@ -129,6 +130,7 @@ export function ClusterReview({ projectId, analysis, existingClustersCount, onDi
   const [isPending, startTransition] = useTransition();
   const [irrelevantExpanded, setIrrelevantExpanded] = useState(false);
   const [copyConfirmation, setCopyConfirmation] = useState<string | null>(null);
+  const [movingKeyword, setMovingKeyword] = useState<{ uid: string; index: number } | null>(null);
 
   const hasSuggestedClusters = clusters.some((c) => c.isAiSuggested);
 
@@ -137,6 +139,9 @@ export function ClusterReview({ projectId, analysis, existingClustersCount, onDi
   }
 
   function updateClusterStrategyField(uid: string, field: StrategyField, value: string) {
+    const cluster = clusters.find((c) => c.uid === uid);
+    if (!cluster) return;
+
     const patch: Partial<EditableCluster> =
       field === 'destination'
         ? { destination: value }
@@ -144,9 +149,30 @@ export function ClusterReview({ projectId, analysis, existingClustersCount, onDi
           ? { contentType: value }
           : { searchIntent: value };
     updateCluster(uid, patch);
+
+    if (field === 'content_type') {
+      void recordClusterFeedback({
+        projectId,
+        jobId: analysis.jobId,
+        feedbackType: 'content_type_changed',
+        originalValue: { content_type: cluster.contentType },
+        correctedValue: { content_type: value },
+      });
+    } else if (field === 'search_intent') {
+      void recordClusterFeedback({
+        projectId,
+        jobId: analysis.jobId,
+        feedbackType: 'intent_changed',
+        originalValue: { search_intent: cluster.searchIntent },
+        correctedValue: { search_intent: value },
+      });
+    }
   }
 
   function toggleKeywordExcluded(clusterUid: string, index: number) {
+    const cluster = clusters.find((c) => c.uid === clusterUid);
+    const keyword = cluster?.keywords[index];
+
     setClusters((prev) =>
       prev.map((c) =>
         c.uid !== clusterUid
@@ -159,11 +185,78 @@ export function ClusterReview({ projectId, analysis, existingClustersCount, onDi
             }
       )
     );
+
+    // Solo se registra al DESMARCAR (excluir) — volver a marcarla no es la
+    // señal de feedback que interesa (deshacer un error de clic no dice
+    // nada sobre si la keyword pertenecía o no al cluster).
+    if (keyword && !keyword.excluded) {
+      void recordClusterFeedback({
+        projectId,
+        jobId: analysis.jobId,
+        feedbackType: 'keyword_removed',
+        originalValue: { cluster: cluster?.title, keyword: keyword.keyword },
+      });
+    }
+  }
+
+  function moveKeywordToCluster(sourceUid: string, index: number, targetUid: string) {
+    if (!targetUid || targetUid === sourceUid) return;
+    const sourceCluster = clusters.find((c) => c.uid === sourceUid);
+    const targetCluster = clusters.find((c) => c.uid === targetUid);
+    const keyword = sourceCluster?.keywords[index];
+    if (!sourceCluster || !targetCluster || !keyword) return;
+
+    setClusters((prev) =>
+      prev.map((c) => {
+        if (c.uid === sourceUid) {
+          const remaining = c.keywords.filter((_, i) => i !== index);
+          // Si la keyword movida era la principal, la siguiente por volumen
+          // (entre las que siguen activas) la sustituye.
+          if (keyword.isPrimary) {
+            const next = [...remaining]
+              .filter((k) => !k.excluded)
+              .sort((a, b) => (b.monthlyVolume ?? 0) - (a.monthlyVolume ?? 0))[0];
+            return {
+              ...c,
+              keywords: remaining.map((k) => ({ ...k, isPrimary: k === next })),
+            };
+          }
+          return { ...c, keywords: remaining };
+        }
+        if (c.uid === targetUid) {
+          return { ...c, keywords: [...c.keywords, { ...keyword, excluded: false, isPrimary: false }] };
+        }
+        return c;
+      })
+    );
+    setMovingKeyword(null);
+
+    void recordClusterFeedback({
+      projectId,
+      jobId: analysis.jobId,
+      feedbackType: 'keyword_moved',
+      originalValue: { cluster_origen: sourceCluster.title, keyword: keyword.keyword },
+      correctedValue: { cluster_destino: targetCluster.title },
+    });
   }
 
   function removeCluster(uid: string) {
     if (!confirm('¿Eliminar este cluster propuesto?')) return;
+    const cluster = clusters.find((c) => c.uid === uid);
     setClusters((prev) => prev.filter((c) => c.uid !== uid));
+
+    if (cluster) {
+      void recordClusterFeedback({
+        projectId,
+        jobId: analysis.jobId,
+        feedbackType: 'cluster_deleted',
+        originalValue: {
+          title: cluster.title,
+          keywords: cluster.keywords.map((k) => k.keyword),
+          search_intent: cluster.searchIntent,
+        },
+      });
+    }
   }
 
   function assignUnassignedKeyword(keyword: string, targetUid: string) {
@@ -238,6 +331,22 @@ export function ClusterReview({ projectId, analysis, existingClustersCount, onDi
       setError('No hay ningún cluster válido para confirmar (título y al menos 1 keyword).');
       return;
     }
+
+    for (const cluster of clusters) {
+      if (computeFeedbackType(cluster) === 'confirmed') {
+        void recordClusterFeedback({
+          projectId,
+          jobId: analysis.jobId,
+          feedbackType: 'cluster_confirmed',
+          originalValue: {
+            title: cluster.title,
+            search_intent: cluster.searchIntent,
+            content_type: cluster.contentType,
+          },
+        });
+      }
+    }
+
     startTransition(async () => {
       const result = await confirmAIClusters(projectId, payload, mode, analysis.jobId);
       if (result && 'error' in result) {
@@ -394,37 +503,74 @@ export function ClusterReview({ projectId, analysis, existingClustersCount, onDi
                   </div>
 
                   <div className="border-t pt-2 space-y-1.5">
-                    {cluster.keywords.map((k, i) => (
-                      <label
-                        key={`${k.keyword}-${i}`}
-                        className={`flex items-center justify-between gap-2 text-sm ${
-                          k.excluded ? 'opacity-40' : ''
-                        }`}
-                      >
-                        <span className="flex items-center gap-1.5 truncate">
-                          <input
-                            type="checkbox"
-                            checked={!k.excluded}
-                            onChange={() => toggleKeywordExcluded(cluster.uid, i)}
-                            title="Desmarca para excluir esta keyword"
-                          />
-                          {k.isPrimary && <span className="text-orange-500">★</span>}
-                          {k.keyword}
-                        </span>
-                        {k.pendingVerification ? (
-                          <span
-                            className="text-muted-foreground text-xs shrink-0"
-                            title="Volumen pendiente de verificar en SE Ranking"
+                    {cluster.keywords.map((k, i) => {
+                      const otherClusters = clusters.filter((c) => c.uid !== cluster.uid);
+                      const isMoving =
+                        movingKeyword?.uid === cluster.uid && movingKeyword.index === i;
+
+                      return (
+                      <div key={`${k.keyword}-${i}`} className={k.excluded ? 'opacity-40' : ''}>
+                        <div className="flex items-center justify-between gap-2 text-sm">
+                          <label className="flex items-center gap-1.5 truncate">
+                            <input
+                              type="checkbox"
+                              checked={!k.excluded}
+                              onChange={() => toggleKeywordExcluded(cluster.uid, i)}
+                              title="Desmarca para excluir esta keyword"
+                            />
+                            {k.isPrimary && <span className="text-orange-500">★</span>}
+                            {k.keyword}
+                          </label>
+                          <span className="flex items-center gap-1.5 shrink-0">
+                            {k.pendingVerification ? (
+                              <span
+                                className="text-muted-foreground text-xs"
+                                title="Volumen pendiente de verificar en SE Ranking"
+                              >
+                                —/mes
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground text-xs">
+                                {k.monthlyVolume ?? '—'}/mes
+                              </span>
+                            )}
+                            {otherClusters.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setMovingKeyword(
+                                    isMoving ? null : { uid: cluster.uid, index: i }
+                                  )
+                                }
+                                className="text-muted-foreground hover:text-foreground"
+                                aria-label={`Mover ${k.keyword} a otro cluster`}
+                                title="Mover a otro cluster"
+                              >
+                                <ArrowRight className="h-3 w-3" />
+                              </button>
+                            )}
+                          </span>
+                        </div>
+                        {isMoving && (
+                          <select
+                            autoFocus
+                            defaultValue=""
+                            onChange={(e) => moveKeywordToCluster(cluster.uid, i, e.target.value)}
+                            className={`${selectClassName} mt-1 h-7 w-full text-xs`}
                           >
-                            —/mes
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground text-xs shrink-0">
-                            {k.monthlyVolume ?? '—'}/mes
-                          </span>
+                            <option value="" disabled>
+                              Mover a...
+                            </option>
+                            {otherClusters.map((c) => (
+                              <option key={c.uid} value={c.uid}>
+                                {c.title || '(sin título)'}
+                              </option>
+                            ))}
+                          </select>
                         )}
-                      </label>
-                    ))}
+                      </div>
+                      );
+                    })}
                   </div>
 
                   <div className="border-t pt-2 flex items-center gap-1.5 text-sm">

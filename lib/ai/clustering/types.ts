@@ -7,6 +7,22 @@ export type KeywordInput = {
   url: string | null;
 };
 
+// Decisión tomada sobre una keyword al agruparla por intención (Capa 0,
+// lib/ai/clustering/layers/0-intent-normalizer.ts) — documenta por qué
+// terminó en el grupo de su raíz (o por qué se separó a un grupo propio).
+export type ModifierDecision = {
+  keyword: string;
+  modifier_found: string | null;
+  effect: 'same_intent' | 'different_intent' | 'unknown';
+  source: 'table' | 'ai_classified';
+};
+
+export type NormalizedGroup = {
+  root_keyword: KeywordInput;
+  keywords: KeywordInput[];
+  modifier_decisions: ModifierDecision[];
+};
+
 export type ClusterGroup = {
   keywords: KeywordInput[];
   centroid_embedding?: number[];
