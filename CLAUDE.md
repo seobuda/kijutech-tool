@@ -183,9 +183,11 @@ Estos dos pasos van antes del `docker exec kijutech\_app pnpm db:migrate` de la 
 Antes de hacer el commit final de cada sesión, genera un archivo de
 documentación en `/docs/sessions/` con el siguiente nombre:
 
-  YYYY-MM-DD-[descripcion-corta-en-kebab-case].md
+  YYYY-MM-DD-HH-[descripcion-corta-en-kebab-case].md
 
-Ejemplo: `2026-08-17-fase-b-ajustes-ux.md`
+`HH` es la hora de cierre de la sesión en formato 24h (00-23).
+
+Ejemplo: `2026-08-17-16-fase-b-ajustes-ux.md`
 
 Genera el archivo ANTES del commit, para que quede versionado en git
 junto al código que describe.
