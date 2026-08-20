@@ -4,8 +4,10 @@ import type { KeywordInput, PipelineConfig } from '../types';
 const BATCH_SIZE = 100;
 
 // La columna `embedding` en BD es vector(1536) fijo (tamaño de OpenAI).
-// Voyage (1024) y Gemini (768) devuelven menos dimensiones — se rellenan
-// con ceros hasta 1536 para poder guardarlas en la misma columna.
+// Voyage (1024) devuelve menos dimensiones — se rellena con ceros hasta
+// 1536 para poder guardarlo en la misma columna. Gemini (gemini-embedding-001)
+// soporta Matryoshka Representation Learning y se le pide 1536 nativamente
+// (ver embedBatchGemini), así que para Gemini este padding es un no-op.
 // Añadir dimensiones en cero no cambia el producto escalar ni la norma
 // de un vector, así que la similitud coseno entre dos vectores del MISMO
 // proveedor se preserva exactamente. Lo que este padding NO resuelve es
@@ -70,7 +72,10 @@ async function embedBatchGemini(
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content: { parts: [{ text }] } }),
+          body: JSON.stringify({
+            content: { parts: [{ text }] },
+            outputDimensionality: TARGET_DIMENSIONS,
+          }),
         }
       );
       if (!res.ok) {

@@ -41,5 +41,9 @@ export const DEFAULT_EMBEDDING_MODEL: Record<string, string> = {
   anthropic: 'voyage-3',
   voyage: 'voyage-3',
   openai: 'text-embedding-3-small',
-  gemini: 'text-embedding-004',
+  // gemini-embedding-001 (no text-embedding-004, deprecado) — soporta
+  // Matryoshka Representation Learning, así que se le pide directamente
+  // 1536 dimensiones (ver embedBatchGemini en 1-embeddings.ts) en vez de
+  // rellenar con ceros los 768 fijos del modelo antiguo.
+  gemini: 'gemini-embedding-001',
 };
