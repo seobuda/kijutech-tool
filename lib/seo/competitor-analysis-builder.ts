@@ -81,6 +81,11 @@ export const COMPETITOR_ANALYSIS_PROCESS_MAP: ProcessStep[] = [
     description: 'El usuario indica hasta 5 páginas de la competencia que ya posicionan para este cluster.',
     status: 'built',
     file: 'lib/seo/competitor-actions.ts',
+    technicalDetail: {
+      summary: 'El scraping de cada URL se dispara en segundo plano nada más guardarlas, sin bloquear la pantalla.',
+      stack: ['Patrón "void promise.catch()" — no hay sistema de colas en el proyecto'],
+      keyDecisions: ['Máximo 5 URLs por cluster (MAX_COMPETITOR_URLS)'],
+    },
   },
   {
     id: 'scraping',
@@ -89,6 +94,15 @@ export const COMPETITOR_ANALYSIS_PROCESS_MAP: ProcessStep[] = [
       'Descarga cada página y analiza su título, encabezados, preguntas frecuentes y llamadas a la acción.',
     status: 'built',
     file: 'lib/seo/competitor-scraper.ts',
+    technicalDetail: {
+      summary:
+        'Descarga cada página con fetch nativo y extrae su estructura con regex, sin ninguna librería de parseo HTML (no había cheerio/jsdom en el proyecto).',
+      stack: ['fetch() nativo', 'Parsing por regex'],
+      keyDecisions: [
+        'Detección de FAQ en 4 capas por prioridad: JSON-LD FAQPage → contenedor semántico → acordeón (details/summary o clases accordion/faq) → 3+ headings consecutivos terminados en "?"',
+        'Polling de 3s en el cliente mientras haya URLs en estado pending/scraping',
+      ],
+    },
   },
   {
     id: 'context-building',
@@ -97,6 +111,14 @@ export const COMPETITOR_ANALYSIS_PROCESS_MAP: ProcessStep[] = [
       'Combina lo extraído de la competencia con las keywords del cluster y las respuestas del kickoff del proyecto.',
     status: 'built',
     file: 'lib/seo/competitor-analysis-builder.ts',
+    technicalDetail: {
+      summary:
+        'Reúne proyecto, respuestas del kickoff, cluster, keywords y los competidores ya scrapeados con éxito en un único contexto para el prompt.',
+      keyDecisions: [
+        'Requiere mínimo 3 competidores con scrape_status = "done", si no, error explícito',
+        'Trunca keywords (máx. 10), FAQs (5), H2s (8) y CTAs (3) por competidor para controlar el tamaño del prompt',
+      ],
+    },
   },
   {
     id: 'ai-analysis',
@@ -104,6 +126,11 @@ export const COMPETITOR_ANALYSIS_PROCESS_MAP: ProcessStep[] = [
     description: 'La inteligencia artificial compara toda la competencia recopilada y redacta una guía de acción.',
     status: 'built',
     file: 'lib/seo/competitor-analysis-prompt.ts',
+    technicalDetail: {
+      summary:
+        'El AI Gateway envía el contexto completo a un LLM con un system prompt en lenguaje de negocio (sin jerga SEO) para que compare la competencia y proponga acciones.',
+      stack: ['AI Gateway — mismo proveedor activo del tenant'],
+    },
   },
   {
     id: 'actionable-guide',
@@ -112,6 +139,15 @@ export const COMPETITOR_ANALYSIS_PROCESS_MAP: ProcessStep[] = [
       'Recomendaciones priorizadas, estructura de contenido sugerida y un resumen ejecutivo, listos para el equipo.',
     status: 'built',
     file: 'lib/ai/parsers/competitor-analysis.ts',
+    technicalDetail: {
+      summary:
+        'Parsea el JSON de salida de forma defensiva y lo guarda — si el parseo falla, guarda el error en vez de perder la respuesta cruda.',
+      stack: ['extractJsonFromLLMResponse() — compartido con la Capa 4 de clustering'],
+      keyDecisions: [
+        'recommendations: hasta 8, ordenadas por prioridad (crítico → recomendado → diferenciador)',
+        'recommended_structure: hasta 5 secciones sugeridas',
+      ],
+    },
   },
 ];
 

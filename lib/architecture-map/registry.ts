@@ -1,5 +1,5 @@
 import { getSeoManifest } from '@/lib/seo/manifest';
-import { CLUSTERING_PROCESS_MAP, type ProcessStep } from '@/lib/ai/clustering/pipeline';
+import { CLUSTERING_PROCESS_MAP, type ProcessStep, type TechnicalDetail } from '@/lib/ai/clustering/pipeline';
 import { COMPETITOR_ANALYSIS_PROCESS_MAP } from '@/lib/seo/competitor-analysis-builder';
 
 export interface SystemNode {
@@ -15,6 +15,7 @@ export interface SystemNode {
   // del flujo en vez de ser un paso propio de él; 'flow' = etapas
   // secuenciales del wizard SEO (derivadas de modules/seo/manifest.json).
   group: 'infrastructure' | 'support' | 'flow';
+  technicalDetail?: TechnicalDetail;
 }
 
 // Infraestructura núcleo real (no son etapas del wizard SEO, así que no
@@ -36,6 +37,20 @@ const CORE_NODES: SystemNode[] = [
     status: 'built',
     icon: 'Sparkles',
     group: 'infrastructure',
+    technicalDetail: {
+      summary:
+        'Punto único de entrada para toda llamada a un modelo de IA — resuelve qué proveedor y clave usar, cifra/descifra las claves, aplica timeout y calcula el coste.',
+      stack: [
+        '4 adaptadores: Anthropic, OpenAI, Gemini, DeepSeek',
+        'AES-256-GCM para las claves (crypto nativo de Node)',
+        'Tabla ai_jobs — tracking de cada llamada',
+      ],
+      keyDecisions: [
+        'Timeout de 60s por llamada',
+        'max_tokens configurable por llamada — antes cada adapter traía un límite fijo (4096 en Anthropic)',
+        'Nunca loguea la clave descifrada',
+      ],
+    },
   },
   {
     id: 'brain-panel',
@@ -44,6 +59,15 @@ const CORE_NODES: SystemNode[] = [
     status: 'built',
     icon: 'Brain',
     group: 'infrastructure',
+    technicalDetail: {
+      summary:
+        'Panel de solo lectura sobre lo que el sistema ha aprendido con el uso (modificadores de intención, ejemplos de clustering validados, feedback) y cuánto se gasta en IA, desglosado por función.',
+      stack: ['Queries de solo lectura sobre ai_intent_modifiers, ai_clustering_examples, ai_clustering_feedback, ai_jobs'],
+      keyDecisions: [
+        'Umbrales mostrados: 200 modificadores de intención, 50 ejemplos de clustering — el RAG real ya se activa automáticamente a partir de 5 ejemplos, un umbral técnico distinto y más bajo que el mostrado en el panel',
+        'El botón "Activar" del pre-filtrado automático es un placeholder, todavía sin lógica real',
+      ],
+    },
   },
   {
     id: 'admin-seo',
@@ -70,6 +94,15 @@ const SUPPORT_NODES: SystemNode[] = [
     icon: 'Target',
     detailMapId: 'competitor_analysis',
     group: 'support',
+    technicalDetail: {
+      summary:
+        'Compara automáticamente hasta 5 páginas de competidores ya posicionadas, extrayendo su estructura con regex (sin librerías de parseo HTML) y pasando ese contexto a un LLM para generar recomendaciones. Ver el detalle paso a paso para cada capa.',
+      stack: ['fetch() nativo + parsing por regex (sin cheerio/jsdom)'],
+      keyDecisions: [
+        'Mínimo 3 competidores con scraping completado (scrape_status = "done") para poder generar el análisis',
+        'Contexto truncado (máx. 10 keywords, 5 FAQs, 8 H2s, 3 CTAs por competidor) para controlar el tamaño del prompt',
+      ],
+    },
   },
 ];
 

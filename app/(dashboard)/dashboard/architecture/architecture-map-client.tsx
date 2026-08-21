@@ -32,11 +32,13 @@ import {
   ArrowLeft,
   Play,
   Square,
+  Info,
   type LucideIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import type { SystemNode } from '@/lib/architecture-map/registry';
-import type { ProcessStep } from '@/lib/ai/clustering/pipeline';
+import type { ProcessStep, TechnicalDetail } from '@/lib/ai/clustering/pipeline';
 
 // Solo tipos — ver comentario en registry.ts: importar por VALOR algo de
 // ahí (o de pipeline.ts) en un componente cliente arrastraría código de
@@ -81,6 +83,11 @@ type MapNodeData = {
   detailMapId?: string;
   highlighted?: boolean;
   group?: SystemNode['group'];
+  technicalDetail?: TechnicalDetail;
+  // Inyectado en tiempo de render (ver nodesToRender) en vez de vivir en
+  // los datos "puros" del nodo — así toMapNode()/buildLevel2() no
+  // necesitan conocer el estado del componente padre.
+  onShowDetail?: () => void;
 };
 
 function MapNode({ data }: NodeProps) {
@@ -109,11 +116,28 @@ function MapNode({ data }: NodeProps) {
           {Icon && <Icon className={`h-5 w-5 shrink-0 ${styles.text}`} />}
           <span className={`text-sm leading-tight font-semibold ${styles.text}`}>{d.label}</span>
         </div>
-        {isSupport && (
-          <span className="shrink-0 rounded-full bg-violet-100 px-1.5 py-0.5 text-[10px] font-medium text-violet-700">
-            Apoyo
-          </span>
-        )}
+        <div className="flex shrink-0 items-center gap-1">
+          {isSupport && (
+            <span className="rounded-full bg-violet-100 px-1.5 py-0.5 text-[10px] font-medium text-violet-700">
+              Apoyo
+            </span>
+          )}
+          {d.technicalDetail && (
+            <button
+              type="button"
+              aria-label="Ver detalle técnico"
+              onClick={(e) => {
+                // No debe disparar también el onNodeClick de "Ver
+                // detalle" del nodo (nivel 2) — parada explícita pedida.
+                e.stopPropagation();
+                d.onShowDetail?.();
+              }}
+              className="rounded p-0.5 text-gray-400 hover:bg-gray-200/60 hover:text-gray-600"
+            >
+              <Info className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
       </div>
       <p className="text-xs leading-snug text-gray-600">{d.description}</p>
       <div className="mt-2.5 flex items-center justify-between">
@@ -165,6 +189,7 @@ function toMapNode(n: SystemNode, x: number, y: number): Node {
       clickable: Boolean(n.detailMapId),
       detailMapId: n.detailMapId,
       group: n.group,
+      technicalDetail: n.technicalDetail,
     },
   };
 }
@@ -252,6 +277,7 @@ function buildLevel2(steps: ProcessStep[]): FlowElements {
       description: s.description,
       status: s.status,
       clickable: false,
+      technicalDetail: s.technicalDetail,
     },
   }));
   const edges = sequentialEdges(steps.map((s) => s.id));
@@ -269,6 +295,9 @@ export function ArchitectureMapClient({ systemNodes, processMaps }: Props) {
   const [detail, setDetail] = useState<{ id: string; title: string } | null>(null);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const [isAnimating, setIsAnimating] = useState(false);
+  const [technicalDetailModal, setTechnicalDetailModal] = useState<{ title: string; detail: TechnicalDetail } | null>(
+    null
+  );
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const level1 = useMemo(() => buildLevel1(systemNodes), [systemNodes]);
@@ -310,9 +339,20 @@ export function ArchitectureMapClient({ systemNodes, processMaps }: Props) {
 
   const nodesToRender = useMemo(
     () =>
-      current.nodes.map((n) =>
-        n.type === 'mapNode' ? { ...n, data: { ...n.data, highlighted: n.id === highlightedId } } : n
-      ),
+      current.nodes.map((n) => {
+        if (n.type !== 'mapNode') return n;
+        const d = n.data as unknown as MapNodeData;
+        return {
+          ...n,
+          data: {
+            ...n.data,
+            highlighted: n.id === highlightedId,
+            onShowDetail: d.technicalDetail
+              ? () => setTechnicalDetailModal({ title: d.label, detail: d.technicalDetail! })
+              : undefined,
+          },
+        };
+      }),
     [current.nodes, highlightedId]
   );
 
@@ -368,6 +408,44 @@ export function ArchitectureMapClient({ systemNodes, processMaps }: Props) {
           <Controls showInteractive={false} />
         </ReactFlow>
       </div>
+
+      <Dialog open={technicalDetailModal !== null} onOpenChange={(open) => !open && setTechnicalDetailModal(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{technicalDetailModal?.title}</DialogTitle>
+          </DialogHeader>
+          {technicalDetailModal && (
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">{technicalDetailModal.detail.summary}</p>
+              {technicalDetailModal.detail.stack && technicalDetailModal.detail.stack.length > 0 && (
+                <div>
+                  <p className="mb-1.5 text-xs font-medium text-gray-500 uppercase">Stack</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {technicalDetailModal.detail.stack.map((item) => (
+                      <span
+                        key={item}
+                        className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700"
+                      >
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {technicalDetailModal.detail.keyDecisions && technicalDetailModal.detail.keyDecisions.length > 0 && (
+                <div>
+                  <p className="mb-1.5 text-xs font-medium text-gray-500 uppercase">Decisiones clave</p>
+                  <ul className="list-disc space-y-1 pl-4 text-sm text-gray-600">
+                    {technicalDetailModal.detail.keyDecisions.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
