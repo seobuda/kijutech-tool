@@ -419,6 +419,33 @@ export const seoCompetitorAnalysis = pgTable('seo_competitor_analysis', {
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
 
+// Fase D — Bloque 2: plan de contenido satélite para un cluster PILAR
+// (transaccional/local). Un plan por cluster, se regenera en vez de
+// acumular histórico — mismo patrón que seoCompetitorAnalysis de arriba.
+// Sigue el SQL literal aprobado explícitamente por Enric: created_at /
+// updated_at con zona horaria (timestamptz, distinto del resto de tablas
+// de este archivo) y sin NOT NULL en ninguna columna salvo las FK.
+export const seoClusterContentPlan = pgTable(
+  'seo_cluster_content_plan',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    clusterId: uuid('cluster_id')
+      .notNull()
+      .references(() => seoKwClusters.id, { onDelete: 'cascade' }),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    manualQuestions: jsonb('manual_questions').default([]),
+    analysisJson: jsonb('analysis_json'),
+    modelUsed: text('model_used'),
+    tokensUsed: integer('tokens_used'),
+    costEstimate: decimal('cost_estimate', { precision: 10, scale: 6 }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => [unique('unique_cluster_content_plan').on(table.clusterId)]
+);
+
 export const seoShareTokens = pgTable('seo_share_tokens', {
   id: uuid('id').primaryKey().defaultRandom(),
   projectId: uuid('project_id')
@@ -664,6 +691,17 @@ export const seoCompetitorAnalysisRelations = relations(seoCompetitorAnalysis, (
   }),
 }));
 
+export const seoClusterContentPlanRelations = relations(seoClusterContentPlan, ({ one }) => ({
+  cluster: one(seoKwClusters, {
+    fields: [seoClusterContentPlan.clusterId],
+    references: [seoKwClusters.id],
+  }),
+  tenant: one(tenants, {
+    fields: [seoClusterContentPlan.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
 export const seoKwClusterKeywordsRelations = relations(
   seoKwClusterKeywords,
   ({ one }) => ({
@@ -792,6 +830,8 @@ export type SeoClusterCompetitor = typeof seoClusterCompetitors.$inferSelect;
 export type NewSeoClusterCompetitor = typeof seoClusterCompetitors.$inferInsert;
 export type SeoCompetitorAnalysis = typeof seoCompetitorAnalysis.$inferSelect;
 export type NewSeoCompetitorAnalysis = typeof seoCompetitorAnalysis.$inferInsert;
+export type SeoClusterContentPlan = typeof seoClusterContentPlan.$inferSelect;
+export type NewSeoClusterContentPlan = typeof seoClusterContentPlan.$inferInsert;
 export type SeoShareToken = typeof seoShareTokens.$inferSelect;
 export type NewSeoShareToken = typeof seoShareTokens.$inferInsert;
 export type SeoKwProgress = typeof seoKwProgress.$inferSelect;
