@@ -9,15 +9,16 @@ export interface SystemNode {
   status: 'built' | 'in_progress' | 'planned';
   icon: string; // nombre de icono lucide-react, resuelto en el cliente
   detailMapId?: string; // si existe, este nodo abre un diagrama de nivel 2
+  // Fila visual en el nivel 1. 'infrastructure' = pilares del sistema
+  // (persisten siempre, no son parte de la secuencia de ningún proyecto);
+  // 'support' = procesos reales pero auxiliares, invocados desde dentro
+  // del flujo en vez de ser un paso propio de él; 'flow' = etapas
+  // secuenciales del wizard SEO (derivadas de modules/seo/manifest.json).
+  group: 'infrastructure' | 'support' | 'flow';
 }
 
 // Infraestructura núcleo real (no son etapas del wizard SEO, así que no
-// viven en modules/seo/manifest.json). "Análisis de Competidores" tampoco
-// es una etapa del manifest — se accede desde dentro de un cluster ya
-// creado en el paso "Keyword Research" (paso 4, por cluster), no como paso
-// propio del wizard — pero SÍ es un proceso con su propio detailMapId, así
-// que vive aquí como nodo independiente en vez de intentar colgar dos
-// detailMapId del mismo nodo "Keyword Research".
+// viven en modules/seo/manifest.json).
 const CORE_NODES: SystemNode[] = [
   {
     id: 'core-projects',
@@ -25,6 +26,7 @@ const CORE_NODES: SystemNode[] = [
     description: 'La base del sistema: tenants, usuarios, roles y proyectos. Todo lo demás se construye sobre esto.',
     status: 'built',
     icon: 'FolderKanban',
+    group: 'infrastructure',
   },
   {
     id: 'ai-gateway',
@@ -33,6 +35,7 @@ const CORE_NODES: SystemNode[] = [
       'El punto único por el que pasan todas las llamadas a modelos de IA, con control de coste y del proveedor activo.',
     status: 'built',
     icon: 'Sparkles',
+    group: 'infrastructure',
   },
   {
     id: 'brain-panel',
@@ -40,6 +43,7 @@ const CORE_NODES: SystemNode[] = [
     description: 'Muestra cuánto ha aprendido el sistema con el uso y cuánto se gasta en IA cada mes.',
     status: 'built',
     icon: 'Brain',
+    group: 'infrastructure',
   },
   {
     id: 'admin-seo',
@@ -47,7 +51,16 @@ const CORE_NODES: SystemNode[] = [
     description: 'Gestión de las tarjetas y la configuración propias del módulo SEO.',
     status: 'built',
     icon: 'BookOpen',
+    group: 'infrastructure',
   },
+];
+
+// Procesos de apoyo: funcionalidad real con su propio detailMapId, pero
+// no es una etapa del manifest — se invoca desde dentro de un paso del
+// flujo (aquí, desde un cluster ya creado en "Keyword Research", paso 4),
+// no como paso propio y secuencial del wizard. Se muestra en su propia
+// fila para no confundirla con los pilares de infraestructura.
+const SUPPORT_NODES: SystemNode[] = [
   {
     id: 'competitor-analysis',
     name: 'Análisis de Competidores',
@@ -56,6 +69,7 @@ const CORE_NODES: SystemNode[] = [
     status: 'built',
     icon: 'Target',
     detailMapId: 'competitor_analysis',
+    group: 'support',
   },
 ];
 
@@ -99,10 +113,11 @@ export function getSystemMap(): SystemNode[] {
       description: STAGE_DESCRIPTIONS[stage.key] ?? stage.name,
       status: BUILT_STAGE_KEYS.has(stage.key) ? 'built' : 'planned',
       icon: STAGE_ICONS[stage.key] ?? 'Circle',
+      group: 'flow' as const,
       ...(stage.key === 'keyword_research' ? { detailMapId: 'clustering' } : {}),
     }));
 
-  return [...CORE_NODES, ...stageNodes];
+  return [...CORE_NODES, ...SUPPORT_NODES, ...stageNodes];
 }
 
 export function getProcessMap(detailMapId: string): ProcessStep[] {

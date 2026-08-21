@@ -80,12 +80,14 @@ type MapNodeData = {
   clickable?: boolean;
   detailMapId?: string;
   highlighted?: boolean;
+  group?: SystemNode['group'];
 };
 
 function MapNode({ data }: NodeProps) {
   const d = data as unknown as MapNodeData;
   const styles = STATUS_STYLES[d.status] ?? STATUS_STYLES.planned;
   const Icon = d.icon ? ICONS[d.icon] : null;
+  const isSupport = d.group === 'support';
 
   return (
     <div
@@ -93,14 +95,25 @@ function MapNode({ data }: NodeProps) {
         'w-[240px] rounded-xl border-2 p-4 shadow-sm transition-shadow',
         styles.bg,
         styles.border,
+        // Los nodos de "Procesos de apoyo" llevan además un acento morado
+        // a la izquierda — distingue visualmente esta fila de los pilares
+        // de infraestructura sin pisar el color de estado (verde/gris).
+        isSupport ? 'border-l-[6px] !border-l-violet-400' : '',
         d.clickable ? 'cursor-pointer border-dashed hover:shadow-md' : 'border-solid',
         d.highlighted ? 'ring-4 ring-blue-400 ring-offset-2 shadow-lg' : '',
       ].join(' ')}
     >
       <Handle type="target" position={Position.Left} className="!bg-gray-400" />
-      <div className="mb-1.5 flex items-center gap-2">
-        {Icon && <Icon className={`h-5 w-5 shrink-0 ${styles.text}`} />}
-        <span className={`text-sm leading-tight font-semibold ${styles.text}`}>{d.label}</span>
+      <div className="mb-1.5 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          {Icon && <Icon className={`h-5 w-5 shrink-0 ${styles.text}`} />}
+          <span className={`text-sm leading-tight font-semibold ${styles.text}`}>{d.label}</span>
+        </div>
+        {isSupport && (
+          <span className="shrink-0 rounded-full bg-violet-100 px-1.5 py-0.5 text-[10px] font-medium text-violet-700">
+            Apoyo
+          </span>
+        )}
       </div>
       <p className="text-xs leading-snug text-gray-600">{d.description}</p>
       <div className="mt-2.5 flex items-center justify-between">
@@ -116,9 +129,14 @@ function MapNode({ data }: NodeProps) {
 }
 
 function SectionLabel({ data }: NodeProps) {
-  const d = data as unknown as { label: string };
+  const d = data as unknown as { label: string; accent?: 'support' };
   return (
-    <div className="pointer-events-none text-xs font-semibold tracking-wide text-gray-400 uppercase">
+    <div
+      className={[
+        'pointer-events-none text-xs font-semibold tracking-wide uppercase',
+        d.accent === 'support' ? 'text-violet-400' : 'text-gray-400',
+      ].join(' ')}
+    >
       {d.label}
     </div>
   );
@@ -129,12 +147,8 @@ const nodeTypes = { mapNode: MapNode, sectionLabel: SectionLabel };
 const NODE_WIDTH = 240;
 const NODE_GAP = 60;
 const ROW_Y_INFRA = 40;
-const ROW_Y_FLOW = 260;
-
-// Mismos ids que CORE_NODES en lib/architecture-map/registry.ts — usado
-// solo para decidir en qué fila del nivel 1 va cada nodo, no representa
-// lógica de negocio nueva.
-const CORE_NODE_IDS = new Set(['core-projects', 'ai-gateway', 'brain-panel', 'admin-seo', 'competitor-analysis']);
+const ROW_Y_SUPPORT = 260;
+const ROW_Y_FLOW = 480;
 
 type FlowElements = { nodes: Node[]; edges: Edge[]; flowOrder: string[] };
 
@@ -150,6 +164,7 @@ function toMapNode(n: SystemNode, x: number, y: number): Node {
       icon: n.icon,
       clickable: Boolean(n.detailMapId),
       detailMapId: n.detailMapId,
+      group: n.group,
     },
   };
 }
@@ -170,8 +185,9 @@ function sequentialEdges(orderedIds: string[], animated = true): Edge[] {
 }
 
 function buildLevel1(systemNodes: SystemNode[]): FlowElements {
-  const coreNodes = systemNodes.filter((n) => CORE_NODE_IDS.has(n.id));
-  const stageNodes = systemNodes.filter((n) => !CORE_NODE_IDS.has(n.id));
+  const coreNodes = systemNodes.filter((n) => n.group === 'infrastructure');
+  const supportNodes = systemNodes.filter((n) => n.group === 'support');
+  const stageNodes = systemNodes.filter((n) => n.group === 'flow');
 
   const nodes: Node[] = [
     {
@@ -184,6 +200,16 @@ function buildLevel1(systemNodes: SystemNode[]): FlowElements {
       connectable: false,
     },
     ...coreNodes.map((n, i) => toMapNode(n, i * (NODE_WIDTH + NODE_GAP), ROW_Y_INFRA)),
+    {
+      id: 'label-support',
+      type: 'sectionLabel',
+      position: { x: 0, y: ROW_Y_SUPPORT - 30 },
+      data: { label: 'Procesos de apoyo', accent: 'support' },
+      draggable: false,
+      selectable: false,
+      connectable: false,
+    },
+    ...supportNodes.map((n, i) => toMapNode(n, i * (NODE_WIDTH + NODE_GAP), ROW_Y_SUPPORT)),
     {
       id: 'label-flow',
       type: 'sectionLabel',
@@ -198,18 +224,18 @@ function buildLevel1(systemNodes: SystemNode[]): FlowElements {
 
   const edges = sequentialEdges(stageNodes.map((n) => n.id));
 
-  // Relación no secuencial: el análisis de competidores se abre desde
-  // dentro de un cluster ya creado en "Keyword Research", no es un paso
-  // propio del wizard — se marca con una línea distinta (sin animar).
-  if (stageNodes.some((n) => n.id === 'keyword_research') && coreNodes.some((n) => n.id === 'competitor-analysis')) {
+  // Relación no secuencial: el análisis de competidores (fila "Procesos de
+  // apoyo") se abre desde dentro de un cluster ya creado en "Keyword
+  // Research", no es un paso propio del wizard — línea distinta, sin animar.
+  if (stageNodes.some((n) => n.id === 'keyword_research') && supportNodes.some((n) => n.id === 'competitor-analysis')) {
     edges.push({
       id: 'e-keyword_research-competitor-analysis',
       source: 'keyword_research',
       target: 'competitor-analysis',
       animated: false,
-      style: { stroke: '#cbd5e1', strokeDasharray: '4 4' },
+      style: { stroke: '#c4b5fd', strokeDasharray: '4 4' },
       label: 'se usa desde',
-      labelStyle: { fill: '#94a3b8', fontSize: 10 },
+      labelStyle: { fill: '#a78bfa', fontSize: 10 },
     });
   }
 
