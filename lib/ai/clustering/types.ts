@@ -48,12 +48,24 @@ export type ClusterProposal = {
     is_primary: boolean;
     pending_verification: boolean;
   }>;
+  // Marca informativa de la Capa 0b (lib/ai/clustering/layers/0b-brand-detection.ts).
+  // No es una columna de seo_kw_clusters — la marca real y persistente que
+  // sobrevive al guardado es content_type === 'competencia_detectada'; este
+  // campo solo existe en memoria mientras el cluster aún no se ha
+  // confirmado, para que la UI de revisión (paso 3) no dependa de comparar
+  // strings de content_type.
+  is_competitor_brand?: boolean;
 };
 
 export type ClusteringInput = {
   projectId: string;
   tenantId: string;
   keywords: KeywordInput[];
+  // Competidores conocidos del proyecto (seo_kw_competitors.name) — los usa
+  // la Capa 0b (lib/ai/clustering/layers/0b-brand-detection.ts) para sacar
+  // del pipeline normal las keywords que son búsquedas de marca de un
+  // competidor, antes de que lleguen a Capa 0/HDBSCAN/Capa 4.
+  competitors: Array<{ name: string }>;
   provider: string;
   model: string;
   apiKey: string;
@@ -70,6 +82,10 @@ export type ReasonedItem = { keyword: string; reason: string };
 export type ClusteringOutput = {
   clusters: ClusterProposal[];
   suggested: ClusterProposal[];
+  // Clusters de marca de competidor (Capa 0b) — no pasan por Capa 1-4, no
+  // llevan target_url/destination ni cuestan tokens de LLM. Informativos,
+  // no accionables (ver Parte B del pedido).
+  brandGroups: ClusterProposal[];
   unassigned: ReasonedItem[];
   irrelevant: ReasonedItem[];
   metadata: {
