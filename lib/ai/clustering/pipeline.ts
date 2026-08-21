@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { aiJobs } from '@/lib/db/schema';
 import { getModelPricing } from '@/lib/ai/gateway';
+import { detectBrandKeywords, brandGroupToProposal } from './layers/0b-brand-detection';
 import { normalizeByIntent } from './layers/0-intent-normalizer';
 import { embedKeywords } from './layers/1-embeddings';
 import { groupByHdbscan } from './layers/2-hdbscan';
@@ -40,11 +41,21 @@ export async function clusterKeywords(
   const cfg: PipelineConfig = { ...DEFAULT_PIPELINE_CONFIG, ...config };
   const layersUsed: string[] = [];
 
+  // Capa 0b — detección de marca (antes que nada más): saca del pipeline
+  // las keywords que son búsquedas de marca de un competidor conocido del
+  // proyecto. No pasan por Capa 0-4 — se convierten directamente en
+  // clusters informativos al final, sin coste de tokens.
+  const { brandGroups, remainingKeywords } = detectBrandKeywords(
+    input.keywords,
+    input.competitors
+  );
+  layersUsed.push('brand_detection');
+
   // Capa 0 — normalización por intención (raíz + modificador). Va antes de
   // los embeddings porque su resultado (qué keywords comparten raíz) se
   // usa para forzar su agrupación después de la Capa 1 — ver más abajo.
   const normalizedGroups = await normalizeByIntent(
-    input.keywords,
+    remainingKeywords,
     input.provider,
     input.model,
     input.apiKey
@@ -53,7 +64,7 @@ export async function clusterKeywords(
 
   // Capa 1 — embeddings
   const embedded = await embedKeywords(
-    input.keywords,
+    remainingKeywords,
     input.embeddingProvider,
     input.embeddingApiKey,
     input.embeddingModel,
@@ -63,7 +74,7 @@ export async function clusterKeywords(
   const embeddingsCost = await estimateEmbeddingsCost(
     input.embeddingProvider,
     input.embeddingModel,
-    input.keywords.length
+    remainingKeywords.length
   );
 
   // Truco técnico: las keywords que la Capa 0 agrupó bajo una misma raíz
@@ -201,6 +212,7 @@ export async function clusterKeywords(
     return {
       clusters: classification.clusters,
       suggested: classification.suggested,
+      brandGroups: brandGroups.map(brandGroupToProposal),
       unassigned,
       irrelevant,
       metadata: {

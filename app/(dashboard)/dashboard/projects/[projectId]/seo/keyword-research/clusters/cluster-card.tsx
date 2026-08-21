@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -15,7 +16,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
-import { MoreVertical, Plus, X, Star, Pencil, Search, TrendingUp, ArrowRight } from 'lucide-react';
+import { MoreVertical, Plus, X, Star, Pencil, Search, TrendingUp, ArrowRight, Globe } from 'lucide-react';
 import {
   updateKwClusterStatus,
   deleteKwCluster,
@@ -286,6 +287,14 @@ export function ClusterCard({ cluster, otherClusters, onUpdated, onDeleted, onKe
               <DropdownMenuItem onClick={() => setIsEditing(true)}>
                 <Pencil className="h-4 w-4" />
                 Editar cluster
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link
+                  href={`/dashboard/projects/${cluster.projectId}/seo/keyword-research/clusters/${cluster.id}/competitors`}
+                >
+                  <Globe className="h-4 w-4" />
+                  Competidores SERP
+                </Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem variant="destructive" onClick={handleDelete}>

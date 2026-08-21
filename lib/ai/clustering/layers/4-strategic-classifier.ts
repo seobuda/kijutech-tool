@@ -2,6 +2,19 @@ import { getAdapter, getPrompt, withTimeout, CALL_TIMEOUT_MS } from '@/lib/ai/ga
 import type { AIMessage } from '@/lib/ai/types';
 import type { ClusterGroup, ClusterProposal, ClusteringExample } from '../types';
 
+// Un objeto JSON completo por grupo (title, reasoning, strategy_note...)
+// pesa bastante en español; con muchos grupos (ej. Noise Recovery —
+// lib/ai/clustering/layers/2b-orphan-assignment.ts — rescata como grupo
+// propio keywords que antes se descartaban como noise) un límite fijo se
+// queda corto y la respuesta se corta a mitad de generación, dando JSON
+// incompleto que ninguna estrategia de extracción puede recuperar (visto
+// en producción con 16, 30+ y 38 grupos). Se escala con el número de
+// grupos en vez de fijar un valor único: 300 tokens/grupo, mínimo 2000
+// (proyectos pequeños), máximo 12000.
+function computeMaxTokens(groupCount: number): number {
+  return Math.min(Math.max(groupCount * 300, 2000), 12000);
+}
+
 const FALLBACK_SYSTEM_PROMPT =
   'Eres un experto en estrategia SEO. Recibes grupos de keywords ya agrupados por ' +
   'similitud semántica. Tu trabajo es clasificarlos estratégicamente y nombrarlos. ' +
@@ -22,6 +35,10 @@ SEÑALES SERP disponibles por grupo (úsalas para clasificar):
 
 {examples_section}
 
+LÍMITE ESTRICTO: reasoning máximo 12 palabras, strategy_note máximo 15 palabras. Sin excepciones.
+
+FUSIÓN DE GRUPOS: revisa los grupos candidatos. Si dos o más grupos representan exactamente la misma intención de búsqueda real (la misma página debería cubrir todas esas keywords), inclúyelos juntos en el mismo array group_indexes. Sé conservador: solo fusiona cuando estés seguro de que es la misma intención, no solo temas parecidos. Presta especial atención a keywords que son variantes casi idénticas entre sí (mismo núcleo semántico con palabras de más o de menos).
+
 GRUPOS A CLASIFICAR:
 {groups_list}
 
@@ -29,7 +46,7 @@ FORMATO JSON (sin nada más):
 {
   "clusters": [
     {
-      "group_index": 0,
+      "group_indexes": [0],
       "title": "Título descriptivo",
       "target_url": "/slug-espanol-sin-acentos",
       "url_type": "landing_servicio|landing_local|articulo_satelite|comparativa_competidores|blog_informacional",
@@ -38,8 +55,8 @@ FORMATO JSON (sin nada más):
       "search_intent": "transaccional|informacional|navegacional|local",
       "difficulty": "easy|medium|hard",
       "low_volume": false,
-      "reasoning": "Por qué este grupo tiene esta intención",
-      "strategy_note": "2-3 frases didácticas sobre cómo ejecutar este cluster",
+      "reasoning": "Máximo 12 palabras. Por qué este grupo tiene esta intención.",
+      "strategy_note": "Máximo 15 palabras. Una frase sobre cómo ejecutar este cluster.",
       "primary_keyword": "keyword principal del grupo"
     }
   ],
@@ -52,8 +69,8 @@ FORMATO JSON (sin nada más):
       "content_type": "landing_transaccional",
       "search_intent": "transaccional",
       "difficulty": "easy",
-      "reasoning": "Por qué esta keyword tiene potencial",
-      "strategy_note": "Cómo ejecutarlo",
+      "reasoning": "Máximo 12 palabras. Por qué esta keyword tiene potencial.",
+      "strategy_note": "Máximo 15 palabras. Cómo ejecutarlo.",
       "primary_keyword": "keyword sugerida",
       "suggested_keywords": ["keyword1", "keyword2"]
     }
@@ -117,8 +134,8 @@ function buildPrompt(
   };
 }
 
-// Extracción robusta de JSON, igual de permisiva que
-// lib/ai/parsers/cluster-keywords.ts (duplicada aquí en vez de compartida
+// Extracción robusta de JSON (misma lógica de 3 estrategias que
+// lib/ai/parsers/json-extractor.ts, duplicada aquí en vez de compartida
 // porque valida una estructura de respuesta distinta — grupos con índice,
 // no keywords sueltas).
 function extractJson(raw: string): unknown {
@@ -155,17 +172,43 @@ function extractJson(raw: string): unknown {
   throw new Error('La respuesta de clasificación estratégica no es JSON válido');
 }
 
-function toProposalFromGroup(
+function pickPrimaryKeyword(keywords: ClusterGroup['keywords']): string {
+  return keywords.reduce((best, k) => ((k.volume ?? 0) > (best.volume ?? 0) ? k : best)).keyword;
+}
+
+// Fusiona los grupos originales de HDBSCAN que la Capa 4 decidió que son
+// la misma intención real (group_indexes con más de un elemento): junta
+// sus keywords y combina las señales SERP de la Capa 3 — OR para
+// high_competition/local_intent/local_physical/informational_intent (si
+// algún grupo fusionado la tenía, el cluster final la hereda), AND para
+// low_volume (solo si TODOS los grupos fusionados eran de volumen bajo).
+function mergeGroups(groups: ClusterGroup[]): {
+  keywords: ClusterGroup['keywords'];
+  lowVolume: boolean;
+} {
+  const keywords = groups.flatMap((g) => g.keywords);
+  const lowVolume = groups.length > 0 && groups.every((g) => g.serp_signals?.includes('low_volume'));
+  return { keywords, lowVolume };
+}
+
+function toProposalFromGroups(
   raw: Record<string, unknown>,
-  group: ClusterGroup
+  mergedGroups: ClusterGroup[]
 ): ClusterProposal | null {
   const title = typeof raw.title === 'string' ? raw.title.trim() : '';
-  if (!title || group.keywords.length === 0) {
+  if (!title || mergedGroups.length === 0) {
     return null;
   }
 
-  const primaryKeyword =
-    typeof raw.primary_keyword === 'string' ? raw.primary_keyword : group.keywords[0].keyword;
+  const { keywords, lowVolume } = mergeGroups(mergedGroups);
+  if (keywords.length === 0) {
+    return null;
+  }
+
+  // Se calcula siempre a partir del volumen real combinado, sin confiar
+  // en lo que diga el modelo — igual que se hace con otros campos
+  // reglados en cluster-keywords.ts (ver decisiones de esta sesión).
+  const primaryKeyword = pickPrimaryKeyword(keywords);
 
   return {
     title,
@@ -175,12 +218,12 @@ function toProposalFromGroup(
     content_type: typeof raw.content_type === 'string' ? raw.content_type : null,
     search_intent: typeof raw.search_intent === 'string' ? raw.search_intent : null,
     difficulty: typeof raw.difficulty === 'string' ? raw.difficulty : null,
-    low_volume: raw.low_volume === true,
+    low_volume: lowVolume,
     reasoning: typeof raw.reasoning === 'string' ? raw.reasoning : null,
     strategy_note: typeof raw.strategy_note === 'string' ? raw.strategy_note : null,
     is_ai_suggested: false,
     primary_keyword: primaryKeyword,
-    keywords: group.keywords.map((k) => ({
+    keywords: keywords.map((k) => ({
       keyword: k.keyword,
       monthly_volume: k.volume,
       is_primary: k.keyword === primaryKeyword,
@@ -256,7 +299,10 @@ export async function classifyStrategically(
     { role: 'user', content: user },
   ];
 
-  const response = await withTimeout(adapter.sendMessage(messages, model, apiKey), CALL_TIMEOUT_MS);
+  const response = await withTimeout(
+    adapter.sendMessage(messages, model, apiKey, computeMaxTokens(groups.length)),
+    CALL_TIMEOUT_MS
+  );
   const data = extractJson(response.content);
 
   if (typeof data !== 'object' || data === null || !Array.isArray((data as Record<string, unknown>).clusters)) {
@@ -272,14 +318,20 @@ export async function classifyStrategically(
   for (const rawCluster of d.clusters as unknown[]) {
     if (typeof rawCluster !== 'object' || rawCluster === null) continue;
     const c = rawCluster as Record<string, unknown>;
-    const groupIndex = typeof c.group_index === 'number' ? c.group_index : null;
-    const group = groupIndex != null ? groups[groupIndex] : undefined;
-    if (!group || groupIndex === null) continue;
+    const groupIndexes = Array.isArray(c.group_indexes)
+      ? c.group_indexes.filter((i): i is number => typeof i === 'number')
+      : [];
+    if (groupIndexes.length === 0) continue;
 
-    const proposal = toProposalFromGroup(c, group);
+    const mergedGroups = groupIndexes
+      .map((idx) => groups[idx])
+      .filter((g): g is ClusterGroup => Boolean(g));
+    if (mergedGroups.length === 0) continue;
+
+    const proposal = toProposalFromGroups(c, mergedGroups);
     if (proposal) {
       clusters.push(proposal);
-      matchedGroupIndexes.push(groupIndex);
+      matchedGroupIndexes.push(...groupIndexes);
     }
   }
 

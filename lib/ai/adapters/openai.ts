@@ -7,7 +7,8 @@ export const openaiAdapter: AIAdapter = {
   async sendMessage(
     messages: AIMessage[],
     model: string,
-    apiKey: string
+    apiKey: string,
+    maxTokens?: number
   ): Promise<AIResponse> {
     const resolvedModel = model || DEFAULT_MODEL;
 
@@ -20,6 +21,7 @@ export const openaiAdapter: AIAdapter = {
       body: JSON.stringify({
         model: resolvedModel,
         messages: messages.map((m) => ({ role: m.role, content: m.content })),
+        ...(maxTokens ? { max_tokens: maxTokens } : {}),
       }),
     });
 

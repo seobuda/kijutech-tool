@@ -122,8 +122,20 @@ type Props = {
   onDiscard: () => void;
 };
 
+// Grupos de marca de competidor (Capa 0b, lib/ai/clustering/layers/0b-brand-detection.ts)
+// — informativos, no accionables. content_type es lo único que sobrevive
+// al guardado en seo_kw_clusters, así que es el criterio que usa también
+// el paso 4 (clusters-board.tsx) para separarlos del grid principal.
+const BRAND_CONTENT_TYPE = 'competencia_detectada';
+
 export function ClusterReview({ projectId, analysis, existingClustersCount, onDiscard }: Props) {
-  const [clusters, setClusters] = useState<EditableCluster[]>(() => toEditable(analysis.clusters));
+  const [clusters, setClusters] = useState<EditableCluster[]>(() =>
+    toEditable(analysis.clusters.filter((c) => c.content_type !== BRAND_CONTENT_TYPE))
+  );
+  const [brandClusters] = useState<EditableCluster[]>(() =>
+    toEditable(analysis.clusters.filter((c) => c.content_type === BRAND_CONTENT_TYPE))
+  );
+  const [brandSectionExpanded, setBrandSectionExpanded] = useState(false);
   const [unassigned, setUnassigned] = useState<ReasonedItem[]>(analysis.unassigned);
   const [showModeChoice, setShowModeChoice] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -298,7 +310,7 @@ export function ClusterReview({ projectId, analysis, existingClustersCount, onDi
   }
 
   function buildPayload() {
-    return clusters
+    return [...clusters, ...brandClusters]
       .map((c) => ({
         title: c.title.trim(),
         targetUrl: c.targetUrl.trim() || null,
@@ -583,6 +595,60 @@ export function ClusterReview({ projectId, analysis, existingClustersCount, onDi
             );
           })}
         </div>
+      )}
+
+      {brandClusters.length > 0 && (
+        <Card>
+          <CardContent className="pt-6 space-y-3">
+            <button
+              type="button"
+              onClick={() => setBrandSectionExpanded((v) => !v)}
+              className="flex items-center gap-1.5 text-sm font-medium w-full text-left"
+            >
+              {brandSectionExpanded ? (
+                <ChevronDown className="h-4 w-4" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
+              )}
+              Demanda de competidores detectada ({brandClusters.length})
+            </button>
+            {brandSectionExpanded && (
+              <div className="space-y-3 pt-1">
+                <p className="text-xs text-muted-foreground">
+                  Estas búsquedas mencionan marcas de competidores. No se recomienda crear
+                  contenido propio dirigido a estas búsquedas — la intención es encontrar ese
+                  negocio específico, no el tuyo. Útil para entender la demanda de la
+                  competencia en tu zona.
+                </p>
+                <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(220px,1fr))]">
+                  {brandClusters.map((cluster) => {
+                    const totalVolume = cluster.keywords.reduce(
+                      (sum, k) => sum + (k.monthlyVolume ?? 0),
+                      0
+                    );
+                    return (
+                      <Card key={cluster.uid} className="bg-gray-50">
+                        <CardContent className="p-4 space-y-2">
+                          <p className="font-medium text-sm">
+                            {cluster.title.replace(/^Marca competidora: /, '')}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {totalVolume} búsq./mes total
+                          </p>
+                          <ul className="text-xs text-muted-foreground space-y-0.5">
+                            {cluster.keywords.map((k) => (
+                              <li key={k.keyword}>{k.keyword}</li>
+                            ))}
+                          </ul>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {unassigned.length > 0 && (

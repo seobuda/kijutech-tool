@@ -4,7 +4,16 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Loader2, CheckCircle2, Plus, ExternalLink, Link as LinkIcon, X } from 'lucide-react';
+import {
+  Loader2,
+  CheckCircle2,
+  Plus,
+  ExternalLink,
+  Link as LinkIcon,
+  X,
+  ChevronDown,
+  ChevronRight
+} from 'lucide-react';
 import {
   createKwCluster,
   generateShareToken,
@@ -22,6 +31,12 @@ const FILTERS = [
   { value: 'completed', label: 'Completados' },
   { value: 'archived', label: 'Archivados' }
 ];
+
+// Igual que en cluster-review.tsx (paso 3) — content_type es lo único de
+// los grupos de marca de competidor (Capa 0b) que sobrevive al guardado
+// en seo_kw_clusters, así que es el criterio para separarlos del grid
+// principal aquí también.
+const BRAND_CONTENT_TYPE = 'competencia_detectada';
 
 type Props = {
   projectId: string;
@@ -45,9 +60,13 @@ export function ClustersBoard({
   const [localStatus, setLocalStatus] = useState(stageStatus);
   const [isResetting, setIsResetting] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const [brandSectionExpanded, setBrandSectionExpanded] = useState(false);
+
+  const actionableClusters = clusters.filter((c) => c.contentType !== BRAND_CONTENT_TYPE);
+  const brandClusters = clusters.filter((c) => c.contentType === BRAND_CONTENT_TYPE);
 
   const filteredClusters =
-    filter === 'all' ? clusters : clusters.filter((c) => c.status === filter);
+    filter === 'all' ? actionableClusters : actionableClusters.filter((c) => c.status === filter);
 
   function handleCreate(values: ClusterFormValues) {
     startTransition(async () => {
@@ -191,7 +210,7 @@ export function ClustersBoard({
         <Card>
           <CardContent className="pt-6">
             <p className="text-muted-foreground">
-              {clusters.length === 0
+              {actionableClusters.length === 0
                 ? 'Todavía no hay clusters. Crea el primero con "Nuevo cluster".'
                 : 'No hay clusters con este filtro.'}
             </p>
@@ -203,13 +222,67 @@ export function ClustersBoard({
             <ClusterCard
               key={cluster.id}
               cluster={cluster}
-              otherClusters={clusters.filter((c) => c.id !== cluster.id)}
+              otherClusters={actionableClusters.filter((c) => c.id !== cluster.id)}
               onUpdated={handleUpdated}
               onDeleted={handleDeleted}
               onKeywordMoved={() => router.refresh()}
             />
           ))}
         </div>
+      )}
+
+      {brandClusters.length > 0 && (
+        <Card>
+          <CardContent className="pt-6 space-y-3">
+            <button
+              type="button"
+              onClick={() => setBrandSectionExpanded((v) => !v)}
+              className="flex items-center gap-1.5 text-sm font-medium w-full text-left"
+            >
+              {brandSectionExpanded ? (
+                <ChevronDown className="h-4 w-4" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
+              )}
+              Demanda de competidores detectada ({brandClusters.length})
+            </button>
+            {brandSectionExpanded && (
+              <div className="space-y-3 pt-1">
+                <p className="text-xs text-muted-foreground">
+                  Estas búsquedas mencionan marcas de competidores. No se recomienda crear
+                  contenido propio dirigido a estas búsquedas — la intención es encontrar ese
+                  negocio específico, no el tuyo. Útil para entender la demanda de la
+                  competencia en tu zona.
+                </p>
+                <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(220px,1fr))]">
+                  {brandClusters.map((cluster) => {
+                    const totalVolume = cluster.keywords.reduce(
+                      (sum, k) => sum + (k.monthlyVolume ?? 0),
+                      0
+                    );
+                    return (
+                      <Card key={cluster.id} className="bg-gray-50">
+                        <CardContent className="p-4 space-y-2">
+                          <p className="font-medium text-sm">
+                            {cluster.title.replace(/^Marca competidora: /, '')}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {totalVolume} búsq./mes total
+                          </p>
+                          <ul className="text-xs text-muted-foreground space-y-0.5">
+                            {cluster.keywords.map((k) => (
+                              <li key={k.id}>{k.keyword}</li>
+                            ))}
+                          </ul>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       <div className="flex items-center space-x-3">

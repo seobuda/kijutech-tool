@@ -6,7 +6,7 @@ import { db } from '@/lib/db/drizzle';
 import { aiJobs, seoKwClusterKeywords, seoKwClusters, seoKwRaw } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
 import { assertUserInProjectTenant } from '@/lib/seo/actions';
-import { getKwRaw } from '@/lib/seo/kw-queries';
+import { getKwRaw, getKwCompetitors } from '@/lib/seo/kw-queries';
 import { completeStep3 } from '@/lib/seo/kw-actions';
 import { callAI, resolveActiveProvider, getEmbeddingConfig } from '@/lib/ai/gateway';
 import { buildClusteringPrompt } from '@/lib/ai/prompts/cluster-keywords';
@@ -56,6 +56,8 @@ export async function analyzeKeywordsWithAI(projectId: string): Promise<AnalyzeR
     return { error: 'Necesitas al menos 3 keywords para analizar con IA' };
   }
 
+  const competitors = await getKwCompetitors(projectId);
+
   let activeProvider;
   let embeddingConfig;
   try {
@@ -82,6 +84,7 @@ export async function analyzeKeywordsWithAI(projectId: string): Promise<AnalyzeR
       projectId,
       tenantId: auth.user.tenantId,
       keywords: keywordsInput,
+      competitors: competitors.map((c) => ({ name: c.name })),
       provider: activeProvider.provider,
       model: activeProvider.model,
       apiKey: activeProvider.apiKey,
@@ -95,9 +98,11 @@ export async function analyzeKeywordsWithAI(projectId: string): Promise<AnalyzeR
 
   return {
     // La pantalla de revisión espera un único array de clusters, donde
-    // is_ai_suggested distingue los reales de los sugeridos — el
-    // pipeline los separa en dos, se fusionan aquí para no tocar la UI.
-    clusters: [...result.clusters, ...result.suggested],
+    // is_ai_suggested distingue los reales de los sugeridos y
+    // content_type === 'competencia_detectada' distingue los grupos de
+    // marca (Capa 0b) — el pipeline los separa en tres, se fusionan aquí
+    // para no tocar el contrato de AnalyzeResult.
+    clusters: [...result.clusters, ...result.suggested, ...result.brandGroups],
     unassigned: result.unassigned,
     irrelevant: result.irrelevant,
     jobId: result.metadata.job_id,

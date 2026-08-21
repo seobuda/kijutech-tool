@@ -15,7 +15,8 @@ export const geminiAdapter: AIAdapter = {
   async sendMessage(
     messages: AIMessage[],
     model: string,
-    apiKey: string
+    apiKey: string,
+    maxTokens?: number
   ): Promise<AIResponse> {
     const resolvedModel = model || DEFAULT_MODEL;
     const systemInstruction = messages
@@ -33,6 +34,7 @@ export const geminiAdapter: AIAdapter = {
         ...(systemInstruction
           ? { systemInstruction: { parts: [{ text: systemInstruction }] } }
           : {}),
+        ...(maxTokens ? { generationConfig: { maxOutputTokens: maxTokens } } : {}),
       }),
     });
 

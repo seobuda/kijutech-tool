@@ -29,6 +29,10 @@ type CallAIParams = {
   messages: AIMessage[];
   preferredProvider?: string;
   promptKey?: string;
+  // Opcional — cada adapter usa su propio default si no se especifica
+  // (ver DEFAULT_MAX_TOKENS en adapters/anthropic.ts, el único que lo
+  // exige como campo obligatorio de su API).
+  maxTokens?: number;
 };
 
 export async function getPrompt(
@@ -231,7 +235,7 @@ export async function getEmbeddingConfig(
 export async function callAI(
   params: CallAIParams
 ): Promise<AIResponse & { jobId: string }> {
-  const { tenantId, projectId, function: fn, messages, preferredProvider, promptKey } = params;
+  const { tenantId, projectId, function: fn, messages, preferredProvider, promptKey, maxTokens } = params;
 
   // Si se pasa promptKey, se carga aquí únicamente para dejar constancia
   // en el job de qué prompt estaba activo en el momento de la llamada —
@@ -264,7 +268,7 @@ export async function callAI(
     }
 
     const response = await withTimeout(
-      adapter.sendMessage(messages, setting.model, setting.apiKey),
+      adapter.sendMessage(messages, setting.model, setting.apiKey, maxTokens),
       CALL_TIMEOUT_MS
     );
 
