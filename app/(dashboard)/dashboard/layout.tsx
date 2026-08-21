@@ -15,7 +15,8 @@ import {
   BookOpen,
   SlidersHorizontal,
   Sparkles,
-  Brain
+  Brain,
+  Network
 } from 'lucide-react';
 
 const ADMIN_ROLES = ['admin', 'super_admin'];
@@ -78,6 +79,11 @@ export default function DashboardLayout({
             href: '/dashboard/ai/brain',
             icon: Brain,
             label: 'Cerebro'
+          },
+          {
+            href: '/dashboard/architecture',
+            icon: Network,
+            label: 'Mapa'
           }
         ]
       : [])

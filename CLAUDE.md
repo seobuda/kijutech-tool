@@ -300,3 +300,21 @@ Ejemplos de lo que hay que señalar:
    sin perder calidad — ¿usamos Haiku aquí?"
 - "Esta tarea no necesita IA — un algoritmo simple lo resuelve
    igual de bien y gratis — ¿lo hacemos sin IA?"
+
+## Mapa Visual del Sistema — mantenimiento obligatorio
+
+Cuando una sesión añada, elimine, reordene, o modifique sustancialmente
+un paso de un proceso multi-fase (una capa del pipeline de clustering,
+un paso de un flujo con estados secuenciales, etc.):
+
+- Actualiza el array de metadata (`*_PROCESS_MAP`) exportado junto a la
+  función principal de ese proceso — nunca en un archivo aparte
+- Si el proceso es nuevo y no tiene metadata todavía, créala siguiendo
+  el patrón de `lib/ai/clustering/pipeline.ts` (`CLUSTERING_PROCESS_MAP`)
+  y regístrala en `lib/architecture-map/registry.ts`
+- Si se añade un módulo o etapa completamente nueva al sistema (no un
+  paso dentro de un proceso existente), añade su entrada a `CORE_NODES`
+  o confirma que ya se deriva de `modules/seo/manifest.json`
+
+Esto no es opcional ni requiere que Enric lo pida — es parte de dar
+por terminada cualquier tarea que toque un proceso multi-fase.
