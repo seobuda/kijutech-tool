@@ -8,6 +8,7 @@ import {
   seoKwClusters,
 } from '@/lib/db/schema';
 import type { ScrapedData } from './competitor-scraper';
+import type { ProcessStep } from '@/lib/ai/clustering/pipeline';
 
 // Keys reales de seo_kickoff_answers (confirmadas contra la BD — las que
 // se asumieron originalmente, business_type/main_services/etc., no
@@ -62,6 +63,57 @@ export type AnalysisContext = {
 export type BuildAnalysisContextResult =
   | { ok: true; context: AnalysisContext }
   | { ok: false; error: string };
+
+// Mapa de arquitectura (Parte A) — mismo patrón que CLUSTERING_PROCESS_MAP
+// en lib/ai/clustering/pipeline.ts, co-ubicado con el código real de este
+// flujo. No vive en lib/seo/competitor-actions.ts (que orquesta los pasos
+// saveCompetitorUrls → performScrape → generateCompetitorAnalysis) porque
+// ese archivo lleva 'use server' — Next.js exige que un archivo así solo
+// exporte funciones async, así que una constante como esta rompería el
+// build. El parser real (lib/ai/parsers/competitor-analysis.ts) devuelve 3
+// campos, no 5 "entregables" separados — recommendations (hasta 8,
+// priorizadas), recommended_structure (hasta 5 secciones) y summary; la
+// descripción del último paso refleja eso.
+export const COMPETITOR_ANALYSIS_PROCESS_MAP: ProcessStep[] = [
+  {
+    id: 'competitor-urls',
+    name: 'URLs de competidores',
+    description: 'El usuario indica hasta 5 páginas de la competencia que ya posicionan para este cluster.',
+    status: 'built',
+    file: 'lib/seo/competitor-actions.ts',
+  },
+  {
+    id: 'scraping',
+    name: 'Extracción de contenido',
+    description:
+      'Descarga cada página y analiza su título, encabezados, preguntas frecuentes y llamadas a la acción.',
+    status: 'built',
+    file: 'lib/seo/competitor-scraper.ts',
+  },
+  {
+    id: 'context-building',
+    name: 'Construcción de contexto',
+    description:
+      'Combina lo extraído de la competencia con las keywords del cluster y las respuestas del kickoff del proyecto.',
+    status: 'built',
+    file: 'lib/seo/competitor-analysis-builder.ts',
+  },
+  {
+    id: 'ai-analysis',
+    name: 'Análisis con IA',
+    description: 'La inteligencia artificial compara toda la competencia recopilada y redacta una guía de acción.',
+    status: 'built',
+    file: 'lib/seo/competitor-analysis-prompt.ts',
+  },
+  {
+    id: 'actionable-guide',
+    name: 'Guía accionable',
+    description:
+      'Recomendaciones priorizadas, estructura de contenido sugerida y un resumen ejecutivo, listos para el equipo.',
+    status: 'built',
+    file: 'lib/ai/parsers/competitor-analysis.ts',
+  },
+];
 
 function truncateScrapedData(data: ScrapedData): ScrapedData {
   return {

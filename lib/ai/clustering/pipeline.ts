@@ -31,6 +31,76 @@ async function estimateEmbeddingsCost(
   return (estimatedTokens / 1000) * Number(pricing.inputCostPer1k);
 }
 
+// Mapa de arquitectura (Parte A) — metadata co-ubicada con el código real
+// que orquesta el pipeline. Cuando clusterKeywords() cambie de orden o de
+// capas, este array debe reflejarlo: es la fuente que consume
+// lib/architecture-map/registry.ts para el nivel 2 del Mapa Visual del
+// Sistema. No se mantiene a mano por separado del código — cualquiera que
+// toque el pipeline sin actualizar este array deja el mapa desincronizado.
+export interface ProcessStep {
+  id: string;
+  name: string;
+  description: string;
+  status: 'built' | 'in_progress' | 'planned';
+  file: string;
+}
+
+export const CLUSTERING_PROCESS_MAP: ProcessStep[] = [
+  {
+    id: 'brand-detection',
+    name: 'Detección de marca',
+    description:
+      'Reconoce automáticamente cuando una búsqueda menciona a un competidor conocido y la separa como información, no como página a crear.',
+    status: 'built',
+    file: 'layers/0b-brand-detection.ts',
+  },
+  {
+    id: 'intent-normalizer',
+    name: 'Normalización de intención',
+    description:
+      'Detecta si dos palabras clave significan lo mismo aunque se escriban distinto (ej. "precios" no cambia la intención).',
+    status: 'built',
+    file: 'layers/0-intent-normalizer.ts',
+  },
+  {
+    id: 'embeddings',
+    name: 'Vectorización semántica',
+    description: 'Convierte cada palabra clave en un punto matemático que representa su significado.',
+    status: 'built',
+    file: 'layers/1-embeddings.ts',
+  },
+  {
+    id: 'hdbscan',
+    name: 'Agrupación matemática',
+    description: 'Agrupa las palabras clave más parecidas entre sí usando matemáticas puras, sin IA.',
+    status: 'built',
+    file: 'layers/2-hdbscan.ts',
+  },
+  {
+    id: 'orphan-assignment',
+    name: 'Rescate de huérfanas',
+    description: 'Palabras clave que quedaron solas se reasignan al grupo más parecido si tiene sentido.',
+    status: 'built',
+    file: 'layers/2b-orphan-assignment.ts',
+  },
+  {
+    id: 'serp-signals',
+    name: 'Señales de Google',
+    description:
+      'Analiza qué tipo de resultados muestra Google para cada grupo (local, informativo, competido...).',
+    status: 'built',
+    file: 'layers/3-serp-signals.ts',
+  },
+  {
+    id: 'strategic-classification',
+    name: 'Clasificación estratégica con IA',
+    description:
+      'La inteligencia artificial nombra cada grupo, decide su tipo de página, y puede fusionar grupos que en realidad son la misma intención de búsqueda.',
+    status: 'built',
+    file: 'layers/4-strategic-classifier.ts',
+  },
+];
+
 // La interfaz externa (ClusteringInput → ClusteringOutput) no cambia
 // aunque cambien las capas internas.
 export async function clusterKeywords(
