@@ -141,6 +141,13 @@
       "when": 1787223631219,
       "tag": "0019_misty_roughhouse",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1787268135955,
+      "tag": "0020_seo_competitor_analysis",
+      "breakpoints": true
     }
   ]
 }

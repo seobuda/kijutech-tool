@@ -11,9 +11,10 @@ import {
   date,
   decimal,
   unique,
+  check,
   vector,
 } from 'drizzle-orm/pg-core';
-import { relations } from 'drizzle-orm';
+import { relations, sql } from 'drizzle-orm';
 
 export const tenants = pgTable('tenants', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -376,6 +377,48 @@ export const seoKwClusterKeywords = pgTable('seo_kw_cluster_keywords', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
+// Fase D — Bloque 1: URLs top 5 de Google introducidas a mano por keyword
+// research para un cluster, con el resultado del scraping (Capa de
+// competitor-scraper.ts). El análisis IA sobre estos datos (Parte 2) vive
+// en seoCompetitorAnalysis, no aquí.
+export const seoClusterCompetitors = pgTable(
+  'seo_cluster_competitors',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    clusterId: uuid('cluster_id')
+      .notNull()
+      .references(() => seoKwClusters.id, { onDelete: 'cascade' }),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    url: text('url').notNull(),
+    position: integer('position').notNull(),
+    scrapedAt: timestamp('scraped_at'),
+    scrapeStatus: varchar('scrape_status', { length: 20 }).notNull().default('pending'),
+    rawScrapedData: jsonb('raw_scraped_data'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [check('position_range', sql`${table.position} BETWEEN 1 AND 5`)]
+);
+
+// Resultado del análisis IA (Parte 2, todavía no implementada) sobre las
+// seoClusterCompetitors ya scrapeadas de un cluster.
+export const seoCompetitorAnalysis = pgTable('seo_competitor_analysis', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  clusterId: uuid('cluster_id')
+    .notNull()
+    .references(() => seoKwClusters.id, { onDelete: 'cascade' }),
+  tenantId: uuid('tenant_id')
+    .notNull()
+    .references(() => tenants.id, { onDelete: 'cascade' }),
+  analysisJson: jsonb('analysis_json').notNull(),
+  modelUsed: varchar('model_used', { length: 100 }),
+  tokensUsed: integer('tokens_used'),
+  costEstimate: decimal('cost_estimate', { precision: 10, scale: 6 }),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
 export const seoShareTokens = pgTable('seo_share_tokens', {
   id: uuid('id').primaryKey().defaultRandom(),
   projectId: uuid('project_id')
@@ -595,6 +638,30 @@ export const seoKwClustersRelations = relations(seoKwClusters, ({ one, many }) =
     references: [projects.id],
   }),
   keywords: many(seoKwClusterKeywords),
+  competitors: many(seoClusterCompetitors),
+  competitorAnalyses: many(seoCompetitorAnalysis),
+}));
+
+export const seoClusterCompetitorsRelations = relations(seoClusterCompetitors, ({ one }) => ({
+  cluster: one(seoKwClusters, {
+    fields: [seoClusterCompetitors.clusterId],
+    references: [seoKwClusters.id],
+  }),
+  tenant: one(tenants, {
+    fields: [seoClusterCompetitors.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const seoCompetitorAnalysisRelations = relations(seoCompetitorAnalysis, ({ one }) => ({
+  cluster: one(seoKwClusters, {
+    fields: [seoCompetitorAnalysis.clusterId],
+    references: [seoKwClusters.id],
+  }),
+  tenant: one(tenants, {
+    fields: [seoCompetitorAnalysis.tenantId],
+    references: [tenants.id],
+  }),
 }));
 
 export const seoKwClusterKeywordsRelations = relations(
@@ -721,6 +788,10 @@ export type SeoKwCluster = typeof seoKwClusters.$inferSelect;
 export type NewSeoKwCluster = typeof seoKwClusters.$inferInsert;
 export type SeoKwClusterKeyword = typeof seoKwClusterKeywords.$inferSelect;
 export type NewSeoKwClusterKeyword = typeof seoKwClusterKeywords.$inferInsert;
+export type SeoClusterCompetitor = typeof seoClusterCompetitors.$inferSelect;
+export type NewSeoClusterCompetitor = typeof seoClusterCompetitors.$inferInsert;
+export type SeoCompetitorAnalysis = typeof seoCompetitorAnalysis.$inferSelect;
+export type NewSeoCompetitorAnalysis = typeof seoCompetitorAnalysis.$inferInsert;
 export type SeoShareToken = typeof seoShareTokens.$inferSelect;
 export type NewSeoShareToken = typeof seoShareTokens.$inferInsert;
 export type SeoKwProgress = typeof seoKwProgress.$inferSelect;
