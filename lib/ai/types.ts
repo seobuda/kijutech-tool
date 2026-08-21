@@ -15,6 +15,7 @@ export type AIAdapter = {
   sendMessage(
     messages: AIMessage[],
     model: string,
-    apiKey: string
+    apiKey: string,
+    maxTokens?: number
   ): Promise<AIResponse>;
 };

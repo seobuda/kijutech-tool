@@ -21,8 +21,7 @@ export type ParsedCompetitorAnalysis = {
   summary: string;
 };
 
-// Lleva la respuesta cruda adjunta, mismo patrón que ClusterParseError en
-// lib/ai/parsers/cluster-keywords.ts, para poder guardarla en
+// Lleva la respuesta cruda adjunta, para poder guardarla en
 // seo_competitor_analysis.analysis_json cuando el parseo falla.
 export class CompetitorAnalysisParseError extends Error {
   rawResponse: string;
@@ -79,9 +78,8 @@ function parseRecommendations(raw: unknown): AnalysisRecommendation[] {
     });
   }
 
-  // Se reordena defensivamente aunque el prompt ya se lo pida al modelo —
-  // mismo criterio que cluster-keywords.ts al forzar reglas del pedido
-  // independientemente de si el modelo las respetó.
+  // Se reordena defensivamente aunque el prompt ya se lo pida al modelo,
+  // sin confiar en que el modelo respete el orden pedido.
   return items.sort((a, b) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority]).slice(0, 8);
 }
 

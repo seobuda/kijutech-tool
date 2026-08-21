@@ -2,6 +2,19 @@ import { getAdapter, getPrompt, withTimeout, CALL_TIMEOUT_MS } from '@/lib/ai/ga
 import type { AIMessage } from '@/lib/ai/types';
 import type { ClusterGroup, ClusterProposal, ClusteringExample } from '../types';
 
+// Un objeto JSON completo por grupo (title, reasoning, strategy_note...)
+// pesa bastante en español; con muchos grupos (ej. Noise Recovery —
+// lib/ai/clustering/layers/2b-orphan-assignment.ts — rescata como grupo
+// propio keywords que antes se descartaban como noise) un límite fijo se
+// queda corto y la respuesta se corta a mitad de generación, dando JSON
+// incompleto que ninguna estrategia de extracción puede recuperar (visto
+// en producción con 16, 30+ y 38 grupos). Se escala con el número de
+// grupos en vez de fijar un valor único: 300 tokens/grupo, mínimo 2000
+// (proyectos pequeños), máximo 12000.
+function computeMaxTokens(groupCount: number): number {
+  return Math.min(Math.max(groupCount * 300, 2000), 12000);
+}
+
 const FALLBACK_SYSTEM_PROMPT =
   'Eres un experto en estrategia SEO. Recibes grupos de keywords ya agrupados por ' +
   'similitud semántica. Tu trabajo es clasificarlos estratégicamente y nombrarlos. ' +
@@ -117,8 +130,8 @@ function buildPrompt(
   };
 }
 
-// Extracción robusta de JSON, igual de permisiva que
-// lib/ai/parsers/cluster-keywords.ts (duplicada aquí en vez de compartida
+// Extracción robusta de JSON (misma lógica de 3 estrategias que
+// lib/ai/parsers/json-extractor.ts, duplicada aquí en vez de compartida
 // porque valida una estructura de respuesta distinta — grupos con índice,
 // no keywords sueltas).
 function extractJson(raw: string): unknown {
@@ -256,7 +269,10 @@ export async function classifyStrategically(
     { role: 'user', content: user },
   ];
 
-  const response = await withTimeout(adapter.sendMessage(messages, model, apiKey), CALL_TIMEOUT_MS);
+  const response = await withTimeout(
+    adapter.sendMessage(messages, model, apiKey, computeMaxTokens(groups.length)),
+    CALL_TIMEOUT_MS
+  );
   const data = extractJson(response.content);
 
   if (typeof data !== 'object' || data === null || !Array.isArray((data as Record<string, unknown>).clusters)) {

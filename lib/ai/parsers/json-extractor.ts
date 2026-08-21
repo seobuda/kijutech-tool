@@ -4,10 +4,10 @@
 // permisiva, y se usa la primera que produzca JSON parseable.
 //
 // Lanza un Error genérico si ninguna estrategia funciona — cada parser
-// que use esta función (cluster-keywords.ts, competitor-analysis.ts) se
-// encarga de capturarlo y envolverlo en su propio tipo de error con la
-// respuesta cruda adjunta, para poder mostrarla en un panel de
-// diagnóstico cuando el parseo falla.
+// que use esta función (ej. competitor-analysis.ts) se encarga de
+// capturarlo y envolverlo en su propio tipo de error con la respuesta
+// cruda adjunta, para poder mostrarla en un panel de diagnóstico cuando
+// el parseo falla.
 export function extractJsonFromLLMResponse(text: string): unknown {
   const trimmed = text.trim();
 
