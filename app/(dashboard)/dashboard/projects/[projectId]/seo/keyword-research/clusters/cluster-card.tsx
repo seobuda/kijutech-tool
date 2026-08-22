@@ -16,7 +16,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
-import { MoreVertical, Plus, X, Star, Pencil, Search, TrendingUp, ArrowRight, Globe } from 'lucide-react';
+import { MoreVertical, Plus, X, Star, Pencil, Search, TrendingUp, ArrowRight, Globe, Lightbulb } from 'lucide-react';
 import {
   updateKwClusterStatus,
   deleteKwCluster,
@@ -296,6 +296,16 @@ export function ClusterCard({ cluster, otherClusters, onUpdated, onDeleted, onKe
                   Competidores SERP
                 </Link>
               </DropdownMenuItem>
+              {(cluster.searchIntent === 'transaccional' || cluster.searchIntent === 'local') && (
+                <DropdownMenuItem asChild>
+                  <Link
+                    href={`/dashboard/projects/${cluster.projectId}/seo/keyword-research/clusters/${cluster.id}/content-plan`}
+                  >
+                    <Lightbulb className="h-4 w-4" />
+                    Estrategia de contenido
+                  </Link>
+                </DropdownMenuItem>
+              )}
               <DropdownMenuSeparator />
               <DropdownMenuItem variant="destructive" onClick={handleDelete}>
                 <X className="h-4 w-4" />
