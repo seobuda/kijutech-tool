@@ -1,7 +1,5 @@
 'use server';
 
-import fs from 'fs';
-import { and, eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
@@ -10,17 +8,14 @@ import { getUser } from '@/lib/db/queries';
 import { callAI, getPrompt } from '@/lib/ai/gateway';
 import { extractJsonFromLLMResponse } from '@/lib/ai/parsers/json-extractor';
 import { getClickUpToken } from '@/lib/operaciones/queries';
-import {
-  ClickUpError,
-  createTask,
-  findTaskByMarker,
-  getListMembers,
-  OPS_TIMEZONE,
-  type ClickUpMember
-} from '@/lib/operaciones/clickup';
+import { getListMembers, OPS_TIMEZONE, type ClickUpMember } from '@/lib/operaciones/clickup';
+import { syncToClickUp, type SyncResult } from '@/lib/operaciones/sync';
+import { buildDescription, fillTemplate } from '@/lib/operaciones/format';
 
 const PREPARE_MAX_TOKENS = 2000;
 const PREPARE_PROMPT_KEY = 'ops_prepare_request';
+
+export type { SyncResult };
 
 // ---------------------------------------------------------------------------
 // Miembros de una lista (para el desplegable de responsable)
@@ -57,21 +52,6 @@ export type PreparedRequest = {
   description: string; // markdown listo para editar y enviar
   missingData: string[];
 };
-
-function fillTemplate(template: string, vars: Record<string, string>) {
-  return template.replace(/\{(\w+)\}/g, (m, key) => (key in vars ? vars[key] : m));
-}
-
-function buildDescription(p: z.infer<typeof preparedSchema>): string {
-  const parts: string[] = [];
-  if (p.resultado_esperado.trim()) parts.push(`## Resultado esperado\n${p.resultado_esperado.trim()}`);
-  if (p.pasos.length) parts.push(`## Pasos\n${p.pasos.map((s, i) => `${i + 1}. ${s}`).join('\n')}`);
-  if (p.criterios_aceptacion.length)
-    parts.push(`## Criterios de aceptación\n${p.criterios_aceptacion.map((c) => `- [ ] ${c}`).join('\n')}`);
-  if (p.datos_que_faltan.length)
-    parts.push(`## Datos que faltan\n${p.datos_que_faltan.map((q) => `- ${q}`).join('\n')}`);
-  return parts.join('\n\n');
-}
 
 export async function prepareRequestWithAI(input: {
   title: string;
@@ -158,28 +138,6 @@ const createSchema = z.object({
 
 export type CreateRequestInput = z.input<typeof createSchema>;
 
-export type SyncResult =
-  | { ok: true; requestId: string; taskUrl: string; reused: boolean }
-  | { ok: false; requestId: string; error: string };
-
-// Solo desarrollo: fuerza un fallo para probar el reintento.
-//  - "before": falla antes de llamar a ClickUp (no se crea nada).
-//  - "after":  ClickUp CREA la tarea pero se pierde la confirmación; el
-//              reintento debe encontrarla por su marca y no duplicarla.
-// Se activa con la variable OPS_SIMULATE_FAILURE o, sin tocar la config de
-// Docker, creando el archivo /tmp/ops-simulate-failure con ese valor dentro.
-function simulatedFailure(): 'before' | 'after' | null {
-  let mode = process.env.OPS_SIMULATE_FAILURE?.trim();
-  if (!mode) {
-    try {
-      mode = fs.readFileSync('/tmp/ops-simulate-failure', 'utf8').trim();
-    } catch {
-      mode = undefined;
-    }
-  }
-  return mode === 'before' || mode === 'after' ? mode : null;
-}
-
 export async function createRequest(
   raw: CreateRequestInput
 ): Promise<SyncResult | { ok: false; requestId?: undefined; error: string }> {
@@ -217,87 +175,4 @@ export async function retryRequest(requestId: string): Promise<SyncResult> {
   const user = await getUser();
   if (!user) return { ok: false, requestId, error: 'No autenticado' };
   return syncToClickUp(requestId, user.tenantId, true);
-}
-
-async function syncToClickUp(
-  requestId: string,
-  tenantId: string,
-  isRetry: boolean
-): Promise<SyncResult> {
-  const [row] = await db
-    .select()
-    .from(opsRequests)
-    .where(and(eq(opsRequests.id, requestId), eq(opsRequests.tenantId, tenantId)))
-    .limit(1);
-  if (!row) return { ok: false, requestId, error: 'Encargo no encontrado' };
-
-  if (row.status === 'creado' && row.clickupTaskUrl) {
-    return { ok: true, requestId, taskUrl: row.clickupTaskUrl, reused: true };
-  }
-
-  const markFailed = async (message: string): Promise<SyncResult> => {
-    await db
-      .update(opsRequests)
-      .set({ status: 'error_sync', errorMessage: message, updatedAt: new Date() })
-      .where(eq(opsRequests.id, requestId));
-    revalidatePath('/dashboard/operaciones/encargos');
-    return { ok: false, requestId, error: message };
-  };
-
-  try {
-    const conn = await getClickUpToken(tenantId);
-    if (!conn) throw new Error('ClickUp no está conectado (falta el token en Ajustes)');
-
-    const marker = `[kiju:${row.id}]`;
-
-    // En un reintento, antes de crear nada se comprueba si la tarea ya existe
-    // en la lista (p. ej. se creó pero no llegó la confirmación).
-    let task: { id: string; url: string } | null = null;
-    let reused = false;
-    if (isRetry) {
-      task = await findTaskByMarker(conn.token, row.clickupListId, marker);
-      reused = Boolean(task);
-    }
-
-    if (!task) {
-      const sim = simulatedFailure();
-      if (sim === 'before') {
-        throw new Error('Fallo simulado (modo desarrollo: antes de llamar a ClickUp)');
-      }
-
-      task = await createTask(conn.token, row.clickupListId, {
-        name: row.title,
-        description: `${row.preparedDescription}\n\n${marker}`,
-        assigneeId: row.assigneeClickupId ? Number(row.assigneeClickupId) : null,
-        dueDate: row.dueDate,
-        priority: row.priority
-      });
-
-      if (sim === 'after') {
-        throw new Error(
-          'Fallo simulado (modo desarrollo: la tarea SÍ se creó en ClickUp pero se perdió la confirmación)'
-        );
-      }
-    }
-
-    // 2) Confirmado por ClickUp → se guarda id y URL y pasa a "creado".
-    await db
-      .update(opsRequests)
-      .set({
-        status: 'creado',
-        clickupTaskId: task.id,
-        clickupTaskUrl: task.url,
-        errorMessage: null,
-        syncedAt: new Date(),
-        updatedAt: new Date()
-      })
-      .where(eq(opsRequests.id, requestId));
-
-    revalidatePath('/dashboard/operaciones/encargos');
-    return { ok: true, requestId, taskUrl: task.url, reused };
-  } catch (e) {
-    const message =
-      e instanceof ClickUpError || e instanceof Error ? e.message : 'Error desconocido al enviar a ClickUp';
-    return markFailed(message);
-  }
 }

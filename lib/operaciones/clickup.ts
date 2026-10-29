@@ -74,26 +74,57 @@ export async function getSpacesWithLists(
   );
 
   return Promise.all(
-    spaces.map(async (space) => {
-      const [folderless, folders] = await Promise.all([
-        cu<{ lists: { id: string; name: string }[] }>(
-          token,
-          `/space/${space.id}/list?archived=false`
-        ),
-        cu<{ folders: { id: string; name: string; lists: { id: string; name: string }[] }[] }>(
-          token,
-          `/space/${space.id}/folder?archived=false`
-        )
-      ]);
-      const lists: ClickUpList[] = [
-        ...folderless.lists.map((l) => ({ id: l.id, name: l.name, folder: null })),
-        ...folders.folders.flatMap((f) =>
-          f.lists.map((l) => ({ id: l.id, name: l.name, folder: f.name }))
-        )
-      ];
-      return { id: space.id, name: space.name, lists };
-    })
+    spaces.map(async (space) => ({
+      id: space.id,
+      name: space.name,
+      lists: await getSpaceLists(token, space.id)
+    }))
   );
+}
+
+// Listas reales de un espacio (las sueltas y las de dentro de carpetas).
+export async function getSpaceLists(token: string, spaceId: string): Promise<ClickUpList[]> {
+  const [folderless, folders] = await Promise.all([
+    cu<{ lists: { id: string; name: string }[] }>(token, `/space/${spaceId}/list?archived=false`),
+    cu<{ folders: { id: string; name: string; lists: { id: string; name: string }[] }[] }>(
+      token,
+      `/space/${spaceId}/folder?archived=false`
+    )
+  ]);
+  return [
+    ...folderless.lists.map((l) => ({ id: l.id, name: l.name, folder: null })),
+    ...folders.folders.flatMap((f) => f.lists.map((l) => ({ id: l.id, name: l.name, folder: f.name })))
+  ];
+}
+
+// Adjunta un archivo a una tarea (multipart; el boundary lo pone fetch).
+export async function attachFileToTask(
+  token: string,
+  taskId: string,
+  file: { filename: string; mimeType: string; data: Buffer }
+): Promise<void> {
+  const form = new FormData();
+  form.append(
+    'attachment',
+    new Blob([new Uint8Array(file.data)], { type: file.mimeType }),
+    file.filename
+  );
+  const res = await fetch(`${BASE_URL}/task/${taskId}/attachment`, {
+    method: 'POST',
+    headers: { Authorization: token },
+    body: form,
+    cache: 'no-store'
+  });
+  if (!res.ok) {
+    let detail = '';
+    try {
+      detail = (await res.json())?.err ?? '';
+    } catch {}
+    throw new ClickUpError(
+      `ClickUp no aceptó el adjunto (${res.status}${detail ? `: ${detail}` : ''})`,
+      res.status
+    );
+  }
 }
 
 type RawTask = {
@@ -242,11 +273,13 @@ export async function getListMembers(token: string, listId: string): Promise<Cli
   return data.members;
 }
 
-// Medianoche (ms) de una fecha YYYY-MM-DD en OPS_TIMEZONE. ClickUp recibe la
-// fecha sin hora (due_date_time=false), así que basta con que caiga en ese día.
-export function madridMidnightMs(ymd: string): number {
+// Las 12:00 (ms) de una fecha YYYY-MM-DD en OPS_TIMEZONE. Al mediodía de Madrid
+// es la mañana en República Dominicana (UTC-4), así que la fecha cae en el
+// MISMO día en ambos sitios. ClickUp recibe la
+// fecha sin hora (due_date_time=false).
+export function madridNoonMs(ymd: string): number {
   const [y, m, d] = ymd.split('-').map(Number);
-  const wallAsUtc = Date.UTC(y, m - 1, d, 0, 0, 0);
+  const wallAsUtc = Date.UTC(y, m - 1, d, 12, 0, 0);
   // Desfase de la zona en un instante concreto (en ms).
   const offsetAt = (ts: number) => {
     const parts = new Intl.DateTimeFormat('en-US', {
@@ -262,7 +295,8 @@ export function madridMidnightMs(ymd: string): number {
     const g = (t: string) => Number(parts.find((p) => p.type === t)!.value);
     return Date.UTC(g('year'), g('month') - 1, g('day'), g('hour'), g('minute'), g('second')) - ts;
   };
-  // Dos pasadas: la segunda corrige los días en que cambia la hora.
+  // Dos pasadas: la segunda recalcula el desfase en el propio instante y así
+  // se respetan los cambios de hora (CET/CEST).
   const first = wallAsUtc - offsetAt(wallAsUtc);
   return wallAsUtc - offsetAt(first);
 }
@@ -286,7 +320,7 @@ export async function createTask(
   };
   if (input.assigneeId) body.assignees = [input.assigneeId];
   if (input.dueDate) {
-    body.due_date = madridMidnightMs(input.dueDate);
+    body.due_date = madridNoonMs(input.dueDate);
     body.due_date_time = false;
   }
   if (input.priority) body.priority = input.priority;

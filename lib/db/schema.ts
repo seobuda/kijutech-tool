@@ -14,6 +14,7 @@ import {
   check,
   index,
   uniqueIndex,
+  customType,
   vector,
 } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
@@ -873,6 +874,83 @@ export const opsClickupConnections = pgTable('ops_clickup_connections', {
 
 export type OpsClickupConnection = typeof opsClickupConnections.$inferSelect;
 
+// Bloc de notas: texto libre (escrito o dictado) que la IA convierte en uno o
+// varios encargos. Se autoguarda; estado 'borrador' → 'convertida'.
+export const opsNotes = pgTable(
+  'ops_notes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    createdBy: integer('created_by')
+      .notNull()
+      .references(() => users.id),
+    content: text('content').notNull().default(''),
+    clickupSpaceId: varchar('clickup_space_id', { length: 50 }),
+    clickupSpaceName: varchar('clickup_space_name', { length: 255 }),
+    assigneeClickupId: varchar('assignee_clickup_id', { length: 50 }),
+    assigneeName: varchar('assignee_name', { length: 255 }),
+    status: varchar('status', { length: 20 }).notNull().default('borrador'),
+    // Última propuesta de la IA (encargos + no_convertido) para que la
+    // pantalla de revisión sobreviva a una recarga sin volver a llamar a la IA.
+    proposal: jsonb('proposal'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+    convertedAt: timestamp('converted_at'),
+  },
+  (table) => [
+    check('ops_notes_status_check', sql`${table.status} IN ('borrador', 'convertida')`),
+    index('ops_notes_tenant_updated_idx').on(table.tenantId, table.updatedAt),
+  ]
+);
+
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType() {
+    return 'bytea';
+  },
+});
+
+// El audio vive en la base de datos: el contenedor se recrea en cada
+// despliegue (un archivo en disco se perdería), el volumen de Postgres no.
+export const opsNoteAudios = pgTable(
+  'ops_note_audios',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    noteId: uuid('note_id')
+      .notNull()
+      .references(() => opsNotes.id, { onDelete: 'cascade' }),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    mimeType: varchar('mime_type', { length: 100 }).notNull(),
+    sizeBytes: integer('size_bytes').notNull(),
+    data: bytea('data').notNull(),
+    transcript: text('transcript'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [index('ops_note_audios_note_idx').on(table.noteId)]
+);
+
+// Ajustes del módulo Operaciones por cuenta (clave/valor). De momento:
+// 'transcription_model' (modelo de Gemini para transcribir audio).
+export const opsSettings = pgTable(
+  'ops_settings',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    key: varchar('key', { length: 100 }).notNull(),
+    value: text('value').notNull(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [unique('ops_settings_tenant_key_unique').on(table.tenantId, table.key)]
+);
+
+export type OpsNote = typeof opsNotes.$inferSelect;
+export type OpsNoteAudio = typeof opsNoteAudios.$inferSelect;
+
 // Encargos creados desde la herramienta hacia ClickUp. Se guardan SIEMPRE
 // primero como 'pendiente_clickup'; solo pasan a 'creado' cuando ClickUp
 // confirma la tarea (id + url). 'error_sync' guarda el motivo en error_message.
@@ -903,8 +981,13 @@ export const opsRequests = pgTable(
     createdAt: timestamp('created_at').notNull().defaultNow(),
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
     syncedAt: timestamp('synced_at'),
+    // Nota de la que salió el encargo (null en los encargos sueltos) y
+    // cuándo se adjuntó su audio a la tarea de ClickUp.
+    noteId: uuid('note_id').references(() => opsNotes.id, { onDelete: 'set null' }),
+    audioAttachedAt: timestamp('audio_attached_at'),
   },
   (table) => [
+    index('ops_requests_note_idx').on(table.noteId),
     check(
       'ops_requests_status_check',
       sql`${table.status} IN ('pendiente_clickup', 'creado', 'error_sync')`

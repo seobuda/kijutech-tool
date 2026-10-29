@@ -1,55 +1,20 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { and, asc, desc, eq } from 'drizzle-orm';
+import { db } from '@/lib/db/drizzle';
+import { opsNoteAudios, opsNotes, opsRequests } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
 import { getClickUpToken } from '@/lib/operaciones/queries';
-import {
-  ClickUpError,
-  OPS_TIMEZONE,
-  getTeamToday,
-  getWorkspaces,
-  type OpsTask
-} from '@/lib/operaciones/clickup';
+import { ClickUpError, getMe, getSpacesWithLists, getWorkspaces } from '@/lib/operaciones/clickup';
+import type { NoteAudioInfo, NoteProposal } from '@/lib/operaciones/note-types';
+import { BlocNotas } from './bloc-notas';
 
 export const dynamic = 'force-dynamic';
 
-const dateFmt = new Intl.DateTimeFormat('es-ES', {
-  timeZone: OPS_TIMEZONE,
-  day: 'numeric',
-  month: 'short'
-});
-
-function TaskRow({ task, overdue }: { task: OpsTask; overdue?: boolean }) {
-  return (
-    <li className="flex items-start gap-2 text-sm">
-      <span
-        className={`shrink-0 mt-0.5 rounded px-1.5 py-0.5 text-xs ${
-          overdue ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
-        }`}
-      >
-        {task.dueDate ? dateFmt.format(task.dueDate) : '—'}
-      </span>
-      <span className="min-w-0">
-        <a
-          href={task.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-gray-900 hover:text-orange-600 hover:underline"
-        >
-          {task.name}
-        </a>
-        <span className="block text-xs text-muted-foreground">
-          {task.listName}
-          {task.status && ` · ${task.status}`}
-        </span>
-      </span>
-    </li>
-  );
-}
-
-export default async function EquipoHoyPage({
+export default async function BlocNotasPage({
   searchParams
 }: {
-  searchParams: Promise<{ ws?: string }>;
+  searchParams: Promise<{ nota?: string; nueva?: string }>;
 }) {
   const user = await getUser();
   if (!user) redirect('/sign-in');
@@ -60,7 +25,7 @@ export default async function EquipoHoyPage({
       <div className="rounded-lg border border-dashed border-gray-300 p-8 text-center space-y-3">
         <p className="font-medium">Todavía no has conectado ClickUp</p>
         <p className="text-sm text-muted-foreground">
-          Pega tu token personal para ver las tareas de hoy de todo el equipo.
+          El Bloc de notas necesita el token para elegir el espacio y crear las tareas.
         </p>
         <Link
           href="/dashboard/operaciones/ajustes"
@@ -72,97 +37,120 @@ export default async function EquipoHoyPage({
     );
   }
 
-  const { ws } = await searchParams;
+  const { nota, nueva } = await searchParams;
+
+  // Historial (sin el audio, que pesa).
+  const notes = await db
+    .select({
+      id: opsNotes.id,
+      content: opsNotes.content,
+      status: opsNotes.status,
+      spaceName: opsNotes.clickupSpaceName,
+      updatedAt: opsNotes.updatedAt
+    })
+    .from(opsNotes)
+    .where(eq(opsNotes.tenantId, user.tenantId))
+    .orderBy(desc(opsNotes.updatedAt))
+    .limit(100);
+
+  // Nota abierta: la pedida, o (si no se pide "nueva") el último borrador, para
+  // que al volver tras cerrar el navegador siga ahí lo que estabas escribiendo.
+  const currentId =
+    nueva === '1'
+      ? null
+      : (nota ?? notes.find((n) => n.status === 'borrador')?.id ?? null);
+
+  const [current] = currentId
+    ? await db
+        .select()
+        .from(opsNotes)
+        .where(and(eq(opsNotes.id, currentId), eq(opsNotes.tenantId, user.tenantId)))
+        .limit(1)
+    : [];
+
+  const audios: NoteAudioInfo[] = current
+    ? (
+        await db
+          .select({
+            id: opsNoteAudios.id,
+            sizeBytes: opsNoteAudios.sizeBytes,
+            transcript: opsNoteAudios.transcript,
+            createdAt: opsNoteAudios.createdAt
+          })
+          .from(opsNoteAudios)
+          .where(eq(opsNoteAudios.noteId, current.id))
+          .orderBy(asc(opsNoteAudios.createdAt))
+      ).map((a) => ({
+        id: a.id,
+        sizeBytes: a.sizeBytes,
+        hasTranscript: Boolean(a.transcript),
+        createdAt: a.createdAt.toISOString()
+      }))
+    : [];
+
+  const noteRequests =
+    current && current.status === 'convertida'
+      ? await db
+          .select({
+            id: opsRequests.id,
+            title: opsRequests.title,
+            status: opsRequests.status,
+            url: opsRequests.clickupTaskUrl,
+            error: opsRequests.errorMessage,
+            listName: opsRequests.clickupListName
+          })
+          .from(opsRequests)
+          .where(eq(opsRequests.noteId, current.id))
+          .orderBy(asc(opsRequests.createdAt))
+      : [];
 
   try {
     const workspaces = await getWorkspaces(conn.token);
-    const workspace =
-      workspaces.find((w) => w.id === (ws ?? conn.workspaceId)) ?? workspaces[0];
+    const workspace = workspaces.find((w) => w.id === conn.workspaceId) ?? workspaces[0];
     if (!workspace) {
       return <p className="text-sm text-muted-foreground">Tu cuenta de ClickUp no tiene workspaces.</p>;
     }
-
-    const { buckets, truncated } = await getTeamToday(conn.token, workspace);
-
-    // Quien tiene más vencidas primero; después más tareas de hoy; después por nombre.
-    const ordered = [...buckets].sort(
-      (a, b) =>
-        b.overdue.length - a.overdue.length ||
-        b.today.length - a.today.length ||
-        a.member.username.localeCompare(b.member.username)
-    );
+    const [spaces, me] = await Promise.all([
+      getSpacesWithLists(conn.token, workspace.id),
+      getMe(conn.token)
+    ]);
 
     return (
-      <div className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm text-muted-foreground">
-            Workspace <strong>{workspace.name}</strong> ·{' '}
-            {new Intl.DateTimeFormat('es-ES', {
-              timeZone: OPS_TIMEZONE,
-              dateStyle: 'full'
-            }).format(new Date())}{' '}
-            · datos en directo de ClickUp (recarga la página para actualizar)
-          </p>
-          {workspaces.length > 1 && (
-            <div className="flex gap-2 text-sm">
-              {workspaces.map((w) => (
-                <Link
-                  key={w.id}
-                  href={`/dashboard/operaciones?ws=${w.id}`}
-                  className={w.id === workspace.id ? 'font-medium underline' : 'text-gray-500 hover:underline'}
-                >
-                  {w.name}
-                </Link>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {truncated && (
-          <p className="text-sm text-amber-700">
-            El workspace tiene muchísimas tareas abiertas: se han leído las primeras 3.000, así que
-            algunas pueden faltar.
-          </p>
-        )}
-
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {ordered.map(({ member, overdue, today, noDateCount }) => (
-            <div key={member.id} className="rounded-lg border border-gray-200 bg-white p-4 space-y-3">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="font-medium truncate">{member.username}</p>
-                  <p className="text-xs text-muted-foreground truncate">{member.email}</p>
-                </div>
-                <div className="flex gap-1 text-xs shrink-0">
-                  <span className="rounded bg-red-100 px-2 py-0.5 text-red-700">{overdue.length} vencidas</span>
-                  <span className="rounded bg-blue-100 px-2 py-0.5 text-blue-700">{today.length} hoy</span>
-                  <span className="rounded bg-gray-100 px-2 py-0.5 text-gray-600">{noDateCount} sin fecha</span>
-                </div>
-              </div>
-
-              {overdue.length === 0 && today.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Sin tareas vencidas ni para hoy.</p>
-              ) : (
-                <ul className="space-y-2">
-                  {overdue.map((t) => (
-                    <TaskRow key={`o-${t.id}`} task={t} overdue />
-                  ))}
-                  {today.map((t) => (
-                    <TaskRow key={`t-${t.id}`} task={t} />
-                  ))}
-                </ul>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
+      <BlocNotas
+        key={current?.id ?? 'nueva'}
+        spaces={spaces}
+        members={workspace.members.map((m) => ({ id: String(m.id), username: m.username }))}
+        meId={String(me.id)}
+        history={notes.map((n) => ({
+          id: n.id,
+          status: n.status,
+          preview: n.content.trim().slice(0, 90) || '(nota vacía)',
+          spaceName: n.spaceName,
+          updatedAt: n.updatedAt.toISOString()
+        }))}
+        note={
+          current
+            ? {
+                id: current.id,
+                content: current.content,
+                status: current.status,
+                spaceId: current.clickupSpaceId ?? '',
+                assigneeId: current.assigneeClickupId ?? '',
+                proposal: (current.proposal as NoteProposal | null) ?? null,
+                audios,
+                requests: noteRequests
+              }
+            : null
+        }
+      />
     );
   } catch (e) {
-    const msg = e instanceof ClickUpError ? e.message : 'No se pudo contactar con ClickUp';
     return (
       <div className="rounded-lg border border-red-200 bg-red-50 p-4 space-y-2">
         <p className="font-medium text-red-700">No se han podido cargar los datos de ClickUp</p>
-        <p className="text-sm text-red-700">{msg}</p>
+        <p className="text-sm text-red-700">
+          {e instanceof ClickUpError ? e.message : 'No se pudo contactar con ClickUp'}
+        </p>
         <Link href="/dashboard/operaciones/ajustes" className="text-sm underline">
           Revisar ajustes
         </Link>

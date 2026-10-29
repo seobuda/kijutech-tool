@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 const TABS = [
-  { href: '/dashboard/operaciones', label: 'Equipo hoy' },
+  { href: '/dashboard/operaciones', label: 'Bloc de notas' },
+  { href: '/dashboard/operaciones/equipo-hoy', label: 'Equipo hoy' },
   { href: '/dashboard/operaciones/encargos', label: 'Encargos' },
   { href: '/dashboard/operaciones/nuevo', label: 'Nuevo encargo' },
   { href: '/dashboard/operaciones/ajustes', label: 'Ajustes ClickUp' }
@@ -13,7 +14,7 @@ const TABS = [
 export function OperacionesTabs() {
   const pathname = usePathname();
   return (
-    <nav className="flex gap-1 border-b border-gray-200">
+    <nav className="flex flex-wrap gap-1 border-b border-gray-200">
       {TABS.map((t) => {
         const active = pathname === t.href;
         return (

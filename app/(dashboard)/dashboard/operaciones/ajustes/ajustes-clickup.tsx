@@ -9,16 +9,19 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import {
   removeClickUpToken,
   saveClickUpToken,
+  saveTranscriptionModel,
   testClickUpConnection,
   type TestConnectionResult
 } from '@/lib/operaciones/actions';
 
 export function AjustesClickUp({
   hasToken,
-  updatedAt
+  updatedAt,
+  transcriptionModel
 }: {
   hasToken: boolean;
   updatedAt: string | null;
+  transcriptionModel: string;
 }) {
   const router = useRouter();
   const [token, setToken] = useState('');
@@ -108,6 +111,8 @@ export function AjustesClickUp({
         </CardContent>
       </Card>
 
+      <ModeloTranscripcion initial={transcriptionModel} />
+
       {result && !result.ok && (
         <p className="text-sm text-red-600">Error de conexión: {result.error}</p>
       )}
@@ -148,5 +153,47 @@ export function AjustesClickUp({
           </Card>
         ))}
     </div>
+  );
+}
+
+function ModeloTranscripcion({ initial }: { initial: string }) {
+  const [model, setModel] = useState(initial);
+  const [msg, setMsg] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  const save = () =>
+    startTransition(async () => {
+      setMsg(null);
+      const res = await saveTranscriptionModel(model);
+      setMsg(res.ok ? { type: 'ok', text: 'Modelo guardado.' } : { type: 'error', text: res.error });
+    });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Transcripción de audio</CardTitle>
+        <CardDescription>
+          Modelo de Gemini que transcribe las grabaciones del Bloc de notas. Usa la clave de Gemini
+          ya configurada en IA &amp; Modelos. Por defecto: gemini-flash-latest.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="space-y-2">
+          <Label htmlFor="transcription-model">Modelo</Label>
+          <Input
+            id="transcription-model"
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            placeholder="gemini-flash-latest"
+          />
+        </div>
+        <Button onClick={save} disabled={pending || !model.trim() || model.trim() === initial}>
+          {pending ? 'Guardando…' : 'Guardar modelo'}
+        </Button>
+        {msg && (
+          <p className={`text-sm ${msg.type === 'ok' ? 'text-green-700' : 'text-red-600'}`}>{msg.text}</p>
+        )}
+      </CardContent>
+    </Card>
   );
 }

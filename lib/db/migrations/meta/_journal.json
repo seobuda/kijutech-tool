@@ -169,6 +169,13 @@
       "when": 1793267091263,
       "tag": "0023_ops_requests",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1793268365182,
+      "tag": "0024_ops_notes",
+      "breakpoints": true
     }
   ]
 }

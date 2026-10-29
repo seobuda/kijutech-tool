@@ -7,6 +7,7 @@ import { opsClickupConnections } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
 import { encrypt } from '@/lib/ai/encryption';
 import { getClickUpToken } from '@/lib/operaciones/queries';
+import { setTranscriptionModel } from '@/lib/operaciones/settings';
 import { getSpacesWithLists, getWorkspaces, ClickUpError } from '@/lib/operaciones/clickup';
 
 export type TestConnectionResult =
@@ -56,6 +57,20 @@ export async function removeClickUpToken(): Promise<{ ok: true } | { ok: false; 
   if (!user) return { ok: false, error: 'No autenticado' };
   await db.delete(opsClickupConnections).where(eq(opsClickupConnections.tenantId, user.tenantId));
   revalidatePath('/dashboard/operaciones', 'layout');
+  return { ok: true };
+}
+
+export async function saveTranscriptionModel(
+  model: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const user = await getUser();
+  if (!user) return { ok: false, error: 'No autenticado' };
+  const clean = model.trim();
+  if (!/^[\w.\-]{3,100}$/.test(clean)) {
+    return { ok: false, error: 'Nombre de modelo no válido (ej.: gemini-flash-latest)' };
+  }
+  await setTranscriptionModel(user.tenantId, clean);
+  revalidatePath('/dashboard/operaciones/ajustes');
   return { ok: true };
 }
 

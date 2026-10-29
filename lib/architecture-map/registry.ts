@@ -89,8 +89,8 @@ const CORE_NODES: SystemNode[] = [
     group: 'infrastructure',
     technicalDetail: {
       summary:
-        'Lee ClickUp en directo (Equipo hoy) y crea tareas desde encargos. Las tareas de lectura no se guardan en la base de datos; los encargos sí (ops_requests).',
-      stack: ['API v2 de ClickUp (fetch nativo)', 'Tablas ops_clickup_connections y ops_requests', 'AES-256-GCM (mismo cifrado que las claves de IA)'],
+        'Bloc de notas con audio que la IA convierte en encargos, y lectura en directo de ClickUp (Equipo hoy). Las tareas leídas no se guardan; las notas y los encargos sí.',
+      stack: ['API v2 de ClickUp (fetch nativo)', 'Tablas ops_clickup_connections, ops_notes, ops_note_audios, ops_requests y ops_settings', 'AES-256-GCM (mismo cifrado que las claves de IA)'],
       keyDecisions: [
         'Una conexión por tenant; el token nunca sale del servidor',
         '"Hoy" se calcula en zona Europe/Madrid',
