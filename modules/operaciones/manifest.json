@@ -1,0 +1,8 @@
+{
+  "key": "operaciones",
+  "name": "Operaciones",
+  "version": "0.1.0",
+  "tables_prefix": "ops_",
+  "roles_extends": ["admin", "editor", "lector"],
+  "stages": []
+}

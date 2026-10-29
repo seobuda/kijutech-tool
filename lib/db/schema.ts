@@ -850,6 +850,27 @@ export type AiIntentModifier = typeof aiIntentModifiers.$inferSelect;
 export type NewAiIntentModifier = typeof aiIntentModifiers.$inferInsert;
 export type AiClusteringFeedback = typeof aiClusteringFeedback.$inferSelect;
 export type NewAiClusteringFeedback = typeof aiClusteringFeedback.$inferInsert;
+// ---------------------------------------------------------------------------
+// Módulo Operaciones (prefijo ops_)
+// ---------------------------------------------------------------------------
+
+// Token personal de ClickUp, cifrado con lib/ai/encryption.ts — mismo formato
+// que ai_provider_settings (api_key_encrypted lleva la etiqueta GCM incluida).
+export const opsClickupConnections = pgTable('ops_clickup_connections', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: uuid('tenant_id')
+    .notNull()
+    .unique()
+    .references(() => tenants.id, { onDelete: 'cascade' }),
+  apiKeyEncrypted: text('api_key_encrypted').notNull(),
+  apiKeyIv: text('api_key_iv').notNull(),
+  workspaceId: varchar('workspace_id', { length: 50 }),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
+export type OpsClickupConnection = typeof opsClickupConnections.$inferSelect;
+
 export type TeamDataWithMembers = Team & {
   teamMembers: (TeamMember & {
     user: Pick<User, 'id' | 'name' | 'email'>;

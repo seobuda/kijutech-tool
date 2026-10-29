@@ -77,6 +77,24 @@ const CORE_NODES: SystemNode[] = [
     icon: 'BookOpen',
     group: 'infrastructure',
   },
+  {
+    id: 'operaciones',
+    name: 'Operaciones',
+    description:
+      'Módulo aparte del SEO: lee en directo ClickUp y muestra qué tiene hoy, vencido y sin fecha cada persona del equipo.',
+    status: 'in_progress',
+    icon: 'FolderKanban',
+    group: 'infrastructure',
+    technicalDetail: {
+      summary:
+        'Solo lectura sobre la API v2 de ClickUp con el token personal guardado cifrado. No guarda tareas en la base de datos: cada visita consulta ClickUp.',
+      stack: ['API v2 de ClickUp (fetch nativo)', 'Tabla ops_clickup_connections', 'AES-256-GCM (mismo cifrado que las claves de IA)'],
+      keyDecisions: [
+        'Una conexión por tenant; el token nunca sale del servidor',
+        '"Hoy" se calcula en zona Europe/Madrid',
+      ],
+    },
+  },
 ];
 
 // Procesos de apoyo: funcionalidad real con su propio detailMapId, pero
