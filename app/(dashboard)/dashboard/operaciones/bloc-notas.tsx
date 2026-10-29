@@ -37,6 +37,7 @@ type HistoryRow = {
 type NoteView = {
   id: string;
   content: string;
+  updatedAt: string; // última vez que el SERVIDOR confirmó un guardado
   status: string;
   spaceId: string;
   assigneeId: string;
@@ -53,6 +54,60 @@ type NoteView = {
 };
 
 const AUTOSAVE_MS = 2500;
+const RETRY_SAVE_MS = 8000;
+
+// Copia local de seguridad (localStorage): se escribe en cada cambio, ANTES de
+// intentar guardar en el servidor, para que un guardado fallido nunca pierda texto.
+type LocalCopy = { content: string; spaceId: string; assigneeId: string; ts: number };
+
+const localKey = (noteId: string | null) => `ops-note-v1:${noteId ?? 'new'}`;
+
+function readLocal(noteId: string | null): LocalCopy | null {
+  try {
+    const raw = localStorage.getItem(localKey(noteId));
+    return raw ? (JSON.parse(raw) as LocalCopy) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeLocal(noteId: string | null, copy: LocalCopy) {
+  try {
+    localStorage.setItem(localKey(noteId), JSON.stringify(copy));
+  } catch {
+    // localStorage lleno o bloqueado: no se puede hacer más; el aviso de guardado sigue siendo fiable.
+  }
+}
+
+function clearLocal(noteId: string | null) {
+  try {
+    localStorage.removeItem(localKey(noteId));
+  } catch {
+    // nada
+  }
+}
+
+// Deja la nota abierta en la URL (?nota=id). Así, cualquier recarga de la página
+// (p. ej. al terminar de enviar los encargos, cuando la nota ya no es un borrador)
+// vuelve a esta misma nota en vez de abrir una en blanco.
+function pinNoteInUrl(noteId: string) {
+  try {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('nota') === noteId) return;
+    url.searchParams.delete('nueva');
+    url.searchParams.set('nota', noteId);
+    window.history.replaceState(window.history.state, '', url.pathname + url.search);
+  } catch {
+    // sin historial disponible: no es crítico
+  }
+}
+
+const timeFmt = new Intl.DateTimeFormat('es-ES', {
+  timeZone: 'Europe/Madrid',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit'
+});
 const MAX_RECORDING_SECONDS = 600;
 
 const selectClass =
@@ -100,6 +155,8 @@ export function BlocNotas({
   );
   const [saveState, setSaveState] = useState<'saved' | 'dirty' | 'saving' | 'error'>('saved');
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(note?.updatedAt ?? null);
+  const [recover, setRecover] = useState<LocalCopy | null>(null);
   const [conversion, setConversion] = useState<ConversionState | null>(note?.conversion ?? null);
   const [starting, setStarting] = useState(false);
   const [now, setNow] = useState(() => Date.now());
@@ -147,10 +204,34 @@ export function BlocNotas({
           setSaveError(res.error);
           return null;
         }
-        noteIdRef.current = res.id;
-        dirty.current = false;
+
+        // La base de datos ha confirmado (devuelve la fila guardada). La nota ya tiene id:
+        // la copia local pasa a su clave definitiva.
+        if (!noteIdRef.current) {
+          clearLocal(null);
+          noteIdRef.current = res.id;
+          pinNoteInUrl(res.id);
+        }
         setSaveError(null);
-        setSaveState('saved');
+        setLastSavedAt(res.savedAt);
+        // La copia local siempre refleja lo último guardado (hora = la del servidor).
+        writeLocal(res.id, {
+          content: s.content,
+          spaceId: s.spaceId,
+          assigneeId: s.assigneeId,
+          ts: Date.parse(res.savedAt)
+        });
+
+        // Si mientras se guardaba se siguió escribiendo, NO está todo guardado todavía.
+        const cur = latest.current;
+        const unchanged =
+          cur.content === s.content && cur.spaceId === s.spaceId && cur.assigneeId === s.assigneeId;
+        if (unchanged) {
+          dirty.current = false;
+          setSaveState('saved');
+        } else {
+          setSaveState('dirty');
+        }
         return res.id;
       };
       const next = saveChain.current.then(run, run);
@@ -169,9 +250,50 @@ export function BlocNotas({
     }
     dirty.current = true;
     setSaveState('dirty');
+    // Copia local inmediata, antes de intentar el servidor.
+    writeLocal(noteIdRef.current, { content, spaceId, assigneeId, ts: Date.now() });
     const t = setTimeout(() => void persist(), AUTOSAVE_MS);
     return () => clearTimeout(t);
   }, [content, spaceId, assigneeId, readOnly, persist]);
+
+  // Al abrir: si la copia local es más reciente que la del servidor, se ofrece recuperarla.
+  useEffect(() => {
+    if (readOnly) return;
+    const local = readLocal(note?.id ?? null);
+    if (!local || !local.content.trim()) return;
+    const serverContent = note?.content ?? '';
+    const serverTs = note ? Date.parse(note.updatedAt) : 0;
+    if (local.content !== serverContent && local.ts > serverTs) setRecover(local);
+    // solo al montar
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Una nota ya existente se deja fijada en la URL desde el principio.
+  useEffect(() => {
+    if (note?.id) pinNoteInUrl(note.id);
+    // solo al montar
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Con un guardado fallido se reintenta solo, y se avisa antes de cerrar la pestaña
+  // si hay algo sin guardar.
+  useEffect(() => {
+    if (readOnly || saveState !== 'error') return;
+    const id = setInterval(() => void persist(), RETRY_SAVE_MS);
+    return () => clearInterval(id);
+  }, [readOnly, saveState, persist]);
+
+  useEffect(() => {
+    if (readOnly) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      if (dirty.current || saveState === 'error') {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [readOnly, saveState]);
 
   // Si se oculta la pestaña o se cierra, se intenta guardar lo pendiente.
   useEffect(() => {
@@ -403,11 +525,15 @@ export function BlocNotas({
     router.push('/dashboard/operaciones?nueva=1');
   };
 
+  // "Guardado" solo si la base de datos lo ha confirmado (hora de esa confirmación).
   const saveLabel = {
-    saved: noteIdRef.current ? 'Guardado' : 'Sin guardar (empieza a escribir)',
+    saved:
+      noteIdRef.current && lastSavedAt
+        ? `Guardado ✓ ${timeFmt.format(new Date(lastSavedAt))}`
+        : 'Sin guardar (empieza a escribir)',
     dirty: 'Cambios sin guardar…',
     saving: 'Guardando…',
-    error: `Error al guardar: ${saveError ?? ''}`
+    error: 'NO guardado · copia local activada'
   }[saveState];
 
   return (
@@ -472,13 +598,68 @@ export function BlocNotas({
               <div className="flex items-center justify-between">
                 <Label htmlFor="note">Nota</Label>
                 <span
+                  data-testid="save-status"
                   className={`text-xs ${
-                    saveState === 'error' ? 'text-red-600' : 'text-muted-foreground'
+                    saveState === 'error'
+                      ? 'text-red-600 font-medium'
+                      : saveState === 'saved'
+                        ? 'text-green-700'
+                        : 'text-muted-foreground'
                   }`}
                 >
                   {readOnly ? 'Nota convertida (solo lectura)' : saveLabel}
                 </span>
               </div>
+              {saveState === 'error' && !readOnly && (
+                <div
+                  role="alert"
+                  className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700 space-y-1"
+                >
+                  <p className="font-medium">No se ha podido guardar. Copia local activada.</p>
+                  <p>
+                    Tu texto está a salvo en este navegador. Motivo: {saveError ?? 'desconocido'}. Se reintenta
+                    solo cada pocos segundos; no cierres la pestaña hasta que vuelva a poner «Guardado».
+                  </p>
+                  <Button size="sm" variant="outline" onClick={() => void persist(true)}>
+                    Reintentar ahora
+                  </Button>
+                </div>
+              )}
+              {recover && !readOnly && (
+                <div
+                  role="alert"
+                  className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 space-y-1"
+                >
+                  <p className="font-medium">Hay una copia local más reciente que la del servidor</p>
+                  <p>
+                    Guardada en este navegador el {dateFmt.format(new Date(recover.ts))} (
+                    {recover.content.length} caracteres, frente a {content.length} en el servidor).
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setContent(recover.content);
+                        setSpaceId(recover.spaceId);
+                        setAssigneeId(recover.assigneeId);
+                        setRecover(null);
+                      }}
+                    >
+                      Recuperar la copia local
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        clearLocal(noteIdRef.current);
+                        setRecover(null);
+                      }}
+                    >
+                      Descartar
+                    </Button>
+                  </div>
+                </div>
+              )}
               <textarea
                 id="note"
                 rows={16}

@@ -133,6 +133,7 @@ export default async function BlocNotasPage({
             ? {
                 id: current.id,
                 content: current.content,
+                updatedAt: current.updatedAt.toISOString(),
                 status: current.status,
                 spaceId: current.clickupSpaceId ?? '',
                 assigneeId: current.assigneeClickupId ?? '',

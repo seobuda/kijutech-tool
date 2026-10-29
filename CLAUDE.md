@@ -318,3 +318,36 @@ un paso de un flujo con estados secuenciales, etc.):
 
 Esto no es opcional ni requiere que Enric lo pida — es parte de dar
 por terminada cualquier tarea que toque un proceso multi-fase.
+
+
+## ClickUp: caché y consultas agrupadas — regla permanente
+
+El token de ClickUp tiene un límite de 100 peticiones por minuto, y cada
+pantalla que llamaba a ClickUp en directo tardaba segundos (el Bloc y
+"Nuevo encargo" hacían 27 peticiones cada vez que se abrían). Por eso:
+
+- Toda funcionalidad nueva que llame a ClickUp debe usar la caché de la base
+  de datos (espacios, carpetas, listas, miembros) y consultas agrupadas a
+  nivel de workspace siempre que sea posible. Nunca pedir "lista por lista" ni
+  "persona por persona" si existe una consulta que lo resuelva de una vez.
+- Una pantalla no debe llamar a ClickUp para pintarse si el dato está en caché.
+  Los datos en directo (tareas) se cargan después de pintar la página, con
+  indicador de carga, y con caché corta.
+- Toda llamada a ClickUp pasa por el cliente de `lib/operaciones/clickup.ts`
+  (contador por minuto, espera ante el límite y reintento ante un 429). No usar
+  `fetch` directo a la API de ClickUp.
+- Antes de dar por terminada una pantalla nueva que use ClickUp, medir cuántas
+  peticiones hace al cargar (Ajustes → peticiones de la última hora).
+
+## Usuario de pruebas de desarrollo y verificación tras cada despliegue
+
+- Existe un usuario de pruebas SOLO para desarrollo, de la cuenta Kijutech. Su
+  email y contraseña están en `.env` (`OPS_TEST_EMAIL`, `OPS_TEST_PASSWORD`),
+  que no se versiona. Antes de subir a un servidor hay que borrarlo.
+- Después de cada despliegue que toque Operaciones, Claude Code inicia sesión
+  con ese usuario en `http://127.0.0.1:3000`, recorre Bloc de notas, Equipo hoy
+  y Encargos comprobando que cargan sin errores, que el autoguardado confirma
+  el guardado, y que `docker logs kijutech_app` no muestra `ReferenceError`.
+- Para crear tareas reales en ClickUp durante las pruebas se usa SOLO la lista
+  "Pruebas Kiju", asignadas al dueño del token. Las notas de prueba se eliminan
+  al terminar.
