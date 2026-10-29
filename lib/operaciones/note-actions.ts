@@ -5,7 +5,7 @@ import { and, eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
-import { opsNotes, opsRequests } from '@/lib/db/schema';
+import { opsNotes, opsRequests, type OpsNote } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
 import { callAI, getPrompt } from '@/lib/ai/gateway';
 import { extractJsonFromLLMResponse } from '@/lib/ai/parsers/json-extractor';
@@ -13,10 +13,16 @@ import { getClickUpToken } from '@/lib/operaciones/queries';
 import { getSpaceLists, getWorkspaces, OPS_TIMEZONE } from '@/lib/operaciones/clickup';
 import { syncToClickUp, type SyncResult } from '@/lib/operaciones/sync';
 import { buildDescription, fillTemplate } from '@/lib/operaciones/format';
-import type { NoteProposal, ProposalItem } from '@/lib/operaciones/note-types';
+import {
+  CONVERSION_TIMEOUT_MS,
+  normalizeConversionState,
+  type ConversionState,
+  type ProposalItem
+} from '@/lib/operaciones/note-types';
 
 const NOTE_PROMPT_KEY = 'ops_note_to_requests';
-const CONVERT_MAX_TOKENS = 6000;
+// Cada encargo ocupa ~400-600 tokens de salida: 8000 da para unos 12-15.
+const CONVERT_MAX_TOKENS = 8000;
 
 // ---------------------------------------------------------------------------
 // Autoguardado
@@ -91,8 +97,13 @@ export async function discardProposal(noteId: string): Promise<{ ok: true }> {
 }
 
 // ---------------------------------------------------------------------------
-// Convertir nota en encargos (IA)
+// Convertir nota en encargos (IA) — en segundo plano
 // ---------------------------------------------------------------------------
+// Leer las listas y llamar a la IA puede tardar, así que no se hace dentro de la
+// petición del botón: startConversion() valida, lanza el trabajo y vuelve al
+// instante. El avance (paso actual, resultado o error) se guarda en
+// ops_notes.proposal; la pantalla lo consulta con getConversionState(). Así
+// sobrevive a cambiar de pestaña o recargar, y nunca se queda "pensando".
 
 const aiItemSchema = z.object({
   titulo: z.string().default(''),
@@ -111,9 +122,15 @@ const aiResponseSchema = z.object({
   no_convertido: z.array(z.string()).default([])
 });
 
-export async function convertNote(
+type NotePrompt = { system_prompt: string; user_prompt_template: string };
+
+async function setConversionState(noteId: string, state: ConversionState) {
+  await db.update(opsNotes).set({ proposal: state }).where(eq(opsNotes.id, noteId));
+}
+
+export async function startConversion(
   noteId: string
-): Promise<{ ok: true; proposal: NoteProposal } | { ok: false; error: string }> {
+): Promise<{ ok: true } | { ok: false; error: string }> {
   const user = await getUser();
   if (!user) return { ok: false, error: 'No autenticado' };
 
@@ -127,6 +144,9 @@ export async function convertNote(
   if (!note.content.trim()) return { ok: false, error: 'La nota está vacía' };
   if (!note.clickupSpaceId) return { ok: false, error: 'Elige primero el espacio de ClickUp' };
 
+  // Ya hay una conversión en marcha: no se lanza otra.
+  if (normalizeConversionState(note.proposal)?.state === 'processing') return { ok: true };
+
   const conn = await getClickUpToken(user.tenantId);
   if (!conn) return { ok: false, error: 'Conecta ClickUp primero en Ajustes' };
 
@@ -138,23 +158,88 @@ export async function convertNote(
     };
   }
 
-  let lists, members;
+  await setConversionState(note.id, {
+    state: 'processing',
+    step: 'Empezando…',
+    startedAt: new Date().toISOString()
+  });
+
+  // Sin await: sigue en segundo plano. runConversion nunca lanza (guarda el error).
+  void runConversion(note, user.tenantId, conn, prompt);
+  return { ok: true };
+}
+
+export async function getConversionState(noteId: string): Promise<ConversionState | null> {
+  const user = await getUser();
+  if (!user) return null;
+  const [note] = await db
+    .select({ proposal: opsNotes.proposal })
+    .from(opsNotes)
+    .where(and(eq(opsNotes.id, noteId), eq(opsNotes.tenantId, user.tenantId)))
+    .limit(1);
+  return note ? normalizeConversionState(note.proposal) : null;
+}
+
+async function runConversion(
+  note: OpsNote,
+  tenantId: string,
+  conn: { token: string; workspaceId: string | null },
+  prompt: NotePrompt
+) {
+  const startedAt = new Date().toISOString();
+  const ctl = { cancelled: false };
+  const step = async (s: string) => {
+    if (!ctl.cancelled) await setConversionState(note.id, { state: 'processing', step: s, startedAt });
+  };
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const watchdog = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      ctl.cancelled = true;
+      reject(
+        new Error(
+          'La conversión tardó más de 2,5 minutos y se canceló. Inténtalo de nuevo (si la nota es muy larga, divídela en dos).'
+        )
+      );
+    }, CONVERSION_TIMEOUT_MS);
+  });
+
   try {
-    const workspaces = await getWorkspaces(conn.token);
-    const workspace = workspaces.find((w) => w.id === conn.workspaceId) ?? workspaces[0];
-    members = workspace?.members ?? [];
-    lists = await getSpaceLists(conn.token, note.clickupSpaceId);
+    await Promise.race([doConversion(note, tenantId, conn, prompt, step, ctl), watchdog]);
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'No se pudo leer ClickUp' };
+    ctl.cancelled = true;
+    const message = e instanceof Error ? e.message : 'Error desconocido al convertir la nota';
+    try {
+      await setConversionState(note.id, { state: 'error', error: message });
+    } catch {
+      // si ni siquiera se puede guardar el error, lo detecta el control de caducidad
+    }
+  } finally {
+    if (timer) clearTimeout(timer);
   }
-  if (lists.length === 0) return { ok: false, error: 'El espacio elegido no tiene listas' };
+}
+
+async function doConversion(
+  note: OpsNote,
+  tenantId: string,
+  conn: { token: string; workspaceId: string | null },
+  prompt: NotePrompt,
+  step: (s: string) => Promise<void>,
+  ctl: { cancelled: boolean }
+) {
+  await step('Leyendo las listas del espacio…');
+  const workspaces = await getWorkspaces(conn.token);
+  const workspace = workspaces.find((w) => w.id === conn.workspaceId) ?? workspaces[0];
+  const members = workspace?.members ?? [];
+  const lists = await getSpaceLists(conn.token, note.clickupSpaceId!);
+  if (lists.length === 0) throw new Error('El espacio elegido no tiene listas en ClickUp');
 
   const today = new Intl.DateTimeFormat('es-ES', { timeZone: OPS_TIMEZONE, dateStyle: 'full' }).format(
     new Date()
   );
   const userPrompt = fillTemplate(prompt.user_prompt_template, {
     fecha_hoy: today,
-    espacio: note.clickupSpaceName ?? note.clickupSpaceId,
+    espacio: note.clickupSpaceName ?? note.clickupSpaceId!,
     responsable_seleccionado: note.assigneeName ?? 'ninguno',
     listas: lists
       .map((l) => `- id: ${l.id} | nombre: ${l.folder ? `${l.folder} / ` : ''}${l.name}`)
@@ -163,10 +248,11 @@ export async function convertNote(
     nota: note.content.trim()
   });
 
+  await step(`Preparando encargos con IA… (${lists.length} listas, ${note.content.trim().length} caracteres)`);
   let response;
   try {
     response = await callAI({
-      tenantId: user.tenantId,
+      tenantId,
       function: 'ops_note_to_requests',
       promptKey: NOTE_PROMPT_KEY,
       maxTokens: CONVERT_MAX_TOKENS,
@@ -176,14 +262,21 @@ export async function convertNote(
       ]
     });
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'La llamada a la IA falló' };
+    throw new Error(`La IA falló: ${e instanceof Error ? e.message : 'error desconocido'}`);
   }
 
+  await step('Revisando la respuesta de la IA…');
   let parsed;
   try {
     parsed = aiResponseSchema.parse(extractJsonFromLLMResponse(response.content));
   } catch {
-    return { ok: false, error: 'La IA no devolvió un JSON válido. Inténtalo de nuevo.' };
+    // Sin la llave de cierre final, la respuesta se cortó por el límite de tokens.
+    const cut = !response.content.trim().endsWith('}');
+    throw new Error(
+      cut
+        ? 'La respuesta de la IA se cortó (la nota genera demasiados encargos para un solo intento). Divide la nota en dos e inténtalo de nuevo.'
+        : 'La IA no devolvió un JSON válido. Inténtalo de nuevo.'
+    );
   }
 
   const validListIds = new Set(lists.map((l) => l.id));
@@ -205,9 +298,8 @@ export async function convertNote(
     };
   });
 
-  const proposal: NoteProposal = { items, notConverted: parsed.no_convertido };
-  await db.update(opsNotes).set({ proposal }).where(eq(opsNotes.id, noteId));
-  return { ok: true, proposal };
+  if (ctl.cancelled) return;
+  await setConversionState(note.id, { state: 'done', items, notConverted: parsed.no_convertido });
 }
 
 // ---------------------------------------------------------------------------

@@ -7,14 +7,21 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
-  convertNote,
+  getConversionState,
   deleteNote,
   discardProposal,
   saveNote,
-  sendNoteRequests
+  sendNoteRequests,
+  startConversion
 } from '@/lib/operaciones/note-actions';
 import type { ClickUpSpaceWithLists } from '@/lib/operaciones/clickup';
-import type { NoteAudioInfo, NoteProposal, ProposalItem } from '@/lib/operaciones/note-types';
+import {
+  CONVERSION_TIMEOUT_MS,
+  type ConversionState,
+  type NoteAudioInfo,
+  type NoteProposal,
+  type ProposalItem
+} from '@/lib/operaciones/note-types';
 import { RetryButton } from './encargos/retry-button';
 
 type Member = { id: string; username: string };
@@ -33,7 +40,7 @@ type NoteView = {
   status: string;
   spaceId: string;
   assigneeId: string;
-  proposal: NoteProposal | null;
+  conversion: ConversionState | null;
   audios: NoteAudioInfo[];
   requests: {
     id: string;
@@ -93,10 +100,11 @@ export function BlocNotas({
   );
   const [saveState, setSaveState] = useState<'saved' | 'dirty' | 'saving' | 'error'>('saved');
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [proposal, setProposal] = useState<NoteProposal | null>(note?.proposal ?? null);
+  const [conversion, setConversion] = useState<ConversionState | null>(note?.conversion ?? null);
+  const [starting, setStarting] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
   const [audios, setAudios] = useState<NoteAudioInfo[]>(note?.audios ?? []);
   const [audioError, setAudioError] = useState<string | null>(null);
-  const [converting, setConverting] = useState(false);
   const [convertError, setConvertError] = useState<string | null>(null);
 
   // Valores "vivos" para el autoguardado, que no deben depender del render.
@@ -118,14 +126,22 @@ export function BlocNotas({
         const s = latest.current;
         if (!noteIdRef.current && !s.content.trim() && !s.spaceId && !force) return null;
         setSaveState('saving');
-        const res = await saveNote({
-          id: noteIdRef.current,
-          content: s.content,
-          spaceId: s.spaceId || null,
-          spaceName: spaces.find((sp) => sp.id === s.spaceId)?.name ?? null,
-          assigneeId: s.assigneeId || null,
-          assigneeName: members.find((m) => m.id === s.assigneeId)?.username ?? null
-        });
+        let res;
+        try {
+          res = await saveNote({
+            id: noteIdRef.current,
+            content: s.content,
+            spaceId: s.spaceId || null,
+            spaceName: spaces.find((sp) => sp.id === s.spaceId)?.name ?? null,
+            assigneeId: s.assigneeId || null,
+            assigneeName: members.find((m) => m.id === s.assigneeId)?.username ?? null
+          });
+        } catch {
+          // Un fallo del servidor no puede dejar la cadena de guardados rota ni la pantalla pensando.
+          setSaveState('error');
+          setSaveError('no se pudo contactar con el servidor');
+          return null;
+        }
         if (!res.ok) {
           setSaveState('error');
           setSaveError(res.error);
@@ -292,22 +308,93 @@ export function BlocNotas({
   };
 
   // --------------------------------------------------------------- convertir
+  // La conversión corre en el servidor en segundo plano; aquí solo se lanza y se
+  // consulta su estado (paso actual / resultado / error), que queda guardado en la
+  // nota: si cambias de pestaña o recargas, al volver se retoma donde estaba.
+  const processing = conversion?.state === 'processing';
+
   const convert = async () => {
     setConvertError(null);
-    setConverting(true);
-    const id = await persist(true);
-    if (!id) {
-      setConverting(false);
-      return;
+    setStarting(true);
+    try {
+      const id = await persist(true);
+      if (!id) {
+        setConvertError(`No se pudo guardar la nota antes de convertirla${saveError ? `: ${saveError}` : ''}.`);
+        return;
+      }
+      const res = await startConversion(id);
+      if (!res.ok) {
+        setConvertError(res.error);
+        return;
+      }
+      setConversion({ state: 'processing', step: 'Empezando…', startedAt: new Date().toISOString() });
+    } catch {
+      setConvertError('No se pudo contactar con el servidor. Recarga la página y vuelve a intentarlo.');
+    } finally {
+      setStarting(false);
     }
-    const res = await convertNote(id);
-    setConverting(false);
-    if (res.ok) setProposal(res.proposal);
-    else setConvertError(res.error);
   };
 
+  // Sondeo del estado mientras hay una conversión en marcha.
+  useEffect(() => {
+    if (!processing || !noteIdRef.current) return;
+    const noteId = noteIdRef.current;
+    const startedAt = Date.parse((conversion as { startedAt: string }).startedAt);
+    let failures = 0;
+    let stopped = false;
+
+    const poll = async () => {
+      if (stopped) return;
+      setNow(Date.now());
+      // Tope en el cliente: pase lo que pase, la pantalla nunca espera más de esto.
+      if (Date.now() - startedAt > CONVERSION_TIMEOUT_MS + 20_000) {
+        setConversion({
+          state: 'error',
+          error: 'La conversión tardó demasiado y se canceló. Inténtalo de nuevo.'
+        });
+        return;
+      }
+      try {
+        const s = await getConversionState(noteId);
+        failures = 0;
+        if (!stopped) {
+          setConversion(
+            s ?? { state: 'error', error: 'Se perdió el estado de la conversión. Inténtalo de nuevo.' }
+          );
+        }
+      } catch {
+        if (++failures >= 5 && !stopped) {
+          setConversion({
+            state: 'error',
+            error: 'No se pudo consultar el estado de la conversión (servidor sin respuesta). Recarga la página.'
+          });
+        }
+      }
+    };
+
+    const id = setInterval(() => void poll(), 1500);
+    const onVisible = () => document.visibilityState === 'visible' && void poll();
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      stopped = true;
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [processing]);
+
   const canConvert =
-    !readOnly && Boolean(content.trim()) && Boolean(spaceId) && !converting && recState === 'idle';
+    !readOnly &&
+    Boolean(content.trim()) &&
+    Boolean(spaceId) &&
+    !starting &&
+    !processing &&
+    recState === 'idle';
+
+  const elapsed =
+    conversion?.state === 'processing'
+      ? Math.max(0, Math.round((now - Date.parse(conversion.startedAt)) / 1000))
+      : 0;
 
   const removeNote = async () => {
     if (!noteIdRef.current) return;
@@ -326,16 +413,16 @@ export function BlocNotas({
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_18rem]">
       <div className="space-y-4 min-w-0">
-        {proposal && !readOnly ? (
+        {conversion?.state === 'done' && !readOnly ? (
           <ReviewPanel
             noteId={noteIdRef.current!}
-            proposal={proposal}
+            proposal={{ items: conversion.items, notConverted: conversion.notConverted }}
             spaces={spaces}
             spaceId={spaceId}
             members={members}
             onBack={async () => {
               await discardProposal(noteIdRef.current!);
-              setProposal(null);
+              setConversion(null);
             }}
             onSent={() => router.refresh()}
           />
@@ -398,7 +485,7 @@ export function BlocNotas({
                 className={`${selectClass} leading-relaxed`}
                 placeholder="Escribe o dicta todo lo que tengas en la cabeza: uno o varios trabajos, ideas, recordatorios… La IA lo separará después."
                 value={content}
-                readOnly={readOnly}
+                readOnly={readOnly || processing}
                 onChange={(e) => setContent(e.target.value)}
               />
             </div>
@@ -415,7 +502,7 @@ export function BlocNotas({
                   </Button>
                 )}
                 <Button onClick={convert} disabled={!canConvert}>
-                  {converting ? 'Analizando la nota…' : 'Convertir en encargos'}
+                  {starting || processing ? 'Convirtiendo…' : 'Convertir en encargos'}
                 </Button>
                 {noteIdRef.current && (
                   <Button variant="ghost" onClick={removeNote}>
@@ -427,7 +514,38 @@ export function BlocNotas({
             {!readOnly && !spaceId && content.trim() && (
               <p className="text-xs text-muted-foreground">Elige el espacio para poder convertir la nota.</p>
             )}
-            {convertError && <p className="text-sm text-red-600">{convertError}</p>}
+            {convertError && (
+              <p className="text-sm text-red-600 rounded-md border border-red-200 bg-red-50 p-2">{convertError}</p>
+            )}
+            {conversion?.state === 'processing' && (
+              <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+                <p className="font-medium">⏳ {conversion.step}</p>
+                <p className="text-xs">
+                  {elapsed} s · Puedes cambiar de pestaña o recargar: el resultado se guarda y lo verás al volver.
+                </p>
+              </div>
+            )}
+            {conversion?.state === 'error' && !readOnly && (
+              <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 space-y-2">
+                <p className="font-medium">La conversión ha fallado</p>
+                <p>{conversion.error}</p>
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={convert} disabled={!canConvert}>
+                    Reintentar
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={async () => {
+                      if (noteIdRef.current) await discardProposal(noteIdRef.current);
+                      setConversion(null);
+                    }}
+                  >
+                    Cerrar aviso
+                  </Button>
+                </div>
+              </div>
+            )}
             {audioError && (
               <p className="text-sm text-amber-700 rounded-md border border-amber-300 bg-amber-50 p-2">
                 {audioError}
@@ -591,19 +709,28 @@ function ReviewPanel({
   const sendAll = async () => {
     setError(null);
     setSending(true);
-    const res = await sendNoteRequests(
-      noteId,
-      items.map((i) => ({
-        key: i.key,
-        title: i.title,
-        description: i.description,
-        listId: i.listId,
-        assigneeId: i.assigneeId,
-        assigneeName: i.assigneeName,
-        dueDate: i.dueDate,
-        priority: i.priority
-      }))
-    );
+    let res;
+    try {
+      res = await sendNoteRequests(
+        noteId,
+        items.map((i) => ({
+          key: i.key,
+          title: i.title,
+          description: i.description,
+          listId: i.listId,
+          assigneeId: i.assigneeId,
+          assigneeName: i.assigneeName,
+          dueDate: i.dueDate,
+          priority: i.priority
+        }))
+      );
+    } catch {
+      setSending(false);
+      setError(
+        'No se pudo contactar con el servidor. Mira en «Encargos»: si ya aparecen, el envío siguió; si no, vuelve a intentarlo.'
+      );
+      return;
+    }
     setSending(false);
     if (!res.ok) {
       setError(res.error);

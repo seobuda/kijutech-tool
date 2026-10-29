@@ -10,10 +10,10 @@ import {
   createRequest,
   getListMembersAction,
   prepareRequestWithAI,
-  retryRequest,
-  type SyncResult
+  retryRequest
 } from '@/lib/operaciones/request-actions';
 import type { ClickUpMember, ClickUpSpaceWithLists } from '@/lib/operaciones/clickup';
+import type { SyncResult } from '@/lib/operaciones/sync';
 
 const PRIORITIES = [
   { value: '1', label: 'Urgente' },

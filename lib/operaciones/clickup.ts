@@ -9,6 +9,23 @@ export const OPS_TIMEZONE = 'Europe/Madrid';
 // límite de peticiones de ClickUp (100/min) en workspaces muy grandes.
 const MAX_TASK_PAGES = 30;
 
+// Ninguna llamada a ClickUp puede quedarse esperando indefinidamente: si no
+// responde en este tiempo se corta con un error claro.
+const CLICKUP_TIMEOUT_MS = 20_000;
+
+async function cuFetch(url: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, { signal: AbortSignal.timeout(CLICKUP_TIMEOUT_MS), ...init });
+  } catch (e) {
+    if (e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError')) {
+      throw new ClickUpError('ClickUp no responde (tiempo de espera agotado). Inténtalo de nuevo.');
+    }
+    throw new ClickUpError(
+      `No se pudo conectar con ClickUp${e instanceof Error ? `: ${e.message}` : ''}`
+    );
+  }
+}
+
 export class ClickUpError extends Error {
   constructor(message: string, public status?: number) {
     super(message);
@@ -16,7 +33,7 @@ export class ClickUpError extends Error {
 }
 
 async function cu<T>(token: string, path: string): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, {
+  const res = await cuFetch(`${BASE_URL}${path}`, {
     headers: { Authorization: token },
     cache: 'no-store'
   });
@@ -109,7 +126,8 @@ export async function attachFileToTask(
     new Blob([new Uint8Array(file.data)], { type: file.mimeType }),
     file.filename
   );
-  const res = await fetch(`${BASE_URL}/task/${taskId}/attachment`, {
+  const res = await cuFetch(`${BASE_URL}/task/${taskId}/attachment`, {
+    signal: AbortSignal.timeout(60_000), // subir un archivo puede tardar más
     method: 'POST',
     headers: { Authorization: token },
     body: form,
@@ -241,7 +259,7 @@ export async function getTeamToday(
 // ---------------------------------------------------------------------------
 
 async function cuSend<T>(token: string, path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, {
+  const res = await cuFetch(`${BASE_URL}${path}`, {
     method: 'POST',
     headers: { Authorization: token, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),

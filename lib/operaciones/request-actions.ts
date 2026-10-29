@@ -15,8 +15,6 @@ import { buildDescription, fillTemplate } from '@/lib/operaciones/format';
 const PREPARE_MAX_TOKENS = 2000;
 const PREPARE_PROMPT_KEY = 'ops_prepare_request';
 
-export type { SyncResult };
-
 // ---------------------------------------------------------------------------
 // Miembros de una lista (para el desplegable de responsable)
 // ---------------------------------------------------------------------------

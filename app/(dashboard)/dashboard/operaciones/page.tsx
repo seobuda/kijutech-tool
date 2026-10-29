@@ -6,7 +6,7 @@ import { opsNoteAudios, opsNotes, opsRequests } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
 import { getClickUpToken } from '@/lib/operaciones/queries';
 import { ClickUpError, getMe, getSpacesWithLists, getWorkspaces } from '@/lib/operaciones/clickup';
-import type { NoteAudioInfo, NoteProposal } from '@/lib/operaciones/note-types';
+import { normalizeConversionState, type NoteAudioInfo } from '@/lib/operaciones/note-types';
 import { BlocNotas } from './bloc-notas';
 
 export const dynamic = 'force-dynamic';
@@ -136,7 +136,7 @@ export default async function BlocNotasPage({
                 status: current.status,
                 spaceId: current.clickupSpaceId ?? '',
                 assigneeId: current.assigneeClickupId ?? '',
-                proposal: (current.proposal as NoteProposal | null) ?? null,
+                conversion: normalizeConversionState(current.proposal),
                 audios,
                 requests: noteRequests
               }

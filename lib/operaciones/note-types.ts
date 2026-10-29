@@ -17,6 +17,47 @@ export type NoteProposal = {
   notConverted: string[]; // partes de la nota que no son encargos
 };
 
+// Estado de la conversión "nota → encargos". Se guarda en ops_notes.proposal
+// (jsonb) para que sobreviva a cambiar de pestaña o recargar la página.
+export type ConversionState =
+  | { state: 'processing'; step: string; startedAt: string }
+  | { state: 'error'; error: string }
+  | { state: 'done'; items: ProposalItem[]; notConverted: string[] };
+
+// Tiempo máximo de una conversión. Pasado este tiempo más un margen, un
+// "processing" se da por muerto (p. ej. el servidor se reinició a mitad): se
+// muestra como error en vez de dejar la pantalla pensando.
+export const CONVERSION_TIMEOUT_MS = 150_000;
+const CONVERSION_STALE_MS = CONVERSION_TIMEOUT_MS + 15_000;
+
+export function normalizeConversionState(raw: unknown): ConversionState | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+
+  if (r.state === 'processing') {
+    const started = Date.parse(String(r.startedAt));
+    if (!Number.isFinite(started) || Date.now() - started > CONVERSION_STALE_MS) {
+      return {
+        state: 'error',
+        error: 'La conversión tardó demasiado y se canceló. Inténtalo de nuevo.'
+      };
+    }
+    return { state: 'processing', step: String(r.step ?? 'Procesando…'), startedAt: String(r.startedAt) };
+  }
+  if (r.state === 'error') {
+    return { state: 'error', error: String(r.error ?? 'Error desconocido') };
+  }
+  // 'done', o el formato anterior ({ items, notConverted }) sin campo state.
+  if (r.state === 'done' || Array.isArray(r.items)) {
+    return {
+      state: 'done',
+      items: (r.items as ProposalItem[]) ?? [],
+      notConverted: (r.notConverted as string[]) ?? []
+    };
+  }
+  return null;
+}
+
 export type NoteAudioInfo = {
   id: string;
   sizeBytes: number;
