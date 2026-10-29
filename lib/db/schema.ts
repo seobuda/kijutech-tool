@@ -868,11 +868,86 @@ export const opsClickupConnections = pgTable('ops_clickup_connections', {
   apiKeyEncrypted: text('api_key_encrypted').notNull(),
   apiKeyIv: text('api_key_iv').notNull(),
   workspaceId: varchar('workspace_id', { length: 50 }),
+  // Datos de la última sincronización de la estructura de ClickUp (caché).
+  workspaceName: varchar('workspace_name', { length: 255 }),
+  meClickupId: varchar('me_clickup_id', { length: 50 }),
+  meUsername: varchar('me_username', { length: 255 }),
+  structureSyncedAt: timestamp('structure_synced_at'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
 
 export type OpsClickupConnection = typeof opsClickupConnections.$inferSelect;
+
+// Caché de la estructura de ClickUp (espacios, listas, miembros): las pantallas
+// leen de aquí en vez de llamar a ClickUp (límite de 100 peticiones/minuto).
+// Solo se guardan las listas de los espacios seleccionados (selected = true).
+export const opsClickupSpaces = pgTable(
+  'ops_clickup_spaces',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    clickupSpaceId: varchar('clickup_space_id', { length: 50 }).notNull(),
+    name: varchar('name', { length: 255 }).notNull(),
+    selected: boolean('selected').notNull().default(false),
+    syncedAt: timestamp('synced_at').notNull().defaultNow(),
+  },
+  (table) => [unique('ops_clickup_spaces_tenant_space_unique').on(table.tenantId, table.clickupSpaceId)]
+);
+
+export const opsClickupLists = pgTable(
+  'ops_clickup_lists',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    clickupListId: varchar('clickup_list_id', { length: 50 }).notNull(),
+    clickupSpaceId: varchar('clickup_space_id', { length: 50 }).notNull(),
+    name: varchar('name', { length: 255 }).notNull(),
+    folderName: varchar('folder_name', { length: 255 }),
+    syncedAt: timestamp('synced_at').notNull().defaultNow(),
+  },
+  (table) => [
+    unique('ops_clickup_lists_tenant_list_unique').on(table.tenantId, table.clickupListId),
+    index('ops_clickup_lists_tenant_space_idx').on(table.tenantId, table.clickupSpaceId),
+  ]
+);
+
+export const opsClickupMembers = pgTable(
+  'ops_clickup_members',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    clickupUserId: varchar('clickup_user_id', { length: 50 }).notNull(),
+    username: varchar('username', { length: 255 }).notNull(),
+    email: varchar('email', { length: 255 }),
+    syncedAt: timestamp('synced_at').notNull().defaultNow(),
+  },
+  (table) => [unique('ops_clickup_members_tenant_user_unique').on(table.tenantId, table.clickupUserId)]
+);
+
+// Registro de peticiones a ClickUp (para el contador y la tabla de Ajustes).
+// Los registros de más de 24 h se borran solos (ver lib/operaciones/clickup.ts).
+export const opsClickupRequests = pgTable(
+  'ops_clickup_requests',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    requestedAt: timestamp('requested_at').notNull().defaultNow(),
+    method: varchar('method', { length: 10 }).notNull(),
+    endpoint: varchar('endpoint', { length: 200 }).notNull(),
+    status: integer('status').notNull(),
+    durationMs: integer('duration_ms').notNull(),
+  },
+  (table) => [index('ops_clickup_requests_tenant_time_idx').on(table.tenantId, table.requestedAt)]
+);
 
 // Bloc de notas: texto libre (escrito o dictado) que la IA convierte en uno o
 // varios encargos. Se autoguarda; estado 'borrador' → 'convertida'.

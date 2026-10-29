@@ -7,31 +7,12 @@ import { opsRequests } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
 import { callAI, getPrompt } from '@/lib/ai/gateway';
 import { extractJsonFromLLMResponse } from '@/lib/ai/parsers/json-extractor';
-import { getClickUpToken } from '@/lib/operaciones/queries';
-import { getListMembers, OPS_TIMEZONE, type ClickUpMember } from '@/lib/operaciones/clickup';
+import { OPS_TIMEZONE } from '@/lib/operaciones/clickup';
 import { syncToClickUp, type SyncResult } from '@/lib/operaciones/sync';
 import { buildDescription, fillTemplate } from '@/lib/operaciones/format';
 
 const PREPARE_MAX_TOKENS = 2000;
 const PREPARE_PROMPT_KEY = 'ops_prepare_request';
-
-// ---------------------------------------------------------------------------
-// Miembros de una lista (para el desplegable de responsable)
-// ---------------------------------------------------------------------------
-
-export async function getListMembersAction(
-  listId: string
-): Promise<{ ok: true; members: ClickUpMember[] } | { ok: false; error: string }> {
-  const user = await getUser();
-  if (!user) return { ok: false, error: 'No autenticado' };
-  const conn = await getClickUpToken(user.tenantId);
-  if (!conn) return { ok: false, error: 'Conecta ClickUp primero en Ajustes' };
-  try {
-    return { ok: true, members: await getListMembers(conn.token, listId) };
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'No se pudieron cargar los miembros' };
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Preparar con IA

@@ -93,6 +93,9 @@ const CORE_NODES: SystemNode[] = [
       stack: ['API v2 de ClickUp (fetch nativo)', 'Tablas ops_clickup_connections, ops_notes, ops_note_audios, ops_requests y ops_settings', 'AES-256-GCM (mismo cifrado que las claves de IA)'],
       keyDecisions: [
         'Una conexión por tenant; el token nunca sale del servidor',
+        'Caché en base de datos de espacios, listas y miembros (se refresca sola cada hora): las pantallas no llaman a ClickUp para pintarse',
+        'Todas las llamadas pasan por un cliente con contador por minuto (espera al 80 % del límite de 100), reintento ante 429 y registro de peticiones',
+        'Equipo hoy: una consulta de workspace filtrada por fecha, con caché de 2 min; "sin fecha" se calcula aparte cada 30 min',
         '"Hoy" se calcula en zona Europe/Madrid',
       ],
     },

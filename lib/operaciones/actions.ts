@@ -3,24 +3,17 @@
 import { eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/lib/db/drizzle';
-import { opsClickupConnections } from '@/lib/db/schema';
+import {
+  opsClickupConnections,
+  opsClickupLists,
+  opsClickupMembers,
+  opsClickupSpaces
+} from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
 import { encrypt } from '@/lib/ai/encryption';
-import { getClickUpToken } from '@/lib/operaciones/queries';
 import { setTranscriptionModel } from '@/lib/operaciones/settings';
-import { getSpacesWithLists, getWorkspaces, ClickUpError } from '@/lib/operaciones/clickup';
-
-export type TestConnectionResult =
-  | {
-      ok: true;
-      workspaces: {
-        id: string;
-        name: string;
-        memberCount: number;
-        spaces: { id: string; name: string; lists: { id: string; name: string; folder: string | null }[] }[];
-      }[];
-    }
-  | { ok: false; error: string };
+import { getWorkspaces, registerTokenTenant, ClickUpError } from '@/lib/operaciones/clickup';
+import { getStructure, setSelectedSpaces, syncStructure } from '@/lib/operaciones/structure';
 
 export async function saveClickUpToken(
   token: string
@@ -32,6 +25,7 @@ export async function saveClickUpToken(
   if (!clean) return { ok: false, error: 'Pega el token de ClickUp' };
 
   // Se valida contra ClickUp antes de guardar, para no almacenar un token roto.
+  registerTokenTenant(clean, user.tenantId);
   try {
     await getWorkspaces(clean);
   } catch (e) {
@@ -45,8 +39,17 @@ export async function saveClickUpToken(
     .onConflictDoUpdate({
       target: opsClickupConnections.tenantId,
       // Al cambiar de token se olvida el workspace elegido (puede ser otro).
-      set: { apiKeyEncrypted: encrypted, apiKeyIv: iv, workspaceId: null, updatedAt: new Date() }
+      set: {
+        apiKeyEncrypted: encrypted,
+        apiKeyIv: iv,
+        workspaceId: null,
+        structureSyncedAt: null,
+        updatedAt: new Date()
+      }
     });
+
+  // La estructura se carga en segundo plano: el Bloc la tendrá lista en segundos.
+  void syncStructure(user.tenantId);
 
   revalidatePath('/dashboard/operaciones', 'layout');
   return { ok: true };
@@ -56,6 +59,10 @@ export async function removeClickUpToken(): Promise<{ ok: true } | { ok: false; 
   const user = await getUser();
   if (!user) return { ok: false, error: 'No autenticado' };
   await db.delete(opsClickupConnections).where(eq(opsClickupConnections.tenantId, user.tenantId));
+  // La caché pertenece a esa conexión: sin token no tiene sentido conservarla.
+  await db.delete(opsClickupLists).where(eq(opsClickupLists.tenantId, user.tenantId));
+  await db.delete(opsClickupSpaces).where(eq(opsClickupSpaces.tenantId, user.tenantId));
+  await db.delete(opsClickupMembers).where(eq(opsClickupMembers.tenantId, user.tenantId));
   revalidatePath('/dashboard/operaciones', 'layout');
   return { ok: true };
 }
@@ -74,33 +81,39 @@ export async function saveTranscriptionModel(
   return { ok: true };
 }
 
-export async function testClickUpConnection(): Promise<TestConnectionResult> {
+export type SyncSummary =
+  | { ok: true; workspaceName: string; members: number; spaces: number; selected: number; lists: number }
+  | { ok: false; error: string };
+
+// "Probar conexión" y "Actualizar desde ClickUp": sincroniza la caché ahora mismo.
+export async function syncClickUpNow(): Promise<SyncSummary> {
   const user = await getUser();
   if (!user) return { ok: false, error: 'No autenticado' };
 
-  const conn = await getClickUpToken(user.tenantId);
-  if (!conn) return { ok: false, error: 'Todavía no hay token guardado' };
+  const res = await syncStructure(user.tenantId);
+  if (!res.ok) return res;
 
-  try {
-    const workspaces = await getWorkspaces(conn.token);
-    const result = await Promise.all(
-      workspaces.map(async (w) => ({
-        id: w.id,
-        name: w.name,
-        memberCount: w.members.length,
-        spaces: await getSpacesWithLists(conn.token, w.id)
-      }))
-    );
+  const s = await getStructure(user.tenantId);
+  revalidatePath('/dashboard/operaciones', 'layout');
+  return {
+    ok: true,
+    workspaceName: s.workspaceName ?? '',
+    members: s.members.length,
+    spaces: s.spaces.length,
+    selected: s.spaces.filter((x) => x.selected).length,
+    lists: s.spaces.reduce((n, x) => n + x.lists.length, 0)
+  };
+}
 
-    // Se recuerda el primer workspace como el que usa "Equipo hoy" si aún no hay uno.
-    if (!conn.workspaceId && workspaces[0]) {
-      await db
-        .update(opsClickupConnections)
-        .set({ workspaceId: workspaces[0].id })
-        .where(eq(opsClickupConnections.tenantId, user.tenantId));
-    }
-    return { ok: true, workspaces: result };
-  } catch (e) {
-    return { ok: false, error: e instanceof ClickUpError ? e.message : 'No se pudo contactar con ClickUp' };
-  }
+// Elige qué espacios se sincronizan (y aparecen en los desplegables).
+export async function saveSelectedSpaces(
+  spaceIds: string[]
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const user = await getUser();
+  if (!user) return { ok: false, error: 'No autenticado' };
+  if (spaceIds.length === 0) return { ok: false, error: 'Deja al menos un espacio seleccionado' };
+
+  const res = await setSelectedSpaces(user.tenantId, spaceIds);
+  revalidatePath('/dashboard/operaciones', 'layout');
+  return res;
 }

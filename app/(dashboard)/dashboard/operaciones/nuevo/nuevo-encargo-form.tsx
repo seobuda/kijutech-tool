@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useTransition } from 'react';
+import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,11 +8,10 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   createRequest,
-  getListMembersAction,
   prepareRequestWithAI,
   retryRequest
 } from '@/lib/operaciones/request-actions';
-import type { ClickUpMember, ClickUpSpaceWithLists } from '@/lib/operaciones/clickup';
+import type { ClickUpSpaceWithLists } from '@/lib/operaciones/clickup';
 import type { SyncResult } from '@/lib/operaciones/sync';
 
 const PRIORITIES = [
@@ -27,16 +26,16 @@ const selectClass =
 
 export function NuevoEncargoForm({
   spaces,
+  members,
   meId
 }: {
   spaces: ClickUpSpaceWithLists[];
+  members: { id: string; username: string }[];
   meId: string;
 }) {
   const [listId, setListId] = useState('');
-  const [members, setMembers] = useState<ClickUpMember[]>([]);
-  const [membersError, setMembersError] = useState<string | null>(null);
-  const [loadingMembers, setLoadingMembers] = useState(false);
-  const [assigneeId, setAssigneeId] = useState('');
+  // Los miembros salen de la caché (no se llama a ClickUp al elegir lista).
+  const [assigneeId, setAssigneeId] = useState(members.some((m) => m.id === meId) ? meId : '');
 
   const [title, setTitle] = useState('');
   const [request, setRequest] = useState('');
@@ -56,31 +55,6 @@ export function NuevoEncargoForm({
   );
   const listName = allLists.find((l) => l.id === listId)?.name ?? '';
 
-  // Al elegir lista se cargan sus miembros; por defecto, yo mismo si estoy en ella.
-  useEffect(() => {
-    if (!listId) {
-      setMembers([]);
-      setAssigneeId('');
-      return;
-    }
-    let cancelled = false;
-    setLoadingMembers(true);
-    setMembersError(null);
-    getListMembersAction(listId).then((res) => {
-      if (cancelled) return;
-      setLoadingMembers(false);
-      if (res.ok) {
-        setMembers(res.members);
-        setAssigneeId(res.members.some((m) => String(m.id) === meId) ? meId : '');
-      } else {
-        setMembers([]);
-        setMembersError(res.error);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [listId, meId]);
 
   const prepare = () =>
     startAi(async () => {
@@ -280,10 +254,10 @@ export function NuevoEncargoForm({
                 className={selectClass}
                 value={assigneeId}
                 onChange={(e) => setAssigneeId(e.target.value)}
-                disabled={!listId || loadingMembers}
+                disabled={!listId}
               >
                 <option value="">
-                  {!listId ? 'Elige antes una lista' : loadingMembers ? 'Cargando…' : 'Sin asignar'}
+                  {!listId ? 'Elige antes una lista' : 'Sin asignar'}
                 </option>
                 {members.map((m) => (
                   <option key={m.id} value={String(m.id)}>
@@ -292,7 +266,6 @@ export function NuevoEncargoForm({
                   </option>
                 ))}
               </select>
-              {membersError && <p className="text-xs text-red-600">{membersError}</p>}
             </div>
             <div className="space-y-2">
               <Label htmlFor="due">Fecha de entrega</Label>

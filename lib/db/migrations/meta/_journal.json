@@ -176,6 +176,13 @@
       "when": 1793268365182,
       "tag": "0024_ops_notes",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1793271311727,
+      "tag": "0025_ops_clickup_cache",
+      "breakpoints": true
     }
   ]
 }

@@ -4,10 +4,11 @@ import { and, asc, desc, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { opsNoteAudios, opsNotes, opsRequests } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
-import { getClickUpToken } from '@/lib/operaciones/queries';
-import { ClickUpError, getMe, getSpacesWithLists, getWorkspaces } from '@/lib/operaciones/clickup';
+import { getClickUpConnection } from '@/lib/operaciones/queries';
+import { ensureFresh, getStructure, selectedSpaces } from '@/lib/operaciones/structure';
 import { normalizeConversionState, type NoteAudioInfo } from '@/lib/operaciones/note-types';
 import { BlocNotas } from './bloc-notas';
+import { SyncPending } from './sync-pending';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,7 +20,7 @@ export default async function BlocNotasPage({
   const user = await getUser();
   if (!user) redirect('/sign-in');
 
-  const conn = await getClickUpToken(user.tenantId);
+  const conn = await getClickUpConnection(user.tenantId);
   if (!conn) {
     return (
       <div className="rounded-lg border border-dashed border-gray-300 p-8 text-center space-y-3">
@@ -104,23 +105,21 @@ export default async function BlocNotasPage({
           .orderBy(asc(opsRequests.createdAt))
       : [];
 
-  try {
-    const workspaces = await getWorkspaces(conn.token);
-    const workspace = workspaces.find((w) => w.id === conn.workspaceId) ?? workspaces[0];
-    if (!workspace) {
-      return <p className="text-sm text-muted-foreground">Tu cuenta de ClickUp no tiene workspaces.</p>;
-    }
-    const [spaces, me] = await Promise.all([
-      getSpacesWithLists(conn.token, workspace.id),
-      getMe(conn.token)
-    ]);
+  {
+    // La estructura sale de la caché de la base de datos: abrir el Bloc NO llama a
+    // ClickUp. Si tiene más de 1 hora, se refresca en segundo plano sin esperar.
+    const structure = await getStructure(user.tenantId);
+    void ensureFresh(user.tenantId);
+    if (!structure.syncedAt) return <SyncPending reason="never" />;
+    const spaces = selectedSpaces(structure);
+    if (spaces.length === 0) return <SyncPending reason="no-spaces" />;
 
     return (
       <BlocNotas
         key={current?.id ?? 'nueva'}
         spaces={spaces}
-        members={workspace.members.map((m) => ({ id: String(m.id), username: m.username }))}
-        meId={String(me.id)}
+        members={structure.members}
+        meId={structure.meId ?? ''}
         history={notes.map((n) => ({
           id: n.id,
           status: n.status,
@@ -144,18 +143,6 @@ export default async function BlocNotasPage({
             : null
         }
       />
-    );
-  } catch (e) {
-    return (
-      <div className="rounded-lg border border-red-200 bg-red-50 p-4 space-y-2">
-        <p className="font-medium text-red-700">No se han podido cargar los datos de ClickUp</p>
-        <p className="text-sm text-red-700">
-          {e instanceof ClickUpError ? e.message : 'No se pudo contactar con ClickUp'}
-        </p>
-        <Link href="/dashboard/operaciones/ajustes" className="text-sm underline">
-          Revisar ajustes
-        </Link>
-      </div>
     );
   }
 }

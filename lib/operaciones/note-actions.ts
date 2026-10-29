@@ -10,7 +10,8 @@ import { getUser } from '@/lib/db/queries';
 import { callAI, getPrompt } from '@/lib/ai/gateway';
 import { extractJsonFromLLMResponse } from '@/lib/ai/parsers/json-extractor';
 import { getClickUpToken } from '@/lib/operaciones/queries';
-import { getSpaceLists, getWorkspaces, OPS_TIMEZONE } from '@/lib/operaciones/clickup';
+import { OPS_TIMEZONE } from '@/lib/operaciones/clickup';
+import { getStructure } from '@/lib/operaciones/structure';
 import { syncToClickUp, type SyncResult } from '@/lib/operaciones/sync';
 import { buildDescription, fillTemplate } from '@/lib/operaciones/format';
 import {
@@ -227,12 +228,16 @@ async function doConversion(
   step: (s: string) => Promise<void>,
   ctl: { cancelled: boolean }
 ) {
-  await step('Leyendo las listas del espacio…');
-  const workspaces = await getWorkspaces(conn.token);
-  const workspace = workspaces.find((w) => w.id === conn.workspaceId) ?? workspaces[0];
-  const members = workspace?.members ?? [];
-  const lists = await getSpaceLists(conn.token, note.clickupSpaceId!);
-  if (lists.length === 0) throw new Error('El espacio elegido no tiene listas en ClickUp');
+  await step('Leyendo las listas del espacio (caché)…');
+  // Listas y miembros salen de la caché de la base de datos: convertir una nota NO llama a ClickUp.
+  const structure = await getStructure(tenantId);
+  const members = structure.members.map((m) => ({ id: Number(m.id), username: m.username }));
+  const lists = structure.spaces.find((s) => s.id === note.clickupSpaceId)?.lists ?? [];
+  if (lists.length === 0) {
+    throw new Error(
+      'No hay listas de ese espacio en la caché. Comprueba en Ajustes que el espacio está seleccionado y pulsa «Actualizar desde ClickUp».'
+    );
+  }
 
   const today = new Intl.DateTimeFormat('es-ES', { timeZone: OPS_TIMEZONE, dateStyle: 'full' }).format(
     new Date()
@@ -342,16 +347,9 @@ export async function sendNoteRequests(
   if (note.status !== 'borrador') return { ok: false, error: 'Esta nota ya está convertida' };
   if (!note.clickupSpaceId) return { ok: false, error: 'La nota no tiene espacio de ClickUp' };
 
-  const conn = await getClickUpToken(user.tenantId);
-  if (!conn) return { ok: false, error: 'Conecta ClickUp primero en Ajustes' };
-
-  // Solo listas reales del espacio de la nota.
-  let lists;
-  try {
-    lists = await getSpaceLists(conn.token, note.clickupSpaceId);
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'No se pudo leer ClickUp' };
-  }
+  // Solo listas reales del espacio de la nota, leídas de la caché (sin llamar a ClickUp).
+  const structure = await getStructure(user.tenantId);
+  const lists = structure.spaces.find((s) => s.id === note.clickupSpaceId)?.lists ?? [];
   const listNames = new Map(lists.map((l) => [l.id, l.name]));
   const bad = items.find((i) => !listNames.has(i.listId));
   if (bad) return { ok: false, error: `La lista elegida para «${bad.title}» no es del espacio de la nota` };
