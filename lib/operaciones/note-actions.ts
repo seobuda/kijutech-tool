@@ -13,7 +13,7 @@ import { getClickUpToken } from '@/lib/operaciones/queries';
 import { OPS_TIMEZONE } from '@/lib/operaciones/clickup';
 import { getStructure } from '@/lib/operaciones/structure';
 import { syncToClickUp, type SyncResult } from '@/lib/operaciones/sync';
-import { buildDescription, fillTemplate } from '@/lib/operaciones/format';
+import { buildDescription, fillTemplate, isOwnTask } from '@/lib/operaciones/format';
 import {
   CONVERSION_TIMEOUT_MS,
   normalizeConversionState,
@@ -246,6 +246,8 @@ async function doConversion(
     fecha_hoy: today,
     espacio: note.clickupSpaceName ?? note.clickupSpaceId!,
     responsable_seleccionado: note.assigneeName ?? 'ninguno',
+    // Quien lleva las operaciones (el dueño del token de ClickUp): sus tareas propias le van siempre a él.
+    yo: structure.meUsername ?? 'ninguno',
     listas: lists
       .map((l) => `- id: ${l.id} | nombre: ${l.folder ? `${l.folder} / ` : ''}${l.name}`)
       .join('\n'),
@@ -287,8 +289,27 @@ async function doConversion(
   const validListIds = new Set(lists.map((l) => l.id));
   const byName = new Map(members.map((m) => [m.username.trim().toLowerCase(), m]));
 
+  // Quien lleva las operaciones (dueño del token): sus tareas propias le van SIEMPRE a él,
+  // aunque el responsable seleccionado sea otra persona (ver isOwnTask en format.ts).
+  const me = structure.meId
+    ? { id: structure.meId, username: structure.meUsername ?? '' }
+    : null;
+
   const items: ProposalItem[] = parsed.encargos.map((e) => {
     const proposed = byName.get(e.responsable.trim().toLowerCase());
+    if (me && isOwnTask(e.titulo)) {
+      return {
+        key: randomUUID(),
+        title: e.titulo.trim(),
+        description: buildDescription(e),
+        missingData: e.datos_que_faltan,
+        listId: validListIds.has(e.lista_id) ? e.lista_id : '',
+        assigneeId: me.id,
+        assigneeName: me.username,
+        dueDate: /^\d{4}-\d{2}-\d{2}$/.test(e.fecha) ? e.fecha : '',
+        priority: e.prioridad >= 1 && e.prioridad <= 4 ? Math.round(e.prioridad) : 3
+      };
+    }
     return {
       key: randomUUID(),
       title: e.titulo.trim(),
