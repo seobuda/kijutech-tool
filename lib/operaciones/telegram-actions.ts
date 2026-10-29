@@ -34,7 +34,7 @@ async function requireUser() {
   return user;
 }
 
-const refresh = () => revalidatePath('/dashboard/operaciones/ajustes');
+const refresh = () => revalidatePath('/dashboard/operaciones/telegram');
 
 // Guarda el token del bot (cifrado, como el de ClickUp) tras comprobarlo con Telegram.
 export async function saveTelegramToken(

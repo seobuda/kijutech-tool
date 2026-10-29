@@ -116,6 +116,44 @@ export function TelegramAjustes({ view }: { view: TelegramView }) {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
+        {/* Acciones de prueba, siempre arriba */}
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              disabled={pending || !view.hasBot}
+              onClick={() => run(sendTestMessage, () => 'Mensaje de prueba en cola: debería llegarte en unos segundos.')}
+            >
+              Enviar mensaje de prueba
+            </Button>
+            <Button
+              variant="outline"
+              disabled={pending || !view.hasBot}
+              onClick={() =>
+                run(sendDailyNow, (r: { queued: number; withoutTasks: number }) =>
+                  r.queued > 0
+                    ? `Resumen en cola para ${r.queued} persona${r.queued === 1 ? '' : 's'} (${r.withoutTasks} sin tareas: no se envía).`
+                    : `Nadie tiene tareas de hoy ni vencidas (${r.withoutTasks} sin tareas): no hay nada que enviar.`
+                )
+              }
+            >
+              Enviar resumen ahora
+            </Button>
+            {!view.hasBot && (
+              <span className="text-sm text-muted-foreground">Guarda primero el token del bot (abajo).</span>
+            )}
+          </div>
+          {view.hasBot && view.testMode && (
+            <p className="text-xs text-muted-foreground">
+              Modo pruebas activo: el resumen de todos llega a tu chat. Si aún no estás vinculado, vincúlate en «Personas».
+            </p>
+          )}
+          {msg && (
+            <p data-testid="tg-message" className={`text-sm ${msg.type === 'ok' ? 'text-green-700' : 'text-red-600'}`}>
+              {msg.text}
+            </p>
+          )}
+        </div>
+
         {/* Token */}
         <div className="space-y-2">
           <Label htmlFor="tg-token">
@@ -176,11 +214,6 @@ export function TelegramAjustes({ view }: { view: TelegramView }) {
               </span>
             )}
           </div>
-          {msg && (
-            <p data-testid="tg-message" className={`text-sm ${msg.type === 'ok' ? 'text-green-700' : 'text-red-600'}`}>
-              {msg.text}
-            </p>
-          )}
         </div>
 
         {view.hasBot && (
@@ -227,32 +260,6 @@ export function TelegramAjustes({ view }: { view: TelegramView }) {
                   <option key={z} value={z} />
                 ))}
               </datalist>
-            </div>
-
-            {/* Acciones de prueba */}
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                variant="outline"
-                disabled={pending}
-                onClick={() =>
-                  run(sendTestMessage, () => 'Aviso de prueba en cola: debería llegarte en unos segundos.')
-                }
-              >
-                Enviar mensaje de prueba
-              </Button>
-              <Button
-                variant="outline"
-                disabled={pending}
-                onClick={() =>
-                  run(sendDailyNow, (r: { queued: number; withoutTasks: number }) =>
-                    r.queued > 0
-                      ? `Resumen en cola para ${r.queued} persona${r.queued === 1 ? '' : 's'} (${r.withoutTasks} sin tareas: no se envía).`
-                      : `Nadie tiene tareas de hoy ni vencidas (${r.withoutTasks} sin tareas): no hay nada que enviar.`
-                  )
-                }
-              >
-                Enviar resumen ahora
-              </Button>
             </div>
 
             {/* Recepción */}

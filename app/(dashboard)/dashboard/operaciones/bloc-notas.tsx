@@ -518,12 +518,27 @@ export function BlocNotas({
       ? Math.max(0, Math.round((now - Date.parse(conversion.startedAt)) / 1000))
       : 0;
 
-  const removeNote = async () => {
-    if (!noteIdRef.current) return;
-    if (!window.confirm('¿Eliminar esta nota y sus audios? Los encargos ya creados se mantienen.')) return;
-    await deleteNote(noteIdRef.current);
-    router.push('/dashboard/operaciones?nueva=1');
+  const [openingId, setOpeningId] = useState<string | null>(null);
+
+  const removeNoteById = async (id: string, converted: boolean) => {
+    const msg = converted
+      ? '¿Eliminar esta nota? Los encargos que creó y sus tareas de ClickUp NO se borran.'
+      : '¿Eliminar esta nota y sus audios? Esta acción no se puede deshacer.';
+    if (!window.confirm(msg)) return;
+    const res = await deleteNote(id);
+    if (!res.ok) {
+      window.alert(res.error);
+      return;
+    }
+    clearLocal(id);
+    if (id === noteIdRef.current) {
+      dirty.current = false;
+      window.location.href = '/dashboard/operaciones?nueva=1';
+    } else {
+      router.refresh();
+    }
   };
+  const removeNote = () => (noteIdRef.current ? removeNoteById(noteIdRef.current, readOnly) : Promise.resolve());
 
   // "Guardado" solo si la base de datos lo ha confirmado (hora de esa confirmación).
   const saveLabel = {
@@ -796,11 +811,16 @@ export function BlocNotas({
                     )}
                   </div>
                 ))}
-                <Link href="/dashboard/operaciones?nueva=1">
-                  <Button size="sm" variant="outline">
-                    Nueva nota
+                <div className="flex flex-wrap gap-2">
+                  <Link href="/dashboard/operaciones?nueva=1">
+                    <Button size="sm" variant="outline">
+                      Nueva nota
+                    </Button>
+                  </Link>
+                  <Button size="sm" variant="ghost" onClick={removeNote}>
+                    Eliminar nota
                   </Button>
-                </Link>
+                </div>
               </div>
             )}
           </>
@@ -823,12 +843,14 @@ export function BlocNotas({
         ) : (
           <ul className="space-y-1">
             {history.map((h) => (
-              <li key={h.id}>
-                <Link
+              <li key={h.id} className="relative">
+                {/* Navegación completa (no de cliente): abrir una nota siempre recarga su contenido. */}
+                <a
                   href={`/dashboard/operaciones?nota=${h.id}`}
-                  className={`block rounded-md border p-2 text-sm hover:bg-gray-50 ${
+                  onClick={() => setOpeningId(h.id)}
+                  className={`block rounded-md border p-2 pr-8 text-sm hover:bg-gray-50 ${
                     h.id === note?.id ? 'border-orange-400 bg-orange-50' : 'border-gray-200 bg-white'
-                  }`}
+                  } ${openingId === h.id ? 'opacity-60' : ''}`}
                 >
                   <span className="flex items-center justify-between gap-2">
                     <span
@@ -838,11 +860,22 @@ export function BlocNotas({
                     >
                       {h.status === 'convertida' ? 'Convertida' : 'Borrador'}
                     </span>
-                    <span className="text-xs text-muted-foreground">{dateFmt.format(new Date(h.updatedAt))}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {openingId === h.id ? 'Abriendo…' : dateFmt.format(new Date(h.updatedAt))}
+                    </span>
                   </span>
                   <span className="mt-1 block truncate">{h.preview}</span>
                   {h.spaceName && <span className="block text-xs text-muted-foreground">{h.spaceName}</span>}
-                </Link>
+                </a>
+                <button
+                  type="button"
+                  aria-label="Eliminar nota"
+                  title="Eliminar nota"
+                  onClick={() => void removeNoteById(h.id, h.status === 'convertida')}
+                  className="absolute right-1 bottom-1 rounded px-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                >
+                  🗑
+                </button>
               </li>
             ))}
           </ul>
