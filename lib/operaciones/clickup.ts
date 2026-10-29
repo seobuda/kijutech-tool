@@ -204,3 +204,119 @@ export async function getTeamToday(
   }
   return { buckets: [...byMember.values()], truncated };
 }
+
+// ---------------------------------------------------------------------------
+// Escritura: crear encargos como tareas de ClickUp
+// ---------------------------------------------------------------------------
+
+async function cuSend<T>(token: string, path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: 'POST',
+    headers: { Authorization: token, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    cache: 'no-store'
+  });
+  if (!res.ok) {
+    let detail = '';
+    try {
+      detail = (await res.json())?.err ?? '';
+    } catch {}
+    throw new ClickUpError(
+      res.status === 429
+        ? 'ClickUp está limitando las peticiones (429). Espera un minuto y reintenta'
+        : `ClickUp respondió ${res.status}${detail ? `: ${detail}` : ''}`,
+      res.status
+    );
+  }
+  return res.json() as Promise<T>;
+}
+
+export async function getMe(token: string): Promise<{ id: number; username: string }> {
+  const data = await cu<{ user: { id: number; username: string } }>(token, '/user');
+  return data.user;
+}
+
+// Miembros que tienen acceso a una lista concreta (los posibles responsables).
+export async function getListMembers(token: string, listId: string): Promise<ClickUpMember[]> {
+  const data = await cu<{ members: ClickUpMember[] }>(token, `/list/${listId}/member`);
+  return data.members;
+}
+
+// Medianoche (ms) de una fecha YYYY-MM-DD en OPS_TIMEZONE. ClickUp recibe la
+// fecha sin hora (due_date_time=false), así que basta con que caiga en ese día.
+export function madridMidnightMs(ymd: string): number {
+  const [y, m, d] = ymd.split('-').map(Number);
+  const wallAsUtc = Date.UTC(y, m - 1, d, 0, 0, 0);
+  // Desfase de la zona en un instante concreto (en ms).
+  const offsetAt = (ts: number) => {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: OPS_TIMEZONE,
+      hourCycle: 'h23',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    }).formatToParts(new Date(ts));
+    const g = (t: string) => Number(parts.find((p) => p.type === t)!.value);
+    return Date.UTC(g('year'), g('month') - 1, g('day'), g('hour'), g('minute'), g('second')) - ts;
+  };
+  // Dos pasadas: la segunda corrige los días en que cambia la hora.
+  const first = wallAsUtc - offsetAt(wallAsUtc);
+  return wallAsUtc - offsetAt(first);
+}
+
+export type CreateTaskInput = {
+  name: string;
+  description: string;
+  assigneeId?: number | null;
+  dueDate?: string | null; // YYYY-MM-DD
+  priority?: number | null; // 1 urgente … 4 baja
+};
+
+export async function createTask(
+  token: string,
+  listId: string,
+  input: CreateTaskInput
+): Promise<{ id: string; url: string }> {
+  const body: Record<string, unknown> = {
+    name: input.name,
+    markdown_description: input.description
+  };
+  if (input.assigneeId) body.assignees = [input.assigneeId];
+  if (input.dueDate) {
+    body.due_date = madridMidnightMs(input.dueDate);
+    body.due_date_time = false;
+  }
+  if (input.priority) body.priority = input.priority;
+
+  const task = await cuSend<{ id: string; url: string }>(token, `/list/${listId}/task`, body);
+  return { id: task.id, url: task.url };
+}
+
+// Busca en la lista (abiertas y cerradas, subtareas incluidas) una tarea cuya
+// descripción contenga la marca. Sirve para no duplicar al reintentar.
+export async function findTaskByMarker(
+  token: string,
+  listId: string,
+  marker: string
+): Promise<{ id: string; url: string } | null> {
+  for (let page = 0; page < MAX_TASK_PAGES; page++) {
+    const { tasks } = await cu<{
+      tasks: { id: string; url: string; description?: string; text_content?: string; markdown_description?: string }[];
+    }>(
+      token,
+      `/list/${listId}/task?page=${page}&include_closed=true&subtasks=true&include_markdown_description=true`
+    );
+    const hit = tasks.find(
+      (t) =>
+        t.description?.includes(marker) ||
+        t.text_content?.includes(marker) ||
+        t.markdown_description?.includes(marker)
+    );
+    if (hit) return { id: hit.id, url: hit.url };
+    if (tasks.length < 100) break;
+  }
+  return null;
+}

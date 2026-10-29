@@ -5,6 +5,8 @@ import { usePathname } from 'next/navigation';
 
 const TABS = [
   { href: '/dashboard/operaciones', label: 'Equipo hoy' },
+  { href: '/dashboard/operaciones/encargos', label: 'Encargos' },
+  { href: '/dashboard/operaciones/nuevo', label: 'Nuevo encargo' },
   { href: '/dashboard/operaciones/ajustes', label: 'Ajustes ClickUp' }
 ];
 

@@ -12,6 +12,8 @@ import {
   decimal,
   unique,
   check,
+  index,
+  uniqueIndex,
   vector,
 } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
@@ -870,6 +872,57 @@ export const opsClickupConnections = pgTable('ops_clickup_connections', {
 });
 
 export type OpsClickupConnection = typeof opsClickupConnections.$inferSelect;
+
+// Encargos creados desde la herramienta hacia ClickUp. Se guardan SIEMPRE
+// primero como 'pendiente_clickup'; solo pasan a 'creado' cuando ClickUp
+// confirma la tarea (id + url). 'error_sync' guarda el motivo en error_message.
+export const opsRequests = pgTable(
+  'ops_requests',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    createdBy: integer('created_by')
+      .notNull()
+      .references(() => users.id),
+    clickupListId: varchar('clickup_list_id', { length: 50 }).notNull(),
+    clickupListName: varchar('clickup_list_name', { length: 255 }),
+    title: varchar('title', { length: 500 }).notNull(),
+    originalRequest: text('original_request').notNull(),
+    preparedDescription: text('prepared_description').notNull(),
+    assigneeClickupId: varchar('assignee_clickup_id', { length: 50 }),
+    assigneeName: varchar('assignee_name', { length: 255 }),
+    dueDate: date('due_date'),
+    // 1 urgente, 2 alta, 3 normal, 4 baja (misma escala que ClickUp)
+    priority: integer('priority'),
+    status: varchar('status', { length: 20 }).notNull().default('pendiente_clickup'),
+    clickupTaskId: varchar('clickup_task_id', { length: 50 }),
+    clickupTaskUrl: text('clickup_task_url'),
+    errorMessage: text('error_message'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+    syncedAt: timestamp('synced_at'),
+  },
+  (table) => [
+    check(
+      'ops_requests_status_check',
+      sql`${table.status} IN ('pendiente_clickup', 'creado', 'error_sync')`
+    ),
+    check(
+      'ops_requests_priority_check',
+      sql`${table.priority} IS NULL OR ${table.priority} BETWEEN 1 AND 4`
+    ),
+    index('ops_requests_tenant_created_idx').on(table.tenantId, table.createdAt),
+    // Protección extra contra duplicados: una tarea de ClickUp no puede
+    // estar enlazada a dos encargos.
+    uniqueIndex('ops_requests_clickup_task_id_unique')
+      .on(table.clickupTaskId)
+      .where(sql`${table.clickupTaskId} IS NOT NULL`),
+  ]
+);
+
+export type OpsRequest = typeof opsRequests.$inferSelect;
 
 export type TeamDataWithMembers = Team & {
   teamMembers: (TeamMember & {
