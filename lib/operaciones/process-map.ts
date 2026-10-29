@@ -93,4 +93,22 @@ export const OPS_REQUEST_PROCESS_MAP: ProcessStep[] = [
       keyDecisions: ['Fallo simulable solo en desarrollo (OPS_SIMULATE_FAILURE o /tmp/ops-simulate-failure)'],
     },
   },
+  {
+    id: 'ops-telegram-notify',
+    name: 'Aviso por Telegram',
+    description:
+      'Cuando ClickUp confirma la tarea, el responsable recibe en Telegram el título, la lista, la fecha de entrega (en su zona horaria), un resumen y el enlace, con un botón "✅ Visto". En modo pruebas todo llega al dueño indicando a quién iba.',
+    status: 'built',
+    file: 'lib/operaciones/notifications.ts',
+    technicalDetail: {
+      summary:
+        'Cada aviso es una fila de ops_notifications (pendiente / enviado / fallido) con clave única: nunca se envía dos veces. Los fallidos se reintentan con espera creciente (6 intentos). El resumen diario sale a la hora de entrada de cada persona, en su zona, de lunes a viernes, reutilizando la consulta de "Equipo hoy".',
+      stack: ['API de Bots de Telegram (fetch)', 'Tabla ops_notifications', 'instrumentation.ts: escucha y planificador dentro del contenedor'],
+      keyDecisions: [
+        'Escucha por consulta periódica (long polling) en local; ruta /api/telegram/webhook preparada para un servidor',
+        'Un candado de PostgreSQL asegura un solo proceso escuchando; un 409 de Telegram se muestra en Ajustes',
+        'Chats no vinculados se ignoran; los códigos de vinculación sirven una sola vez; "Visto" solo cuenta desde el chat del responsable',
+      ],
+    },
+  },
 ];

@@ -351,3 +351,14 @@ pantalla que llamaba a ClickUp en directo tardaba segundos (el Bloc y
 - Para crear tareas reales en ClickUp durante las pruebas se usa SOLO la lista
   "Pruebas Kiju", asignadas al dueño del token. Las notas de prueba se eliminan
   al terminar.
+
+## Procesos de fondo (Telegram): un solo oyente
+
+- El bot de Telegram se escucha desde `instrumentation.ts` (dentro de `kijutech_app`), no
+  desde un servicio aparte. Un candado de PostgreSQL asegura que solo un proceso escucha;
+  si Telegram da error 409 (conflicto), Ajustes → Telegram lo muestra.
+- Nunca arrancar un segundo proceso que use el mismo token de bot (otro contenedor, otro
+  ordenador o un script con `getUpdates`): Telegram corta al primero.
+- En un servidor con URL pública se cambia a webhook desde Ajustes → Telegram.
+- Todo aviso pasa por `ops_notifications` (clave única, reintentos); no enviar mensajes
+  de Telegram directamente desde otras funcionalidades.

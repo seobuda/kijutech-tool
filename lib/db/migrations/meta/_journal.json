@@ -183,6 +183,13 @@
       "when": 1793271311727,
       "tag": "0025_ops_clickup_cache",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1793273650680,
+      "tag": "0026_ops_telegram",
+      "breakpoints": true
     }
   ]
 }

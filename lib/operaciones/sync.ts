@@ -5,6 +5,7 @@ import { db } from '@/lib/db/drizzle';
 import { opsNoteAudios, opsRequests } from '@/lib/db/schema';
 import { getClickUpToken } from '@/lib/operaciones/queries';
 import { attachFileToTask, createTask, findTaskByMarker } from '@/lib/operaciones/clickup';
+import { enqueueNewRequestNotification } from '@/lib/operaciones/notifications';
 
 export type SyncResult =
   | { ok: true; requestId: string; taskUrl: string; reused: boolean }
@@ -156,6 +157,12 @@ export async function syncToClickUp(
         updatedAt: new Date()
       })
       .where(eq(opsRequests.id, requestId));
+
+    // Aviso por Telegram: SOLO ahora que ClickUp ha confirmado la tarea. Es idempotente
+    // (dedupe por encargo) y nunca debe estropear un envío correcto.
+    void enqueueNewRequestNotification(requestId).catch((e) =>
+      console.error('[telegram] no se pudo encolar el aviso:', e instanceof Error ? e.message : e)
+    );
 
     revalidatePath('/dashboard/operaciones/encargos');
     return { ok: true, requestId, taskUrl: task.url, reused };

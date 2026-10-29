@@ -74,6 +74,7 @@ export default async function EncargosPage() {
               <th className="px-3 py-2">Entrega</th>
               <th className="px-3 py-2">Estado</th>
               <th className="px-3 py-2">ClickUp</th>
+              <th className="px-3 py-2">Visto (Telegram)</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -111,6 +112,17 @@ export default async function EncargosPage() {
                       </a>
                     ) : (
                       <RetryButton requestId={r.id} />
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-xs">
+                    {r.seenAt ? (
+                      <span title={r.seenBy ?? ''}>
+                        <span className="rounded bg-green-100 px-2 py-0.5 text-green-700">✅ Visto</span>{' '}
+                        <span className="text-muted-foreground">{fmt.format(r.seenAt)}</span>
+                        {r.seenBy && <span className="block text-muted-foreground">{r.seenBy}</span>}
+                      </span>
+                    ) : (
+                      <span className="text-gray-400">—</span>
                     )}
                   </td>
                 </tr>

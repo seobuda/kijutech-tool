@@ -15,6 +15,7 @@ import {
   index,
   uniqueIndex,
   customType,
+  bigint,
   vector,
 } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
@@ -1060,6 +1061,9 @@ export const opsRequests = pgTable(
     // cuándo se adjuntó su audio a la tarea de ClickUp.
     noteId: uuid('note_id').references(() => opsNotes.id, { onDelete: 'set null' }),
     audioAttachedAt: timestamp('audio_attached_at'),
+    // "✅ Visto" pulsado en Telegram por el chat del responsable (o el mío en modo pruebas).
+    seenAt: timestamp('seen_at'),
+    seenBy: varchar('seen_by', { length: 255 }),
   },
   (table) => [
     index('ops_requests_note_idx').on(table.noteId),
@@ -1081,6 +1085,100 @@ export const opsRequests = pgTable(
 );
 
 export type OpsRequest = typeof opsRequests.$inferSelect;
+
+// ---------------------------------------------------------------------------
+// Avisos por Telegram
+// ---------------------------------------------------------------------------
+
+// Bot de Telegram de la cuenta (token cifrado, mismo formato que el de ClickUp).
+export const opsTelegramConfig = pgTable('ops_telegram_config', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: uuid('tenant_id')
+    .notNull()
+    .unique()
+    .references(() => tenants.id, { onDelete: 'cascade' }),
+  botTokenEncrypted: text('bot_token_encrypted').notNull(),
+  botTokenIv: text('bot_token_iv').notNull(),
+  botUsername: varchar('bot_username', { length: 100 }),
+  botName: varchar('bot_name', { length: 255 }),
+  // Mientras esté activo, los avisos solo se envían al dueño (indicando a quién iban).
+  testMode: boolean('test_mode').notNull().default(true),
+  // 'polling' (consulta periódica, en local) o 'webhook' (en un servidor con URL pública).
+  receiveMode: varchar('receive_mode', { length: 10 }).notNull().default('polling'),
+  webhookUrl: text('webhook_url'),
+  lastUpdateId: bigint('last_update_id', { mode: 'number' }).notNull().default(0),
+  lastPollAt: timestamp('last_poll_at'),
+  // Último error de la escucha (p. ej. "CONFLICTO: otro proceso escucha este bot").
+  lastError: text('last_error'),
+  lastErrorAt: timestamp('last_error_at'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
+// Una fila por miembro de ClickUp: su vinculación con Telegram y su horario.
+export const opsTelegramMembers = pgTable(
+  'ops_telegram_members',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    clickupUserId: varchar('clickup_user_id', { length: 50 }).notNull(),
+    username: varchar('username', { length: 255 }).notNull(),
+    // Código del enlace t.me/<bot>?start=<código>. De un solo uso: al vincularse
+    // se borra (null). Se genera uno nuevo con el botón de Ajustes.
+    linkCode: varchar('link_code', { length: 40 }).unique(),
+    telegramChatId: bigint('telegram_chat_id', { mode: 'number' }),
+    telegramUsername: varchar('telegram_username', { length: 100 }),
+    linkedAt: timestamp('linked_at'),
+    timezone: varchar('timezone', { length: 60 }).notNull().default('America/Santo_Domingo'),
+    workStart: varchar('work_start', { length: 5 }).notNull().default('09:00'),
+    dailyEnabled: boolean('daily_enabled').notNull().default(true),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [unique('ops_telegram_members_tenant_user_unique').on(table.tenantId, table.clickupUserId)]
+);
+
+// Cada aviso con su estado. dedupe_key único = nunca se envía dos veces el mismo
+// (encargo: "new_request:<id>"; resumen: "daily:<persona>:<fecha local>").
+export const opsNotifications = pgTable(
+  'ops_notifications',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    kind: varchar('kind', { length: 20 }).notNull(),
+    dedupeKey: varchar('dedupe_key', { length: 200 }).notNull(),
+    forClickupUserId: varchar('for_clickup_user_id', { length: 50 }),
+    forName: varchar('for_name', { length: 255 }),
+    // Destino real; se resuelve al enviar (en modo pruebas, el chat del dueño).
+    chatId: bigint('chat_id', { mode: 'number' }),
+    requestId: uuid('request_id').references(() => opsRequests.id, { onDelete: 'set null' }),
+    payload: jsonb('payload').notNull(),
+    status: varchar('status', { length: 10 }).notNull().default('pendiente'),
+    attempts: integer('attempts').notNull().default(0),
+    lastError: text('last_error'),
+    nextAttemptAt: timestamp('next_attempt_at').notNull().defaultNow(),
+    sentAt: timestamp('sent_at'),
+    telegramMessageId: bigint('telegram_message_id', { mode: 'number' }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    unique('ops_notifications_tenant_dedupe_unique').on(table.tenantId, table.dedupeKey),
+    index('ops_notifications_status_next_idx').on(table.status, table.nextAttemptAt),
+    check('ops_notifications_status_check', sql`${table.status} IN ('pendiente', 'enviado', 'fallido')`),
+    check(
+      'ops_notifications_kind_check',
+      sql`${table.kind} IN ('new_request', 'daily_summary', 'test')`
+    ),
+  ]
+);
+
+export type OpsTelegramConfig = typeof opsTelegramConfig.$inferSelect;
+export type OpsTelegramMember = typeof opsTelegramMembers.$inferSelect;
+export type OpsNotification = typeof opsNotifications.$inferSelect;
 
 export type TeamDataWithMembers = Team & {
   teamMembers: (TeamMember & {
