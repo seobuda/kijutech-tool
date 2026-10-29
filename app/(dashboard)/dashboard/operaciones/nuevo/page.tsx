@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { getUser } from '@/lib/db/queries';
 import { getClickUpConnection } from '@/lib/operaciones/queries';
 import { ensureFresh, getStructure, selectedSpaces } from '@/lib/operaciones/structure';
+import { getWorkTypeOptions } from '@/lib/operaciones/work-types';
 import { SyncPending } from '../sync-pending';
 import { NuevoEncargoForm } from './nuevo-encargo-form';
 
@@ -37,5 +38,5 @@ export default async function NuevoEncargoPage() {
   const spaces = selectedSpaces(structure);
   if (spaces.length === 0) return <SyncPending reason="no-spaces" />;
 
-  return <NuevoEncargoForm spaces={spaces} clientFields={structure.clientFields} members={structure.members} meId={structure.meId ?? ''} />;
+  return <NuevoEncargoForm spaces={spaces} clientFields={structure.clientFields} workTypes={await getWorkTypeOptions(user.tenantId)} members={structure.members} meId={structure.meId ?? ''} />;
 }

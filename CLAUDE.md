@@ -362,3 +362,7 @@ pantalla que llamaba a ClickUp en directo tardaba segundos (el Bloc y
 - En un servidor con URL pública se cambia a webhook desde pestaña Telegram.
 - Todo aviso pasa por `ops_notifications` (clave única, reintentos); no enviar mensajes
   de Telegram directamente desde otras funcionalidades.
+- Todo cambio en ClickUp que dispare el flujo de Telegram (estado de la tarea o comentario) pasa por la
+  bandeja de salida `ops_clickup_outbox` (`lib/operaciones/outbox.ts`): clave única, reintentos y el cliente con
+  contador. No llamar a `updateTaskStatus` / `addTaskComment` directamente desde otras funcionalidades.
+- Cada pulsación de botón y acción del bot se registra con `logEvent` (`ops_request_events`).

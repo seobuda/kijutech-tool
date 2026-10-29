@@ -14,6 +14,8 @@ import { tg, TelegramError, type TgUpdate } from '@/lib/operaciones/telegram';
 import { decodeBotToken } from '@/lib/operaciones/telegram-config';
 import { handleUpdate } from '@/lib/operaciones/telegram-handler';
 import { processNotifications, runDailySummaries } from '@/lib/operaciones/notifications';
+import { processOutbox } from '@/lib/operaciones/outbox';
+import { runDigests } from '@/lib/operaciones/digest';
 
 const LOCK_KEY = 74200126; // identifica "oyente de Telegram de Kijutech"
 const POLL_TIMEOUT_S = 50;
@@ -197,6 +199,8 @@ async function schedulerLoop(state: WorkerState) {
       for (const cfg of configs) {
         await processNotifications(cfg.tenantId);
         await runDailySummaries(cfg.tenantId);
+        await runDigests(cfg.tenantId);
+        await processOutbox(cfg.tenantId);
       }
     } catch (e) {
       console.error('[telegram] planificador:', e instanceof Error ? e.message : e);

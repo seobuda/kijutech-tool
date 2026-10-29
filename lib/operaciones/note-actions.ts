@@ -11,6 +11,7 @@ import { callAI, getPrompt } from '@/lib/ai/gateway';
 import { extractJsonFromLLMResponse } from '@/lib/ai/parsers/json-extractor';
 import { getClickUpToken } from '@/lib/operaciones/queries';
 import { OPS_TIMEZONE } from '@/lib/operaciones/clickup';
+import { getWorkTypeOptions, validWorkTypeKey } from '@/lib/operaciones/work-types';
 import { clientFieldForList, getStructure, matchClientOption, validClient } from '@/lib/operaciones/structure';
 import { syncToClickUp, type SyncResult } from '@/lib/operaciones/sync';
 import { buildDescription, fillTemplate, isOwnTask } from '@/lib/operaciones/format';
@@ -116,7 +117,8 @@ const aiItemSchema = z.object({
   responsable: z.string().default(''),
   fecha: z.string().default(''),
   prioridad: z.coerce.number().default(3),
-  cliente: z.string().default('')
+  cliente: z.string().default(''),
+  tipo_trabajo: z.string().default('')
 });
 
 const aiResponseSchema = z.object({
@@ -275,6 +277,8 @@ async function doConversion(
     );
   }
 
+  const workTypes = await getWorkTypeOptions(tenantId);
+  const validTypes = new Set(workTypes.map((t) => t.key));
   const today = new Intl.DateTimeFormat('es-ES', { timeZone: OPS_TIMEZONE, dateStyle: 'full' }).format(
     new Date()
   );
@@ -289,6 +293,7 @@ async function doConversion(
       .join('\n'),
     miembros: members.map((m) => `- ${m.username}`).join('\n') || '- (sin datos)',
     clientes: clientOptionsPrompt(lists, structure.clientFields),
+    tipos: workTypes.map((t) => `- ${t.key}: ${t.label}`).join('\n'),
     nota: note.content.trim()
   });
 
@@ -345,7 +350,9 @@ async function doConversion(
         assigneeName: me.username,
         dueDate: /^\d{4}-\d{2}-\d{2}$/.test(e.fecha) ? e.fecha : '',
         priority: e.prioridad >= 1 && e.prioridad <= 4 ? Math.round(e.prioridad) : 3,
-        ...pickClient(structure, e.lista_id, e.cliente)
+        ...pickClient(structure, e.lista_id, e.cliente),
+        workTypeKey: validTypes.has(e.tipo_trabajo.trim()) ? e.tipo_trabajo.trim() : '',
+        requiresReview: false
       };
     }
     return {
@@ -359,7 +366,9 @@ async function doConversion(
       assigneeName: proposed ? proposed.username : note.assigneeName ?? '',
       dueDate: /^\d{4}-\d{2}-\d{2}$/.test(e.fecha) ? e.fecha : '',
       priority: e.prioridad >= 1 && e.prioridad <= 4 ? Math.round(e.prioridad) : 3,
-      ...pickClient(structure, e.lista_id, e.cliente)
+      ...pickClient(structure, e.lista_id, e.cliente),
+      workTypeKey: validTypes.has(e.tipo_trabajo.trim()) ? e.tipo_trabajo.trim() : '',
+      requiresReview: false
     };
   });
 
@@ -380,7 +389,9 @@ const sendItemSchema = z.object({
   assigneeName: z.string().default(''),
   dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).or(z.literal('')).default(''),
   priority: z.number().int().min(1).max(4).default(3),
-  clientOptionId: z.string().default('')
+  clientOptionId: z.string().default(''),
+  workTypeKey: z.string().default(''),
+  requiresReview: z.boolean().default(false)
 });
 
 export type SendNoteResult =
@@ -415,11 +426,13 @@ export async function sendNoteRequests(
   const bad = items.find((i) => !listNames.has(i.listId));
   if (bad) return { ok: false, error: `La lista elegida para «${bad.title}» no es del espacio de la nota` };
 
+  const typeKeys = await Promise.all(items.map((i) => validWorkTypeKey(user.tenantId, i.workTypeKey)));
+
   // 1) Todos los encargos se guardan primero como pendiente_clickup, vinculados a la nota…
   const rows = await db
     .insert(opsRequests)
     .values(
-      items.map((i) => ({
+      items.map((i, idx) => ({
         tenantId: user.tenantId,
         createdBy: user.id,
         clickupListId: i.listId,
@@ -432,6 +445,8 @@ export async function sendNoteRequests(
         dueDate: i.dueDate || null,
         priority: i.priority,
         ...validClient(structure, i.listId, i.clientOptionId),
+        workTypeKey: typeKeys[idx],
+        reviewerKey: i.requiresReview ? 'owner' : null,
         status: 'pendiente_clickup',
         noteId: note.id
       }))

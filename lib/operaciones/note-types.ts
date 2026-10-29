@@ -13,6 +13,9 @@ export type ProposalItem = {
   // Opción del campo "Cliente" de la lista elegida ('' = ninguna clara). Items antiguos: undefined.
   clientOptionId?: string;
   clientName?: string;
+  // Paso 5: tipo de trabajo (clave de ops_work_types; '' = sin tipo) y casilla «requiere mi revisión».
+  workTypeKey?: string;
+  requiresReview?: boolean;
 };
 
 export type NoteProposal = {

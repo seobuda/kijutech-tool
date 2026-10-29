@@ -111,4 +111,61 @@ export const OPS_REQUEST_PROCESS_MAP: ProcessStep[] = [
       ],
     },
   },
+  {
+    id: 'ops-workflow',
+    name: 'El equipo responde desde Telegram',
+    description:
+      'El aviso de cada encargo lleva los botones Empezar, Bloqueado, Hecho y «Hecho, ¿lo revisas?». Cada pulsación cambia el estado de la tarea en ClickUp (o deja un comentario si la lista no tiene ese estado) y se registra con persona, encargo y hora exacta.',
+    status: 'built',
+    file: 'lib/operaciones/workflow.ts',
+    technicalDetail: {
+      summary:
+        'Máquina de estados atómica: asignado → en_curso → (bloqueado) → en_revision → completado, con «devuelto» que vuelve a en curso. Los cambios en ClickUp van a una bandeja de salida (ops_clickup_outbox) con reintentos. La correspondencia con los estados de cada lista (ops_status_map) se propone por nombre y se edita en Ajustes.',
+      stack: ['Tablas ops_status_map, ops_clickup_outbox, ops_request_events, ops_telegram_pending', 'Cliente de ClickUp con contador de peticiones'],
+      keyDecisions: [
+        'Pulsar dos veces un botón no repite nada (transición condicionada al estado de origen)',
+        'Solo el responsable (o el dueño en modo pruebas) puede usar los botones de su encargo; Aceptar, Devolver y Responder solo el dueño',
+        'Cada acción queda en ops_request_events para medir rendimiento más adelante',
+      ],
+    },
+  },
+  {
+    id: 'ops-review',
+    name: 'Revisión con revisor intercambiable',
+    description:
+      'Si el encargo requiere revisión (casilla en la revisión de la nota y en Nuevo encargo), «Hecho» pasa a «en revisión» y le llega al revisor con Aceptar (completa la tarea) o Devolver (pide motivo, vuelve a en curso y la persona lo recibe).',
+    status: 'built',
+    file: 'lib/operaciones/reviewers.ts',
+    technicalDetail: {
+      summary:
+        'Cada encargo guarda un reviewer_key (hoy: owner o ninguno). Los revisores se registran en reviewers.ts con una sola función, requestReview(); un revisor automático futuro (por tipo de trabajo o por cliente) solo tendrá que llamar a acceptWork() o returnWork().',
+      stack: ['reviewers.ts', 'Tipos de trabajo editables (ops_work_types)'],
+    },
+  },
+  {
+    id: 'ops-blockers',
+    name: 'Bloqueos: el agente responde o lo escala',
+    description:
+      'Al pulsar Bloqueado, el bot pregunta qué necesita (texto o captura). La IA revisa la tarea, su descripción, la nota original y los comentarios: si la respuesta está ahí, responde a la persona citando la fuente; si no, te llega resumido con opciones y recomendación, y tu respuesta le llega a la persona y queda como comentario en ClickUp.',
+    status: 'built',
+    file: 'lib/operaciones/blockers.ts',
+    technicalDetail: {
+      summary:
+        'Una llamada a la IA con el prompt editable ops_blocker_triage. Solo responde sola si devuelve la respuesta Y la fuente; con cualquier duda escala. Una captura sin texto va directa al dueño.',
+      stack: ['callAI() — pasarela de IA', 'Prompt en ai_prompts (editable)', 'Tabla ops_blockers'],
+    },
+  },
+  {
+    id: 'ops-firewall',
+    name: 'Cortafuegos de avisos y Mi bandeja',
+    description:
+      'Al dueño solo le llegan al instante los bloqueos y las revisiones de encargos urgentes. Todo lo demás va agrupado en dos resúmenes al día (13:00 y 18:00, hora de Madrid, configurables) y en la pestaña «Mi bandeja», ordenado por tiempo de espera.',
+    status: 'built',
+    file: 'lib/operaciones/digest.ts',
+    technicalDetail: {
+      summary:
+        'El resumen se inserta primero con clave única (fecha y hora) para no duplicarse; si el servidor estuvo apagado a esa hora se envía hasta 3 h después. «Mi bandeja» se calcula del estado actual (encargos en revisión y bloqueos escalados), sin tabla propia.',
+      stack: ['ops_notifications (kind digest)', 'inbox.ts'],
+    },
+  },
 ];

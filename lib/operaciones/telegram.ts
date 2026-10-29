@@ -14,7 +14,14 @@ export class TelegramError extends Error {
 
 export type TgUser = { id: number; is_bot?: boolean; first_name?: string; username?: string };
 export type TgChat = { id: number; type: string; username?: string };
-export type TgMessage = { message_id: number; chat: TgChat; from?: TgUser; text?: string };
+export type TgMessage = {
+  message_id: number;
+  chat: TgChat;
+  from?: TgUser;
+  text?: string;
+  caption?: string;
+  photo?: { file_id: string; width: number; height: number }[];
+};
 export type TgCallbackQuery = { id: string; from: TgUser; message?: TgMessage; data?: string };
 export type TgUpdate = { update_id: number; message?: TgMessage; callback_query?: TgCallbackQuery };
 

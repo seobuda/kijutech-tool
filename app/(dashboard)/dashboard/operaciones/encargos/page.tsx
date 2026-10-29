@@ -14,6 +14,15 @@ const STATUS: Record<string, { label: string; className: string }> = {
   error_sync: { label: 'Error de sincronización', className: 'bg-red-100 text-red-700' }
 };
 
+const WORK: Record<string, string> = {
+  asignado: 'Asignado',
+  en_curso: '▶️ En curso',
+  bloqueado: '🚫 Bloqueado',
+  en_revision: '👀 En revisión',
+  devuelto: '↩️ Devuelto',
+  completado: '✅ Completado'
+};
+
 const PRIORITY: Record<number, string> = { 1: 'Urgente', 2: 'Alta', 3: 'Normal', 4: 'Baja' };
 
 const fmt = new Intl.DateTimeFormat('es-ES', {
@@ -73,6 +82,7 @@ export default async function EncargosPage() {
               <th className="px-3 py-2">Responsable</th>
               <th className="px-3 py-2">Entrega</th>
               <th className="px-3 py-2">Estado</th>
+              <th className="px-3 py-2">Flujo</th>
               <th className="px-3 py-2">ClickUp</th>
               <th className="px-3 py-2">Visto (Telegram)</th>
             </tr>
@@ -99,6 +109,10 @@ export default async function EncargosPage() {
                   </td>
                   <td className="px-3 py-2">
                     <span className={`rounded px-2 py-0.5 text-xs ${st.className}`}>{st.label}</span>
+                  </td>
+                  <td className="px-3 py-2 whitespace-nowrap text-xs">
+                    {r.status === 'creado' ? (WORK[r.workStatus] ?? r.workStatus) : '—'}
+                    {r.reviewerKey && <span className="block text-muted-foreground">Con revisión</span>}
                   </td>
                   <td className="px-3 py-2 whitespace-nowrap">
                     {r.clickupTaskUrl ? (

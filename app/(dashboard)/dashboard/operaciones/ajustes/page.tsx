@@ -3,7 +3,10 @@ import { getUser } from '@/lib/db/queries';
 import { getClickUpConnection, getClickUpRequestStats } from '@/lib/operaciones/queries';
 import { getTranscriptionModel } from '@/lib/operaciones/settings';
 import { getStructure } from '@/lib/operaciones/structure';
+import { getStatusGroups } from '@/lib/operaciones/status-map';
+import { getWorkTypes } from '@/lib/operaciones/work-types';
 import { AjustesClickUp } from './ajustes-clickup';
+import { FlujoAjustes } from './flujo-ajustes';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,6 +19,11 @@ export default async function AjustesClickUpPage() {
     getTranscriptionModel(user.tenantId),
     getStructure(user.tenantId),
     getClickUpRequestStats(user.tenantId)
+  ]);
+
+  const [statusGroups, workTypes] = await Promise.all([
+    getStatusGroups(user.tenantId),
+    getWorkTypes(user.tenantId, true)
   ]);
 
   return (
@@ -36,6 +44,17 @@ export default async function AjustesClickUpPage() {
           }))
         }}
         stats={stats}
+      />
+      <FlujoAjustes
+        groups={statusGroups.map((g) => ({
+          key: g.key,
+          statuses: g.statuses,
+          listIds: g.listIds,
+          listNames: g.listNames,
+          values: g.values,
+          edited: g.edited
+        }))}
+        workTypes={workTypes.map((t) => ({ key: t.key, label: t.label, active: t.active }))}
       />
     </div>
   );

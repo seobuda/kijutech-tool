@@ -1,0 +1,149 @@
+// Cortafuegos de avisos para quien lleva las operaciones: salvo los bloqueos y las revisiones
+// URGENTES (que llegan al instante), todo va agrupado en dos resúmenes al día (por defecto 13:00 y
+// 18:00, hora de Madrid; configurables): qué se ha completado, qué ha resuelto el agente solo y
+// qué necesita de ti. Se inserta primero (dedupe por fecha y hora) para no duplicar ni perder
+// el resumen aunque el servidor se reinicie; si estuvo apagado a esa hora, se envía hasta 3 h después.
+import { and, desc, eq, gte, inArray, like } from 'drizzle-orm';
+import { db } from '@/lib/db/drizzle';
+import { opsNotifications, opsRequestEvents, opsRequests, type OpsRequest } from '@/lib/db/schema';
+import { enqueueNotification, localParts, toMinutes, DAILY_WINDOW_MINUTES } from '@/lib/operaciones/notifications';
+import { getTelegramConfig, getOwnerMember } from '@/lib/operaciones/telegram-config';
+import { escapeHtml } from '@/lib/operaciones/telegram';
+import { getInbox, waitLabel } from '@/lib/operaciones/inbox';
+
+const MAX_LIST = 8;
+const MAX_BUTTON_ROWS = 5;
+
+const short = (t: string, n = 28) => (t.length > n ? `${t.slice(0, n - 1)}…` : t);
+
+async function buildDigest(
+  tenantId: string,
+  since: Date
+): Promise<{ text: string; buttons: { text: string; data: string }[][]; empty: boolean }> {
+  const events = await db
+    .select()
+    .from(opsRequestEvents)
+    .where(
+      and(
+        eq(opsRequestEvents.tenantId, tenantId),
+        gte(opsRequestEvents.createdAt, since),
+        inArray(opsRequestEvents.eventType, ['done', 'accepted', 'agent_answered'])
+      )
+    )
+    .orderBy(opsRequestEvents.createdAt);
+
+  const reqIds = [...new Set(events.map((e) => e.requestId).filter((x): x is string => Boolean(x)))];
+  const reqs = reqIds.length
+    ? await db.select().from(opsRequests).where(inArray(opsRequests.id, reqIds))
+    : [];
+  const byId = new Map<string, OpsRequest>(reqs.map((r) => [r.id, r]));
+
+  // Un encargo sale una sola vez por sección (aunque se devolviera y se entregara de nuevo).
+  const uniq = <T extends { requestId: string | null }>(list: T[]) => {
+    const seen = new Set<string>();
+    return list.filter((e) => (e.requestId ? (seen.has(e.requestId) ? false : (seen.add(e.requestId), true)) : true));
+  };
+  const completed = uniq(events.filter((e) => e.eventType === 'done' || e.eventType === 'accepted').reverse()).reverse();
+  const agent = uniq(events.filter((e) => e.eventType === 'agent_answered').reverse()).reverse();
+  const inbox = await getInbox(tenantId);
+
+  const sections: string[] = [];
+  if (completed.length) {
+    const lines = completed.slice(0, MAX_LIST).map((e) => {
+      const r = e.requestId ? byId.get(e.requestId) : undefined;
+      const who = e.eventType === 'accepted' ? 'aceptado' : (e.personName ?? '—');
+      return `• ${escapeHtml(r?.title ?? '(encargo borrado)')} <i>(${escapeHtml(who)})</i>`;
+    });
+    if (completed.length > MAX_LIST) lines.push(`… y ${completed.length - MAX_LIST} más`);
+    sections.push(`✅ <b>Completado (${completed.length})</b>\n${lines.join('\n')}`);
+  }
+  if (agent.length) {
+    const lines = agent.slice(0, MAX_LIST).map((e) => {
+      const r = e.requestId ? byId.get(e.requestId) : undefined;
+      const src = (e.payload as { source?: string } | null)?.source;
+      return `• ${escapeHtml(r?.title ?? '(encargo borrado)')} <i>(${escapeHtml(e.personName ?? '—')}${src ? ` · fuente: ${escapeHtml(src)}` : ''})</i>`;
+    });
+    sections.push(`🤖 <b>Resuelto por el agente (${agent.length})</b>\n${lines.join('\n')}`);
+  }
+
+  const buttons: { text: string; data: string }[][] = [];
+  if (inbox.length) {
+    const lines = inbox.slice(0, MAX_LIST).map((i) => {
+      const what = i.kind === 'review' ? '👀 revisión' : '🚫 bloqueo';
+      return `• ${what}: ${escapeHtml(i.req.title)} <i>(espera ${waitLabel(i.since)})</i>`;
+    });
+    if (inbox.length > MAX_LIST) lines.push(`… y ${inbox.length - MAX_LIST} más (en «Mi bandeja»)`);
+    sections.push(`🙋 <b>Necesita de ti (${inbox.length})</b>\n${lines.join('\n')}`);
+    for (const i of inbox.slice(0, MAX_BUTTON_ROWS)) {
+      if (i.kind === 'review') {
+        buttons.push([
+          { text: `✅ ${short(i.req.title, 20)}`, data: `ok:${i.req.id}` },
+          { text: '↩️ Devolver', data: `rt:${i.req.id}` }
+        ]);
+      } else {
+        buttons.push([{ text: `💬 Responder · ${short(i.req.title, 22)}`, data: `rp:${i.blocker.id}` }]);
+      }
+    }
+  }
+
+  return {
+    text: sections.length ? `📋 <b>Resumen</b>\n\n${sections.join('\n\n')}` : '',
+    buttons,
+    empty: sections.length === 0
+  };
+}
+
+async function lastDigestAt(tenantId: string): Promise<Date> {
+  const [last] = await db
+    .select({ at: opsNotifications.createdAt })
+    .from(opsNotifications)
+    .where(and(eq(opsNotifications.tenantId, tenantId), eq(opsNotifications.kind, 'digest'), like(opsNotifications.dedupeKey, 'digest:%')))
+    .orderBy(desc(opsNotifications.createdAt))
+    .limit(1);
+  return last?.at ?? new Date(Date.now() - 24 * 3600 * 1000);
+}
+
+// Planificador: se llama cada 30 s. De lunes a viernes, a cada hora configurada.
+export async function runDigests(tenantId: string, now = new Date()): Promise<void> {
+  const cfg = await getTelegramConfig(tenantId);
+  if (!cfg) return;
+  const lp = localParts(cfg.digestTimezone, now);
+  if (lp.weekday === 'Sat' || lp.weekday === 'Sun') return;
+
+  const slots = cfg.digestTimes
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => /^\d{1,2}:\d{2}$/.test(s));
+  const slot = slots.find((s) => lp.minutes >= toMinutes(s) && lp.minutes < toMinutes(s) + DAILY_WINDOW_MINUTES);
+  if (!slot) return;
+
+  const key = `digest:${lp.date}:${slot}`;
+  const [exists] = await db
+    .select({ id: opsNotifications.id })
+    .from(opsNotifications)
+    .where(and(eq(opsNotifications.tenantId, tenantId), eq(opsNotifications.dedupeKey, key)))
+    .limit(1);
+  if (exists) return;
+  await queueDigest(tenantId, key, await lastDigestAt(tenantId));
+}
+
+async function queueDigest(tenantId: string, key: string, since: Date): Promise<boolean> {
+  const owner = await getOwnerMember(tenantId);
+  const d = await buildDigest(tenantId, since);
+  await enqueueNotification({
+    tenantId,
+    kind: 'digest',
+    dedupeKey: key,
+    forClickupUserId: owner?.clickupUserId ?? null,
+    forName: owner?.username ?? 'Dueño',
+    payload: { text: d.text, toOwner: true, buttons: d.buttons.length ? d.buttons : undefined, skipped: d.empty ? 'sin novedades' : undefined },
+    skipped: d.empty
+  });
+  return !d.empty;
+}
+
+// Botón «Enviar resumen de la bandeja ahora» (pruebas): fuerza un resumen con las últimas 24 h.
+export async function sendDigestNow(tenantId: string): Promise<{ sent: boolean }> {
+  const sent = await queueDigest(tenantId, `digest-manual:${Date.now()}`, new Date(Date.now() - 24 * 3600 * 1000));
+  return { sent };
+}

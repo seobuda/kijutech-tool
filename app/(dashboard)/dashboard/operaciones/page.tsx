@@ -7,6 +7,7 @@ import { getUser } from '@/lib/db/queries';
 import { getClickUpConnection } from '@/lib/operaciones/queries';
 import { ensureFresh, getStructure, selectedSpaces } from '@/lib/operaciones/structure';
 import { normalizeConversionState, type NoteAudioInfo } from '@/lib/operaciones/note-types';
+import { getWorkTypeOptions } from '@/lib/operaciones/work-types';
 import { BlocNotas } from './bloc-notas';
 import { SyncPending } from './sync-pending';
 
@@ -119,6 +120,7 @@ export default async function BlocNotasPage({
         key={current?.id ?? 'nueva'}
         spaces={spaces}
         clientFields={structure.clientFields}
+        workTypes={await getWorkTypeOptions(user.tenantId)}
         members={structure.members}
         meId={structure.meId ?? ''}
         history={notes.map((n) => ({

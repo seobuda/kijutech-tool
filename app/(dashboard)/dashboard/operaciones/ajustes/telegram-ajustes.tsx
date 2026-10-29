@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { saveDigestSettings, sendDigestNowAction } from '@/lib/operaciones/flow-actions';
 import {
   activateWebhook,
   backToPolling,
@@ -46,6 +47,8 @@ export type TelegramNotificationView = {
 };
 
 export type TelegramView = {
+  digestTimes: string;
+  digestTimezone: string;
   hasBot: boolean;
   botName: string | null;
   botUsername: string | null;
@@ -74,7 +77,12 @@ const TIMEZONES = [
 const KIND_LABEL: Record<string, string> = {
   new_request: 'Encargo nuevo',
   daily_summary: 'Resumen diario',
-  test: 'Prueba'
+  test: 'Prueba',
+  review_request: 'Revisión urgente',
+  block_alert: 'Bloqueo urgente',
+  reply: 'Respuesta a la persona',
+  returned: 'Devolución',
+  digest: 'Resumen de la bandeja'
 };
 
 const dateTimeFmt = new Intl.DateTimeFormat('es-ES', {
@@ -261,6 +269,9 @@ export function TelegramAjustes({ view }: { view: TelegramView }) {
                 ))}
               </datalist>
             </div>
+
+            {/* Resúmenes de la bandeja (cortafuegos) */}
+            <DigestBox view={view} />
 
             {/* Recepción */}
             <div className="space-y-2 rounded-md border border-gray-200 p-3">
@@ -530,6 +541,60 @@ function MemberRow({ m, botReady }: { m: TelegramMemberView; botReady: boolean }
           }
         >
           Guardar
+        </Button>
+      </div>
+      {msg && <p className={`text-xs ${msg.type === 'ok' ? 'text-green-700' : 'text-red-600'}`}>{msg.text}</p>}
+    </div>
+  );
+}
+
+// Cortafuegos de avisos: solo lo urgente llega al instante; el resto, en dos resúmenes al día.
+function DigestBox({ view }: { view: TelegramView }) {
+  const router = useRouter();
+  const [times, setTimes] = useState(view.digestTimes.split(',').join(', '));
+  const [tz, setTz] = useState(view.digestTimezone);
+  const [msg, setMsg] = useState<Msg>(null);
+  const [pending, startTransition] = useTransition();
+
+  const run = (fn: () => Promise<{ ok: boolean; error?: string; sent?: boolean }>, text: (r: { sent?: boolean }) => string) =>
+    startTransition(async () => {
+      setMsg(null);
+      const res = await fn();
+      setMsg(res.ok ? { type: 'ok', text: text(res) } : { type: 'error', text: res.error ?? 'Error' });
+      router.refresh();
+    });
+
+  return (
+    <div className="space-y-2 rounded-md border border-gray-200 p-3">
+      <p className="font-medium text-sm">Resúmenes de «Mi bandeja» para ti</p>
+      <p className="text-xs text-muted-foreground">
+        Solo los bloqueos y las revisiones de encargos <strong>urgentes</strong> te llegan al instante. Todo lo demás
+        (qué se ha completado, qué ha resuelto el agente solo y qué necesita de ti) va en estos resúmenes, de lunes a
+        viernes.
+      </p>
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="space-y-1">
+          <Label htmlFor="digest-times">Horas (HH:MM, separadas por comas)</Label>
+          <Input id="digest-times" className="w-48" value={times} onChange={(e) => setTimes(e.target.value)} />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="digest-tz">Zona horaria</Label>
+          <Input id="digest-tz" className="w-48" list="tz-list" value={tz} onChange={(e) => setTz(e.target.value)} />
+        </div>
+        <Button size="sm" disabled={pending} onClick={() => run(() => saveDigestSettings(times, tz), () => 'Horas guardadas.')}>
+          Guardar
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={pending}
+          onClick={() =>
+            run(sendDigestNowAction, (r) =>
+              r.sent ? 'Resumen en cola: te llegará en unos segundos.' : 'No hay novedades ni nada pendiente de ti: no hay nada que enviar.'
+            )
+          }
+        >
+          Enviar resumen de la bandeja ahora
         </Button>
       </div>
       {msg && <p className={`text-xs ${msg.type === 'ok' ? 'text-green-700' : 'text-red-600'}`}>{msg.text}</p>}

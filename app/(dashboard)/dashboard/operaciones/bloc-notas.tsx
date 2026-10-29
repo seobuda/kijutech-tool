@@ -135,6 +135,7 @@ function mmss(s: number) {
 export function BlocNotas({
   spaces,
   clientFields,
+  workTypes,
   members,
   meId,
   history,
@@ -142,6 +143,7 @@ export function BlocNotas({
 }: {
   spaces: ClickUpSpaceWithLists[];
   clientFields: ClientFields;
+  workTypes: { key: string; label: string }[];
   members: Member[];
   meId: string;
   history: HistoryRow[];
@@ -562,6 +564,7 @@ export function BlocNotas({
             proposal={{ items: conversion.items, notConverted: conversion.notConverted }}
             spaces={spaces}
             clientFields={clientFields}
+            workTypes={workTypes}
             spaceId={spaceId}
             members={members}
             onBack={async () => {
@@ -899,6 +902,7 @@ function ReviewPanel({
   proposal,
   spaces,
   clientFields,
+  workTypes,
   spaceId,
   members,
   onBack,
@@ -908,6 +912,7 @@ function ReviewPanel({
   proposal: NoteProposal;
   spaces: ClickUpSpaceWithLists[];
   clientFields: ClientFields;
+  workTypes: { key: string; label: string }[];
   spaceId: string;
   members: Member[];
   onBack: () => void;
@@ -947,7 +952,9 @@ function ReviewPanel({
           assigneeName: i.assigneeName,
           dueDate: i.dueDate,
           priority: i.priority,
-          clientOptionId: i.clientOptionId ?? ''
+          clientOptionId: i.clientOptionId ?? '',
+          workTypeKey: i.workTypeKey ?? '',
+          requiresReview: Boolean(i.requiresReview)
         }))
       );
     } catch {
@@ -1070,6 +1077,34 @@ function ReviewPanel({
               disabled={sent}
               onChange={(o) => update(item.key, { clientOptionId: o?.id ?? '', clientName: o?.label ?? '' })}
             />
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <Label>Tipo de trabajo</Label>
+                <select
+                  className={selectClass}
+                  value={item.workTypeKey ?? ''}
+                  disabled={sent}
+                  onChange={(e) => update(item.key, { workTypeKey: e.target.value })}
+                >
+                  <option value="">Sin tipo</option>
+                  {workTypes.map((t) => (
+                    <option key={t.key} value={t.key}>
+                      {t.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <label className="flex items-center gap-2 text-sm pt-6">
+                <input
+                  type="checkbox"
+                  checked={Boolean(item.requiresReview)}
+                  disabled={sent}
+                  onChange={(e) => update(item.key, { requiresReview: e.target.checked })}
+                />
+                Requiere mi revisión
+              </label>
+            </div>
 
             <div className="grid gap-3 sm:grid-cols-4">
               <div className="space-y-1">

@@ -27,11 +27,13 @@ const selectClass =
 export function NuevoEncargoForm({
   spaces,
   clientFields,
+  workTypes,
   members,
   meId
 }: {
   spaces: ClickUpSpaceWithLists[];
   clientFields: Record<string, { name: string; options: { id: string; label: string }[] }>;
+  workTypes: { key: string; label: string }[];
   members: { id: string; username: string }[];
   meId: string;
 }) {
@@ -46,6 +48,8 @@ export function NuevoEncargoForm({
   const [dueDate, setDueDate] = useState('');
   const [priority, setPriority] = useState('3');
   const [clientOptionId, setClientOptionId] = useState('');
+  const [workTypeKey, setWorkTypeKey] = useState('');
+  const [requiresReview, setRequiresReview] = useState(false);
   const [clientHint, setClientHint] = useState(false); // la IA lo intentó y no encontró uno claro
 
   const [aiError, setAiError] = useState<string | null>(null);
@@ -96,7 +100,9 @@ export function NuevoEncargoForm({
         assigneeName: assignee?.username ?? null,
         dueDate: dueDate || null,
         priority: priority ? Number(priority) : null,
-        clientOptionId: clientField ? clientOptionId : ''
+        clientOptionId: clientField ? clientOptionId : '',
+        workTypeKey,
+        requiresReview
       });
       if ('requestId' in res && res.requestId) setResult(res as SyncResult);
       else if (!res.ok) setFormError(res.error);
@@ -115,6 +121,8 @@ export function NuevoEncargoForm({
     setDueDate('');
     setPriority('3');
     setClientOptionId('');
+    setWorkTypeKey('');
+    setRequiresReview(false);
     setClientHint(false);
     setResult(null);
     setFormError(null);
@@ -297,6 +305,29 @@ export function NuevoEncargoForm({
               )}
             </div>
           )}
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="worktype">Tipo de trabajo</Label>
+              <select
+                id="worktype"
+                className={selectClass}
+                value={workTypeKey}
+                onChange={(e) => setWorkTypeKey(e.target.value)}
+              >
+                <option value="">Sin tipo</option>
+                {workTypes.map((t) => (
+                  <option key={t.key} value={t.key}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <label className="flex items-center gap-2 text-sm pt-7">
+              <input type="checkbox" checked={requiresReview} onChange={(e) => setRequiresReview(e.target.checked)} />
+              Requiere mi revisión
+            </label>
+          </div>
 
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="space-y-2">

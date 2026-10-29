@@ -10,6 +10,7 @@ import { extractJsonFromLLMResponse } from '@/lib/ai/parsers/json-extractor';
 import { OPS_TIMEZONE } from '@/lib/operaciones/clickup';
 import { syncToClickUp, type SyncResult } from '@/lib/operaciones/sync';
 import { buildDescription, fillTemplate } from '@/lib/operaciones/format';
+import { validWorkTypeKey } from '@/lib/operaciones/work-types';
 import { clientFieldForList, getStructure, matchClientOption, validClient } from '@/lib/operaciones/structure';
 
 const PREPARE_MAX_TOKENS = 2000;
@@ -124,7 +125,9 @@ const createSchema = z.object({
     .nullable()
     .default(null),
   priority: z.number().int().min(1).max(4).nullable().default(null),
-  clientOptionId: z.string().default('')
+  clientOptionId: z.string().default(''),
+  workTypeKey: z.string().default(''),
+  requiresReview: z.boolean().default(false)
 });
 
 export type CreateRequestInput = z.input<typeof createSchema>;
@@ -155,6 +158,8 @@ export async function createRequest(
       dueDate: d.dueDate,
       priority: d.priority,
       ...validClient(await getStructure(user.tenantId), d.listId, d.clientOptionId),
+      workTypeKey: await validWorkTypeKey(user.tenantId, d.workTypeKey),
+      reviewerKey: d.requiresReview ? 'owner' : null,
       status: 'pendiente_clickup'
     })
     .returning({ id: opsRequests.id });

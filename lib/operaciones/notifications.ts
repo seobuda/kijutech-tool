@@ -33,15 +33,21 @@ type Payload = {
   text: string; // cuerpo en HTML (sin la cabecera de modo pruebas)
   testMode: boolean;
   seenButton?: boolean;
-  sentText?: string; // lo que realmente se envió (para editarlo al pulsar "Visto")
+  actions?: boolean; // aviso de encargo con los botones del flujo (Empezar, Bloqueado, Hecho…)
+  buttons?: { text: string; data: string }[][]; // botones propios de otros avisos (revisión, bloqueo, resumen…)
+  toOwner?: boolean; // aviso dirigido al dueño: en modo pruebas no lleva la cabecera "iba dirigido a"
+  photoFileId?: string; // captura adjunta (file_id de Telegram)
+  sentText?: string; // lo que realmente se envió (para editarlo al pulsar un botón)
   skipped?: string; // resumen omitido (p. ej. "sin tareas")
 };
+
+export type { Payload as NotificationPayload };
 
 // ---------------------------------------------------------------------------
 // Formato
 // ---------------------------------------------------------------------------
 
-function fmtDay(ms: number, timezone: string): string {
+export function fmtDay(ms: number, timezone: string): string {
   return new Intl.DateTimeFormat('es-ES', {
     timeZone: timezone,
     weekday: 'short',
@@ -116,7 +122,7 @@ export async function enqueueNewRequestNotification(requestId: string): Promise<
       .join('\n')
   );
 
-  const payload: Payload = { text, testMode: cfg.testMode, seenButton: true };
+  const payload: Payload = { text, testMode: cfg.testMode, seenButton: true, actions: true };
   const inserted = await db
     .insert(opsNotifications)
     .values({
@@ -133,6 +139,108 @@ export async function enqueueNewRequestNotification(requestId: string): Promise<
     .returning({ id: opsNotifications.id });
 
   if (inserted.length > 0) void processNotifications(req.tenantId);
+}
+
+// Encola un aviso del flujo (revisión, bloqueo, respuesta, devolución, resumen). Se inserta primero
+// (dedupe_key único) y se envía después. Nunca lanza: un fallo de Telegram no rompe la acción.
+export async function enqueueNotification(input: {
+  tenantId: string;
+  kind: 'review_request' | 'block_alert' | 'reply' | 'returned' | 'digest';
+  dedupeKey: string;
+  forClickupUserId: string | null;
+  forName: string | null;
+  requestId?: string | null;
+  payload: Omit<Payload, 'testMode'>;
+  skipped?: boolean;
+}): Promise<void> {
+  const cfg = await getTelegramConfig(input.tenantId);
+  if (!cfg) return;
+  await db
+    .insert(opsNotifications)
+    .values({
+      tenantId: input.tenantId,
+      kind: input.kind,
+      dedupeKey: input.dedupeKey,
+      forClickupUserId: input.forClickupUserId,
+      forName: input.forName,
+      requestId: input.requestId ?? null,
+      payload: { ...input.payload, testMode: cfg.testMode } satisfies Payload,
+      status: input.skipped ? 'enviado' : 'pendiente'
+    })
+    .onConflictDoNothing();
+  if (!input.skipped) void processNotifications(input.tenantId);
+}
+
+// Teclado del aviso de encargo según el estado del encargo: solo se ofrece lo que tiene sentido ahora.
+export function noticeKeyboard(
+  req: { id: string; seenAt: Date | null; workStatus: string },
+  notifId: string
+): { text: string; callback_data: string }[][] {
+  const rows: { text: string; callback_data: string }[][] = [];
+  const open = ['asignado', 'en_curso', 'devuelto', 'bloqueado'].includes(req.workStatus);
+  if (!req.seenAt) rows.push([{ text: '✅ Visto', callback_data: `seen:${notifId}` }]);
+  if (!open) return rows;
+  const first: { text: string; callback_data: string }[] = [];
+  if (['asignado', 'devuelto', 'bloqueado'].includes(req.workStatus)) {
+    first.push({ text: '▶️ Empezar', callback_data: `st:${req.id}` });
+  }
+  if (req.workStatus !== 'bloqueado') first.push({ text: '🚫 Bloqueado', callback_data: `bl:${req.id}` });
+  if (first.length) rows.push(first);
+  rows.push([
+    { text: '✅ Hecho', callback_data: `dn:${req.id}` },
+    { text: '👀 Hecho, ¿lo revisas?', callback_data: `dr:${req.id}` }
+  ]);
+  return rows;
+}
+
+const STATUS_LINE: Record<string, string> = {
+  asignado: '',
+  en_curso: '▶️ En curso',
+  bloqueado: '🚫 Bloqueado (esperando respuesta)',
+  en_revision: '👀 En revisión',
+  devuelto: '↩️ Devuelto: en curso de nuevo',
+  completado: '✅ Completado'
+};
+
+// Reescribe el aviso de encargo ya enviado (estado actual y botones vigentes). Nunca lanza.
+export async function refreshNotice(tenantId: string, requestId: string): Promise<void> {
+  try {
+    const [req] = await db
+      .select()
+      .from(opsRequests)
+      .where(and(eq(opsRequests.id, requestId), eq(opsRequests.tenantId, tenantId)))
+      .limit(1);
+    if (!req) return;
+    const [n] = await db
+      .select()
+      .from(opsNotifications)
+      .where(
+        and(
+          eq(opsNotifications.tenantId, tenantId),
+          eq(opsNotifications.requestId, requestId),
+          eq(opsNotifications.kind, 'new_request'),
+          eq(opsNotifications.status, 'enviado')
+        )
+      )
+      .limit(1);
+    const cfg = await getTelegramConfig(tenantId);
+    if (!n || !cfg || !n.chatId || !n.telegramMessageId) return;
+    const payload = n.payload as Payload;
+    const lines: string[] = [];
+    if (req.seenAt) lines.push('✅ <b>Visto</b>');
+    if (STATUS_LINE[req.workStatus]) lines.push(`<b>${STATUS_LINE[req.workStatus]}</b>`);
+    const text = `${payload.sentText ?? payload.text}${lines.length ? `\n\n${lines.join(' · ')}` : ''}`;
+    await tg(decodeBotToken(cfg), 'editMessageText', {
+      chat_id: n.chatId,
+      message_id: n.telegramMessageId,
+      text: clampMessage(text),
+      parse_mode: 'HTML',
+      disable_web_page_preview: true,
+      reply_markup: { inline_keyboard: noticeKeyboard(req, n.id) }
+    });
+  } catch {
+    // el mensaje pudo borrarse o no haber cambiado: no es crítico
+  }
 }
 
 export async function enqueueTestNotification(tenantId: string): Promise<void> {
@@ -156,6 +264,7 @@ type Claimed = {
   kind: string;
   for_clickup_user_id: string | null;
   for_name: string | null;
+  request_id: string | null;
   payload: Payload;
   attempts: number;
 };
@@ -164,7 +273,7 @@ async function resolveChat(
   c: Claimed
 ): Promise<{ chatId: number } | { error: string }> {
   // Los avisos de prueba y todo lo de modo pruebas van al dueño.
-  if (c.kind === 'test' || c.payload.testMode) {
+  if (c.kind === 'test' || c.payload.testMode || c.payload.toOwner) {
     const owner = await getOwnerMember(c.tenant_id);
     if (owner?.telegramChatId) return { chatId: owner.telegramChatId };
     return {
@@ -196,21 +305,41 @@ async function sendOne(c: Claimed): Promise<void> {
   if ('error' in dest) return fail(dest.error);
 
   const header =
-    c.payload.testMode && c.kind !== 'test'
+    c.payload.testMode && c.kind !== 'test' && !c.payload.toOwner
       ? `🧪 <i>Modo pruebas · iba dirigido a: ${escapeHtml(c.for_name ?? '—')}</i>\n\n`
       : '';
   const text = clampMessage(`${header}${c.payload.text}`);
 
   try {
-    const msg = await tg<{ message_id: number }>(decodeBotToken(cfg), 'sendMessage', {
-      chat_id: dest.chatId,
-      text,
-      parse_mode: 'HTML',
-      disable_web_page_preview: true,
-      ...(c.payload.seenButton
-        ? { reply_markup: { inline_keyboard: [[{ text: '✅ Visto', callback_data: `seen:${c.id}` }]] } }
-        : {})
-    });
+    let keyboard: { text: string; callback_data: string }[][] | null = null;
+    if (c.payload.actions) {
+      const [req] = c.request_id
+        ? await db.select().from(opsRequests).where(eq(opsRequests.id, c.request_id)).limit(1)
+        : [];
+      keyboard = req
+        ? noticeKeyboard(req, c.id)
+        : [[{ text: '✅ Visto', callback_data: `seen:${c.id}` }]];
+    } else if (c.payload.seenButton) {
+      keyboard = [[{ text: '✅ Visto', callback_data: `seen:${c.id}` }]];
+    } else if (c.payload.buttons?.length) {
+      keyboard = c.payload.buttons.map((row) => row.map((b) => ({ text: b.text, callback_data: b.data })));
+    }
+    const markup = keyboard && keyboard.length ? { reply_markup: { inline_keyboard: keyboard } } : {};
+    const msg = c.payload.photoFileId
+      ? await tg<{ message_id: number }>(decodeBotToken(cfg), 'sendPhoto', {
+          chat_id: dest.chatId,
+          photo: c.payload.photoFileId,
+          caption: clampMessage(text, 1000),
+          parse_mode: 'HTML',
+          ...markup
+        })
+      : await tg<{ message_id: number }>(decodeBotToken(cfg), 'sendMessage', {
+          chat_id: dest.chatId,
+          text,
+          parse_mode: 'HTML',
+          disable_web_page_preview: true,
+          ...markup
+        });
     await db
       .update(opsNotifications)
       .set({
@@ -249,7 +378,7 @@ export async function processNotifications(tenantId?: string): Promise<number> {
           ORDER BY created_at
           LIMIT 10
           FOR UPDATE SKIP LOCKED)
-        RETURNING id, tenant_id, kind, for_clickup_user_id, for_name, payload, attempts
+        RETURNING id, tenant_id, kind, for_clickup_user_id, for_name, request_id, payload, attempts
       `)) as unknown as Claimed[];
       if (rows.length === 0) break;
       for (const c of rows) {
@@ -276,7 +405,7 @@ export async function retryNotification(tenantId: string, id: string) {
 // Resumen diario
 // ---------------------------------------------------------------------------
 
-function localParts(timezone: string, now: Date) {
+export function localParts(timezone: string, now: Date) {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: timezone,
     year: 'numeric',
@@ -295,7 +424,7 @@ function localParts(timezone: string, now: Date) {
   };
 }
 
-const toMinutes = (hhmm: string) => {
+export const toMinutes = (hhmm: string) => {
   const [h, m] = hhmm.split(':').map(Number);
   return h * 60 + m;
 };

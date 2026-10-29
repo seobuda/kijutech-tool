@@ -914,6 +914,8 @@ export const opsClickupLists = pgTable(
     clientFieldId: varchar('client_field_id', { length: 50 }),
     // Cuándo se comprobaron los campos de esta lista (null = nunca).
     fieldsSyncedAt: timestamp('fields_synced_at'),
+    // Estados de la lista: [{ status, type }] (type: open | custom | done | closed).
+    statuses: jsonb('statuses').$type<{ status: string; type: string }[]>(),
   },
   (table) => [
     unique('ops_clickup_lists_tenant_list_unique').on(table.tenantId, table.clickupListId),
@@ -1089,9 +1091,20 @@ export const opsRequests = pgTable(
     // Opción elegida del campo personalizado "Cliente" de ClickUp (null = sin cliente).
     clientOptionId: varchar('client_option_id', { length: 50 }),
     clientName: varchar('client_name', { length: 255 }),
+    // Flujo de trabajo (paso 5): asignado → en_curso → (bloqueado) → en_revision → completado.
+    workStatus: varchar('work_status', { length: 20 }).notNull().default('asignado'),
+    workStatusAt: timestamp('work_status_at').notNull().defaultNow(),
+    workTypeKey: varchar('work_type_key', { length: 40 }),
+    // null = sin revisión; 'owner' = la persona que lleva las operaciones; futuro: revisores automáticos.
+    reviewerKey: varchar('reviewer_key', { length: 30 }),
+    doneNote: text('done_note'),
   },
   (table) => [
     index('ops_requests_note_idx').on(table.noteId),
+    check(
+      'ops_requests_work_status_check',
+      sql`${table.workStatus} IN ('asignado', 'en_curso', 'bloqueado', 'en_revision', 'devuelto', 'completado')`
+    ),
     check(
       'ops_requests_status_check',
       sql`${table.status} IN ('pendiente_clickup', 'creado', 'error_sync')`
@@ -1136,6 +1149,9 @@ export const opsTelegramConfig = pgTable('ops_telegram_config', {
   // Último error de la escucha (p. ej. "CONFLICTO: otro proceso escucha este bot").
   lastError: text('last_error'),
   lastErrorAt: timestamp('last_error_at'),
+  // Horas (HH:MM separadas por coma) de los resúmenes para el dueño, en su zona horaria.
+  digestTimes: varchar('digest_times', { length: 40 }).notNull().default('13:00,18:00'),
+  digestTimezone: varchar('digest_timezone', { length: 60 }).notNull().default('Europe/Madrid'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
@@ -1196,10 +1212,145 @@ export const opsNotifications = pgTable(
     check('ops_notifications_status_check', sql`${table.status} IN ('pendiente', 'enviado', 'fallido')`),
     check(
       'ops_notifications_kind_check',
-      sql`${table.kind} IN ('new_request', 'daily_summary', 'test')`
+      sql`${table.kind} IN ('new_request', 'daily_summary', 'test', 'review_request', 'block_alert', 'reply', 'returned', 'digest')`
     ),
   ]
 );
+
+// ---------------------------------------------------------------------------
+// Operaciones · paso 5: flujo de trabajo desde Telegram
+// ---------------------------------------------------------------------------
+
+// Tipos de trabajo (editables).
+export const opsWorkTypes = pgTable(
+  'ops_work_types',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    key: varchar('key', { length: 40 }).notNull(),
+    label: varchar('label', { length: 100 }).notNull(),
+    sortOrder: integer('sort_order').notNull().default(0),
+    active: boolean('active').notNull().default(true),
+  },
+  (table) => [unique('ops_work_types_tenant_key_unique').on(table.tenantId, table.key)]
+);
+
+// Correspondencia de estados de ClickUp por lista (editable en Ajustes).
+export const opsStatusMap = pgTable(
+  'ops_status_map',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    clickupListId: varchar('clickup_list_id', { length: 50 }).notNull(),
+    inProgressStatus: varchar('in_progress_status', { length: 100 }),
+    inReviewStatus: varchar('in_review_status', { length: 100 }),
+    doneStatus: varchar('done_status', { length: 100 }),
+    // true = la cambió una persona (no se vuelve a proponer automáticamente).
+    edited: boolean('edited').notNull().default(false),
+  },
+  (table) => [unique('ops_status_map_tenant_list_unique').on(table.tenantId, table.clickupListId)]
+);
+
+// Bloqueos que comunica una persona desde Telegram.
+export const opsBlockers = pgTable(
+  'ops_blockers',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    requestId: uuid('request_id').references(() => opsRequests.id, { onDelete: 'set null' }),
+    askedByClickupId: varchar('asked_by_clickup_id', { length: 50 }),
+    askedByName: varchar('asked_by_name', { length: 255 }),
+    question: text('question').notNull(),
+    attachmentFileId: text('attachment_file_id'),
+    status: varchar('status', { length: 20 }).notNull().default('abierto'),
+    aiAnswer: text('ai_answer'),
+    aiSource: text('ai_source'),
+    aiSummary: text('ai_summary'),
+    aiOptions: jsonb('ai_options'),
+    aiRecommendation: text('ai_recommendation'),
+    ownerAnswer: text('owner_answer'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    answeredAt: timestamp('answered_at'),
+  },
+  (table) => [
+    index('ops_blockers_status_idx').on(table.tenantId, table.status, table.createdAt),
+    check(
+      'ops_blockers_status_check',
+      sql`${table.status} IN ('abierto', 'respondido_agente', 'escalado', 'respondido_owner')`
+    ),
+  ]
+);
+
+// Eventos: cada pulsación de botón y acción del bot. Solo se guardan (medición futura).
+export const opsRequestEvents = pgTable(
+  'ops_request_events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    requestId: uuid('request_id').references(() => opsRequests.id, { onDelete: 'set null' }),
+    personClickupUserId: varchar('person_clickup_user_id', { length: 50 }),
+    personName: varchar('person_name', { length: 255 }),
+    eventType: varchar('event_type', { length: 40 }).notNull(),
+    payload: jsonb('payload'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    index('ops_request_events_req_idx').on(table.requestId, table.createdAt),
+    index('ops_request_events_tenant_idx').on(table.tenantId, table.createdAt),
+  ]
+);
+
+// Bandeja de salida hacia ClickUp (cambios de estado y comentarios, con reintentos).
+export const opsClickupOutbox = pgTable(
+  'ops_clickup_outbox',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    requestId: uuid('request_id').references(() => opsRequests.id, { onDelete: 'set null' }),
+    action: varchar('action', { length: 20 }).notNull(),
+    payload: jsonb('payload').notNull(),
+    dedupeKey: varchar('dedupe_key', { length: 200 }).notNull(),
+    status: varchar('status', { length: 10 }).notNull().default('pendiente'),
+    attempts: integer('attempts').notNull().default(0),
+    lastError: text('last_error'),
+    nextAttemptAt: timestamp('next_attempt_at').notNull().defaultNow(),
+    doneAt: timestamp('done_at'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    unique('ops_clickup_outbox_tenant_dedupe_unique').on(table.tenantId, table.dedupeKey),
+    index('ops_outbox_status_idx').on(table.status, table.nextAttemptAt),
+    check('ops_outbox_status_check', sql`${table.status} IN ('pendiente', 'hecho', 'fallido')`),
+    check('ops_outbox_action_check', sql`${table.action} IN ('set_status', 'comment')`),
+  ]
+);
+
+// Conversación pendiente del bot (esperando enlace, motivo, pregunta o respuesta).
+export const opsTelegramPending = pgTable('ops_telegram_pending', {
+  chatId: bigint('chat_id', { mode: 'number' }).primaryKey(),
+  tenantId: uuid('tenant_id')
+    .notNull()
+    .references(() => tenants.id, { onDelete: 'cascade' }),
+  kind: varchar('kind', { length: 20 }).notNull(),
+  requestId: uuid('request_id').references(() => opsRequests.id, { onDelete: 'cascade' }),
+  blockerId: uuid('blocker_id').references(() => opsBlockers.id, { onDelete: 'cascade' }),
+  expiresAt: timestamp('expires_at').notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+export type OpsBlocker = typeof opsBlockers.$inferSelect;
+export type OpsWorkType = typeof opsWorkTypes.$inferSelect;
+export type OpsStatusMap = typeof opsStatusMap.$inferSelect;
 
 export type OpsTelegramConfig = typeof opsTelegramConfig.$inferSelect;
 export type OpsTelegramMember = typeof opsTelegramMembers.$inferSelect;

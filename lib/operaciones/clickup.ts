@@ -219,7 +219,14 @@ export async function getMe(token: string): Promise<{ id: number; username: stri
 }
 
 // clientFieldId: campo personalizado "Cliente" de la lista (solo viene de la caché de estructura).
-export type ClickUpList = { id: string; name: string; folder: string | null; clientFieldId?: string | null };
+export type ClickUpStatus = { status: string; type: string };
+export type ClickUpList = {
+  id: string;
+  name: string;
+  folder: string | null;
+  clientFieldId?: string | null;
+  statuses?: ClickUpStatus[] | null;
+};
 export type ClickUpSpaceWithLists = { id: string; name: string; lists: ClickUpList[] };
 
 // Espacios del workspace (sin sus listas): 1 petición.
@@ -236,16 +243,21 @@ export async function getSpacesBasic(
 
 // Listas reales de un espacio (las sueltas y las de dentro de carpetas): 2 peticiones.
 export async function getSpaceLists(token: string, spaceId: string): Promise<ClickUpList[]> {
+  type RawList = { id: string; name: string; statuses?: { status: string; type: string }[] };
   const [folderless, folders] = await Promise.all([
-    cu<{ lists: { id: string; name: string }[] }>(token, `/space/${spaceId}/list?archived=false`),
-    cu<{ folders: { id: string; name: string; lists: { id: string; name: string }[] }[] }>(
+    cu<{ lists: RawList[] }>(token, `/space/${spaceId}/list?archived=false`),
+    cu<{ folders: { id: string; name: string; lists: RawList[] }[] }>(
       token,
       `/space/${spaceId}/folder?archived=false`
     )
   ]);
+  // Los estados vienen en la propia respuesta de las listas: no cuestan peticiones extra.
+  const st = (l: RawList) => (l.statuses ? l.statuses.map((x) => ({ status: x.status, type: x.type })) : null);
   return [
-    ...folderless.lists.map((l) => ({ id: l.id, name: l.name, folder: null })),
-    ...folders.folders.flatMap((f) => f.lists.map((l) => ({ id: l.id, name: l.name, folder: f.name })))
+    ...folderless.lists.map((l) => ({ id: l.id, name: l.name, folder: null, statuses: st(l) })),
+    ...folders.folders.flatMap((f) =>
+      f.lists.map((l) => ({ id: l.id, name: l.name, folder: f.name, statuses: st(l) }))
+    )
   ];
 }
 
@@ -521,4 +533,64 @@ export async function getListFields(token: string, listId: string): Promise<Clic
     type: f.type,
     options: (f.type_config?.options ?? []).map((o) => ({ id: o.id, label: (o.name ?? o.label ?? '').trim() }))
   }));
+}
+
+// ---------------------------------------------------------------------------
+// Estados y comentarios (flujo de trabajo del paso 5)
+// ---------------------------------------------------------------------------
+
+async function cuPut<T>(token: string, path: string, body: unknown): Promise<T> {
+  const res = await cuFetch(`${BASE_URL}${path}`, {
+    method: 'PUT',
+    headers: { Authorization: token, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    cache: 'no-store'
+  });
+  if (!res.ok) throw await errorFrom(res);
+  return res.json() as Promise<T>;
+}
+
+export async function updateTaskStatus(token: string, taskId: string, status: string): Promise<void> {
+  await cuPut(token, `/task/${taskId}`, { status });
+}
+
+export async function addTaskComment(token: string, taskId: string, text: string): Promise<void> {
+  await cuSend(token, `/task/${taskId}/comment`, { comment_text: text, notify_all: false });
+}
+
+export type TaskContext = {
+  name: string;
+  status: string;
+  description: string;
+  comments: { author: string; text: string; date: number }[];
+};
+
+// Tarea + comentarios para que la IA responda a un bloqueo: 2 peticiones.
+export async function getTaskContext(token: string, taskId: string): Promise<TaskContext> {
+  const [task, comments] = await Promise.all([
+    cu<{ name: string; status?: { status: string }; text_content?: string; description?: string }>(
+      token,
+      `/task/${taskId}`
+    ),
+    cu<{ comments: { comment_text: string; user?: { username: string }; date: string }[] }>(
+      token,
+      `/task/${taskId}/comment`
+    )
+  ]);
+  return {
+    name: task.name,
+    status: task.status?.status ?? '',
+    description: task.text_content ?? task.description ?? '',
+    comments: (comments.comments ?? []).map((c) => ({
+      author: c.user?.username ?? '—',
+      text: c.comment_text,
+      date: Number(c.date)
+    }))
+  };
+}
+
+// Estados de una lista concreta (algunas listas no traen "statuses" en la consulta del espacio): 1 petición.
+export async function getListStatuses(token: string, listId: string): Promise<ClickUpStatus[]> {
+  const list = await cu<{ statuses?: { status: string; type: string }[] }>(token, `/list/${listId}`);
+  return (list.statuses ?? []).map((x) => ({ status: x.status, type: x.type }));
 }

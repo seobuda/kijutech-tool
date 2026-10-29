@@ -37,6 +37,8 @@ export default async function TelegramPage() {
     webhookUrl: tgCfg?.webhookUrl ?? null,
     pollAgeSeconds: tgCfg?.lastPollAt ? Math.round((Date.now() - tgCfg.lastPollAt.getTime()) / 1000) : null,
     lastError: tgCfg?.lastError ?? null,
+    digestTimes: tgCfg?.digestTimes ?? '13:00,18:00',
+    digestTimezone: tgCfg?.digestTimezone ?? 'Europe/Madrid',
     workerRole: worker?.role ?? 'unknown',
     members: tgMembers.map((m) => ({
       clickupUserId: m.clickupUserId,

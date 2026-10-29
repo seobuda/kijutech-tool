@@ -15,9 +15,11 @@ import {
   opsClickupSpaces
 } from '@/lib/db/schema';
 import { getClickUpToken } from '@/lib/operaciones/queries';
+import { proposeStatusMaps } from '@/lib/operaciones/status-map';
 import {
   ClickUpError,
   getListFields,
+  getListStatuses,
   getMe,
   getSpaceLists,
   getSpacesBasic,
@@ -167,7 +169,8 @@ async function replaceLists(tenantId: string, bySpace: Map<string, ClickUpList[]
     .select({
       id: opsClickupLists.clickupListId,
       clientFieldId: opsClickupLists.clientFieldId,
-      fieldsSyncedAt: opsClickupLists.fieldsSyncedAt
+      fieldsSyncedAt: opsClickupLists.fieldsSyncedAt,
+      statuses: opsClickupLists.statuses
     })
     .from(opsClickupLists)
     .where(eq(opsClickupLists.tenantId, tenantId));
@@ -185,6 +188,7 @@ async function replaceLists(tenantId: string, bySpace: Map<string, ClickUpList[]
             clickupSpaceId: spaceId,
             name: l.name,
             folderName: l.folder,
+            statuses: l.statuses ?? oldById.get(l.id)?.statuses ?? null,
             clientFieldId: oldById.get(l.id)?.clientFieldId ?? null,
             fieldsSyncedAt: oldById.get(l.id)?.fieldsSyncedAt ?? null
           }))
@@ -288,6 +292,16 @@ async function doSync(tenantId: string): Promise<SyncOutcome> {
       structureSyncedAt: new Date()
     })
     .where(eq(opsClickupConnections.tenantId, tenantId));
+
+  // Las listas que no traen sus estados en la consulta del espacio: 1 petición cada una, solo la primera vez.
+  await fillMissingStatuses(tenantId, conn.token).catch((e) =>
+    console.error('[operaciones] estados de listas:', e instanceof Error ? e.message : e)
+  );
+
+  // Estados de ClickUp → propuesta de correspondencia (solo en listas no editadas a mano).
+  await proposeStatusMaps(tenantId).catch((e) =>
+    console.error('[operaciones] correspondencia de estados:', e instanceof Error ? e.message : e)
+  );
 
   // Los campos "Cliente" se traen aparte y en segundo plano (1 petición por lista nueva).
   void syncClientFields(tenantId);
@@ -465,4 +479,22 @@ export function matchClientOption(options: { id: string; label: string }[], text
   const t = norm(text);
   if (!t) return null;
   return options.find((o) => norm(o.label) === t) ?? null;
+}
+
+async function fillMissingStatuses(tenantId: string, token: string) {
+  const missing = await db
+    .select({ id: opsClickupLists.clickupListId })
+    .from(opsClickupLists)
+    .where(and(eq(opsClickupLists.tenantId, tenantId), isNull(opsClickupLists.statuses)));
+  for (let i = 0; i < missing.length; i += 4) {
+    const chunk = missing.slice(i, i + 4);
+    const results = await Promise.allSettled(chunk.map((l) => getListStatuses(token, l.id)));
+    for (const [idx, r] of results.entries()) {
+      if (r.status !== 'fulfilled' || r.value.length === 0) continue;
+      await db
+        .update(opsClickupLists)
+        .set({ statuses: r.value })
+        .where(and(eq(opsClickupLists.tenantId, tenantId), eq(opsClickupLists.clickupListId, chunk[idx].id)));
+    }
+  }
 }
