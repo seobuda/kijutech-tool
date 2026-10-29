@@ -910,11 +910,33 @@ export const opsClickupLists = pgTable(
     name: varchar('name', { length: 255 }).notNull(),
     folderName: varchar('folder_name', { length: 255 }),
     syncedAt: timestamp('synced_at').notNull().defaultNow(),
+    // Campo personalizado "Cliente" de la lista (ops_clickup_fields.clickup_field_id); null = no tiene.
+    clientFieldId: varchar('client_field_id', { length: 50 }),
+    // Cuándo se comprobaron los campos de esta lista (null = nunca).
+    fieldsSyncedAt: timestamp('fields_synced_at'),
   },
   (table) => [
     unique('ops_clickup_lists_tenant_list_unique').on(table.tenantId, table.clickupListId),
     index('ops_clickup_lists_tenant_space_idx').on(table.tenantId, table.clickupSpaceId),
   ]
+);
+
+// Campos personalizados desplegables (p. ej. "Cliente") con sus opciones. Se guardan una sola
+// vez por campo: el mismo campo vale para muchas listas.
+export const opsClickupFields = pgTable(
+  'ops_clickup_fields',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    clickupFieldId: varchar('clickup_field_id', { length: 50 }).notNull(),
+    name: varchar('name', { length: 255 }).notNull(),
+    type: varchar('type', { length: 30 }).notNull(),
+    options: jsonb('options').$type<{ id: string; label: string }[]>().notNull().default([]),
+    syncedAt: timestamp('synced_at').notNull().defaultNow(),
+  },
+  (table) => [unique('ops_clickup_fields_tenant_field_unique').on(table.tenantId, table.clickupFieldId)]
 );
 
 export const opsClickupMembers = pgTable(
@@ -1064,6 +1086,9 @@ export const opsRequests = pgTable(
     // "✅ Visto" pulsado en Telegram por el chat del responsable (o el mío en modo pruebas).
     seenAt: timestamp('seen_at'),
     seenBy: varchar('seen_by', { length: 255 }),
+    // Opción elegida del campo personalizado "Cliente" de ClickUp (null = sin cliente).
+    clientOptionId: varchar('client_option_id', { length: 50 }),
+    clientName: varchar('client_name', { length: 255 }),
   },
   (table) => [
     index('ops_requests_note_idx').on(table.noteId),

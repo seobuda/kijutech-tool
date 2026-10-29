@@ -6,6 +6,7 @@ import { opsNoteAudios, opsRequests } from '@/lib/db/schema';
 import { getClickUpToken } from '@/lib/operaciones/queries';
 import { attachFileToTask, createTask, findTaskByMarker } from '@/lib/operaciones/clickup';
 import { enqueueNewRequestNotification } from '@/lib/operaciones/notifications';
+import { clientFieldForList, getStructure } from '@/lib/operaciones/structure';
 
 export type SyncResult =
   | { ok: true; requestId: string; taskUrl: string; reused: boolean }
@@ -107,7 +108,18 @@ export async function syncToClickUp(
         ? `\n\n## Transcripción del audio\n${transcripts.join('\n\n')}`
         : '';
 
+      // Campo personalizado "Cliente": solo si la lista lo tiene y la opción es una de las reales.
+      // Sin campo (o sin cliente elegido) la tarea se crea igualmente, sin él.
+      const clientField = row.clientOptionId
+        ? clientFieldForList(await getStructure(tenantId), row.clickupListId)
+        : null;
+      const clientOk = clientField?.options.some((o) => o.id === row.clientOptionId);
+
       task = await createTask(conn.token, row.clickupListId, {
+        customFields:
+          clientField && clientOk && row.clientOptionId
+            ? [{ id: clientField.fieldId, value: row.clientOptionId }]
+            : undefined,
         name: row.title,
         description: `${row.preparedDescription}${transcriptBlock}\n\n${marker}`,
         assigneeId: row.assigneeClickupId ? Number(row.assigneeClickupId) : null,

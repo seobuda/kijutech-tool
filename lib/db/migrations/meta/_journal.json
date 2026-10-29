@@ -190,6 +190,20 @@
       "when": 1793273650680,
       "tag": "0026_ops_telegram",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1793295793299,
+      "tag": "0027_ops_cliente_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1793313891053,
+      "tag": "0028_ops_requests_cliente",
+      "breakpoints": true
     }
   ]
 }

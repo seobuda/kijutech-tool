@@ -37,5 +37,5 @@ export default async function NuevoEncargoPage() {
   const spaces = selectedSpaces(structure);
   if (spaces.length === 0) return <SyncPending reason="no-spaces" />;
 
-  return <NuevoEncargoForm spaces={spaces} members={structure.members} meId={structure.meId ?? ''} />;
+  return <NuevoEncargoForm spaces={spaces} clientFields={structure.clientFields} members={structure.members} meId={structure.meId ?? ''} />;
 }

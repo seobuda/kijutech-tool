@@ -26,12 +26,12 @@ export const OPS_REQUEST_PROCESS_MAP: ProcessStep[] = [
     id: 'ops-convert',
     name: 'Convertir nota en encargos (IA)',
     description:
-      'La IA lee la nota y propone uno o varios encargos, cada uno con lista del espacio, responsable, fecha y prioridad. Lo que no es un encargo se lista aparte.',
+      'La IA lee la nota y propone uno o varios encargos, cada uno con lista del espacio, responsable, cliente, fecha y prioridad. Lo que no es un encargo se lista aparte.',
     status: 'built',
     file: 'lib/operaciones/note-actions.ts',
     technicalDetail: {
       summary:
-        'Una llamada a la IA con el prompt editable ops_note_to_requests. Se le pasan las listas reales del espacio y los miembros; el servidor descarta cualquier id de lista que no exista.',
+        'Una llamada a la IA con el prompt editable ops_note_to_requests. Se le pasan las listas reales del espacio y los miembros; el servidor descarta cualquier id de lista que no exista. El cliente se elige SOLO entre las opciones reales del campo personalizado "Cliente" de la lista de destino (caché ops_clickup_fields); si no coincide exactamente con una opción, queda vacío y la tarjeta avisa.',
       stack: ['callAI() — pasarela de IA', 'Prompt en ai_prompts (editable)', 'zod'],
       keyDecisions: [
         'Devuelve también no_convertido, que se muestra bajo las tarjetas para que nada se pierda',
@@ -71,7 +71,7 @@ export const OPS_REQUEST_PROCESS_MAP: ProcessStep[] = [
     id: 'ops-create',
     name: 'Crear la tarea en ClickUp',
     description:
-      'Se crea la tarea con su descripción, responsable, fecha (sin hora) y prioridad. La descripción lleva la marca [kiju:ID].',
+      'Se crea la tarea con su descripción, responsable, fecha (sin hora), prioridad y el campo personalizado Cliente (si la lista lo tiene). La descripción lleva la marca [kiju:ID].',
     status: 'built',
     file: 'lib/operaciones/clickup.ts',
     technicalDetail: {

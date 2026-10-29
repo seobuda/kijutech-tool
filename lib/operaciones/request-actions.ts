@@ -10,6 +10,7 @@ import { extractJsonFromLLMResponse } from '@/lib/ai/parsers/json-extractor';
 import { OPS_TIMEZONE } from '@/lib/operaciones/clickup';
 import { syncToClickUp, type SyncResult } from '@/lib/operaciones/sync';
 import { buildDescription, fillTemplate } from '@/lib/operaciones/format';
+import { clientFieldForList, getStructure, matchClientOption, validClient } from '@/lib/operaciones/structure';
 
 const PREPARE_MAX_TOKENS = 2000;
 const PREPARE_PROMPT_KEY = 'ops_prepare_request';
@@ -23,19 +24,22 @@ const preparedSchema = z.object({
   resultado_esperado: z.string().default(''),
   pasos: z.array(z.string()).default([]),
   criterios_aceptacion: z.array(z.string()).default([]),
-  datos_que_faltan: z.array(z.string()).default([])
+  datos_que_faltan: z.array(z.string()).default([]),
+  cliente: z.string().default('')
 });
 
 export type PreparedRequest = {
   title: string;
   description: string; // markdown listo para editar y enviar
   missingData: string[];
+  clientOptionId: string; // '' = la IA no encontró un cliente claro (o la lista no tiene el campo)
 };
 
 export async function prepareRequestWithAI(input: {
   title: string;
   request: string;
   listName: string;
+  listId?: string;
 }): Promise<{ ok: true; prepared: PreparedRequest } | { ok: false; error: string }> {
   const user = await getUser();
   if (!user) return { ok: false, error: 'No autenticado' };
@@ -56,11 +60,17 @@ export async function prepareRequestWithAI(input: {
     dateStyle: 'full'
   }).format(new Date());
 
+  // Opciones reales del campo "Cliente" de la lista de destino (de la caché).
+  const clientField = input.listId ? clientFieldForList(await getStructure(user.tenantId), input.listId) : null;
+
   const userPrompt = fillTemplate(prompt.user_prompt_template, {
     fecha_hoy: today,
     lista: input.listName || 'sin especificar',
     titulo: input.title.trim() || 'sin título',
-    peticion: request
+    peticion: request,
+    clientes: clientField
+      ? clientField.options.map((o) => `- ${o.label}`).join('\n')
+      : '(esta lista no tiene campo Cliente: deja cliente vacío)'
   });
 
   let response;
@@ -86,7 +96,8 @@ export async function prepareRequestWithAI(input: {
       prepared: {
         title: parsed.titulo.trim() || input.title.trim(),
         description: buildDescription(parsed),
-        missingData: parsed.datos_que_faltan
+        missingData: parsed.datos_que_faltan,
+        clientOptionId: (clientField && matchClientOption(clientField.options, parsed.cliente)?.id) || ''
       }
     };
   } catch {
@@ -112,7 +123,8 @@ const createSchema = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .nullable()
     .default(null),
-  priority: z.number().int().min(1).max(4).nullable().default(null)
+  priority: z.number().int().min(1).max(4).nullable().default(null),
+  clientOptionId: z.string().default('')
 });
 
 export type CreateRequestInput = z.input<typeof createSchema>;
@@ -142,6 +154,7 @@ export async function createRequest(
       assigneeName: d.assigneeName,
       dueDate: d.dueDate,
       priority: d.priority,
+      ...validClient(await getStructure(user.tenantId), d.listId, d.clientOptionId),
       status: 'pendiente_clickup'
     })
     .returning({ id: opsRequests.id });

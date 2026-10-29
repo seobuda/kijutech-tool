@@ -10,6 +10,9 @@ export type ProposalItem = {
   assigneeName: string;
   dueDate: string; // '' o AAAA-MM-DD
   priority: number; // 1 urgente … 4 baja
+  // Opción del campo "Cliente" de la lista elegida ('' = ninguna clara). Items antiguos: undefined.
+  clientOptionId?: string;
+  clientName?: string;
 };
 
 export type NoteProposal = {

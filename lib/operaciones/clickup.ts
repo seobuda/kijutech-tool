@@ -218,7 +218,8 @@ export async function getMe(token: string): Promise<{ id: number; username: stri
   return data.user;
 }
 
-export type ClickUpList = { id: string; name: string; folder: string | null };
+// clientFieldId: campo personalizado "Cliente" de la lista (solo viene de la caché de estructura).
+export type ClickUpList = { id: string; name: string; folder: string | null; clientFieldId?: string | null };
 export type ClickUpSpaceWithLists = { id: string; name: string; lists: ClickUpList[] };
 
 // Espacios del workspace (sin sus listas): 1 petición.
@@ -441,6 +442,8 @@ export type CreateTaskInput = {
   assigneeId?: number | null;
   dueDate?: string | null; // YYYY-MM-DD
   priority?: number | null; // 1 urgente … 4 baja
+  // Campos personalizados; en un desplegable, value = id de la opción.
+  customFields?: { id: string; value: string }[];
 };
 
 export async function createTask(
@@ -458,6 +461,7 @@ export async function createTask(
     body.due_date_time = false;
   }
   if (input.priority) body.priority = input.priority;
+  if (input.customFields?.length) body.custom_fields = input.customFields;
 
   const task = await cuSend<{ id: string; url: string }>(token, `/list/${listId}/task`, body);
   return { id: task.id, url: task.url };
@@ -487,4 +491,34 @@ export async function findTaskByMarker(
     if (tasks.length < 100) break;
   }
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// Campos personalizados
+// ---------------------------------------------------------------------------
+
+export type ClickUpCustomField = {
+  id: string;
+  name: string;
+  type: string; // drop_down, labels, short_text, text, …
+  options: { id: string; label: string }[];
+};
+
+// Campos personalizados accesibles de una lista: 1 petición (ClickUp no tiene una
+// consulta agrupada por workspace para esto).
+export async function getListFields(token: string, listId: string): Promise<ClickUpCustomField[]> {
+  const { fields } = await cu<{
+    fields: {
+      id: string;
+      name: string;
+      type: string;
+      type_config?: { options?: { id: string; name?: string; label?: string }[] };
+    }[];
+  }>(token, `/list/${listId}/field`);
+  return fields.map((f) => ({
+    id: f.id,
+    name: f.name,
+    type: f.type,
+    options: (f.type_config?.options ?? []).map((o) => ({ id: o.id, label: (o.name ?? o.label ?? '').trim() }))
+  }));
 }

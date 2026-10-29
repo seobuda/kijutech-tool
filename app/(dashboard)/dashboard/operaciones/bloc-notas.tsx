@@ -134,12 +134,14 @@ function mmss(s: number) {
 
 export function BlocNotas({
   spaces,
+  clientFields,
   members,
   meId,
   history,
   note
 }: {
   spaces: ClickUpSpaceWithLists[];
+  clientFields: ClientFields;
   members: Member[];
   meId: string;
   history: HistoryRow[];
@@ -559,6 +561,7 @@ export function BlocNotas({
             noteId={noteIdRef.current!}
             proposal={{ items: conversion.items, notConverted: conversion.notConverted }}
             spaces={spaces}
+            clientFields={clientFields}
             spaceId={spaceId}
             members={members}
             onBack={async () => {
@@ -895,6 +898,7 @@ function ReviewPanel({
   noteId,
   proposal,
   spaces,
+  clientFields,
   spaceId,
   members,
   onBack,
@@ -903,6 +907,7 @@ function ReviewPanel({
   noteId: string;
   proposal: NoteProposal;
   spaces: ClickUpSpaceWithLists[];
+  clientFields: ClientFields;
   spaceId: string;
   members: Member[];
   onBack: () => void;
@@ -913,6 +918,12 @@ function ReviewPanel({
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<Record<string, SendResult> | null>(null);
+
+  // Campo Cliente de una lista (de la caché; null si la lista no lo tiene).
+  const fieldOf = (listId: string) => {
+    const fid = lists.find((l) => l.id === listId)?.clientFieldId;
+    return fid ? clientFields[fid] ?? null : null;
+  };
 
   const update = (key: string, patch: Partial<ProposalItem>) =>
     setItems((prev) => prev.map((i) => (i.key === key ? { ...i, ...patch } : i)));
@@ -935,7 +946,8 @@ function ReviewPanel({
           assigneeId: i.assigneeId,
           assigneeName: i.assigneeName,
           dueDate: i.dueDate,
-          priority: i.priority
+          priority: i.priority,
+          clientOptionId: i.clientOptionId ?? ''
         }))
       );
     } catch {
@@ -1051,6 +1063,14 @@ function ReviewPanel({
               />
             </div>
 
+            <ClientPicker
+              field={fieldOf(item.listId)}
+              hasList={Boolean(item.listId)}
+              value={item.clientOptionId ?? ''}
+              disabled={sent}
+              onChange={(o) => update(item.key, { clientOptionId: o?.id ?? '', clientName: o?.label ?? '' })}
+            />
+
             <div className="grid gap-3 sm:grid-cols-4">
               <div className="space-y-1">
                 <Label>
@@ -1060,7 +1080,15 @@ function ReviewPanel({
                   className={`${selectClass} ${!item.listId ? 'border-red-400' : ''}`}
                   value={item.listId}
                   disabled={sent}
-                  onChange={(e) => update(item.key, { listId: e.target.value })}
+                  onChange={(e) => {
+                    // Si la nueva lista usa otro campo Cliente, el cliente elegido ya no vale.
+                    const f = fieldOf(e.target.value);
+                    const keep = f?.options.some((o) => o.id === item.clientOptionId);
+                    update(item.key, {
+                      listId: e.target.value,
+                      ...(keep ? {} : { clientOptionId: '', clientName: '' })
+                    });
+                  }}
                 >
                   <option value="">Elige una lista…</option>
                   {lists.map((l) => (
@@ -1157,6 +1185,55 @@ function ReviewPanel({
             <Button variant="ghost">Ver encargos</Button>
           </Link>
         </div>
+      )}
+    </div>
+  );
+}
+
+export type ClientFields = Record<string, { name: string; options: { id: string; label: string }[] }>;
+
+// Desplegable de cliente (campo personalizado de ClickUp). Vacío + aviso si no hay uno claro.
+function ClientPicker({
+  field,
+  hasList,
+  value,
+  disabled,
+  onChange
+}: {
+  field: ClientFields[string] | null;
+  hasList: boolean;
+  value: string;
+  disabled: boolean;
+  onChange: (o: { id: string; label: string } | null) => void;
+}) {
+  if (!hasList) return null;
+  if (!field) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        Esta lista no tiene campo «Cliente»: la tarea se creará sin él.
+      </p>
+    );
+  }
+  return (
+    <div className="space-y-1">
+      <Label>Cliente</Label>
+      <select
+        className={`${selectClass} ${!value ? 'border-amber-400' : ''}`}
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(field.options.find((o) => o.id === e.target.value) ?? null)}
+      >
+        <option value="">Sin cliente</option>
+        {field.options.map((o) => (
+          <option key={o.id} value={o.id}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+      {!value && (
+        <p className="text-xs text-amber-700">
+          La IA no ha encontrado un cliente claro en la nota. Elígelo o déjalo vacío.
+        </p>
       )}
     </div>
   );

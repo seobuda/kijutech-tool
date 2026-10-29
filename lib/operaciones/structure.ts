@@ -5,10 +5,11 @@
 //  - Botón "Actualizar desde ClickUp" en Ajustes.
 //  - Solo se guardan las listas de los espacios seleccionados.
 //  - En la primera sincronización todos los espacios quedan seleccionados.
-import { and, eq, inArray, notInArray } from 'drizzle-orm';
+import { and, eq, inArray, isNull, lt, notInArray, or } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import {
   opsClickupConnections,
+  opsClickupFields,
   opsClickupLists,
   opsClickupMembers,
   opsClickupSpaces
@@ -16,10 +17,12 @@ import {
 import { getClickUpToken } from '@/lib/operaciones/queries';
 import {
   ClickUpError,
+  getListFields,
   getMe,
   getSpaceLists,
   getSpacesBasic,
   getWorkspaces,
+  type ClickUpCustomField,
   type ClickUpList
 } from '@/lib/operaciones/clickup';
 
@@ -27,6 +30,8 @@ export const STRUCTURE_STALE_MS = 60 * 60 * 1000;
 
 export type CachedSpace = { id: string; name: string; selected: boolean; lists: ClickUpList[] };
 export type CachedMember = { id: string; username: string };
+
+export type CachedClientField = { name: string; options: { id: string; label: string }[] };
 
 export type CachedStructure = {
   connected: boolean;
@@ -37,6 +42,8 @@ export type CachedStructure = {
   meUsername: string | null;
   spaces: CachedSpace[]; // todos los espacios; las listas solo vienen en los seleccionados
   members: CachedMember[];
+  // Campo personalizado "Cliente" por id de campo (las listas apuntan a él con clientFieldId).
+  clientFields: Record<string, CachedClientField>;
 };
 
 export async function getStructure(tenantId: string): Promise<CachedStructure> {
@@ -54,20 +61,22 @@ export async function getStructure(tenantId: string): Promise<CachedStructure> {
       meId: null,
       meUsername: null,
       spaces: [],
-      members: []
+      members: [],
+      clientFields: {}
     };
   }
 
-  const [spaces, lists, members] = await Promise.all([
+  const [spaces, lists, members, fields] = await Promise.all([
     db.select().from(opsClickupSpaces).where(eq(opsClickupSpaces.tenantId, tenantId)),
     db.select().from(opsClickupLists).where(eq(opsClickupLists.tenantId, tenantId)),
-    db.select().from(opsClickupMembers).where(eq(opsClickupMembers.tenantId, tenantId))
+    db.select().from(opsClickupMembers).where(eq(opsClickupMembers.tenantId, tenantId)),
+    db.select().from(opsClickupFields).where(eq(opsClickupFields.tenantId, tenantId))
   ]);
 
   const listsBySpace = new Map<string, ClickUpList[]>();
   for (const l of lists) {
     const arr = listsBySpace.get(l.clickupSpaceId) ?? [];
-    arr.push({ id: l.clickupListId, name: l.name, folder: l.folderName });
+    arr.push({ id: l.clickupListId, name: l.name, folder: l.folderName, clientFieldId: l.clientFieldId });
     listsBySpace.set(l.clickupSpaceId, arr);
   }
 
@@ -90,7 +99,10 @@ export async function getStructure(tenantId: string): Promise<CachedStructure> {
       .sort((a, b) => a.name.localeCompare(b.name, 'es')),
     members: members
       .map((m) => ({ id: m.clickupUserId, username: m.username }))
-      .sort((a, b) => a.username.localeCompare(b.username, 'es'))
+      .sort((a, b) => a.username.localeCompare(b.username, 'es')),
+    clientFields: Object.fromEntries(
+      fields.map((f) => [f.clickupFieldId, { name: f.name, options: f.options }])
+    )
   };
 }
 
@@ -150,6 +162,16 @@ async function fetchListsInChunks(token: string, spaceIds: string[]) {
 
 async function replaceLists(tenantId: string, bySpace: Map<string, ClickUpList[]>) {
   if (bySpace.size === 0) return;
+  // El campo "Cliente" de cada lista se conserva al reescribir las listas.
+  const old = await db
+    .select({
+      id: opsClickupLists.clickupListId,
+      clientFieldId: opsClickupLists.clientFieldId,
+      fieldsSyncedAt: opsClickupLists.fieldsSyncedAt
+    })
+    .from(opsClickupLists)
+    .where(eq(opsClickupLists.tenantId, tenantId));
+  const oldById = new Map(old.map((o) => [o.id, o]));
   await db.transaction(async (tx) => {
     for (const [spaceId, lists] of bySpace) {
       await tx
@@ -162,7 +184,9 @@ async function replaceLists(tenantId: string, bySpace: Map<string, ClickUpList[]
             clickupListId: l.id,
             clickupSpaceId: spaceId,
             name: l.name,
-            folderName: l.folder
+            folderName: l.folder,
+            clientFieldId: oldById.get(l.id)?.clientFieldId ?? null,
+            fieldsSyncedAt: oldById.get(l.id)?.fieldsSyncedAt ?? null
           }))
         );
       }
@@ -265,6 +289,9 @@ async function doSync(tenantId: string): Promise<SyncOutcome> {
     })
     .where(eq(opsClickupConnections.tenantId, tenantId));
 
+  // Los campos "Cliente" se traen aparte y en segundo plano (1 petición por lista nueva).
+  void syncClientFields(tenantId);
+
   return { ok: true };
 }
 
@@ -302,4 +329,140 @@ export async function setSelectedSpaces(tenantId: string, spaceIds: string[]): P
   } catch (e) {
     return { ok: false, error: e instanceof ClickUpError || e instanceof Error ? e.message : 'Error desconocido' };
   }
+}
+
+// ---------------------------------------------------------------------------
+// Campo personalizado "Cliente"
+// ---------------------------------------------------------------------------
+
+const FIELDS_RECHECK_MS = 7 * 24 * 60 * 60 * 1000; // volver a mirar los campos de una lista cada 7 días
+
+const norm = (t: string) =>
+  t
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .trim()
+    .toLowerCase();
+
+// El campo "Cliente" de una lista: el que se llama exactamente así (sin mayúsculas ni tildes);
+// si no hay, uno cuyo nombre empiece por "cliente" solo cuando es único. Solo desplegables.
+export function pickClientField(fields: ClickUpCustomField[]): ClickUpCustomField | null {
+  const dd = fields.filter((f) => f.type === 'drop_down' && f.options.length > 0);
+  const exact = dd.find((f) => norm(f.name) === 'cliente');
+  if (exact) return exact;
+  const like = dd.filter((f) => norm(f.name).startsWith('cliente'));
+  return like.length === 1 ? like[0] : null;
+}
+
+const gf = globalThis as unknown as { __opsFieldSyncs?: Map<string, Promise<void>> };
+const fieldSyncs: Map<string, Promise<void>> = (gf.__opsFieldSyncs ??= new Map());
+
+// Trae el campo "Cliente" de las listas que aún no se han comprobado (o hace más de 7 días) y
+// refresca las opciones de cada campo conocido con UNA lista representante. Un solo proceso por cuenta.
+export function syncClientFields(tenantId: string): Promise<void> {
+  const current = fieldSyncs.get(tenantId);
+  if (current) return current;
+  const p = doSyncClientFields(tenantId)
+    .catch((e) => console.error('[operaciones] campos Cliente:', e instanceof Error ? e.message : e))
+    .finally(() => fieldSyncs.delete(tenantId));
+  fieldSyncs.set(tenantId, p);
+  return p;
+}
+
+async function doSyncClientFields(tenantId: string) {
+  const conn = await getClickUpToken(tenantId);
+  if (!conn) return;
+  const stale = new Date(Date.now() - FIELDS_RECHECK_MS);
+  const todo = await db
+    .select()
+    .from(opsClickupLists)
+    .where(
+      and(
+        eq(opsClickupLists.tenantId, tenantId),
+        or(isNull(opsClickupLists.fieldsSyncedAt), lt(opsClickupLists.fieldsSyncedAt, stale))
+      )
+    );
+  const fetched = new Set<string>();
+
+  const saveField = async (f: ClickUpCustomField) => {
+    await db
+      .insert(opsClickupFields)
+      .values({ tenantId, clickupFieldId: f.id, name: f.name, type: f.type, options: f.options })
+      .onConflictDoUpdate({
+        target: [opsClickupFields.tenantId, opsClickupFields.clickupFieldId],
+        set: { name: f.name, type: f.type, options: f.options, syncedAt: new Date() }
+      });
+    fetched.add(f.id);
+  };
+
+  for (let i = 0; i < todo.length; i += 4) {
+    const chunk = todo.slice(i, i + 4);
+    const results = await Promise.allSettled(chunk.map((l) => getListFields(conn.token, l.clickupListId)));
+    for (const [idx, r] of results.entries()) {
+      // Si la consulta falla, la lista queda sin marcar y se reintenta en la próxima sincronización.
+      if (r.status !== 'fulfilled') continue;
+      const field = pickClientField(r.value);
+      if (field) await saveField(field);
+      await db
+        .update(opsClickupLists)
+        .set({ clientFieldId: field?.id ?? null, fieldsSyncedAt: new Date() })
+        .where(
+          and(
+            eq(opsClickupLists.tenantId, tenantId),
+            eq(opsClickupLists.clickupListId, chunk[idx].clickupListId)
+          )
+        );
+    }
+  }
+
+  // Opciones al día: cada campo conocido que no se ha leído ahora, con una lista que lo use.
+  const known = await db.select().from(opsClickupFields).where(eq(opsClickupFields.tenantId, tenantId));
+  for (const kf of known) {
+    if (fetched.has(kf.clickupFieldId)) continue;
+    const [rep] = await db
+      .select({ id: opsClickupLists.clickupListId })
+      .from(opsClickupLists)
+      .where(and(eq(opsClickupLists.tenantId, tenantId), eq(opsClickupLists.clientFieldId, kf.clickupFieldId)))
+      .limit(1);
+    if (!rep) continue;
+    try {
+      const f = (await getListFields(conn.token, rep.id)).find((x) => x.id === kf.clickupFieldId);
+      if (f) await saveField(f);
+    } catch {
+      // se queda con las opciones guardadas
+    }
+  }
+}
+
+// Campo Cliente de una lista con sus opciones válidas (null si la lista no lo tiene).
+export function clientFieldForList(
+  structure: Pick<CachedStructure, 'spaces' | 'clientFields'>,
+  listId: string
+): { fieldId: string; name: string; options: { id: string; label: string }[] } | null {
+  for (const sp of structure.spaces) {
+    const l = sp.lists.find((x) => x.id === listId);
+    if (l?.clientFieldId) {
+      const f = structure.clientFields[l.clientFieldId];
+      return f ? { fieldId: l.clientFieldId, name: f.name, options: f.options } : null;
+    }
+  }
+  return null;
+}
+
+// Cliente elegido → columnas de ops_requests. Solo vale una opción real del campo de esa lista.
+export function validClient(
+  structure: Pick<CachedStructure, 'spaces' | 'clientFields'>,
+  listId: string,
+  optionId: string
+): { clientOptionId: string | null; clientName: string | null } {
+  const f = clientFieldForList(structure, listId);
+  const opt = f?.options.find((o) => o.id === optionId);
+  return { clientOptionId: opt?.id ?? null, clientName: opt?.label ?? null };
+}
+
+// Empareja un texto (lo que dijo la IA) con una opción real, sin mayúsculas ni tildes. null si no hay.
+export function matchClientOption(options: { id: string; label: string }[], text: string) {
+  const t = norm(text);
+  if (!t) return null;
+  return options.find((o) => norm(o.label) === t) ?? null;
 }

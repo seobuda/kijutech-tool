@@ -11,7 +11,7 @@ import { callAI, getPrompt } from '@/lib/ai/gateway';
 import { extractJsonFromLLMResponse } from '@/lib/ai/parsers/json-extractor';
 import { getClickUpToken } from '@/lib/operaciones/queries';
 import { OPS_TIMEZONE } from '@/lib/operaciones/clickup';
-import { getStructure } from '@/lib/operaciones/structure';
+import { clientFieldForList, getStructure, matchClientOption, validClient } from '@/lib/operaciones/structure';
 import { syncToClickUp, type SyncResult } from '@/lib/operaciones/sync';
 import { buildDescription, fillTemplate, isOwnTask } from '@/lib/operaciones/format';
 import {
@@ -115,7 +115,8 @@ const aiItemSchema = z.object({
   lista_id: z.coerce.string().default(''),
   responsable: z.string().default(''),
   fecha: z.string().default(''),
-  prioridad: z.coerce.number().default(3)
+  prioridad: z.coerce.number().default(3),
+  cliente: z.string().default('')
 });
 
 const aiResponseSchema = z.object({
@@ -220,6 +221,41 @@ async function runConversion(
   }
 }
 
+// Bloque {clientes} del prompt: las opciones reales del campo "Cliente", agrupadas por campo
+// (casi siempre es el mismo campo en todas las listas, así que sale una sola vez).
+function clientOptionsPrompt(
+  lists: { id: string; clientFieldId?: string | null }[],
+  fields: Record<string, { name: string; options: { label: string }[] }>
+): string {
+  const groups = new Map<string, string[]>();
+  const without: string[] = [];
+  for (const l of lists) {
+    if (l.clientFieldId && fields[l.clientFieldId]) {
+      groups.set(l.clientFieldId, [...(groups.get(l.clientFieldId) ?? []), l.id]);
+    } else without.push(l.id);
+  }
+  if (groups.size === 0) return '(ninguna lista de este espacio tiene campo Cliente: deja cliente vacío)';
+  const out: string[] = [];
+  for (const [fid, ids] of groups) {
+    const scope = ids.length === lists.length ? 'TODAS las listas' : `solo las listas con id: ${ids.join(', ')}`;
+    out.push(`Opciones válidas (${scope}):\n${fields[fid].options.map((o) => `- ${o.label}`).join('\n')}`);
+  }
+  if (without.length > 0) out.push(`Listas SIN campo Cliente (deja cliente vacío): ${without.join(', ')}`);
+  return out.join('\n\n');
+}
+
+// Cliente propuesto por la IA, validado contra las opciones REALES del campo de la lista elegida:
+// si no coincide exactamente con una opción (o la lista no tiene el campo), queda vacío.
+function pickClient(
+  structure: Awaited<ReturnType<typeof getStructure>>,
+  listId: string,
+  text: string
+): { clientOptionId: string; clientName: string } {
+  const f = clientFieldForList(structure, listId);
+  const opt = f ? matchClientOption(f.options, text) : null;
+  return { clientOptionId: opt?.id ?? '', clientName: opt?.label ?? '' };
+}
+
 async function doConversion(
   note: OpsNote,
   tenantId: string,
@@ -252,6 +288,7 @@ async function doConversion(
       .map((l) => `- id: ${l.id} | nombre: ${l.folder ? `${l.folder} / ` : ''}${l.name}`)
       .join('\n'),
     miembros: members.map((m) => `- ${m.username}`).join('\n') || '- (sin datos)',
+    clientes: clientOptionsPrompt(lists, structure.clientFields),
     nota: note.content.trim()
   });
 
@@ -307,7 +344,8 @@ async function doConversion(
         assigneeId: me.id,
         assigneeName: me.username,
         dueDate: /^\d{4}-\d{2}-\d{2}$/.test(e.fecha) ? e.fecha : '',
-        priority: e.prioridad >= 1 && e.prioridad <= 4 ? Math.round(e.prioridad) : 3
+        priority: e.prioridad >= 1 && e.prioridad <= 4 ? Math.round(e.prioridad) : 3,
+        ...pickClient(structure, e.lista_id, e.cliente)
       };
     }
     return {
@@ -320,7 +358,8 @@ async function doConversion(
       assigneeId: proposed ? String(proposed.id) : note.assigneeClickupId ?? '',
       assigneeName: proposed ? proposed.username : note.assigneeName ?? '',
       dueDate: /^\d{4}-\d{2}-\d{2}$/.test(e.fecha) ? e.fecha : '',
-      priority: e.prioridad >= 1 && e.prioridad <= 4 ? Math.round(e.prioridad) : 3
+      priority: e.prioridad >= 1 && e.prioridad <= 4 ? Math.round(e.prioridad) : 3,
+      ...pickClient(structure, e.lista_id, e.cliente)
     };
   });
 
@@ -340,7 +379,8 @@ const sendItemSchema = z.object({
   assigneeId: z.string().default(''),
   assigneeName: z.string().default(''),
   dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).or(z.literal('')).default(''),
-  priority: z.number().int().min(1).max(4).default(3)
+  priority: z.number().int().min(1).max(4).default(3),
+  clientOptionId: z.string().default('')
 });
 
 export type SendNoteResult =
@@ -391,6 +431,7 @@ export async function sendNoteRequests(
         assigneeName: i.assigneeName || null,
         dueDate: i.dueDate || null,
         priority: i.priority,
+        ...validClient(structure, i.listId, i.clientOptionId),
         status: 'pendiente_clickup',
         noteId: note.id
       }))

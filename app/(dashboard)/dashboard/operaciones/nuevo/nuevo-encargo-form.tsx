@@ -26,10 +26,12 @@ const selectClass =
 
 export function NuevoEncargoForm({
   spaces,
+  clientFields,
   members,
   meId
 }: {
   spaces: ClickUpSpaceWithLists[];
+  clientFields: Record<string, { name: string; options: { id: string; label: string }[] }>;
   members: { id: string; username: string }[];
   meId: string;
 }) {
@@ -43,6 +45,8 @@ export function NuevoEncargoForm({
   const [missing, setMissing] = useState<string[]>([]);
   const [dueDate, setDueDate] = useState('');
   const [priority, setPriority] = useState('3');
+  const [clientOptionId, setClientOptionId] = useState('');
+  const [clientHint, setClientHint] = useState(false); // la IA lo intentó y no encontró uno claro
 
   const [aiError, setAiError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -54,12 +58,16 @@ export function NuevoEncargoForm({
     s.lists.map((l) => ({ ...l, spaceName: s.name }))
   );
   const listName = allLists.find((l) => l.id === listId)?.name ?? '';
+  const clientField = (() => {
+    const fid = allLists.find((l) => l.id === listId)?.clientFieldId;
+    return fid ? clientFields[fid] ?? null : null;
+  })();
 
 
   const prepare = () =>
     startAi(async () => {
       setAiError(null);
-      const res = await prepareRequestWithAI({ title, request, listName });
+      const res = await prepareRequestWithAI({ title, request, listName, listId });
       if (!res.ok) {
         setAiError(res.error);
         return;
@@ -67,6 +75,10 @@ export function NuevoEncargoForm({
       setTitle(res.prepared.title);
       setPrepared(res.prepared.description);
       setMissing(res.prepared.missingData);
+      if (clientField) {
+        setClientOptionId(res.prepared.clientOptionId);
+        setClientHint(!res.prepared.clientOptionId);
+      }
     });
 
   const send = () =>
@@ -83,7 +95,8 @@ export function NuevoEncargoForm({
         assigneeId: assignee ? String(assignee.id) : null,
         assigneeName: assignee?.username ?? null,
         dueDate: dueDate || null,
-        priority: priority ? Number(priority) : null
+        priority: priority ? Number(priority) : null,
+        clientOptionId: clientField ? clientOptionId : ''
       });
       if ('requestId' in res && res.requestId) setResult(res as SyncResult);
       else if (!res.ok) setFormError(res.error);
@@ -101,6 +114,8 @@ export function NuevoEncargoForm({
     setMissing([]);
     setDueDate('');
     setPriority('3');
+    setClientOptionId('');
+    setClientHint(false);
     setResult(null);
     setFormError(null);
     setAiError(null);
@@ -169,7 +184,12 @@ export function NuevoEncargoForm({
               id="list"
               className={selectClass}
               value={listId}
-              onChange={(e) => setListId(e.target.value)}
+              onChange={(e) => {
+                const fid = allLists.find((l) => l.id === e.target.value)?.clientFieldId;
+                // El cliente elegido solo vale si la nueva lista usa el mismo campo.
+                if (!fid || !clientFields[fid]?.options.some((o) => o.id === clientOptionId)) setClientOptionId('');
+                setListId(e.target.value);
+              }}
             >
               <option value="">Elige una lista…</option>
               {spaces.map((s) => (
@@ -243,6 +263,38 @@ export function NuevoEncargoForm({
                 value={prepared}
                 onChange={(e) => setPrepared(e.target.value)}
               />
+            </div>
+          )}
+
+          {listId && (
+            <div className="space-y-2">
+              <Label htmlFor="client">Cliente</Label>
+              {clientField ? (
+                <>
+                  <select
+                    id="client"
+                    className={`${selectClass} ${clientHint && !clientOptionId ? 'border-amber-400' : ''}`}
+                    value={clientOptionId}
+                    onChange={(e) => setClientOptionId(e.target.value)}
+                  >
+                    <option value="">Sin cliente</option>
+                    {clientField.options.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                  {clientHint && !clientOptionId && (
+                    <p className="text-xs text-amber-700">
+                      La IA no ha encontrado un cliente claro en la petición. Elígelo o déjalo vacío.
+                    </p>
+                  )}
+                </>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Esta lista no tiene campo «Cliente»: la tarea se creará sin él.
+                </p>
+              )}
             </div>
           )}
 

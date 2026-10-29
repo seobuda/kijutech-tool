@@ -118,6 +118,7 @@ export default async function BlocNotasPage({
       <BlocNotas
         key={current?.id ?? 'nueva'}
         spaces={spaces}
+        clientFields={structure.clientFields}
         members={structure.members}
         meId={structure.meId ?? ''}
         history={notes.map((n) => ({
