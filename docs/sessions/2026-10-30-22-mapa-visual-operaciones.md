@@ -1,7 +1,7 @@
 # Mapa Visual: módulo Operaciones completo, mapa vivo y regla permanente
 **Fecha:** 2026-10-30  
 **Rama:** operaciones  
-**Commit:** COMMIT_CODE
+**Commit:** 00d08e8a
 
 ## Qué se construyó
 - `lib/operaciones/process-map.ts` — reescrito: `OPS_MAPS` con el nivel 2 (13 procesos y piezas de Operaciones) y 9 mapas de nivel 3 (Entrada de trabajo, Ejecución, Vigilancia de ClickUp, Planificador, Resúmenes, Pasada diaria, La memoria, Fiabilidad y seguridad, Integraciones con el prompt de cada función de IA) más `tech_debt`. Cada paso declara cuándo se ejecuta, qué decide la IA, qué decide el código, tablas, ajustes del panel (`settings`), prompts, tareas del planificador (`runs`) y proveedor de última ejecución (`live`).
