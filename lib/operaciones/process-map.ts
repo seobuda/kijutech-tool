@@ -186,4 +186,24 @@ export const OPS_REQUEST_PROCESS_MAP: ProcessStep[] = [
       ],
     },
   },
+  {
+    id: 'ops-clients',
+    name: 'Clientes: fichas, plazo y responsable habitual',
+    description:
+      'Cada cliente tiene una ficha (nombres alternativos, nivel y plazo, servicios con su responsable habitual, listas habituales, negocio y estrategia). Al convertir una nota, el agente reconoce al cliente por sus alias, propone la fecha según su plazo en días laborables y el responsable habitual del servicio, y rellena el campo Cliente de ClickUp.',
+    status: 'built',
+    file: 'lib/operaciones/clients.ts',
+    technicalDetail: {
+      summary:
+        'La IA identifica (cliente por alias, servicio y lista) en la misma llamada de la conversión; el código decide: busca el cliente por nombre o alias si la IA no acierta, calcula la fecha contando días laborables y aplica el responsable. Prioridad del responsable: tarea propia → elegido o nombrado en la nota → habitual del cliente para ese servicio → propuesta por las fichas del Equipo. «Rellenar con IA» propone los campos de una ficha desde un texto o un audio y nunca guarda por su cuenta.',
+      stack: ['Tablas ops_clients, ops_client_services, ops_client_levels y ops_services', 'callAI() con prompts ops_note_to_requests (v6) y ops_client_fill', 'Gemini para transcribir el audio'],
+      keyDecisions: [
+        'Niveles y servicios son tablas editables; se validan en el código, no con restricciones fijas',
+        'La fecha no la calcula la IA: se cuentan días laborables desde hoy (los festivos no se tienen en cuenta)',
+        'Un cliente desactivado se sigue reconociendo, pero la tarjeta de revisión muestra un aviso ámbar',
+        'Una ficha con encargos no se puede borrar, solo desactivar',
+        'En webs y herramientas no se guardan contraseñas',
+      ],
+    },
+  },
 ];

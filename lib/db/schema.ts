@@ -1391,6 +1391,95 @@ export const opsTeamProfileWorkTypes = pgTable(
   ]
 );
 
+// Sección «Clientes»: ficha por cliente. Los niveles y los servicios son tablas editables, así que
+// level / service_key se validan en el código contra ellas (sin CHECK de valores fijos).
+export const opsClientLevels = pgTable(
+  'ops_client_levels',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    key: varchar('key', { length: 30 }).notNull(),
+    label: varchar('label', { length: 60 }).notNull(),
+    defaultDays: integer('default_days').notNull(),
+    sortOrder: integer('sort_order').notNull().default(0),
+  },
+  (table) => [
+    unique('ops_client_levels_tenant_key_unique').on(table.tenantId, table.key),
+    check('ops_client_levels_days_check', sql`${table.defaultDays} BETWEEN 0 AND 60`),
+  ]
+);
+
+export const opsServices = pgTable(
+  'ops_services',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    key: varchar('key', { length: 40 }).notNull(),
+    label: varchar('label', { length: 100 }).notNull(),
+    sortOrder: integer('sort_order').notNull().default(0),
+    active: boolean('active').notNull().default(true),
+  },
+  (table) => [unique('ops_services_tenant_key_unique').on(table.tenantId, table.key)]
+);
+
+export type OpsClientTool = { name: string; url: string; note: string };
+
+export const opsClients = pgTable(
+  'ops_clients',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    name: varchar('name', { length: 255 }).notNull(),
+    aliases: jsonb('aliases').$type<string[]>().notNull().default([]),
+    clickupOptionId: varchar('clickup_option_id', { length: 50 }),
+    clickupOptionLabel: varchar('clickup_option_label', { length: 255 }),
+    usualSpaceId: varchar('usual_space_id', { length: 50 }),
+    usualListIds: jsonb('usual_list_ids').$type<string[]>().notNull().default([]),
+    level: varchar('level', { length: 30 }).notNull().default('standard'),
+    // null = el plazo por defecto del nivel.
+    deliveryDays: integer('delivery_days'),
+    monthlyHours: decimal('monthly_hours', { precision: 6, scale: 1 }),
+    // Días de la semana en que se le trabaja (1 = lunes … 7 = domingo); null = lunes a viernes.
+    workDays: varchar('work_days', { length: 20 }),
+    // Webs y herramientas. NUNCA contraseñas.
+    tools: jsonb('tools').$type<OpsClientTool[]>().notNull().default([]),
+    business: text('business'),
+    offerings: text('offerings'),
+    area: varchar('area', { length: 255 }),
+    audience: text('audience'),
+    goals: text('goals'),
+    strategy: text('strategy'),
+    notes: text('notes'),
+    active: boolean('active').notNull().default(true),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    unique('ops_clients_tenant_option_unique').on(table.tenantId, table.clickupOptionId),
+    check('ops_clients_days_check', sql`${table.deliveryDays} IS NULL OR ${table.deliveryDays} BETWEEN 0 AND 60`),
+  ]
+);
+
+export const opsClientServices = pgTable(
+  'ops_client_services',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => opsClients.id, { onDelete: 'cascade' }),
+    serviceKey: varchar('service_key', { length: 40 }).notNull(),
+    responsibleClickupId: varchar('responsible_clickup_id', { length: 50 }),
+  },
+  (table) => [unique('ops_client_services_unique').on(table.clientId, table.serviceKey)]
+);
+
+export type OpsClient = typeof opsClients.$inferSelect;
 export type OpsTeamProfile = typeof opsTeamProfiles.$inferSelect;
 export type OpsBlocker = typeof opsBlockers.$inferSelect;
 export type OpsWorkType = typeof opsWorkTypes.$inferSelect;

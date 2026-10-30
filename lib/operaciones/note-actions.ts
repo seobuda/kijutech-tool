@@ -12,6 +12,16 @@ import { extractJsonFromLLMResponse } from '@/lib/ai/parsers/json-extractor';
 import { getClickUpToken } from '@/lib/operaciones/queries';
 import { OPS_TIMEZONE } from '@/lib/operaciones/clickup';
 import { profilesForPrompt } from '@/lib/operaciones/team-profiles';
+import {
+  addWorkingDays,
+  clientDeliveryDays,
+  findClientByName,
+  findClientInText,
+  getLevels,
+  getServices,
+  listClients,
+  type ClientWithServices
+} from '@/lib/operaciones/clients';
 import { getWorkTypeOptions, validWorkTypeKey } from '@/lib/operaciones/work-types';
 import { clientFieldForList, getStructure, matchClientOption, validClient } from '@/lib/operaciones/structure';
 import { syncToClickUp, type SyncResult } from '@/lib/operaciones/sync';
@@ -120,7 +130,8 @@ const aiItemSchema = z.object({
   prioridad: z.coerce.number().default(3),
   cliente: z.string().default(''),
   tipo_trabajo: z.string().default(''),
-  motivo_responsable: z.string().default('')
+  motivo_responsable: z.string().default(''),
+  servicio: z.string().default('')
 });
 
 const aiResponseSchema = z.object({
@@ -260,6 +271,25 @@ function pickClient(
   return { clientOptionId: opt?.id ?? '', clientName: opt?.label ?? '' };
 }
 
+// Bloque {alias_clientes}: solo los clientes con nombres alternativos o con listas habituales en este espacio.
+function clientCardsPrompt(
+  clients: ClientWithServices[],
+  spaceId: string,
+  lists: { id: string; name: string; folder?: string | null }[]
+): string {
+  const listName = new Map(lists.map((l) => [l.id, `${l.folder ? `${l.folder} / ` : ''}${l.name}`]));
+  const out: string[] = [];
+  for (const c of clients) {
+    const usual = c.usualSpaceId === spaceId ? c.usualListIds.filter((id) => listName.has(id)) : [];
+    if (c.aliases.length === 0 && usual.length === 0) continue;
+    const lines = [`- ${c.clickupOptionLabel ?? c.name}`];
+    if (c.aliases.length > 0) lines.push(`  también se le llama: ${c.aliases.join(', ')}`);
+    if (usual.length > 0) lines.push(`  listas habituales en este espacio: ${usual.map((id) => `${id} (${listName.get(id)})`).join('; ')}`);
+    out.push(lines.join('\n'));
+  }
+  return out.join('\n') || '- (ninguno)';
+}
+
 async function doConversion(
   note: OpsNote,
   tenantId: string,
@@ -280,6 +310,12 @@ async function doConversion(
   }
 
   const workTypes = await getWorkTypeOptions(tenantId);
+  const [clients, levels, allServices] = await Promise.all([
+    listClients(tenantId),
+    getLevels(tenantId),
+    getServices(tenantId)
+  ]);
+  const services = allServices.filter((s) => s.active);
   const validTypes = new Set(workTypes.map((t) => t.key));
   const today = new Intl.DateTimeFormat('es-ES', { timeZone: OPS_TIMEZONE, dateStyle: 'full' }).format(
     new Date()
@@ -296,6 +332,8 @@ async function doConversion(
     miembros: members.map((m) => `- ${m.username}`).join('\n') || '- (sin datos)',
     clientes: clientOptionsPrompt(lists, structure.clientFields),
     tipos: workTypes.map((t) => `- ${t.key}: ${t.label}`).join('\n'),
+    alias_clientes: clientCardsPrompt(clients, note.clickupSpaceId!, lists),
+    servicios: services.map((s) => `- ${s.key}: ${s.label}`).join('\n') || '- (ninguno)',
     fichas: await profilesForPrompt(tenantId, new Map(structure.members.map((m) => [m.id, m.username]))),
     nota: note.content.trim()
   });
@@ -340,38 +378,93 @@ async function doConversion(
     ? { id: structure.meId, username: structure.meUsername ?? '' }
     : null;
 
+  const validServiceKeys = new Set(services.map((s) => s.key));
+  const serviceLabel = new Map(allServices.map((s) => [s.key, s.label]));
+  const levelLabel = new Map(levels.map((l) => [l.key, l.label]));
+  const memberNames = new Map(members.map((m) => [String(m.id), m.username]));
+  const allOptions = Object.values(structure.clientFields).flatMap((f) => f.options);
+  const usualLists = (c: ClientWithServices) =>
+    c.usualSpaceId === note.clickupSpaceId ? c.usualListIds.filter((id) => validListIds.has(id)) : [];
+
   const items: ProposalItem[] = parsed.encargos.map((e) => {
+    const own = Boolean(me && isOwnTask(e.titulo));
     const proposed = byName.get(e.responsable.trim().toLowerCase());
-    if (me && isOwnTask(e.titulo)) {
-      return {
-        key: randomUUID(),
-        title: e.titulo.trim(),
-        description: buildDescription(e),
-        missingData: e.datos_que_faltan,
-        listId: validListIds.has(e.lista_id) ? e.lista_id : '',
-        assigneeId: me.id,
-        assigneeName: me.username,
-        dueDate: /^\d{4}-\d{2}-\d{2}$/.test(e.fecha) ? e.fecha : '',
-        priority: e.prioridad >= 1 && e.prioridad <= 4 ? Math.round(e.prioridad) : 3,
-        ...pickClient(structure, e.lista_id, e.cliente),
-        workTypeKey: validTypes.has(e.tipo_trabajo.trim()) ? e.tipo_trabajo.trim() : '',
-        requiresReview: false
-      };
+    const serviceKey = validServiceKeys.has(e.servicio.trim()) ? e.servicio.trim() : '';
+    const priority = e.prioridad >= 1 && e.prioridad <= 4 ? Math.round(e.prioridad) : 3;
+
+    // Cliente: la IA identifica, el código decide. 1) la opción que dijo la IA (o un nombre/alias suyo),
+    // 2) si no, nombres o alias dentro del encargo, 3) si no, dentro de la nota (solo si sale uno).
+    const aiOption = matchClientOption(allOptions, e.cliente);
+    const client =
+      (aiOption ? clients.find((c) => c.clickupOptionId === aiOption.id) : null) ??
+      findClientByName(clients, e.cliente) ??
+      findClientInText(clients, `${e.titulo} ${e.resultado_esperado}`) ??
+      findClientInText(clients, note.content) ??
+      null;
+
+    // Lista: la que dijo la IA; si no hay, la primera lista habitual del cliente en este espacio.
+    const listId = validListIds.has(e.lista_id) ? e.lista_id : (client ? usualLists(client)[0] : undefined) ?? '';
+    const clientFields = client?.clickupOptionId
+      ? validClient(structure, listId, client.clickupOptionId)
+      : { clientOptionId: null, clientName: null };
+    const pickedClient = client
+      ? { clientOptionId: clientFields.clientOptionId ?? '', clientName: clientFields.clientName ?? '' }
+      : pickClient(structure, listId, e.cliente);
+
+    // Responsable (prioridad): tarea propia → persona nombrada en la nota (o responsable elegido) →
+    // responsable habitual del cliente para ese servicio → propuesta de la IA con las fichas del Equipo.
+    let assigneeId = note.assigneeClickupId ?? '';
+    let assigneeName = note.assigneeName ?? '';
+    let assigneeReason = '';
+    if (own && me) {
+      assigneeId = me.id;
+      assigneeName = me.username;
+    } else {
+      const habitual = serviceKey
+        ? client?.services.find((s) => s.serviceKey === serviceKey)?.responsibleClickupId
+        : null;
+      const explicit = proposed && (Boolean(note.assigneeClickupId) || !e.motivo_responsable.trim());
+      if (explicit) {
+        assigneeId = String(proposed.id);
+        assigneeName = proposed.username;
+      } else if (!note.assigneeClickupId && habitual && memberNames.has(habitual)) {
+        assigneeId = habitual;
+        assigneeName = memberNames.get(habitual)!;
+        assigneeReason = `Responsable habitual de ${serviceLabel.get(serviceKey) ?? serviceKey} para ${client!.name}.`;
+      } else if (proposed) {
+        assigneeId = String(proposed.id);
+        assigneeName = proposed.username;
+        // El motivo solo se muestra cuando no había responsable elegido y lo propuso la IA con las fichas.
+        assigneeReason = !note.assigneeClickupId ? e.motivo_responsable.trim().slice(0, 200) : '';
+      }
     }
+
+    // Fecha: la de la nota manda; si no hay, el plazo del cliente en días laborables (no para tareas propias).
+    let dueDate = /^\d{4}-\d{2}-\d{2}$/.test(e.fecha) ? e.fecha : '';
+    let dueReason = '';
+    if (!dueDate && client && !own) {
+      const days = clientDeliveryDays(client, levels);
+      if (days != null) {
+        dueDate = addWorkingDays(days, client.workDays, OPS_TIMEZONE);
+        dueReason = `Plazo de ${client.name} (nivel ${levelLabel.get(client.level) ?? client.level}): ${days} día${days === 1 ? '' : 's'} laborable${days === 1 ? '' : 's'}.`;
+      }
+    }
+
     return {
       key: randomUUID(),
       title: e.titulo.trim(),
       description: buildDescription(e),
       missingData: e.datos_que_faltan,
-      // Solo listas reales del espacio: si la IA se inventa un id, queda vacío.
-      listId: validListIds.has(e.lista_id) ? e.lista_id : '',
-      assigneeId: proposed ? String(proposed.id) : note.assigneeClickupId ?? '',
-      assigneeName: proposed ? proposed.username : note.assigneeName ?? '',
-      // El motivo solo se muestra cuando no había responsable elegido y lo propuso la IA con las fichas.
-      assigneeReason: proposed && !note.assigneeClickupId ? e.motivo_responsable.trim().slice(0, 200) : '',
-      dueDate: /^\d{4}-\d{2}-\d{2}$/.test(e.fecha) ? e.fecha : '',
-      priority: e.prioridad >= 1 && e.prioridad <= 4 ? Math.round(e.prioridad) : 3,
-      ...pickClient(structure, e.lista_id, e.cliente),
+      listId,
+      assigneeId,
+      assigneeName,
+      assigneeReason,
+      dueDate,
+      dueReason,
+      priority,
+      ...pickedClient,
+      clientWarning: client && !client.active ? 'Este cliente está desactivado' : '',
+      serviceKey,
       workTypeKey: validTypes.has(e.tipo_trabajo.trim()) ? e.tipo_trabajo.trim() : '',
       requiresReview: false
     };

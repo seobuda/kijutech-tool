@@ -218,6 +218,13 @@
       "when": 1793330000000,
       "tag": "0030_ops_team_profiles",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1793340000000,
+      "tag": "0031_ops_clients",
+      "breakpoints": true
     }
   ]
 }

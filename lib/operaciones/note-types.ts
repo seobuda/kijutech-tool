@@ -18,6 +18,10 @@ export type ProposalItem = {
   requiresReview?: boolean;
   // Equipo: por qué la IA propuso a este responsable según las fichas (una línea; '' = no lo propuso ella).
   assigneeReason?: string;
+  // Clientes: de dónde salió la fecha propuesta (plazo del cliente), servicio detectado y aviso si la ficha está desactivada.
+  dueReason?: string;
+  serviceKey?: string;
+  clientWarning?: string;
 };
 
 export type NoteProposal = {

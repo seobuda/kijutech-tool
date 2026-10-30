@@ -154,9 +154,8 @@ export function BlocNotas({
 
   const [content, setContent] = useState(note?.content ?? '');
   const [spaceId, setSpaceId] = useState(note?.spaceId ?? '');
-  const [assigneeId, setAssigneeId] = useState(
-    note ? note.assigneeId : members.some((m) => m.id === meId) ? meId : ''
-  );
+  // Las notas nuevas arrancan «Sin asignar»: la IA propone responsable según las fichas del Equipo.
+  const [assigneeId, setAssigneeId] = useState(note ? note.assigneeId : '');
   const [saveState, setSaveState] = useState<'saved' | 'dirty' | 'saving' | 'error'>('saved');
   const [saveError, setSaveError] = useState<string | null>(null);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(note?.updatedAt ?? null);
@@ -1075,8 +1074,19 @@ function ReviewPanel({
               hasList={Boolean(item.listId)}
               value={item.clientOptionId ?? ''}
               disabled={sent}
-              onChange={(o) => update(item.key, { clientOptionId: o?.id ?? '', clientName: o?.label ?? '' })}
+              onChange={(o) =>
+                update(item.key, { clientOptionId: o?.id ?? '', clientName: o?.label ?? '', clientWarning: '' })
+              }
             />
+
+            {item.clientWarning && (
+              <p
+                className="rounded-md border border-amber-300 bg-amber-50 p-2 text-sm text-amber-900"
+                data-testid="client-warning"
+              >
+                ⚠️ {item.clientWarning}. Decide si quieres enviar este encargo igualmente.
+              </p>
+            )}
 
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1">
@@ -1121,7 +1131,7 @@ function ReviewPanel({
                     const keep = f?.options.some((o) => o.id === item.clientOptionId);
                     update(item.key, {
                       listId: e.target.value,
-                      ...(keep ? {} : { clientOptionId: '', clientName: '' })
+                      ...(keep ? {} : { clientOptionId: '', clientName: '', clientWarning: '' })
                     });
                   }}
                 >
@@ -1166,8 +1176,13 @@ function ReviewPanel({
                   type="date"
                   value={item.dueDate}
                   disabled={sent}
-                  onChange={(e) => update(item.key, { dueDate: e.target.value })}
+                  onChange={(e) => update(item.key, { dueDate: e.target.value, dueReason: '' })}
                 />
+                {item.dueReason && (
+                  <p className="text-xs text-muted-foreground" data-testid="due-reason">
+                    📅 {item.dueReason}
+                  </p>
+                )}
               </div>
               <div className="space-y-1">
                 <Label>Prioridad</Label>
