@@ -1,7 +1,7 @@
 # Paso 6B · Sección «Clientes» (fichas por cliente)
 **Fecha:** 2026-10-30  
 **Rama:** operaciones  
-**Commit:** (se rellena tras el commit de código)
+**Commit:** dfb5939b
 
 ## Qué se construyó
 - `app/(dashboard)/dashboard/operaciones/clientes/page.tsx`, `clientes-view.tsx` — pestaña «Clientes»: lista con buscador y filtros (nivel, estado), crear, editar, desactivar/reactivar y eliminar (solo sin encargos, con confirmación), estado vacío, aviso de cambios sin guardar, aviso de opciones de ClickUp sin ficha («Crear fichas»), aviso de posibles duplicados, panel «Niveles y servicios» (catálogos editables) y «Rellenar con IA» (texto o audio).
