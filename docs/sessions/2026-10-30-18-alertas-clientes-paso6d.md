@@ -1,7 +1,7 @@
 # Paso 6D · Alertas de clientes
 **Fecha:** 2026-10-30  
 **Rama:** operaciones  
-**Commit:** (se rellena tras el commit de código)
+**Commit:** a5207461
 
 ## Qué se construyó
 - `lib/operaciones/client-activity.ts` — pasada diaria (03:00 Madrid) con UNA consulta agrupada de workspace (por el cliente con contador): última actividad, completadas del mes, abiertas con fecha en el horizonte del cliente y horas del mes (tiempo laboral entre Empezar y Hecho de los encargos). Botón manual, reintento cada 30 min si falla, marca de «alerta ya avisada» que se borra cuando la condición desaparece, alertas para el resumen (nuevas + recordatorio cada 7 días) y `getMonthWork` («Trabajo de este mes», caché de 2 min, mes actual o anterior).
