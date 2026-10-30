@@ -1,8 +1,8 @@
 import Link from 'next/link';
-import { desc, eq } from 'drizzle-orm';
+import { desc, eq, inArray, and } from 'drizzle-orm';
 import { redirect } from 'next/navigation';
 import { db } from '@/lib/db/drizzle';
-import { opsRequests } from '@/lib/db/schema';
+import { opsRequestEvents, opsRequests } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
 import { RetryButton } from './retry-button';
 
@@ -21,6 +21,21 @@ const WORK: Record<string, string> = {
   en_revision: '👀 En revisión',
   devuelto: '↩️ Devuelto',
   completado: '✅ Completado'
+};
+
+// Última acción de la persona en Telegram (cualquier botón cuenta como visto).
+const ACTION_LABEL: Record<string, string> = {
+  start: '▶️ Empezar',
+  later: '🕐 Más tarde',
+  blocked: '🚫 Bloqueado',
+  done: '✅ Hecho',
+  done_review: '👀 Hecho, ¿lo revisas?',
+  seen: '✅ Visto'
+};
+const BUTTON_LABEL: Record<string, string> = {
+  bl: '🚫 Bloqueado',
+  dn: '✅ Hecho',
+  dr: '👀 Hecho, ¿lo revisas?'
 };
 
 const PRIORITY: Record<number, string> = { 1: 'Urgente', 2: 'Alta', 3: 'Normal', 4: 'Baja' };
@@ -43,6 +58,28 @@ export default async function EncargosPage() {
     .where(eq(opsRequests.tenantId, user.tenantId))
     .orderBy(desc(opsRequests.createdAt))
     .limit(200);
+
+  // Última acción por encargo: el evento más reciente de un botón pulsado.
+  const lastAction = new Map<string, { label: string; at: Date; by: string | null }>();
+  if (rows.length > 0) {
+    const events = await db
+      .select()
+      .from(opsRequestEvents)
+      .where(
+        and(
+          eq(opsRequestEvents.tenantId, user.tenantId),
+          inArray(opsRequestEvents.requestId, rows.map((r) => r.id)),
+          inArray(opsRequestEvents.eventType, ['start', 'later', 'blocked', 'done', 'done_review', 'seen'])
+        )
+      )
+      .orderBy(desc(opsRequestEvents.createdAt));
+    for (const e of events) {
+      if (!e.requestId || lastAction.has(e.requestId)) continue;
+      const button = (e.payload as { button?: string } | null)?.button;
+      const label = e.eventType === 'seen' && button && BUTTON_LABEL[button] ? BUTTON_LABEL[button] : ACTION_LABEL[e.eventType];
+      lastAction.set(e.requestId, { label, at: e.createdAt, by: e.personName });
+    }
+  }
 
   if (rows.length === 0) {
     return (
@@ -84,7 +121,7 @@ export default async function EncargosPage() {
               <th className="px-3 py-2">Estado</th>
               <th className="px-3 py-2">Flujo</th>
               <th className="px-3 py-2">ClickUp</th>
-              <th className="px-3 py-2">Visto (Telegram)</th>
+              <th className="px-3 py-2">Última acción</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -129,15 +166,26 @@ export default async function EncargosPage() {
                     )}
                   </td>
                   <td className="px-3 py-2 text-xs">
-                    {r.seenAt ? (
-                      <span title={r.seenBy ?? ''}>
-                        <span className="rounded bg-green-100 px-2 py-0.5 text-green-700">✅ Visto</span>{' '}
-                        <span className="text-muted-foreground">{fmt.format(r.seenAt)}</span>
-                        {r.seenBy && <span className="block text-muted-foreground">{r.seenBy}</span>}
-                      </span>
-                    ) : (
-                      <span className="text-gray-400">—</span>
-                    )}
+                    {(() => {
+                      const act = lastAction.get(r.id);
+                      if (act) {
+                        return (
+                          <span title={act.by ?? ''}>
+                            <span className="rounded bg-green-100 px-2 py-0.5 text-green-700">{act.label}</span>{' '}
+                            <span className="text-muted-foreground">{fmt.format(act.at)}</span>
+                          </span>
+                        );
+                      }
+                      // Encargos anteriores a los eventos: solo consta que se vio.
+                      return r.seenAt ? (
+                        <span title={r.seenBy ?? ''}>
+                          <span className="rounded bg-green-100 px-2 py-0.5 text-green-700">✅ Visto</span>{' '}
+                          <span className="text-muted-foreground">{fmt.format(r.seenAt)}</span>
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">—</span>
+                      );
+                    })()}
                   </td>
                 </tr>
               );

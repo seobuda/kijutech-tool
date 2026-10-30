@@ -245,6 +245,15 @@ async function handleWorkflowCallback(
     return void (await answer('No puedes usar este botón.', true));
   }
 
+  // Cualquier botón del aviso cuenta como visto (Empezar y Más tarde lo registran en su propia acción).
+  if (code === 'bl' || code === 'dn' || code === 'dr') {
+    await db
+      .update(opsRequests)
+      .set({ seenAt: sql`coalesce(${opsRequests.seenAt}, now())`, seenBy: sql`coalesce(${opsRequests.seenBy}, ${presser.username})` })
+      .where(eq(opsRequests.id, req.id));
+    await logEvent(tenantId, { requestId: req.id, actor, type: 'seen', payload: { button: code } });
+  }
+
   // Persona a la que corresponde el botón: la del aviso (varios responsables) o la que lo pulsa.
   const target = forUser && mine(forUser) ? forUser : mine(presser.clickupUserId) ? presser.clickupUserId : req.assigneeClickupId;
   const targetMember = target ? await getMemberByUser(tenantId, target) : null;

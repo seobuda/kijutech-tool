@@ -35,3 +35,8 @@ Backup previo: `backups/backup_pre_operaciones_watch_20261030.sql`.
 - Un cambio de estado en ClickUp distinto de cerrar no se refleja; reabrir una tarea cerrada tampoco.
 - Una tarea con varios responsables crea un único encargo; si luego se quita al principal y queda otro, no se re-asigna.
 - Tareas de prueba «[PRUEBA PASO 5]» y «[PRUEBA 6C]» en Pruebas Kiju y el usuario de pruebas siguen pendientes de borrar antes de subir a servidor.
+
+## Añadido tras el 6C (antes del 6D)
+- **Encargos → «Última acción»** (`encargos/page.tsx`, `telegram-handler.ts`): sustituye a «Visto (Telegram)». Muestra el último botón pulsado con su hora (▶️ Empezar, 🕐 Más tarde, 🚫 Bloqueado, ✅ Hecho, 👀 Hecho, ¿lo revisas?). Cualquier botón cuenta como visto: Bloqueado/Hecho/Hecho-revisas registran un evento `seen` con el botón al pulsarse; Empezar y Más tarde tienen su propio evento. Los encargos anteriores a los eventos muestran «✅ Visto» si lo tenían.
+- **Tiempos cortos solo en desarrollo** (`reminders.ts`): la variable de entorno `OPS_DEV_REMINDER_MINUTES` o la fila `dev_reminder_minutes` de `ops_settings` convierten las «2 horas laborables» en N minutos de reloj (y «mitad de jornada» / «fin de jornada» en N minutos). No se pudo usar la variable de entorno porque exige tocar `docker-compose.yml` (requiere aprobación); se probó con la fila de `ops_settings` (valor 2 y luego 10) y se borra al terminar. Sin ella, tiempos reales.
+- **Pendiente para servidor:** el enlace «Abrir tarea» de Encargos va directo a ClickUp, por lo que no se puede registrar el clic. Al subir a servidor, redirigirlo a través de la herramienta (`/r/<id>` que registra el evento y redirige).

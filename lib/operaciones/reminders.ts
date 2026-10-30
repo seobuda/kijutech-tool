@@ -7,7 +7,7 @@
 // Cada persona tiene como máximo un recordatorio por encargo (dedupe_key único en ops_notifications).
 import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { opsNotifications, opsRequestEvents, opsRequests, type OpsRequest } from '@/lib/db/schema';
+import { opsNotifications, opsRequestEvents, opsRequests, opsSettings, type OpsRequest } from '@/lib/db/schema';
 import {
   enqueueNotification,
   localParts,
@@ -21,6 +21,22 @@ import { logEvent } from '@/lib/operaciones/events';
 import { clampMessage, escapeHtml } from '@/lib/operaciones/telegram';
 
 export const REMINDER_WORKING_MINUTES = 120;
+
+// SOLO DESARROLLO: acorta los tiempos para poder probar. Con N minutos, las "2 horas laborables" pasan a
+// ser N minutos de reloj, "a mitad de jornada" pasa a ser N minutos tras pulsar «Más tarde» y "al terminar
+// la jornada" pasa a ser N minutos tras el recordatorio. Se activa con la variable de entorno
+// OPS_DEV_REMINDER_MINUTES o con la fila dev_reminder_minutes de ops_settings (sin ella, tiempos reales).
+export async function devReminderMinutes(tenantId: string): Promise<number | null> {
+  const env = Number(process.env.OPS_DEV_REMINDER_MINUTES);
+  if (Number.isFinite(env) && env > 0) return env;
+  const [row] = await db
+    .select({ value: opsSettings.value })
+    .from(opsSettings)
+    .where(and(eq(opsSettings.tenantId, tenantId), eq(opsSettings.key, 'dev_reminder_minutes')))
+    .limit(1);
+  const n = Number(row?.value);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
 const STEP_MS = 5 * 60 * 1000;
 const MAX_SCAN_DAYS = 14;
 const MAX_NOTICE_AGE_MS = 3 * 24 * 3600 * 1000;
@@ -110,6 +126,7 @@ export async function runReminders(tenantId: string, now = new Date()): Promise<
       )
     );
   const schedules = await getScheduleMap(tenantId);
+  const dev = await devReminderMinutes(tenantId);
 
   for (const req of reqs) {
     for (const n of notices.filter((x) => x.requestId === req.id)) {
@@ -124,9 +141,15 @@ export async function runReminders(tenantId: string, now = new Date()): Promise<
       const sch = scheduleOrDefault(schedules, user);
       if (!sch.active) continue;
 
-      const later = events.some((e) => e.requestId === req.id && e.personClickupUserId === user && e.eventType === 'later');
+      const laterEvent = events.find((e) => e.requestId === req.id && e.personClickupUserId === user && e.eventType === 'later');
+      const later = Boolean(laterEvent);
       let due = false;
-      if (!later) {
+      if (dev !== null) {
+        // Modo desarrollo: minutos de reloj. «Más tarde» además exige que la tarea venza hoy.
+        due = later
+          ? req.dueDate === localParts(sch.timezone, now).date && now.getTime() - laterEvent!.createdAt.getTime() >= dev * 60000
+          : now.getTime() - n.sentAt.getTime() >= dev * 60000;
+      } else if (!later) {
         due = workingMinutesBetween(sch, n.sentAt.getTime(), now.getTime(), REMINDER_WORKING_MINUTES) >= REMINDER_WORKING_MINUTES;
       } else {
         // «Más tarde» + vence hoy + pasada la mitad de su jornada (y sin haber terminado).
@@ -171,6 +194,7 @@ export async function runReminders(tenantId: string, now = new Date()): Promise<
 // Encargos recordados que siguen sin empezar tras terminar la jornada de su responsable y aún no se
 // han mostrado en ningún resumen del dueño.
 export async function getUnanswered(tenantId: string, now = new Date()): Promise<OpsRequest[]> {
+  const dev = await devReminderMinutes(tenantId);
   const rows = await db
     .select()
     .from(opsRequests)
@@ -179,6 +203,8 @@ export async function getUnanswered(tenantId: string, now = new Date()): Promise
   if (pending.length === 0) return [];
   const schedules = await getScheduleMap(tenantId);
   return pending.filter((r) =>
-    jornadaEndedBetween(scheduleOrDefault(schedules, r.assigneeClickupId ?? ''), r.remindedAt!.getTime(), now.getTime())
+    dev !== null
+      ? now.getTime() - r.remindedAt!.getTime() >= dev * 60000
+      : jornadaEndedBetween(scheduleOrDefault(schedules, r.assigneeClickupId ?? ''), r.remindedAt!.getTime(), now.getTime())
   );
 }
