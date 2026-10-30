@@ -10,6 +10,7 @@ import { enqueueNotification, localParts, toMinutes, DAILY_WINDOW_MINUTES } from
 import { getTelegramConfig, getOwnerMember } from '@/lib/operaciones/telegram-config';
 import { escapeHtml } from '@/lib/operaciones/telegram';
 import { getInbox, waitLabel } from '@/lib/operaciones/inbox';
+import { getOwnerTimezone } from '@/lib/operaciones/team-profiles';
 
 const MAX_LIST = 8;
 const MAX_BUTTON_ROWS = 5;
@@ -107,7 +108,7 @@ async function lastDigestAt(tenantId: string): Promise<Date> {
 export async function runDigests(tenantId: string, now = new Date()): Promise<void> {
   const cfg = await getTelegramConfig(tenantId);
   if (!cfg) return;
-  const lp = localParts(cfg.digestTimezone, now);
+  const lp = localParts(await getOwnerTimezone(tenantId), now);
   if (lp.weekday === 'Sat' || lp.weekday === 'Sun') return;
 
   const slots = cfg.digestTimes

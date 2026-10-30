@@ -11,6 +11,7 @@ import { callAI, getPrompt } from '@/lib/ai/gateway';
 import { extractJsonFromLLMResponse } from '@/lib/ai/parsers/json-extractor';
 import { getClickUpToken } from '@/lib/operaciones/queries';
 import { OPS_TIMEZONE } from '@/lib/operaciones/clickup';
+import { profilesForPrompt } from '@/lib/operaciones/team-profiles';
 import { getWorkTypeOptions, validWorkTypeKey } from '@/lib/operaciones/work-types';
 import { clientFieldForList, getStructure, matchClientOption, validClient } from '@/lib/operaciones/structure';
 import { syncToClickUp, type SyncResult } from '@/lib/operaciones/sync';
@@ -118,7 +119,8 @@ const aiItemSchema = z.object({
   fecha: z.string().default(''),
   prioridad: z.coerce.number().default(3),
   cliente: z.string().default(''),
-  tipo_trabajo: z.string().default('')
+  tipo_trabajo: z.string().default(''),
+  motivo_responsable: z.string().default('')
 });
 
 const aiResponseSchema = z.object({
@@ -294,6 +296,7 @@ async function doConversion(
     miembros: members.map((m) => `- ${m.username}`).join('\n') || '- (sin datos)',
     clientes: clientOptionsPrompt(lists, structure.clientFields),
     tipos: workTypes.map((t) => `- ${t.key}: ${t.label}`).join('\n'),
+    fichas: await profilesForPrompt(tenantId, new Map(structure.members.map((m) => [m.id, m.username]))),
     nota: note.content.trim()
   });
 
@@ -364,6 +367,8 @@ async function doConversion(
       listId: validListIds.has(e.lista_id) ? e.lista_id : '',
       assigneeId: proposed ? String(proposed.id) : note.assigneeClickupId ?? '',
       assigneeName: proposed ? proposed.username : note.assigneeName ?? '',
+      // El motivo solo se muestra cuando no había responsable elegido y lo propuso la IA con las fichas.
+      assigneeReason: proposed && !note.assigneeClickupId ? e.motivo_responsable.trim().slice(0, 200) : '',
       dueDate: /^\d{4}-\d{2}-\d{2}$/.test(e.fecha) ? e.fecha : '',
       priority: e.prioridad >= 1 && e.prioridad <= 4 ? Math.round(e.prioridad) : 3,
       ...pickClient(structure, e.lista_id, e.cliente),

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -30,6 +31,7 @@ export type TelegramMemberView = {
   linked: boolean;
   telegramUsername: string | null;
   linkUrl: string | null;
+  // De la ficha del Equipo (solo lectura aquí).
   timezone: string;
   workStart: string;
   dailyEnabled: boolean;
@@ -63,16 +65,6 @@ export type TelegramView = {
 };
 
 type Msg = { type: 'ok' | 'error'; text: string } | null;
-
-const TIMEZONES = [
-  'America/Santo_Domingo',
-  'Europe/Madrid',
-  'America/Mexico_City',
-  'America/Bogota',
-  'America/New_York',
-  'America/Argentina/Buenos_Aires',
-  'UTC'
-];
 
 const KIND_LABEL: Record<string, string> = {
   new_request: 'Encargo nuevo',
@@ -263,11 +255,6 @@ export function TelegramAjustes({ view }: { view: TelegramView }) {
                   </p>
                 )}
               </div>
-              <datalist id="tz-list">
-                {TIMEZONES.map((z) => (
-                  <option key={z} value={z} />
-                ))}
-              </datalist>
             </div>
 
             {/* Resúmenes de la bandeja (cortafuegos) */}
@@ -430,14 +417,12 @@ function ListenerStatus({ view }: { view: TelegramView }) {
 
 function MemberRow({ m, botReady }: { m: TelegramMemberView; botReady: boolean }) {
   const router = useRouter();
-  const [tz, setTz] = useState(m.timezone);
-  const [start, setStart] = useState(m.workStart);
   const [daily, setDaily] = useState(m.dailyEnabled);
   const [msg, setMsg] = useState<Msg>(null);
   const [pending, startTransition] = useTransition();
   const [copied, setCopied] = useState(false);
 
-  const dirty = tz !== m.timezone || start !== m.workStart || daily !== m.dailyEnabled;
+  const dirty = daily !== m.dailyEnabled;
 
   const act = (fn: () => Promise<{ ok: boolean; error?: string }>, okText: string) =>
     startTransition(async () => {
@@ -513,14 +498,13 @@ function MemberRow({ m, botReady }: { m: TelegramMemberView; botReady: boolean }
       </div>
 
       <div className="flex flex-wrap items-end gap-3">
-        <div className="space-y-1">
-          <Label className="text-xs">Zona horaria</Label>
-          <Input list="tz-list" value={tz} onChange={(e) => setTz(e.target.value)} className="w-56" />
-        </div>
-        <div className="space-y-1">
-          <Label className="text-xs">Hora de entrada</Label>
-          <Input type="time" value={start} onChange={(e) => setStart(e.target.value)} className="w-32" />
-        </div>
+        <p className="text-xs text-muted-foreground pb-2">
+          Entrada {m.workStart} · {m.timezone}. Se editan en{' '}
+          <Link href="/dashboard/operaciones/equipo" className="text-orange-600 hover:underline">
+            Equipo
+          </Link>
+          .
+        </p>
         <label className="flex items-center gap-2 text-sm pb-2">
           <input
             type="checkbox"
@@ -535,7 +519,7 @@ function MemberRow({ m, botReady }: { m: TelegramMemberView; botReady: boolean }
           disabled={pending || !dirty}
           onClick={() =>
             act(
-              () => saveMemberSettings({ clickupUserId: m.clickupUserId, timezone: tz, workStart: start, dailyEnabled: daily }),
+              () => saveMemberSettings({ clickupUserId: m.clickupUserId, dailyEnabled: daily }),
               'Guardado.'
             )
           }
@@ -552,7 +536,6 @@ function MemberRow({ m, botReady }: { m: TelegramMemberView; botReady: boolean }
 function DigestBox({ view }: { view: TelegramView }) {
   const router = useRouter();
   const [times, setTimes] = useState(view.digestTimes.split(',').join(', '));
-  const [tz, setTz] = useState(view.digestTimezone);
   const [msg, setMsg] = useState<Msg>(null);
   const [pending, startTransition] = useTransition();
 
@@ -577,11 +560,14 @@ function DigestBox({ view }: { view: TelegramView }) {
           <Label htmlFor="digest-times">Horas (HH:MM, separadas por comas)</Label>
           <Input id="digest-times" className="w-48" value={times} onChange={(e) => setTimes(e.target.value)} />
         </div>
-        <div className="space-y-1">
-          <Label htmlFor="digest-tz">Zona horaria</Label>
-          <Input id="digest-tz" className="w-48" list="tz-list" value={tz} onChange={(e) => setTz(e.target.value)} />
-        </div>
-        <Button size="sm" disabled={pending} onClick={() => run(() => saveDigestSettings(times, tz), () => 'Horas guardadas.')}>
+        <p className="text-xs text-muted-foreground pb-2">
+          Hora de {view.digestTimezone} (zona de tu ficha en{' '}
+          <Link href="/dashboard/operaciones/equipo" className="text-orange-600 hover:underline">
+            Equipo
+          </Link>
+          ).
+        </p>
+        <Button size="sm" disabled={pending} onClick={() => run(() => saveDigestSettings(times), () => 'Horas guardadas.')}>
           Guardar
         </Button>
         <Button

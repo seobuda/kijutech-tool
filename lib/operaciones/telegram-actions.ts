@@ -16,7 +16,6 @@ import {
 } from '@/lib/operaciones/telegram-config';
 import {
   enqueueTestNotification,
-  isValidTimezone,
   retryNotification,
   sendDailySummariesNow
 } from '@/lib/operaciones/notifications';
@@ -136,25 +135,16 @@ export async function setTestMode(enabled: boolean): Promise<Ok> {
   }
 }
 
+// Zona horaria y hora de entrada ya no se guardan aquí: viven en la ficha del Equipo.
 export async function saveMemberSettings(input: {
   clickupUserId: string;
-  timezone: string;
-  workStart: string;
   dailyEnabled: boolean;
 }): Promise<Ok> {
   try {
     const user = await requireUser();
-    if (!isValidTimezone(input.timezone)) {
-      return { ok: false, error: 'Zona horaria no válida (ej.: America/Santo_Domingo, Europe/Madrid)' };
-    }
-    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(input.workStart)) {
-      return { ok: false, error: 'La hora de entrada debe tener formato HH:MM (ej.: 09:00)' };
-    }
     await db
       .update(opsTelegramMembers)
       .set({
-        timezone: input.timezone,
-        workStart: input.workStart,
         dailyEnabled: input.dailyEnabled,
         updatedAt: new Date()
       })

@@ -4,6 +4,7 @@ import { db } from '@/lib/db/drizzle';
 import { opsNotifications } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
 import { ensureTelegramMembers, getOwnerMember, getTelegramConfig, linkUrl } from '@/lib/operaciones/telegram-config';
+import { getOwnerTimezone, getScheduleMap, scheduleOrDefault } from '@/lib/operaciones/team-profiles';
 import { getWorkerState } from '@/lib/operaciones/telegram-worker';
 import { TelegramAjustes, type TelegramView } from '../ajustes/telegram-ajustes';
 
@@ -27,6 +28,7 @@ export default async function TelegramPage() {
         .limit(15)
     : [];
   const worker = getWorkerState();
+  const schedules = await getScheduleMap(user.tenantId);
 
   const telegram: TelegramView = {
     hasBot: Boolean(tgCfg),
@@ -38,7 +40,7 @@ export default async function TelegramPage() {
     pollAgeSeconds: tgCfg?.lastPollAt ? Math.round((Date.now() - tgCfg.lastPollAt.getTime()) / 1000) : null,
     lastError: tgCfg?.lastError ?? null,
     digestTimes: tgCfg?.digestTimes ?? '13:00,18:00',
-    digestTimezone: tgCfg?.digestTimezone ?? 'Europe/Madrid',
+    digestTimezone: await getOwnerTimezone(user.tenantId),
     workerRole: worker?.role ?? 'unknown',
     members: tgMembers.map((m) => ({
       clickupUserId: m.clickupUserId,
@@ -47,8 +49,8 @@ export default async function TelegramPage() {
       linked: m.telegramChatId !== null,
       telegramUsername: m.telegramUsername,
       linkUrl: linkUrl(tgCfg?.botUsername ?? null, m.linkCode),
-      timezone: m.timezone,
-      workStart: m.workStart,
+      timezone: scheduleOrDefault(schedules, m.clickupUserId).timezone,
+      workStart: scheduleOrDefault(schedules, m.clickupUserId).workStart,
       dailyEnabled: m.dailyEnabled
     })),
     notifications: notifications.map((n) => ({

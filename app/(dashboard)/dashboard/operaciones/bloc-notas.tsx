@@ -1142,7 +1142,8 @@ function ReviewPanel({
                   onChange={(e) =>
                     update(item.key, {
                       assigneeId: e.target.value,
-                      assigneeName: members.find((m) => m.id === e.target.value)?.username ?? ''
+                      assigneeName: members.find((m) => m.id === e.target.value)?.username ?? '',
+                      assigneeReason: ''
                     })
                   }
                 >
@@ -1153,6 +1154,11 @@ function ReviewPanel({
                     </option>
                   ))}
                 </select>
+                {item.assigneeReason && (
+                  <p className="text-xs text-muted-foreground" data-testid="assignee-reason">
+                    🤖 Propuesto por la IA: {item.assigneeReason}
+                  </p>
+                )}
               </div>
               <div className="space-y-1">
                 <Label>Entrega</Label>

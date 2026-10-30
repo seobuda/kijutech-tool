@@ -1348,6 +1348,50 @@ export const opsTelegramPending = pgTable('ops_telegram_pending', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
+// Ficha de cada persona del equipo (sección «Equipo»). Fuente única de zona horaria y horario.
+// user_id queda preparado para que más adelante cada miembro vea su propio perfil.
+export const opsTeamProfiles = pgTable(
+  'ops_team_profiles',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    clickupUserId: varchar('clickup_user_id', { length: 50 }),
+    userId: integer('user_id').references(() => users.id, { onDelete: 'set null' }),
+    name: varchar('name', { length: 255 }).notNull(),
+    jobTitle: varchar('job_title', { length: 150 }),
+    description: text('description'),
+    notes: text('notes'),
+    // Días laborables: 1 = lunes … 7 = domingo.
+    workDays: varchar('work_days', { length: 20 }).notNull().default('1,2,3,4,5'),
+    workStart: varchar('work_start', { length: 5 }).notNull().default('09:00'),
+    hoursPerDay: decimal('hours_per_day', { precision: 4, scale: 2 }).notNull().default('8'),
+    timezone: varchar('timezone', { length: 60 }).notNull().default('America/Santo_Domingo'),
+    active: boolean('active').notNull().default(true),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [unique('ops_team_profiles_tenant_clickup_unique').on(table.tenantId, table.clickupUserId)]
+);
+
+export const opsTeamProfileWorkTypes = pgTable(
+  'ops_team_profile_work_types',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => opsTeamProfiles.id, { onDelete: 'cascade' }),
+    workTypeKey: varchar('work_type_key', { length: 40 }).notNull(),
+    role: varchar('role', { length: 10 }).notNull(),
+  },
+  (table) => [
+    unique('ops_team_profile_work_types_unique').on(table.profileId, table.workTypeKey),
+    check('ops_team_profile_work_types_role_check', sql`${table.role} IN ('primary', 'support')`),
+  ]
+);
+
+export type OpsTeamProfile = typeof opsTeamProfiles.$inferSelect;
 export type OpsBlocker = typeof opsBlockers.$inferSelect;
 export type OpsWorkType = typeof opsWorkTypes.$inferSelect;
 export type OpsStatusMap = typeof opsStatusMap.$inferSelect;

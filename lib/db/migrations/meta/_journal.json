@@ -211,6 +211,13 @@
       "when": 1793314967516,
       "tag": "0029_ops_paso5_flujo",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1793330000000,
+      "tag": "0030_ops_team_profiles",
+      "breakpoints": true
     }
   ]
 }

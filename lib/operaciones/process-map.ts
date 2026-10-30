@@ -168,4 +168,22 @@ export const OPS_REQUEST_PROCESS_MAP: ProcessStep[] = [
       stack: ['ops_notifications (kind digest)', 'inbox.ts'],
     },
   },
+  {
+    id: 'ops-team-profiles',
+    name: 'Equipo: fichas y responsable propuesto',
+    description:
+      'Cada persona tiene una ficha (puesto, descripción, tipos de trabajo como función principal o de apoyo, horario y zona horaria). Al convertir una nota sin responsable, la IA propone a quien tiene ese tipo de trabajo como principal y explica por qué en una línea; tú puedes cambiarlo.',
+    status: 'built',
+    file: 'lib/operaciones/team-profiles.ts',
+    technicalDetail: {
+      summary:
+        'Las fichas (ops_team_profiles y ops_team_profile_work_types) son la única fuente de zona horaria, hora de entrada y días laborables: los resúmenes de Telegram las leen de ahí. Las fichas activas con miembro de ClickUp se añaden al mismo prompt de conversión de notas (sin llamada extra a la IA). «Rellenar con IA» propone los campos de una ficha desde un texto o un audio y nunca guarda por su cuenta.',
+      stack: ['Tablas ops_team_profiles y ops_team_profile_work_types', 'callAI() con prompts ops_note_to_requests y ops_profile_fill', 'Gemini para transcribir el audio'],
+      keyDecisions: [
+        'La IA solo propone a personas con ficha activa y miembro de ClickUp vinculado',
+        'Un responsable elegido por ti en la nota manda sobre la propuesta',
+        'La ficha lleva user_id para que más adelante cada miembro vea la suya (hoy solo la ve quien lleva las operaciones)',
+      ],
+    },
+  },
 ];

@@ -8,7 +8,6 @@ import { db } from '@/lib/db/drizzle';
 import { opsTelegramConfig, opsWorkTypes } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
 import { getClickUpConnection } from '@/lib/operaciones/queries';
-import { isValidTimezone } from '@/lib/operaciones/notifications';
 import { saveStatusGroup } from '@/lib/operaciones/status-map';
 import { slugKey } from '@/lib/operaciones/work-types';
 import { sendDigestNow } from '@/lib/operaciones/digest';
@@ -106,7 +105,7 @@ export async function updateWorkType(key: string, patch: { label?: string; activ
 
 // --- Resúmenes para el dueño ------------------------------------------------------------
 
-export async function saveDigestSettings(times: string, timezone: string): Promise<Ok> {
+export async function saveDigestSettings(times: string): Promise<Ok> {
   try {
     const user = await requireUser();
     const list = times
@@ -116,12 +115,10 @@ export async function saveDigestSettings(times: string, timezone: string): Promi
     if (list.length === 0 || list.length > 4 || list.some((t) => !/^([01]?\d|2[0-3]):[0-5]\d$/.test(t))) {
       return { ok: false, error: 'Escribe de 1 a 4 horas con formato HH:MM separadas por comas (ej.: 13:00, 18:00)' };
     }
-    if (!isValidTimezone(timezone)) return { ok: false, error: 'Zona horaria no válida (ej.: Europe/Madrid)' };
     await db
       .update(opsTelegramConfig)
       .set({
         digestTimes: list.map((t) => t.padStart(5, '0')).join(','),
-        digestTimezone: timezone,
         updatedAt: new Date()
       })
       .where(eq(opsTelegramConfig.tenantId, user.tenantId));

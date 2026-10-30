@@ -16,6 +16,8 @@ export type ProposalItem = {
   // Paso 5: tipo de trabajo (clave de ops_work_types; '' = sin tipo) y casilla «requiere mi revisión».
   workTypeKey?: string;
   requiresReview?: boolean;
+  // Equipo: por qué la IA propuso a este responsable según las fichas (una línea; '' = no lo propuso ella).
+  assigneeReason?: string;
 };
 
 export type NoteProposal = {

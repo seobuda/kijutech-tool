@@ -11,8 +11,8 @@ import {
 import { decrypt } from '@/lib/ai/encryption';
 import { getStructure } from '@/lib/operaciones/structure';
 
-export const DEFAULT_TEAM_TIMEZONE = 'America/Santo_Domingo';
-export const OWNER_TIMEZONE = 'Europe/Madrid';
+// La zona horaria y el horario viven en la ficha del Equipo (team-profiles.ts), no aquí.
+export { DEFAULT_TEAM_TIMEZONE, OWNER_TIMEZONE } from '@/lib/operaciones/team-profiles';
 
 export async function getTelegramConfig(tenantId: string): Promise<OpsTelegramConfig | null> {
   const [row] = await db
@@ -38,7 +38,6 @@ export function linkUrl(botUsername: string | null, code: string | null): string
 }
 
 // Garantiza una fila por miembro de ClickUp (de la caché de estructura) y devuelve todas.
-// Zona horaria por defecto: Europe/Madrid para el dueño del token, America/Santo_Domingo para el resto.
 export async function ensureTelegramMembers(tenantId: string): Promise<OpsTelegramMember[]> {
   const structure = await getStructure(tenantId);
   const existing = await db
@@ -56,8 +55,7 @@ export async function ensureTelegramMembers(tenantId: string): Promise<OpsTelegr
           tenantId,
           clickupUserId: m.id,
           username: m.username,
-          linkCode: newLinkCode(),
-          timezone: m.id === structure.meId ? OWNER_TIMEZONE : DEFAULT_TEAM_TIMEZONE
+          linkCode: newLinkCode()
         }))
       )
       .onConflictDoNothing();

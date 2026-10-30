@@ -16,11 +16,16 @@ import {
 import { clampMessage, escapeHtml, tg, TelegramError } from '@/lib/operaciones/telegram';
 import {
   decodeBotToken,
-  DEFAULT_TEAM_TIMEZONE,
   getMemberByUser,
   getOwnerMember,
   getTelegramConfig
 } from '@/lib/operaciones/telegram-config';
+import {
+  getMemberTimezone,
+  getScheduleMap,
+  scheduleOrDefault,
+  WEEKDAY_ISO
+} from '@/lib/operaciones/team-profiles';
 import { madridNoonMs } from '@/lib/operaciones/clickup';
 import { getTeamToday, type TeamMemberToday } from '@/lib/operaciones/team-today';
 import type { OpsTask } from '@/lib/operaciones/clickup';
@@ -106,7 +111,7 @@ export async function enqueueNewRequestNotification(requestId: string): Promise<
   if (!req.assigneeClickupId) return; // sin responsable no hay a quién avisar
 
   const member = await getMemberByUser(req.tenantId, req.assigneeClickupId);
-  const tz = member?.timezone ?? DEFAULT_TEAM_TIMEZONE;
+  const tz = await getMemberTimezone(req.tenantId, req.assigneeClickupId);
   const due = req.dueDate ? `\n📅 Entrega: <b>${escapeHtml(fmtDay(madridNoonMs(req.dueDate), tz))}</b>` : '';
   const summary = summarize(req.preparedDescription);
 
@@ -450,14 +455,18 @@ export async function runDailySummaries(tenantId: string, now = new Date()): Pro
     .from(opsTelegramMembers)
     .where(and(eq(opsTelegramMembers.tenantId, tenantId), eq(opsTelegramMembers.dailyEnabled, true)));
 
+  // Zona, hora de entrada y días laborables salen de la ficha del Equipo.
+  const schedules = await getScheduleMap(tenantId);
   const due: { member: OpsTelegramMember; key: string; tz: string }[] = [];
   for (const m of members) {
     if (!m.telegramChatId) continue; // el resumen programado es solo para personas vinculadas
-    const lp = localParts(m.timezone, now);
-    if (lp.weekday === 'Sat' || lp.weekday === 'Sun') continue;
-    const start = toMinutes(m.workStart);
+    const sch = scheduleOrDefault(schedules, m.clickupUserId);
+    if (!sch.active) continue; // ficha desactivada
+    const lp = localParts(sch.timezone, now);
+    if (!sch.workDays.includes(WEEKDAY_ISO[lp.weekday])) continue;
+    const start = toMinutes(sch.workStart);
     if (lp.minutes < start || lp.minutes >= start + DAILY_WINDOW_MINUTES) continue;
-    due.push({ member: m, key: `daily:${m.clickupUserId}:${lp.date}`, tz: m.timezone });
+    due.push({ member: m, key: `daily:${m.clickupUserId}:${lp.date}`, tz: sch.timezone });
   }
   if (due.length === 0) return;
 
@@ -508,6 +517,7 @@ export async function sendDailySummariesNow(
     .from(opsTelegramMembers)
     .where(eq(opsTelegramMembers.tenantId, tenantId));
   const data = await getTeamToday(tenantId, { force: true });
+  const schedules = await getScheduleMap(tenantId);
 
   let queued = 0;
   let withoutTasks = 0;
@@ -525,7 +535,7 @@ export async function sendDailySummariesNow(
       dedupeKey: `daily-manual:${m.clickupUserId}:${stamp}`,
       forClickupUserId: m.clickupUserId,
       forName: m.username,
-      payload: { text: buildDailyText(m.username, b, m.timezone), testMode: cfg.testMode } satisfies Payload
+      payload: { text: buildDailyText(m.username, b, scheduleOrDefault(schedules, m.clickupUserId).timezone), testMode: cfg.testMode } satisfies Payload
     });
     queued++;
   }

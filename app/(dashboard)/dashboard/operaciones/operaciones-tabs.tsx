@@ -7,6 +7,7 @@ const TABS = [
   { href: '/dashboard/operaciones', label: 'Bloc de notas' },
   { href: '/dashboard/operaciones/equipo-hoy', label: 'Equipo hoy' },
   { href: '/dashboard/operaciones/bandeja', label: 'Mi bandeja' },
+  { href: '/dashboard/operaciones/equipo', label: 'Equipo' },
   { href: '/dashboard/operaciones/encargos', label: 'Encargos' },
   { href: '/dashboard/operaciones/nuevo', label: 'Nuevo encargo' },
   { href: '/dashboard/operaciones/telegram', label: 'Telegram' },
