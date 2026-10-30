@@ -10,6 +10,7 @@
 //     Responder solo los acepta el chat del dueño.
 //  4. Los mensajes de texto de un chat vinculado solo se atienden si el bot estaba esperando una
 //     respuesta (enlace, motivo, pregunta…); el resto se ignora.
+import { getAuto, num } from '@/lib/operaciones/automations';
 import { and, eq, ne, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import {
@@ -100,7 +101,6 @@ async function handleMessage(tenantId: string, token: string, msg: TgMessage): P
 // Conversación pendiente: el bot espera un enlace, una pregunta, un motivo o una respuesta
 // ---------------------------------------------------------------------------
 
-const PENDING_MINUTES = 30;
 
 async function setPending(
   tenantId: string,
@@ -113,7 +113,7 @@ async function setPending(
     kind,
     requestId: ids.requestId ?? null,
     blockerId: ids.blockerId ?? null,
-    expiresAt: new Date(Date.now() + PENDING_MINUTES * 60_000),
+    expiresAt: new Date(Date.now() + num(await getAuto(tenantId, 'delivery'), 'pendingMinutes') * 60_000),
     createdAt: new Date()
   };
   await db

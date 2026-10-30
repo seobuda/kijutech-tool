@@ -3,6 +3,7 @@
 // "owner" (quien lleva las operaciones); más adelante se añaden revisores automáticos (por tipo de
 // trabajo o por cliente) registrándolos aquí: tendrán que llamar a acceptWork() o returnWork() del
 // flujo (workflow.ts) cuando decidan, sin tocar nada más.
+import { DEF, getAuto, renderTemplate } from '@/lib/operaciones/automations';
 import { escapeHtml } from '@/lib/operaciones/telegram';
 import { enqueueNotification } from '@/lib/operaciones/notifications';
 import { getOwnerMember } from '@/lib/operaciones/telegram-config';
@@ -42,7 +43,8 @@ const OwnerReviewer: Reviewer = {
     });
     // Cortafuegos: solo las revisiones urgentes (prioridad 1) llegan al instante. El resto va al
     // resumen de las 13:00 / 18:00 y a «Mi bandeja».
-    if (req.priority !== 1) return;
+    const urgentAuto = await getAuto(req.tenantId, 'urgent_review');
+    if (req.priority !== 1 || !urgentAuto.enabled) return;
     const owner = await getOwnerMember(req.tenantId);
     if (!owner) return;
     await enqueueNotification({
@@ -53,7 +55,7 @@ const OwnerReviewer: Reviewer = {
       forName: owner.username,
       requestId: req.id,
       payload: {
-        text: `🔴 <b>URGENTE</b>\n${reviewText(req, submittedBy.name, note)}`,
+        text: renderTemplate(DEF.get('urgent_review')!, urgentAuto.template, { detalle: reviewText(req, submittedBy.name, note) }),
         toOwner: true,
         buttons: [
           [

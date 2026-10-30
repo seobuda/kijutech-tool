@@ -26,8 +26,9 @@ import { getTelegramConfig } from '@/lib/operaciones/telegram-config';
 import { logEvent } from '@/lib/operaciones/events';
 import { enqueueNewRequestNotification, refreshNotice } from '@/lib/operaciones/notifications';
 import { transition } from '@/lib/operaciones/workflow';
+import { getAuto, num } from '@/lib/operaciones/automations';
 
-export const WATCH_EVERY_MS = 150_000;
+export const WATCH_EVERY_MS = 150_000; // por defecto; se cambia en Automatizaciones
 const OVERLAP_MS = 10_000;
 const OPEN_STATES = ['asignado', 'en_curso', 'devuelto', 'bloqueado'];
 
@@ -104,6 +105,7 @@ type Ctx = {
 export async function runWatch(tenantId: string, now = new Date()): Promise<void> {
   const w = await getWatch(tenantId);
   if (!w?.enabled || !w.activatedAt) return;
+  const everyMs = num(await getAuto(tenantId, 'watch'), 'everySec') * 1000;
   // Reclamar la pasada (atómico): si otra la tiene en marcha o es pronto, no se hace.
   const claimed = await db
     .update(opsClickupWatch)
@@ -112,7 +114,7 @@ export async function runWatch(tenantId: string, now = new Date()): Promise<void
       and(
         eq(opsClickupWatch.tenantId, tenantId),
         eq(opsClickupWatch.enabled, true),
-        or(isNull(opsClickupWatch.lastRunAt), lt(opsClickupWatch.lastRunAt, new Date(now.getTime() - WATCH_EVERY_MS)))
+        or(isNull(opsClickupWatch.lastRunAt), lt(opsClickupWatch.lastRunAt, new Date(now.getTime() - everyMs)))
       )
     )
     .returning({ cursor: opsClickupWatch.cursorMs });

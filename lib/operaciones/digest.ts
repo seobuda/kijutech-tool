@@ -6,11 +6,13 @@
 import { and, desc, eq, gte, inArray, like } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { opsNotifications, opsRequestEvents, opsRequests, type OpsRequest } from '@/lib/db/schema';
-import { enqueueNotification, localParts, toMinutes, DAILY_WINDOW_MINUTES } from '@/lib/operaciones/notifications';
+import { enqueueNotification, localParts, toMinutes } from '@/lib/operaciones/notifications';
+import { DEF, getAuto, num, renderTemplate } from '@/lib/operaciones/automations';
+import { nearestAllowedMinute } from '@/lib/operaciones/quiet';
 import { getTelegramConfig, getOwnerMember } from '@/lib/operaciones/telegram-config';
 import { escapeHtml } from '@/lib/operaciones/telegram';
 import { getInbox, waitLabel } from '@/lib/operaciones/inbox';
-import { getOwnerTimezone } from '@/lib/operaciones/team-profiles';
+import { getOwnerTimezone, getScheduleMap, scheduleOrDefault } from '@/lib/operaciones/team-profiles';
 import { getUnanswered } from '@/lib/operaciones/reminders';
 import { getClientAlertsToShow, markClientAlertsShown, type ClientAlertItem } from '@/lib/operaciones/client-activity';
 
@@ -71,7 +73,9 @@ async function buildDigest(
   }
 
   // Encargos recordados que siguen sin empezar al terminar la jornada de su responsable: salen una vez.
-  const unanswered = await getUnanswered(tenantId);
+  const digestAuto = await getAuto(tenantId, 'digest');
+  const alertsAuto = await getAuto(tenantId, 'client_alerts');
+  const unanswered = digestAuto.cfg.includeUnanswered ? await getUnanswered(tenantId) : [];
   if (unanswered.length) {
     const lines = unanswered.slice(0, MAX_LIST).map(
       (r) => `• ${escapeHtml(r.title)} <i>(${escapeHtml(r.assigneeName ?? '—')} · sin respuesta desde el ${r.remindedAt!.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', timeZone: 'Europe/Madrid' })})</i>`
@@ -81,14 +85,14 @@ async function buildDigest(
   }
 
   // Clientes en alerta (solo en el último resumen del día): nuevas, y recordatorio semanal si siguen.
-  const clientAlerts = withClientAlerts ? await getClientAlertsToShow(tenantId) : [];
+  const clientAlerts = withClientAlerts && alertsAuto.enabled ? await getClientAlertsToShow(tenantId) : [];
   if (clientAlerts.length) {
     const lines = clientAlerts.slice(0, MAX_LIST * 2).map((a) => {
       const icon = a.kind === 'inactive' ? '🔴' : '🟠';
       return `• ${icon} <b>${escapeHtml(a.name)}</b>: ${escapeHtml(a.text)}${a.reminder ? ' <i>(recordatorio semanal)</i>' : ''}`;
     });
     if (clientAlerts.length > MAX_LIST * 2) lines.push(`… y ${clientAlerts.length - MAX_LIST * 2} más (en «Clientes»)`);
-    sections.push(`📉 <b>Clientes en alerta (${clientAlerts.length})</b>\n${lines.join('\n')}`);
+    sections.push(renderTemplate(DEF.get('client_alerts')!, alertsAuto.template, { total: String(clientAlerts.length), lista: lines.join('\n') }));
   }
 
   const buttons: { text: string; data: string }[][] = [];
@@ -112,7 +116,7 @@ async function buildDigest(
   }
 
   return {
-    text: sections.length ? `📋 <b>Resumen</b>\n\n${sections.join('\n\n')}` : '',
+    text: sections.length ? renderTemplate(DEF.get('digest')!, digestAuto.template, { secciones: sections.join('\n\n') }) : '',
     buttons,
     empty: sections.length === 0,
     unansweredIds: unanswered.map((r) => r.id),
@@ -134,14 +138,20 @@ async function lastDigestAt(tenantId: string): Promise<Date> {
 export async function runDigests(tenantId: string, now = new Date()): Promise<void> {
   const cfg = await getTelegramConfig(tenantId);
   if (!cfg) return;
+  const auto = await getAuto(tenantId, 'digest');
+  if (!auto.enabled) return;
+  const owner = await getOwnerMember(tenantId);
+  const ownerSch = owner ? scheduleOrDefault(await getScheduleMap(tenantId), owner.clickupUserId) : null;
   const lp = localParts(await getOwnerTimezone(tenantId), now);
   if (lp.weekday === 'Sat' || lp.weekday === 'Sun') return;
 
-  const slots = cfg.digestTimes
+  const slots = String(auto.cfg.times)
     .split(',')
     .map((s) => s.trim())
     .filter((s) => /^\d{1,2}:\d{2}$/.test(s));
-  const slot = slots.find((s) => lp.minutes >= toMinutes(s) && lp.minutes < toMinutes(s) + DAILY_WINDOW_MINUTES);
+  // Si una hora cae en la comida o el silencio del dueño, sale en el momento permitido más cercano.
+  const effective = (s: string) => (ownerSch && !cfg.testMode ? nearestAllowedMinute(ownerSch, toMinutes(s)) : toMinutes(s));
+  const slot = slots.find((s) => lp.minutes >= effective(s) && lp.minutes < effective(s) + num(auto, 'windowMin'));
   if (!slot) return;
 
   const key = `digest:${lp.date}:${slot}`;

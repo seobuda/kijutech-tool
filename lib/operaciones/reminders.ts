@@ -19,8 +19,8 @@ import { getTelegramConfig } from '@/lib/operaciones/telegram-config';
 import { getScheduleMap, scheduleOrDefault, WEEKDAY_ISO, type Schedule } from '@/lib/operaciones/team-profiles';
 import { logEvent } from '@/lib/operaciones/events';
 import { clampMessage, escapeHtml } from '@/lib/operaciones/telegram';
+import { DEF, getAuto, num, renderTemplate } from '@/lib/operaciones/automations';
 
-export const REMINDER_WORKING_MINUTES = 120;
 
 // SOLO DESARROLLO: acorta los tiempos para poder probar. Con N minutos, las "2 horas laborables" pasan a
 // ser N minutos de reloj, "a mitad de jornada" pasa a ser N minutos tras pulsar «Más tarde» y "al terminar
@@ -42,7 +42,7 @@ const MAX_SCAN_DAYS = 14;
 const MAX_NOTICE_AGE_MS = 3 * 24 * 3600 * 1000;
 const REMINDERS_FROM = new Date('2026-10-30T10:30:00Z'); // despliegue del paso 6C
 
-function isWorkMoment(sch: Schedule, t: number): boolean {
+export function isWorkMoment(sch: Schedule, t: number): boolean {
   const lp = localParts(sch.timezone, new Date(t));
   if (!sch.workDays.includes(WEEKDAY_ISO[lp.weekday])) return false;
   const start = toMinutes(sch.workStart);
@@ -77,11 +77,15 @@ export function jornadaEndedBetween(sch: Schedule, fromMs: number, toMs: number)
   return false;
 }
 
-function reminderText(req: OpsRequest, later: boolean): string {
-  const due = req.dueDate ? `\n📅 Entrega: <b>${escapeHtml(req.dueDate)}</b>` : '';
-  const url = req.clickupTaskUrl ? `\n🔗 <a href="${req.clickupTaskUrl.replace(/"/g, '%22')}">Abrir la tarea en ClickUp</a>` : '';
+function reminderText(req: OpsRequest, later: boolean, template: string, personName: string | null): string {
   return clampMessage(
-    `⏰ <b>Recordatorio</b>: este encargo sigue sin empezar${later ? ' y vence hoy' : ''}.\n<b>${escapeHtml(req.title)}</b>${due}${url}`
+    renderTemplate(DEF.get(later ? 'reminder_later' : 'reminder_unanswered')!, template, {
+      nombre: escapeHtml(personName ?? ''),
+      tarea: escapeHtml(req.title),
+      fecha: req.dueDate ? escapeHtml(req.dueDate) : '',
+      cliente: req.clientName ? escapeHtml(req.clientName) : '',
+      url: req.clickupTaskUrl ? req.clickupTaskUrl.replace(/"/g, '%22') : ''
+    })
   );
 }
 
@@ -127,6 +131,11 @@ export async function runReminders(tenantId: string, now = new Date()): Promise<
     );
   const schedules = await getScheduleMap(tenantId);
   const dev = await devReminderMinutes(tenantId);
+  const aUn = await getAuto(tenantId, 'reminder_unanswered');
+  const aLater = await getAuto(tenantId, 'reminder_later');
+  if (!aUn.enabled && !aLater.enabled) return;
+  const unMinutes = num(aUn, 'minutes');
+  const dayFrac = num(aLater, 'dayPct') / 100;
 
   for (const req of reqs) {
     for (const n of notices.filter((x) => x.requestId === req.id)) {
@@ -143,6 +152,8 @@ export async function runReminders(tenantId: string, now = new Date()): Promise<
 
       const laterEvent = events.find((e) => e.requestId === req.id && e.personClickupUserId === user && e.eventType === 'later');
       const later = Boolean(laterEvent);
+      const auto = later ? aLater : aUn;
+      if (!auto.enabled) continue;
       let due = false;
       if (dev !== null) {
         // Modo desarrollo: minutos de reloj. «Más tarde» además exige que la tarea venza hoy.
@@ -150,12 +161,12 @@ export async function runReminders(tenantId: string, now = new Date()): Promise<
           ? req.dueDate === localParts(sch.timezone, now).date && now.getTime() - laterEvent!.createdAt.getTime() >= dev * 60000
           : now.getTime() - n.sentAt.getTime() >= dev * 60000;
       } else if (!later) {
-        due = workingMinutesBetween(sch, n.sentAt.getTime(), now.getTime(), REMINDER_WORKING_MINUTES) >= REMINDER_WORKING_MINUTES;
+        due = workingMinutesBetween(sch, n.sentAt.getTime(), now.getTime(), unMinutes) >= unMinutes;
       } else {
         // «Más tarde» + vence hoy + pasada la mitad de su jornada (y sin haber terminado).
         const lp = localParts(sch.timezone, now);
         const start = toMinutes(sch.workStart);
-        const half = start + (sch.hoursPerDay * 60) / 2;
+        const half = start + sch.hoursPerDay * 60 * dayFrac;
         due =
           req.dueDate === lp.date &&
           sch.workDays.includes(WEEKDAY_ISO[lp.weekday]) &&
@@ -175,7 +186,7 @@ export async function runReminders(tenantId: string, now = new Date()): Promise<
         forClickupUserId: user,
         forName: n.forName,
         requestId: req.id,
-        payload: { text: reminderText(req, later), buttons } satisfies Omit<NotificationPayload, 'testMode'>
+        payload: { text: reminderText(req, later, auto.template, n.forName), buttons } satisfies Omit<NotificationPayload, 'testMode'>
       });
       await db
         .update(opsRequests)

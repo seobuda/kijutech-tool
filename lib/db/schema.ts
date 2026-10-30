@@ -1405,6 +1405,12 @@ export const opsTeamProfiles = pgTable(
     workStart: varchar('work_start', { length: 5 }).notNull().default('09:00'),
     hoursPerDay: decimal('hours_per_day', { precision: 4, scale: 2 }).notNull().default('8'),
     timezone: varchar('timezone', { length: 60 }).notNull().default('America/Santo_Domingo'),
+    // Comida y silencio (HH:MM, en su zona): en ese hueco no se le envía nada. null = sin hueco.
+    lunchStart: varchar('lunch_start', { length: 5 }),
+    lunchEnd: varchar('lunch_end', { length: 5 }),
+    quietStart: varchar('quiet_start', { length: 5 }),
+    quietEnd: varchar('quiet_end', { length: 5 }),
+    urgentBypassQuiet: boolean('urgent_bypass_quiet').notNull().default(false),
     active: boolean('active').notNull().default(true),
     createdAt: timestamp('created_at').notNull().defaultNow(),
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
@@ -1579,3 +1585,42 @@ export enum ActivityType {
   INVITE_TEAM_MEMBER = 'INVITE_TEAM_MEMBER',
   ACCEPT_INVITATION = 'ACCEPT_INVITATION',
 }
+
+// ---------------------------------------------------------------------------
+// Operaciones · paso 6E: panel de Automatizaciones
+// ---------------------------------------------------------------------------
+
+// Solo guarda lo que el usuario ha cambiado; el resto son los valores por defecto del código.
+export const opsAutomations = pgTable(
+  'ops_automations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    key: varchar('key', { length: 60 }).notNull(),
+    enabled: boolean('enabled'),
+    config: jsonb('config').notNull().default({}),
+    template: text('template'),
+    updatedBy: integer('updated_by').references(() => users.id, { onDelete: 'set null' }),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [unique('ops_automations_tenant_key_unique').on(table.tenantId, table.key)]
+);
+
+export const opsAutomationChanges = pgTable(
+  'ops_automation_changes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    automationKey: varchar('automation_key', { length: 60 }).notNull(),
+    field: varchar('field', { length: 60 }).notNull(),
+    oldValue: text('old_value'),
+    newValue: text('new_value'),
+    changedBy: integer('changed_by').references(() => users.id, { onDelete: 'set null' }),
+    changedAt: timestamp('changed_at').notNull().defaultNow(),
+  },
+  (table) => [index('ops_automation_changes_tenant_at_idx').on(table.tenantId, table.changedAt)]
+);

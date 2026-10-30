@@ -5,6 +5,7 @@ import { opsNotifications } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
 import { ensureTelegramMembers, getOwnerMember, getTelegramConfig, linkUrl } from '@/lib/operaciones/telegram-config';
 import { getOwnerTimezone, getScheduleMap, scheduleOrDefault } from '@/lib/operaciones/team-profiles';
+import { getAuto } from '@/lib/operaciones/automations';
 import { getWorkerState } from '@/lib/operaciones/telegram-worker';
 import { TelegramAjustes, type TelegramView } from '../ajustes/telegram-ajustes';
 
@@ -39,7 +40,7 @@ export default async function TelegramPage() {
     webhookUrl: tgCfg?.webhookUrl ?? null,
     pollAgeSeconds: tgCfg?.lastPollAt ? Math.round((Date.now() - tgCfg.lastPollAt.getTime()) / 1000) : null,
     lastError: tgCfg?.lastError ?? null,
-    digestTimes: tgCfg?.digestTimes ?? '13:00,18:00',
+    digestTimes: String((await getAuto(user.tenantId, 'digest')).cfg.times),
     digestTimezone: await getOwnerTimezone(user.tenantId),
     workerRole: worker?.role ?? 'unknown',
     members: tgMembers.map((m) => ({

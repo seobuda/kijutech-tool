@@ -35,6 +35,11 @@ export default async function EquipoPage() {
     workStart: p.workStart,
     hoursPerDay: Number(p.hoursPerDay),
     timezone: p.timezone,
+    lunchStart: p.lunchStart ?? '',
+    lunchEnd: p.lunchEnd ?? '',
+    quietStart: p.quietStart ?? '',
+    quietEnd: p.quietEnd ?? '',
+    urgentBypassQuiet: p.urgentBypassQuiet,
     active: p.active,
     workTypes: p.workTypes
   }));

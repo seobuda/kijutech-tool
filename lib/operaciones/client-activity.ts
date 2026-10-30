@@ -11,7 +11,8 @@ import { opsClientActivity, opsRequestEvents, opsRequests, opsSettings } from '@
 import { fetchWatchTasks, madridNoonMs, OPS_TIMEZONE, type WatchTask } from '@/lib/operaciones/clickup';
 import { getClickUpToken } from '@/lib/operaciones/queries';
 import { getStructure, selectedSpaces } from '@/lib/operaciones/structure';
-import { localParts } from '@/lib/operaciones/notifications';
+import { localParts, toMinutes } from '@/lib/operaciones/notifications';
+import { getAuto, num } from '@/lib/operaciones/automations';
 import { getScheduleMap, scheduleOrDefault } from '@/lib/operaciones/team-profiles';
 import { workingMinutesBetween } from '@/lib/operaciones/reminders';
 import {
@@ -27,9 +28,7 @@ const DAY_MS = 24 * 3600 * 1000;
 const KEY_LAST_RUN = 'client_activity_last_run'; // AAAA-MM-DD (Madrid) de la última pasada correcta
 const KEY_LAST_ATTEMPT = 'client_activity_last_attempt'; // ms del último intento
 const KEY_LAST_ERROR = 'client_activity_last_error';
-const RETRY_AFTER_MS = 30 * 60 * 1000;
-const RUN_AFTER_MINUTES = 3 * 60; // 03:00 Madrid
-const REMIND_EVERY_MS = 7 * DAY_MS;
+// Hora de la pasada, reintento y recordatorio semanal: Automatizaciones (por defecto 03:00, 30 min, 7 días).
 const isClosedType = (t: string) => t === 'closed' || t === 'done';
 
 async function getSetting(tenantId: string, key: string): Promise<string | null> {
@@ -208,15 +207,17 @@ export async function runActivityNow(tenantId: string): Promise<ScanResult> {
 
 // Planificador (cada 30 s): una pasada al día, a partir de las 03:00 de Madrid.
 export async function runActivityDaily(tenantId: string, now = new Date()): Promise<void> {
+  const auto = await getAuto(tenantId, 'activity_scan');
+  if (!auto.enabled) return;
   const lp = localParts(OPS_TIMEZONE, now);
-  if (lp.minutes < RUN_AFTER_MINUTES) return;
+  if (lp.minutes < toMinutes(String(auto.cfg.time))) return;
   const last = await getSetting(tenantId, KEY_LAST_RUN);
   if (last) {
     const lastDay = new Intl.DateTimeFormat('en-CA', { timeZone: OPS_TIMEZONE }).format(new Date(last));
     if (lastDay === lp.date) return;
   }
   const attempt = Number(await getSetting(tenantId, KEY_LAST_ATTEMPT));
-  if (Number.isFinite(attempt) && now.getTime() - attempt < RETRY_AFTER_MS) return;
+  if (Number.isFinite(attempt) && now.getTime() - attempt < num(auto, 'retryMin') * 60_000) return;
   await setSetting(tenantId, KEY_LAST_ATTEMPT, String(now.getTime()));
   try {
     await runActivityNow(tenantId);
@@ -236,12 +237,13 @@ export async function getClientAlertsToShow(tenantId: string, now = Date.now()):
     getLevels(tenantId),
     db.select().from(opsClientActivity).where(eq(opsClientActivity.tenantId, tenantId))
   ]);
+  const remindEveryMs = num(await getAuto(tenantId, 'client_alerts'), 'remindDays') * DAY_MS;
   const out: ClientAlertItem[] = [];
   for (const c of clients) {
     const row = rows.find((r) => r.clientId === c.id);
     if (!row) continue;
     const ev = evaluateClient(c, row, levels, now);
-    const due = (notified: Date | null) => !notified || now - notified.getTime() >= REMIND_EVERY_MS;
+    const due = (notified: Date | null) => !notified || now - notified.getTime() >= remindEveryMs;
     if (ev.inactive && due(row.inactiveNotifiedAt)) {
       out.push({ clientId: c.id, name: c.name, kind: 'inactive', text: ev.inactiveNote, reminder: Boolean(row.inactiveNotifiedAt) });
     }

@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { saveDigestSettings, sendDigestNowAction } from '@/lib/operaciones/flow-actions';
+import { sendDigestNowAction } from '@/lib/operaciones/flow-actions';
 import {
   activateWebhook,
   backToPolling,
@@ -535,7 +535,6 @@ function MemberRow({ m, botReady }: { m: TelegramMemberView; botReady: boolean }
 // Cortafuegos de avisos: solo lo urgente llega al instante; el resto, en dos resúmenes al día.
 function DigestBox({ view }: { view: TelegramView }) {
   const router = useRouter();
-  const [times, setTimes] = useState(view.digestTimes.split(',').join(', '));
   const [msg, setMsg] = useState<Msg>(null);
   const [pending, startTransition] = useTransition();
 
@@ -556,20 +555,14 @@ function DigestBox({ view }: { view: TelegramView }) {
         viernes.
       </p>
       <div className="flex flex-wrap items-end gap-2">
-        <div className="space-y-1">
-          <Label htmlFor="digest-times">Horas (HH:MM, separadas por comas)</Label>
-          <Input id="digest-times" className="w-48" value={times} onChange={(e) => setTimes(e.target.value)} />
-        </div>
         <p className="text-xs text-muted-foreground pb-2">
-          Hora de {view.digestTimezone} (zona de tu ficha en{' '}
-          <Link href="/dashboard/operaciones/equipo" className="text-orange-600 hover:underline">
-            Equipo
+          Horas actuales: <strong>{view.digestTimes.split(',').join(', ')}</strong> (hora de {view.digestTimezone}). Se cambian, con el
+          resto de tiempos y textos, en{' '}
+          <Link href="/dashboard/operaciones/automatizaciones" className="text-orange-600 hover:underline">
+            Automatizaciones
           </Link>
-          ).
+          .
         </p>
-        <Button size="sm" disabled={pending} onClick={() => run(() => saveDigestSettings(times), () => 'Horas guardadas.')}>
-          Guardar
-        </Button>
         <Button
           size="sm"
           variant="outline"

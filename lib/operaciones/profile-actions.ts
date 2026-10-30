@@ -49,6 +49,12 @@ export type ProfileInput = {
   workStart: string;
   hoursPerDay: number;
   timezone: string;
+  // Comida y silencio (HH:MM; vacío = sin hueco): en ese hueco no se le envía nada.
+  lunchStart: string;
+  lunchEnd: string;
+  quietStart: string;
+  quietEnd: string;
+  urgentBypassQuiet: boolean;
   active: boolean;
   workTypes: { key: string; role: WorkTypeRole }[];
 };
@@ -66,6 +72,14 @@ export async function saveProfile(input: ProfileInput): Promise<Ok<{ id: string 
     }
     if (!(input.hoursPerDay > 0 && input.hoursPerDay <= 24)) {
       return { ok: false, error: 'Las horas por día deben estar entre 0,5 y 24' };
+    }
+    const hhmm = /^([01]\d|2[0-3]):[0-5]\d$/;
+    for (const [label, a, b] of [
+      ['La comida', input.lunchStart, input.lunchEnd],
+      ['El silencio', input.quietStart, input.quietEnd]
+    ] as const) {
+      if (!a && !b) continue;
+      if (!hhmm.test(a) || !hhmm.test(b) || a === b) return { ok: false, error: `${label}: indica la hora de inicio y la de fin (distintas, formato HH:MM) o deja ambas vacías` };
     }
     const days = [...new Set(input.workDays.filter((d) => Number.isInteger(d) && d >= 1 && d <= 7))].sort();
     if (days.length === 0) return { ok: false, error: 'Marca al menos un día laborable' };
@@ -107,6 +121,11 @@ export async function saveProfile(input: ProfileInput): Promise<Ok<{ id: string 
       workStart: input.workStart,
       hoursPerDay: String(input.hoursPerDay),
       timezone: input.timezone,
+      lunchStart: input.lunchStart || null,
+      lunchEnd: input.lunchEnd || null,
+      quietStart: input.quietStart || null,
+      quietEnd: input.quietEnd || null,
+      urgentBypassQuiet: input.urgentBypassQuiet,
       active: input.active,
       updatedAt: new Date()
     };

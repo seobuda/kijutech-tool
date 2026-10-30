@@ -11,6 +11,7 @@ const TABS = [
   { href: '/dashboard/operaciones/clientes', label: 'Clientes' },
   { href: '/dashboard/operaciones/encargos', label: 'Encargos' },
   { href: '/dashboard/operaciones/nuevo', label: 'Nuevo encargo' },
+  { href: '/dashboard/operaciones/automatizaciones', label: 'Automatizaciones' },
   { href: '/dashboard/operaciones/telegram', label: 'Telegram' },
   { href: '/dashboard/operaciones/ajustes', label: 'Ajustes ClickUp' }
 ];

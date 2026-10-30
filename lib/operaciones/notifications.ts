@@ -27,12 +27,14 @@ import {
   WEEKDAY_ISO
 } from '@/lib/operaciones/team-profiles';
 import { madridNoonMs } from '@/lib/operaciones/clickup';
+import { DEF, getAuto, num, renderTemplate } from '@/lib/operaciones/automations';
+import { isQuietAt, nearestAllowedMinute, releaseAt } from '@/lib/operaciones/quiet';
 import { getTeamToday, type TeamMemberToday } from '@/lib/operaciones/team-today';
 import type { OpsTask } from '@/lib/operaciones/clickup';
 
-const MAX_ATTEMPTS = 6;
+const MAX_ATTEMPTS = 6; // por defecto; se cambia en Automatizaciones → Envío
+const URGENT_KINDS = ['block_alert', 'review_request'];
 const LEASE_SECONDS = 90;
-export const DAILY_WINDOW_MINUTES = 180; // si el servidor estuvo apagado a la hora, se envía hasta 3 h después
 
 type Payload = {
   text: string; // cuerpo en HTML (sin la cabecera de modo pruebas)
@@ -89,13 +91,15 @@ function section(title: string, tasks: OpsTask[], timezone: string, max = 8): st
   return `<b>${title} (${tasks.length})</b>\n${shown.join('\n')}`;
 }
 
-export function buildDailyText(name: string, b: TeamMemberToday, timezone: string): string {
-  const parts = [
-    `☀️ <b>Buenos días, ${escapeHtml(name)}</b>`,
-    section('⚠️ Vencidas', b.overdue, timezone),
-    section('📅 Para hoy', b.today, timezone)
-  ].filter(Boolean);
-  return clampMessage(parts.join('\n\n'));
+export function buildDailyText(name: string, b: TeamMemberToday, timezone: string, template: string): string {
+  return clampMessage(
+    renderTemplate(DEF.get('daily_team')!, template, {
+      nombre: escapeHtml(name),
+      vencidas: section('⚠️ Vencidas', b.overdue, timezone),
+      hoy: section('📅 Para hoy', b.today, timezone),
+      fecha: fmtDay(Date.now(), timezone)
+    })
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -113,24 +117,25 @@ export async function enqueueNewRequestNotification(
 
   const cfg = await getTelegramConfig(req.tenantId);
   if (!cfg) return; // Telegram no está configurado
+  const auto = await getAuto(req.tenantId, 'new_request');
+  if (!auto.enabled) return; // apagado en Automatizaciones
   const userId = opts.forUserId ?? req.assigneeClickupId;
   if (!userId) return; // sin responsable no hay a quién avisar
   const userName = opts.forName ?? req.assigneeName;
 
   const tz = await getMemberTimezone(req.tenantId, userId);
-  const due = req.dueDate ? `\n📅 Entrega: <b>${escapeHtml(fmtDay(madridNoonMs(req.dueDate), tz))}</b>` : '';
   const summary = summarize(req.preparedDescription);
 
   const text = clampMessage(
-    [
-      `📌 <b>Nuevo encargo</b>${opts.label ? ` <i>(${escapeHtml(opts.label)})</i>` : ''}`,
-      `<b>${escapeHtml(req.title)}</b>`,
-      `📂 Lista: ${escapeHtml(req.clickupListName ?? '—')}${due}`,
-      summary ? `\n${escapeHtml(summary)}` : '',
-      `\n🔗 <a href="${safeUrl(req.clickupTaskUrl)}">Abrir la tarea en ClickUp</a>`
-    ]
-      .filter((l) => l !== '')
-      .join('\n')
+    renderTemplate(DEF.get('new_request')!, auto.template, {
+      tarea: escapeHtml(req.title),
+      lista: escapeHtml(req.clickupListName ?? '—'),
+      fecha: req.dueDate ? escapeHtml(fmtDay(madridNoonMs(req.dueDate), tz)) : '',
+      cliente: req.clientName ? escapeHtml(req.clientName) : '',
+      resumen: summary ? escapeHtml(summary) : '',
+      url: safeUrl(req.clickupTaskUrl),
+      etiqueta: opts.label ? ` <i>(${escapeHtml(opts.label)})</i>` : ''
+    })
   );
 
   const payload: Payload = { text, testMode: cfg.testMode, actions: true };
@@ -347,6 +352,20 @@ async function sendOne(c: Claimed): Promise<void> {
   const dest = await resolveChat(c);
   if ('error' in dest) return fail(dest.error);
 
+  // Comida y silencio de la persona (en modo pruebas no se aplican): el aviso se retrasa hasta que acabe el hueco.
+  if (c.kind !== 'test' && !c.payload.testMode && c.for_clickup_user_id) {
+    const sch = scheduleOrDefault(await getScheduleMap(c.tenant_id), c.for_clickup_user_id);
+    const urgent = URGENT_KINDS.includes(c.kind);
+    const nowMs = Date.now();
+    if (isQuietAt(sch, nowMs, urgent)) {
+      await db
+        .update(opsNotifications)
+        .set({ attempts: Math.max(0, c.attempts - 1), nextAttemptAt: new Date(releaseAt(sch, nowMs, urgent)) })
+        .where(eq(opsNotifications.id, c.id));
+      return;
+    }
+  }
+
   const header =
     c.payload.testMode && c.kind !== 'test' && !c.payload.toOwner
       ? `🧪 <i>Modo pruebas · iba dirigido a: ${escapeHtml(c.for_name ?? '—')}</i>\n\n`
@@ -408,6 +427,7 @@ export async function processNotifications(tenantId?: string): Promise<number> {
   processing = true;
   let sent = 0;
   try {
+    const maxAttempts = tenantId ? num(await getAuto(tenantId, 'delivery'), 'maxAttempts') : MAX_ATTEMPTS;
     for (let round = 0; round < 5; round++) {
       const rows = (await db.execute(sql`
         UPDATE ops_notifications
@@ -415,7 +435,7 @@ export async function processNotifications(tenantId?: string): Promise<number> {
             next_attempt_at = now() + make_interval(secs => ${LEASE_SECONDS})
         WHERE id IN (
           SELECT id FROM ops_notifications
-          WHERE (status = 'pendiente' OR (status = 'fallido' AND attempts < ${MAX_ATTEMPTS}))
+          WHERE (status = 'pendiente' OR (status = 'fallido' AND attempts < ${maxAttempts}))
             AND next_attempt_at <= now()
             ${tenantId ? sql`AND tenant_id = ${tenantId}` : sql``}
           ORDER BY created_at
@@ -487,6 +507,9 @@ export function isValidTimezone(tz: string): boolean {
 export async function runDailySummaries(tenantId: string, now = new Date()): Promise<void> {
   const cfg = await getTelegramConfig(tenantId);
   if (!cfg) return;
+  const auto = await getAuto(tenantId, 'daily_team');
+  if (!auto.enabled) return;
+  const windowMin = num(auto, 'windowMin');
 
   const members = await db
     .select()
@@ -502,8 +525,9 @@ export async function runDailySummaries(tenantId: string, now = new Date()): Pro
     if (!sch.active) continue; // ficha desactivada
     const lp = localParts(sch.timezone, now);
     if (!sch.workDays.includes(WEEKDAY_ISO[lp.weekday])) continue;
-    const start = toMinutes(sch.workStart);
-    if (lp.minutes < start || lp.minutes >= start + DAILY_WINDOW_MINUTES) continue;
+    // Si la hora de entrada cae en su comida o silencio, sale en el momento permitido más cercano.
+    const start = cfg.testMode ? toMinutes(sch.workStart) : nearestAllowedMinute(sch, toMinutes(sch.workStart));
+    if (lp.minutes < start || lp.minutes >= start + windowMin) continue;
     due.push({ member: m, key: `daily:${m.clickupUserId}:${lp.date}`, tz: sch.timezone });
   }
   if (due.length === 0) return;
@@ -524,7 +548,7 @@ export async function runDailySummaries(tenantId: string, now = new Date()): Pro
     const empty = !b || (b.overdue.length === 0 && b.today.length === 0);
     const payload: Payload = empty
       ? { text: '', testMode: cfg.testMode, skipped: 'sin tareas' }
-      : { text: buildDailyText(d.member.username, b!, d.tz), testMode: cfg.testMode };
+      : { text: buildDailyText(d.member.username, b!, d.tz, auto.template), testMode: cfg.testMode };
     await db
       .insert(opsNotifications)
       .values({
@@ -556,6 +580,7 @@ export async function sendDailySummariesNow(
     .where(eq(opsTelegramMembers.tenantId, tenantId));
   const data = await getTeamToday(tenantId, { force: true });
   const schedules = await getScheduleMap(tenantId);
+  const auto = await getAuto(tenantId, 'daily_team');
 
   let queued = 0;
   let withoutTasks = 0;
@@ -573,7 +598,7 @@ export async function sendDailySummariesNow(
       dedupeKey: `daily-manual:${m.clickupUserId}:${stamp}`,
       forClickupUserId: m.clickupUserId,
       forName: m.username,
-      payload: { text: buildDailyText(m.username, b, scheduleOrDefault(schedules, m.clickupUserId).timezone), testMode: cfg.testMode } satisfies Payload
+      payload: { text: buildDailyText(m.username, b, scheduleOrDefault(schedules, m.clickupUserId).timezone, auto.template), testMode: cfg.testMode } satisfies Payload
     });
     queued++;
   }

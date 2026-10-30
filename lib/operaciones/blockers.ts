@@ -4,6 +4,7 @@
 //  - si no → se escala a quien lleva las operaciones, resumido, con opciones y recomendación.
 // Solo los bloqueos de encargos urgentes (prioridad 1) llegan al instante; el resto va al resumen
 // de las 13:00 / 18:00 y a «Mi bandeja».
+import { DEF, getAuto, renderTemplate } from '@/lib/operaciones/automations';
 import { and, eq, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
@@ -228,7 +229,8 @@ async function escalate(
     `🙋 He pasado tu pregunta a quien lleva las operaciones.\n<b>${escapeHtml(req.title)}</b>\nTe responderá por aquí.`
   );
   // Cortafuegos: solo lo urgente (prioridad 1) llega al instante.
-  if (req.priority === 1) {
+  const urgentAuto = await getAuto(req.tenantId, 'urgent_block');
+  if (req.priority === 1 && urgentAuto.enabled) {
     const owner = await getOwnerMember(req.tenantId);
     if (owner) {
       await enqueueNotification({
@@ -239,7 +241,7 @@ async function escalate(
         forName: owner.username,
         requestId: req.id,
         payload: {
-          text: `🔴 <b>URGENTE</b>\n${blockerOwnerText(req, upd)}`,
+          text: renderTemplate(DEF.get('urgent_block')!, urgentAuto.template, { detalle: blockerOwnerText(req, upd) }),
           toOwner: true,
           photoFileId: b.attachmentFileId ?? undefined,
           buttons: [[{ text: '💬 Responder', data: `rp:${b.id}` }]]

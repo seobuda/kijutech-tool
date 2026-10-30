@@ -5,7 +5,7 @@
 import { and, eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/lib/db/drizzle';
-import { opsTelegramConfig, opsWorkTypes } from '@/lib/db/schema';
+import { opsWorkTypes } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
 import { getClickUpConnection } from '@/lib/operaciones/queries';
 import { saveStatusGroup } from '@/lib/operaciones/status-map';
@@ -104,30 +104,6 @@ export async function updateWorkType(key: string, patch: { label?: string; activ
 }
 
 // --- Resúmenes para el dueño ------------------------------------------------------------
-
-export async function saveDigestSettings(times: string): Promise<Ok> {
-  try {
-    const user = await requireUser();
-    const list = times
-      .split(',')
-      .map((t) => t.trim())
-      .filter(Boolean);
-    if (list.length === 0 || list.length > 4 || list.some((t) => !/^([01]?\d|2[0-3]):[0-5]\d$/.test(t))) {
-      return { ok: false, error: 'Escribe de 1 a 4 horas con formato HH:MM separadas por comas (ej.: 13:00, 18:00)' };
-    }
-    await db
-      .update(opsTelegramConfig)
-      .set({
-        digestTimes: list.map((t) => t.padStart(5, '0')).join(','),
-        updatedAt: new Date()
-      })
-      .where(eq(opsTelegramConfig.tenantId, user.tenantId));
-    revalidatePath('/dashboard/operaciones/telegram');
-    return { ok: true };
-  } catch (e) {
-    return fail(e, 'No se pudo guardar');
-  }
-}
 
 export async function sendDigestNowAction(): Promise<Ok<{ sent: boolean }>> {
   try {

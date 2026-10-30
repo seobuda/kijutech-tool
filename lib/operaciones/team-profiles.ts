@@ -26,6 +26,11 @@ export type Schedule = {
   workDays: number[]; // 1 = lunes … 7 = domingo
   hoursPerDay: number;
   active: boolean;
+  lunchStart: string | null;
+  lunchEnd: string | null;
+  quietStart: string | null;
+  quietEnd: string | null;
+  urgentBypassQuiet: boolean;
 };
 
 // Quién puede ver o editar fichas. Hoy solo quien lleva las operaciones (cualquier usuario con
@@ -93,7 +98,12 @@ export async function getScheduleMap(tenantId: string): Promise<Map<string, Sche
       workStart: p.workStart,
       workDays: parseWorkDays(p.workDays),
       hoursPerDay: Number(p.hoursPerDay),
-      active: p.active
+      active: p.active,
+      lunchStart: p.lunchStart,
+      lunchEnd: p.lunchEnd,
+      quietStart: p.quietStart,
+      quietEnd: p.quietEnd,
+      urgentBypassQuiet: p.urgentBypassQuiet
     });
   }
   return map;
@@ -106,7 +116,12 @@ export function scheduleOrDefault(map: Map<string, Schedule>, clickupUserId: str
       workStart: '09:00',
       workDays: [1, 2, 3, 4, 5],
       hoursPerDay: 8,
-      active: true
+      active: true,
+      lunchStart: null,
+      lunchEnd: null,
+      quietStart: null,
+      quietEnd: null,
+      urgentBypassQuiet: false
     }
   );
 }

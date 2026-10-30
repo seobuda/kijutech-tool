@@ -244,4 +244,23 @@ export const OPS_REQUEST_PROCESS_MAP: ProcessStep[] = [
       ],
     },
   },
+  {
+    id: 'ops-automations',
+    name: 'Panel de Automatizaciones: tiempos, textos y silencio',
+    description:
+      'Todas las automatizaciones (avisos, recordatorios, resúmenes, alertas de clientes, vigilancia de ClickUp, pasada de actividad) se ajustan desde una pestaña: interruptor, tiempos con límites, texto con huecos y vista previa, «Enviarme una prueba», registro de cambios y «Próximos envíos» de las próximas 24 horas. Cada persona tiene comida y horas de silencio en su ficha.',
+    status: 'built',
+    file: 'lib/operaciones/automations.ts',
+    technicalDetail: {
+      summary:
+        'Registro de definiciones con valores por defecto en código; la tabla ops_automations solo guarda lo cambiado (interruptor, config, texto). Los planificadores leen de ahí en cada pasada (caché de 10 s). El silencio se aplica en el único punto de envío (processNotifications: los avisos que reaccionan a algo se retrasan hasta que acabe el hueco; los urgentes lo atraviesan solo si la ficha lo permite) y los envíos programados (resumen diario y de bandeja) salen en el momento permitido más cercano. Los próximos envíos se calculan al vuelo con las mismas reglas.',
+      stack: ['Tablas ops_automations y ops_automation_changes', 'Columnas de comida y silencio en ops_team_profiles', 'Plantillas con huecos validadas (etiquetas de Telegram)', 'lib/operaciones/quiet.ts y upcoming.ts'],
+      keyDecisions: [
+        'Sin IA: todo es configuración y cálculo determinista',
+        'Los valores por defecto viven en el código; restaurar es borrar la fila',
+        'Una línea con un hueco opcional vacío desaparece del mensaje',
+        'En modo pruebas no se aplica el silencio para no retrasar lo que llega al dueño',
+      ],
+    },
+  },
 ];

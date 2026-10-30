@@ -26,6 +26,11 @@ export type ProfileView = {
   workStart: string;
   hoursPerDay: number;
   timezone: string;
+  lunchStart: string;
+  lunchEnd: string;
+  quietStart: string;
+  quietEnd: string;
+  urgentBypassQuiet: boolean;
   active: boolean;
   workTypes: { key: string; role: 'primary' | 'support' }[];
 };
@@ -60,6 +65,11 @@ const emptyProfile = (): ProfileView => ({
   workStart: '09:00',
   hoursPerDay: 8,
   timezone: 'America/Santo_Domingo',
+  lunchStart: '',
+  lunchEnd: '',
+  quietStart: '',
+  quietEnd: '',
+  urgentBypassQuiet: false,
   active: true,
   workTypes: []
 });
@@ -343,6 +353,11 @@ function ProfileForm({
         workStart: f.workStart,
         hoursPerDay: f.hoursPerDay,
         timezone: f.timezone,
+        lunchStart: f.lunchStart,
+        lunchEnd: f.lunchEnd,
+        quietStart: f.quietStart,
+        quietEnd: f.quietEnd,
+        urgentBypassQuiet: f.urgentBypassQuiet,
         active: f.active,
         workTypes: f.workTypes
       };
@@ -466,6 +481,35 @@ function ProfileForm({
             </datalist>
           </div>
         </div>
+      </div>
+
+      <div className="space-y-2" data-testid="perfil-silencio">
+        <Label>Comida y horas de silencio</Label>
+        <p className="text-xs text-muted-foreground">
+          En estos huecos (hora de su zona) no se le envía nada: lo que caiga dentro se retrasa hasta que termine (y los resúmenes programados salen en el momento permitido más cercano). Deja vacío para no aplicar.
+        </p>
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="space-y-1">
+            <Label htmlFor="p-lunch-a" className="text-xs">Comida: de</Label>
+            <Input id="p-lunch-a" type="time" className="w-32" value={f.lunchStart} onChange={(e) => set({ lunchStart: e.target.value })} />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="p-lunch-b" className="text-xs">a</Label>
+            <Input id="p-lunch-b" type="time" className="w-32" value={f.lunchEnd} onChange={(e) => set({ lunchEnd: e.target.value })} />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="p-quiet-a" className="text-xs">Silencio: de</Label>
+            <Input id="p-quiet-a" type="time" className="w-32" value={f.quietStart} onChange={(e) => set({ quietStart: e.target.value })} />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="p-quiet-b" className="text-xs">a</Label>
+            <Input id="p-quiet-b" type="time" className="w-32" value={f.quietEnd} onChange={(e) => set({ quietEnd: e.target.value })} />
+          </div>
+        </div>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={f.urgentBypassQuiet} onChange={(e) => set({ urgentBypassQuiet: e.target.checked })} />
+          Los urgentes pueden saltarse el silencio
+        </label>
       </div>
 
       <div className="space-y-1">
