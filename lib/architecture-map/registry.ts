@@ -1,7 +1,7 @@
 import { getSeoManifest } from '@/lib/seo/manifest';
 import { CLUSTERING_PROCESS_MAP, type ProcessStep, type TechnicalDetail } from '@/lib/ai/clustering/pipeline';
 import { COMPETITOR_ANALYSIS_PROCESS_MAP } from '@/lib/seo/competitor-analysis-builder';
-import { OPS_REQUEST_PROCESS_MAP } from '@/lib/operaciones/process-map';
+import { OPS_MAPS } from '@/lib/operaciones/process-map';
 
 export interface SystemNode {
   id: string;
@@ -15,8 +15,11 @@ export interface SystemNode {
   // 'support' = procesos reales pero auxiliares, invocados desde dentro
   // del flujo en vez de ser un paso propio de él; 'flow' = etapas
   // secuenciales del wizard SEO (derivadas de modules/seo/manifest.json).
-  group: 'infrastructure' | 'support' | 'flow';
+  // 'future' = pendientes en gris (todavía sin construir).
+  group: 'infrastructure' | 'support' | 'flow' | 'future';
   technicalDetail?: TechnicalDetail;
+  // Conexiones visuales extra (línea discontinua) hacia otros nodos del mismo nivel.
+  edgesTo?: { id: string; label: string }[];
 }
 
 // Infraestructura núcleo real (no son etapas del wizard SEO, así que no
@@ -82,24 +85,48 @@ const CORE_NODES: SystemNode[] = [
     id: 'operaciones',
     name: 'Operaciones',
     description:
-      'Módulo aparte del SEO: lee en directo ClickUp y muestra qué tiene hoy, vencido y sin fecha cada persona del equipo.',
-    status: 'in_progress',
+      'Del texto suelto a la tarea completada: Bloc con IA, envío fiable a ClickUp, avisos y botones por Telegram, vigilancia de ClickUp, resúmenes, alertas de clientes y panel de Automatizaciones.',
+    status: 'built',
     icon: 'FolderKanban',
-    detailMapId: 'ops_requests',
+    detailMapId: 'ops',
     group: 'infrastructure',
+    edgesTo: [{ id: 'future-subagentes', label: 'revisor intercambiable (reviewers.ts)' }],
     technicalDetail: {
       summary:
-        'Bloc de notas con audio que la IA convierte en encargos, y lectura en directo de ClickUp (Equipo hoy). Las tareas leídas no se guardan; las notas y los encargos sí.',
-      stack: ['API v2 de ClickUp (fetch nativo)', 'Tablas ops_clickup_connections, ops_notes, ops_note_audios, ops_requests y ops_settings', 'AES-256-GCM (mismo cifrado que las claves de IA)'],
+        'Módulo aparte del SEO. Un bloc de notas (texto o audio) que la IA convierte en encargos con cliente, responsable, fecha y lista; el envío a ClickUp es fiable (sin duplicados); el equipo trabaja desde botones de Telegram; el sistema vigila ClickUp, manda recordatorios y resúmenes y avisa de clientes sin actividad. Todo se ajusta desde el panel de Automatizaciones.',
+      stack: ['API v2 de ClickUp (fetch nativo)', 'Bot de Telegram (long polling dentro del contenedor)', 'callAI() — pasarela de IA con prompts editables', 'Tablas ops_* (mapa detallado en el nivel siguiente)'],
       keyDecisions: [
+        'Las decisiones las toma el código siempre que se pueda; la IA solo propone, transcribe o hace el triaje de bloqueos',
         'Una conexión por tenant; el token nunca sale del servidor',
-        'Caché en base de datos de espacios, listas y miembros (se refresca sola cada hora): las pantallas no llaman a ClickUp para pintarse',
-        'Todas las llamadas pasan por un cliente con contador por minuto (espera al 80 % del límite de 100), reintento ante 429 y registro de peticiones',
-        'Equipo hoy: una consulta de workspace filtrada por fecha, con caché de 2 min; "sin fecha" se calcula aparte cada 30 min',
-        '"Hoy" se calcula en zona Europe/Madrid',
+        'Todas las llamadas a ClickUp pasan por un cliente con contador por minuto y caché',
+        'Un solo proceso escucha el bot (candado de PostgreSQL)',
       ],
     },
   },
+  {
+    id: 'integraciones',
+    name: 'Integraciones',
+    description: 'Las conexiones con el exterior: ClickUp (caché y contador de peticiones), Telegram y la IA, con el prompt que usa cada función.',
+    status: 'built',
+    icon: 'Sparkles',
+    detailMapId: 'ops_integrations',
+    group: 'infrastructure',
+  },
+];
+
+
+// Pendientes (en gris): todavía sin construir. Cada uno con una frase de qué será.
+const FUTURE_NODES: SystemNode[] = [
+  { id: 'future-servidor', name: 'Servidor', status: 'planned', icon: 'Circle', group: 'future', description: 'Subir la herramienta a un servidor con dirección pública: Telegram por webhook, copias de seguridad, usuarios y roles con seguridad real y limpieza de la plantilla.' },
+  { id: 'future-jornada', name: 'Jornada y rendimiento', status: 'planned', icon: 'Circle', group: 'future', description: 'Medir rendimiento y no presencia, con flexibilidad: botones «tengo que salir» y «he vuelto», y la hora de entrada frente a la primera actividad real (se apoya en el registro de eventos).' },
+  { id: 'future-niveles', name: 'Niveles y recompensas', status: 'planned', icon: 'Circle', group: 'future', description: 'Progreso visible, carreras con formaciones desbloqueables y bonos mensuales que se pueden perder, con un salario base que solo sube.' },
+  { id: 'future-subagentes', name: 'Subagentes por área', status: 'planned', icon: 'Circle', group: 'future', description: 'Agentes de IA por área o por cliente que revisan el trabajo antes que tú, con su ficha y su criterio (por ejemplo, redacción con el tono de cada cliente o diseño web con tu criterio). Se enchufan como revisor intercambiable.' },
+  { id: 'future-diccionario', name: 'Diccionario de la agencia', status: 'planned', icon: 'Circle', group: 'future', description: 'Herramientas, clientes y personas, más los errores de tu dictado por voz. En parte ya lo cubren los nombres alternativos de las fichas de clientes.' },
+  { id: 'future-audio-telegram', name: 'Audios al bot de Telegram', status: 'planned', icon: 'Circle', group: 'future', description: 'Crear notas mandando un audio al bot desde el móvil, sin abrir la herramienta.' },
+  { id: 'future-email', name: 'Entrada de trabajo por email', status: 'planned', icon: 'Circle', group: 'future', description: 'Reenviar un email a una dirección propia para que se convierta en una nota y, de ahí, en encargos.' },
+  { id: 'future-reglas', name: 'Reglas que aprenden de mis respuestas', status: 'planned', icon: 'Circle', group: 'future', description: 'Reglas de decisión que se aprenden de cómo respondes a bloqueos y revisiones, para que el agente resuelva más solo.' },
+  { id: 'future-seo-auto', name: 'SEO automatizado', status: 'planned', icon: 'Circle', group: 'future', description: 'Auditoría por API, competidores desde la SERP y volúmenes de búsqueda con DataForSEO, sin cargas manuales.' },
+  { id: 'future-deuda', name: 'Deuda técnica', status: 'planned', icon: 'Circle', group: 'future', detailMapId: 'tech_debt', description: 'Columnas obsoletas por borrar, datos y tareas de prueba, festivos en los días laborables y textos de «Respuesta» y «Devuelto» fijos en el código.' },
 ];
 
 // Procesos de apoyo: funcionalidad real con su propio detailMapId, pero
@@ -173,8 +200,11 @@ export function getSystemMap(): SystemNode[] {
       ...(stage.key === 'keyword_research' ? { detailMapId: 'clustering' } : {}),
     }));
 
-  return [...CORE_NODES, ...SUPPORT_NODES, ...stageNodes];
+  return [...CORE_NODES, ...SUPPORT_NODES, ...stageNodes, ...FUTURE_NODES];
 }
+
+// Todos los mapas de detalle conocidos (el Server Component los resuelve y los pasa al cliente).
+export const PROCESS_MAP_IDS = ['clustering', 'competitor_analysis', ...Object.keys(OPS_MAPS)];
 
 export function getProcessMap(detailMapId: string): ProcessStep[] {
   switch (detailMapId) {
@@ -182,9 +212,7 @@ export function getProcessMap(detailMapId: string): ProcessStep[] {
       return CLUSTERING_PROCESS_MAP;
     case 'competitor_analysis':
       return COMPETITOR_ANALYSIS_PROCESS_MAP;
-    case 'ops_requests':
-      return OPS_REQUEST_PROCESS_MAP;
     default:
-      return [];
+      return OPS_MAPS[detailMapId] ?? [];
   }
 }

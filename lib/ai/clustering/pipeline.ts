@@ -55,6 +55,27 @@ export interface ProcessStep {
   status: 'built' | 'in_progress' | 'planned';
   file: string;
   technicalDetail?: TechnicalDetail;
+  // --- Campos opcionales (mapa de Operaciones, niveles 2 y 3). Los mapas de SEO no los usan. ---
+  lane?: string; // fila visual en la que se dibuja el nodo
+  to?: string[]; // ids de los nodos a los que apunta (si ningún nodo del mapa lo define, se encadenan en orden)
+  icon?: string;
+  detailMapId?: string; // si existe, el nodo abre otro mapa (siguiente nivel)
+  when?: string; // cuándo se ejecuta
+  ai?: string; // qué decide la IA
+  code?: string; // qué decide el código
+  tables?: string[]; // tablas que usa
+  settings?: StepSettingRef[]; // ajustes del panel de Automatizaciones que le afectan
+  prompts?: string[]; // claves de prompts de IA que usa
+  runs?: string[]; // tareas del planificador que ejecutan este paso
+  live?: string; // proveedor de «última ejecución» (lib/operaciones/map-live.ts)
+  next?: { path: string[]; label: string }; // «sigue en…»: ruta de mapas a abrir
+  extension?: string; // punto de extensión futuro
+}
+
+// Ajustes del panel de Automatizaciones que afectan a un paso (el mapa muestra sus valores reales).
+export interface StepSettingRef {
+  automation: string; // clave de la automatización (lib/operaciones/automations.ts)
+  fields?: string[]; // campos a mostrar (todos si se omite)
 }
 
 export const CLUSTERING_PROCESS_MAP: ProcessStep[] = [

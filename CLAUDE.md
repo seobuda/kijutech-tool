@@ -301,23 +301,33 @@ Ejemplos de lo que hay que señalar:
 - "Esta tarea no necesita IA — un algoritmo simple lo resuelve
    igual de bien y gratis — ¿lo hacemos sin IA?"
 
-## Mapa Visual del Sistema — mantenimiento obligatorio
+## Mapa Visual del Sistema — regla permanente: el mapa es parte de "terminado"
 
-Cuando una sesión añada, elimine, reordene, o modifique sustancialmente
-un paso de un proceso multi-fase (una capa del pipeline de clustering,
-un paso de un flujo con estados secuenciales, etc.):
+**Ningún paso (de cualquier módulo) se considera terminado hasta que el Mapa Visual refleje lo
+construido: nodos, estado, descripción y ajustes.** No requiere que Enric lo pida.
 
-- Actualiza el array de metadata (`*_PROCESS_MAP`) exportado junto a la
-  función principal de ese proceso — nunca en un archivo aparte
-- Si el proceso es nuevo y no tiene metadata todavía, créala siguiendo
-  el patrón de `lib/ai/clustering/pipeline.ts` (`CLUSTERING_PROCESS_MAP`)
-  y regístrala en `lib/architecture-map/registry.ts`
-- Si se añade un módulo o etapa completamente nueva al sistema (no un
-  paso dentro de un proceso existente), añade su entrada a `CORE_NODES`
-  o confirma que ya se deriva de `modules/seo/manifest.json`
+Cuando una sesión añada, elimine, reordene o modifique sustancialmente un proceso, un paso, una
+automatización, una tabla, un prompt de IA o una pieza de un módulo:
 
-Esto no es opcional ni requiere que Enric lo pida — es parte de dar
-por terminada cualquier tarea que toque un proceso multi-fase.
+- **Operaciones:** actualiza `lib/operaciones/process-map.ts` (`OPS_MAPS`: nivel 2 = procesos y piezas,
+  nivel 3 = pasos). Cada paso declara `when` (cuándo se ejecuta), `ai` (qué decide la IA), `code` (qué
+  decide el código), `tables`, `settings` (automatizaciones del panel que le afectan: el mapa muestra
+  sus valores ACTUALES y enlaza al ajuste, nunca escribas valores fijos), `prompts`, `runs` (tareas del
+  planificador) y `live` (proveedor de «última ejecución» de `lib/operaciones/map-live.ts`).
+- **Nuevo proceso periódico:** añade su proveedor `live` en `map-live.ts` (última ejecución y error).
+- **Otros módulos (SEO, etc.):** el array `*_PROCESS_MAP` va junto a la función principal del proceso, siguiendo
+  el patrón de `lib/ai/clustering/pipeline.ts` (`CLUSTERING_PROCESS_MAP`), y se registra en
+  `lib/architecture-map/registry.ts` (`getProcessMap` / `PROCESS_MAP_IDS`).
+- **Módulo o etapa nueva del sistema:** añade su nodo a `CORE_NODES` / `SUPPORT_NODES` o confirma que se
+  deriva de `modules/seo/manifest.json`. Lo pendiente va como nodo gris en `FUTURE_NODES` con una frase de qué
+  será; al construirlo, pasa a `built`.
+- **Comprobación automática (obligatoria):** antes de cada commit de cierre de paso, ejecuta
+  `node scripts/check-architecture-map.js` (también `pnpm check:map` dentro del contenedor). Falla si una
+  automatización del panel, una tarea del planificador, un prompt de IA o una tabla `ops_*` no tiene su
+  entrada en el mapa, o si el mapa está roto (archivos inexistentes, enlaces rotos). Si falla, el paso no está
+  terminado: corrige el mapa y vuelve a ejecutarla. Si la comprobación necesita un criterio nuevo (por ejemplo,
+  otra familia de tablas), amplíala en el mismo paso.
+- Menciona en el documento de sesión que el mapa se actualizó y que la comprobación pasó.
 
 
 ## ClickUp: caché y consultas agrupadas — regla permanente

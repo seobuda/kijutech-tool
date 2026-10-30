@@ -10,7 +10,8 @@
     "db:seed-seo": "npx tsx lib/db/seed-seo.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "check:map": "node scripts/check-architecture-map.js"
   },
   "dependencies": {
     "@tailwindcss/postcss": "4.1.7",

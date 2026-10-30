@@ -143,7 +143,7 @@ function Card1({ card, hasBot }: { card: CardView; hasBot: boolean }) {
   };
 
   return (
-    <Card data-testid={`auto-${card.key}`}>
+    <Card id={`auto-${card.key}`} className="scroll-mt-4" data-testid={`auto-${card.key}`}>
       <CardHeader className="pb-2">
         <div className="flex items-start justify-between gap-3">
           <div>
