@@ -1,7 +1,7 @@
 # Paso 6C · Tareas de ClickUp en el circuito y botones por fases
 **Fecha:** 2026-10-30  
 **Rama:** operaciones  
-**Commit:** (se rellena tras el commit de código)
+**Commit:** 07750bef
 
 ## Qué se construyó
 - `lib/operaciones/notifications.ts` — nuevo `noticeKeyboard` por fases: «▶️ Empezar ahora» / «🕐 Más tarde» (sustituye a «Visto»); tras Empezar, «🚫 Bloqueado», «✅ Hecho», «👀 Hecho, ¿lo revisas?». `refreshNotice` edita ahora todos los avisos del encargo (uno por responsable) y quita los botones a quien ya no lo lleva. `enqueueNewRequestNotification` acepta destinatario, etiqueta («creada/asignada/reasignada en ClickUp») y sufijo de clave.
