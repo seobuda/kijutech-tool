@@ -1,7 +1,7 @@
 # Paso 6E · Panel de Automatizaciones
 **Fecha:** 2026-10-30  
 **Rama:** operaciones  
-**Commit:** COMMIT_CODE
+**Commit:** 4be2f480
 
 ## Qué se construyó
 - `lib/operaciones/automations.ts` — registro de las 10 automatizaciones con sus valores por defecto (los que estaban fijos en el código), validación de campos y de textos (huecos conocidos, obligatorios, etiquetas de Telegram bien cerradas), render de plantillas (una línea con un hueco opcional vacío desaparece), lectura con caché de 10 s, guardado con registro de cambios y restauración.
