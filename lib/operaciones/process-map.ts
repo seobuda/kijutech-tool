@@ -225,4 +225,23 @@ export const OPS_REQUEST_PROCESS_MAP: ProcessStep[] = [
       ],
     },
   },
+  {
+    id: 'ops-client-alerts',
+    name: 'Alertas de clientes: actividad y trabajo planificado',
+    description:
+      'Cada madrugada se calcula, por cliente, su última actividad, las tareas completadas del mes, las abiertas con fecha próxima y las horas aproximadas. Dos alertas (sin actividad, sin trabajo planificado) con umbrales por nivel o por cliente, un semáforo en Clientes y, en el resumen de las 18:00, solo las alertas nuevas (recordatorio semanal si siguen).',
+    status: 'built',
+    file: 'lib/operaciones/client-activity.ts',
+    technicalDetail: {
+      summary:
+        'Una pasada diaria (03:00 Madrid) con UNA consulta agrupada de workspace por el cliente con contador; las tareas se asignan al cliente por el campo Cliente. Las horas son el tiempo laboral (horario de la ficha) entre Empezar y Hecho. Solo alertan clientes activos, vinculados, con ficha completada (servicio u horas al mes) y el interruptor encendido. La marca «ya avisada» se borra cuando la condición desaparece. «Trabajo de este mes» consulta ClickUp en el momento (caché de 2 min).',
+      stack: ['Tabla ops_client_activity', 'Umbrales en ops_client_levels y ops_clients', 'Cliente de clickup.ts con contador de peticiones', 'Resumen del dueño (digest.ts)'],
+      keyDecisions: [
+        'Sin IA: todo es cálculo determinista',
+        'Las alertas van solo en el último resumen del día, con recordatorio semanal',
+        'Horizonte de trabajo planificado por nivel (mantenimiento desactivado) y editable por cliente',
+        'Ficha sin completar = gris, sin ruido inicial',
+      ],
+    },
+  },
 ];

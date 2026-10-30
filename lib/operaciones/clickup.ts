@@ -612,6 +612,7 @@ export type WatchTask = {
   creatorId: string | null;
   createdMs: number;
   updatedMs: number;
+  closedMs: number | null; // fecha de cierre o de hecho, si la tiene
   dueMs: number | null;
   priority: number | null;
   // Campos personalizados de tipo desplegable: id del campo → id y texto de la opción elegida.
@@ -630,6 +631,8 @@ type RawWatchTask = {
   creator?: { id: number };
   date_created?: string;
   date_updated?: string;
+  date_closed?: string | null;
+  date_done?: string | null;
   due_date?: string | null;
   priority?: { id?: string } | null;
   custom_fields?: {
@@ -664,6 +667,7 @@ function toWatchTask(t: RawWatchTask): WatchTask {
     creatorId: t.creator?.id != null ? String(t.creator.id) : null,
     createdMs: Number(t.date_created) || 0,
     updatedMs: Number(t.date_updated) || 0,
+    closedMs: Number(t.date_closed || t.date_done) || null,
     dueMs: t.due_date ? Number(t.due_date) : null,
     priority: prio >= 1 && prio <= 4 ? prio : null,
     dropdowns

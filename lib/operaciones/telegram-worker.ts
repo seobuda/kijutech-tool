@@ -19,6 +19,7 @@ import { processOutbox } from '@/lib/operaciones/outbox';
 import { runDigests } from '@/lib/operaciones/digest';
 import { runReminders } from '@/lib/operaciones/reminders';
 import { runWatch } from '@/lib/operaciones/watch';
+import { runActivityDaily } from '@/lib/operaciones/client-activity';
 
 const LOCK_KEY = 74200126; // identifica "oyente de Telegram de Kijutech"
 const POLL_TIMEOUT_S = 50;
@@ -206,6 +207,7 @@ async function schedulerLoop(state: WorkerState) {
         await processOutbox(cfg.tenantId);
         await runWatch(cfg.tenantId); // tareas creadas o asignadas en ClickUp (cada ~2,5 min)
         await runReminders(cfg.tenantId);
+        await runActivityDaily(cfg.tenantId); // actividad por cliente (una vez al día, de madrugada)
       }
     } catch (e) {
       console.error('[telegram] planificador:', e instanceof Error ? e.message : e);

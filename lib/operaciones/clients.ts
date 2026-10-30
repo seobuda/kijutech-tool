@@ -15,12 +15,18 @@ import { parseWorkDays } from '@/lib/operaciones/team-profiles';
 
 export type ClientService = { serviceKey: string; responsibleClickupId: string | null };
 export type ClientWithServices = OpsClient & { services: ClientService[] };
-export type LevelRow = { key: string; label: string; defaultDays: number };
+export type LevelRow = { key: string; label: string; defaultDays: number; inactivityDays: number; planningDays: number };
 export type ServiceRow = { key: string; label: string; active: boolean };
 
 export async function getLevels(tenantId: string): Promise<LevelRow[]> {
   return db
-    .select({ key: opsClientLevels.key, label: opsClientLevels.label, defaultDays: opsClientLevels.defaultDays })
+    .select({
+      key: opsClientLevels.key,
+      label: opsClientLevels.label,
+      defaultDays: opsClientLevels.defaultDays,
+      inactivityDays: opsClientLevels.inactivityDays,
+      planningDays: opsClientLevels.planningDays
+    })
     .from(opsClientLevels)
     .where(eq(opsClientLevels.tenantId, tenantId))
     .orderBy(asc(opsClientLevels.sortOrder), asc(opsClientLevels.label));
@@ -143,4 +149,66 @@ export function addWorkingDays(days: number, workDaysRaw: string | null, timeZon
     if (workDays.has(iso)) left--;
   }
   return d.toISOString().slice(0, 10);
+}
+
+// --- Alertas de cliente (paso 6D) -------------------------------------------------------------
+
+// Días sin actividad a partir de los cuales se alerta (el del cliente o el de su nivel).
+export function clientInactivityDays(c: Pick<OpsClient, 'level' | 'inactivityDays'>, levels: LevelRow[]): number {
+  return c.inactivityDays ?? levels.find((l) => l.key === c.level)?.inactivityDays ?? 14;
+}
+
+// Horizonte (días) en que debe haber trabajo planificado; 0 = alerta desactivada.
+export function clientPlanningDays(c: Pick<OpsClient, 'level' | 'planningDays'>, levels: LevelRow[]): number {
+  return c.planningDays ?? levels.find((l) => l.key === c.level)?.planningDays ?? 0;
+}
+
+export type AlertState = 'red' | 'amber' | 'green' | 'gray';
+export type AlertEval = {
+  state: AlertState;
+  inactive: boolean;
+  unplanned: boolean;
+  note: string; // motivo del gris o resumen de las alertas
+  inactiveNote: string;
+  unplannedNote: string;
+};
+
+// Solo generan alertas los clientes activos, vinculados a ClickUp, con el interruptor encendido y la ficha
+// completada (al menos un servicio contratado u horas al mes).
+export function alertEligibility(
+  c: Pick<OpsClient, 'active' | 'alertsEnabled' | 'clickupOptionId' | 'monthlyHours'> & { services: unknown[] }
+): { ok: true } | { ok: false; reason: string } {
+  if (!c.active) return { ok: false, reason: 'Desactivado' };
+  if (!c.alertsEnabled) return { ok: false, reason: 'Alertas desactivadas' };
+  if (!c.clickupOptionId) return { ok: false, reason: 'Sin vincular a ClickUp' };
+  if (c.services.length === 0 && !(Number(c.monthlyHours) > 0)) return { ok: false, reason: 'Ficha sin completar' };
+  return { ok: true };
+}
+
+const DAY_MS = 24 * 3600 * 1000;
+
+export function evaluateClient(
+  c: ClientWithServices,
+  act: { lastActivityMs: number | null; windowDays: number; upcomingTasks: number; horizonDays: number } | null,
+  levels: LevelRow[],
+  now = Date.now()
+): AlertEval {
+  const el = alertEligibility(c);
+  if (!el.ok) return { state: 'gray', inactive: false, unplanned: false, note: el.reason, inactiveNote: '', unplannedNote: '' };
+  if (!act) return { state: 'gray', inactive: false, unplanned: false, note: 'Sin datos todavía', inactiveNote: '', unplannedNote: '' };
+  const limit = clientInactivityDays(c, levels);
+  const daysSince = act.lastActivityMs ? Math.floor((now - act.lastActivityMs) / DAY_MS) : null;
+  const inactive = daysSince === null || daysSince >= limit;
+  const planning = clientPlanningDays(c, levels);
+  const unplanned = planning > 0 && act.upcomingTasks === 0;
+  const inactiveNote = inactive ? (daysSince === null ? `Sin actividad en más de ${act.windowDays} días` : `Sin actividad desde hace ${daysSince} días (límite ${limit})`) : '';
+  const unplannedNote = unplanned ? `Sin trabajo planificado en los próximos ${planning} días` : '';
+  return {
+    state: inactive ? 'red' : unplanned ? 'amber' : 'green',
+    inactive,
+    unplanned,
+    note: [inactiveNote, unplannedNote].filter(Boolean).join(' · '),
+    inactiveNote,
+    unplannedNote
+  };
 }

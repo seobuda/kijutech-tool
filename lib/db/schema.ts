@@ -1440,11 +1440,16 @@ export const opsClientLevels = pgTable(
     key: varchar('key', { length: 30 }).notNull(),
     label: varchar('label', { length: 60 }).notNull(),
     defaultDays: integer('default_days').notNull(),
+    // Alertas de cliente (6D): días sin actividad y horizonte de trabajo planificado (0 = desactivado).
+    inactivityDays: integer('inactivity_days').notNull().default(14),
+    planningDays: integer('planning_days').notNull().default(14),
     sortOrder: integer('sort_order').notNull().default(0),
   },
   (table) => [
     unique('ops_client_levels_tenant_key_unique').on(table.tenantId, table.key),
     check('ops_client_levels_days_check', sql`${table.defaultDays} BETWEEN 0 AND 60`),
+    check('ops_client_levels_inactivity_check', sql`${table.inactivityDays} BETWEEN 1 AND 90`),
+    check('ops_client_levels_planning_check', sql`${table.planningDays} BETWEEN 0 AND 60`),
   ]
 );
 
@@ -1481,6 +1486,10 @@ export const opsClients = pgTable(
     level: varchar('level', { length: 30 }).notNull().default('standard'),
     // null = el plazo por defecto del nivel.
     deliveryDays: integer('delivery_days'),
+    // Alertas (6D): null = el del nivel; planning_days 0 = desactivado para este cliente.
+    inactivityDays: integer('inactivity_days'),
+    planningDays: integer('planning_days'),
+    alertsEnabled: boolean('alerts_enabled').notNull().default(true),
     monthlyHours: decimal('monthly_hours', { precision: 6, scale: 1 }),
     // Días de la semana en que se le trabaja (1 = lunes … 7 = domingo); null = lunes a viernes.
     workDays: varchar('work_days', { length: 20 }),
@@ -1499,6 +1508,8 @@ export const opsClients = pgTable(
   },
   (table) => [
     unique('ops_clients_tenant_option_unique').on(table.tenantId, table.clickupOptionId),
+    check('ops_clients_inactivity_check', sql`${table.inactivityDays} IS NULL OR ${table.inactivityDays} BETWEEN 1 AND 90`),
+    check('ops_clients_planning_check', sql`${table.planningDays} IS NULL OR ${table.planningDays} BETWEEN 0 AND 60`),
     check('ops_clients_days_check', sql`${table.deliveryDays} IS NULL OR ${table.deliveryDays} BETWEEN 0 AND 60`),
   ]
 );
@@ -1516,6 +1527,30 @@ export const opsClientServices = pgTable(
   (table) => [unique('ops_client_services_unique').on(table.clientId, table.serviceKey)]
 );
 
+// Resultado de la pasada nocturna de actividad por cliente (una fila por cliente, se sobrescribe cada día).
+export const opsClientActivity = pgTable(
+  'ops_client_activity',
+  {
+    clientId: uuid('client_id')
+      .primaryKey()
+      .references(() => opsClients.id, { onDelete: 'cascade' }),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    lastActivityMs: bigint('last_activity_ms', { mode: 'number' }),
+    windowDays: integer('window_days').notNull(),
+    completedMonth: integer('completed_month').notNull().default(0),
+    upcomingTasks: integer('upcoming_tasks').notNull().default(0),
+    horizonDays: integer('horizon_days').notNull().default(0),
+    hoursMonth: decimal('hours_month', { precision: 7, scale: 1 }).notNull().default('0'),
+    inactiveNotifiedAt: timestamp('inactive_notified_at'),
+    unplannedNotifiedAt: timestamp('unplanned_notified_at'),
+    computedAt: timestamp('computed_at').notNull().defaultNow(),
+  },
+  (table) => [index('ops_client_activity_tenant_idx').on(table.tenantId)]
+);
+
+export type OpsClientActivity = typeof opsClientActivity.$inferSelect;
 export type OpsClient = typeof opsClients.$inferSelect;
 export type OpsTeamProfile = typeof opsTeamProfiles.$inferSelect;
 export type OpsBlocker = typeof opsBlockers.$inferSelect;

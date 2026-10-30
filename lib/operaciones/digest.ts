@@ -12,6 +12,7 @@ import { escapeHtml } from '@/lib/operaciones/telegram';
 import { getInbox, waitLabel } from '@/lib/operaciones/inbox';
 import { getOwnerTimezone } from '@/lib/operaciones/team-profiles';
 import { getUnanswered } from '@/lib/operaciones/reminders';
+import { getClientAlertsToShow, markClientAlertsShown, type ClientAlertItem } from '@/lib/operaciones/client-activity';
 
 const MAX_LIST = 8;
 const MAX_BUTTON_ROWS = 5;
@@ -20,8 +21,9 @@ const short = (t: string, n = 28) => (t.length > n ? `${t.slice(0, n - 1)}…` :
 
 async function buildDigest(
   tenantId: string,
-  since: Date
-): Promise<{ text: string; buttons: { text: string; data: string }[][]; empty: boolean; unansweredIds: string[] }> {
+  since: Date,
+  withClientAlerts = false
+): Promise<{ text: string; buttons: { text: string; data: string }[][]; empty: boolean; unansweredIds: string[]; clientAlerts: ClientAlertItem[] }> {
   const events = await db
     .select()
     .from(opsRequestEvents)
@@ -78,6 +80,17 @@ async function buildDigest(
     sections.push(`⏳ <b>Sin respuesta (${unanswered.length})</b>\n${lines.join('\n')}`);
   }
 
+  // Clientes en alerta (solo en el último resumen del día): nuevas, y recordatorio semanal si siguen.
+  const clientAlerts = withClientAlerts ? await getClientAlertsToShow(tenantId) : [];
+  if (clientAlerts.length) {
+    const lines = clientAlerts.slice(0, MAX_LIST * 2).map((a) => {
+      const icon = a.kind === 'inactive' ? '🔴' : '🟠';
+      return `• ${icon} <b>${escapeHtml(a.name)}</b>: ${escapeHtml(a.text)}${a.reminder ? ' <i>(recordatorio semanal)</i>' : ''}`;
+    });
+    if (clientAlerts.length > MAX_LIST * 2) lines.push(`… y ${clientAlerts.length - MAX_LIST * 2} más (en «Clientes»)`);
+    sections.push(`📉 <b>Clientes en alerta (${clientAlerts.length})</b>\n${lines.join('\n')}`);
+  }
+
   const buttons: { text: string; data: string }[][] = [];
   if (inbox.length) {
     const lines = inbox.slice(0, MAX_LIST).map((i) => {
@@ -102,7 +115,8 @@ async function buildDigest(
     text: sections.length ? `📋 <b>Resumen</b>\n\n${sections.join('\n\n')}` : '',
     buttons,
     empty: sections.length === 0,
-    unansweredIds: unanswered.map((r) => r.id)
+    unansweredIds: unanswered.map((r) => r.id),
+    clientAlerts
   };
 }
 
@@ -137,12 +151,14 @@ export async function runDigests(tenantId: string, now = new Date()): Promise<vo
     .where(and(eq(opsNotifications.tenantId, tenantId), eq(opsNotifications.dedupeKey, key)))
     .limit(1);
   if (exists) return;
-  await queueDigest(tenantId, key, await lastDigestAt(tenantId));
+  // Las alertas de clientes solo van en el último resumen del día (el de las 18:00 por defecto).
+  const lastSlot = [...slots].sort((a, b) => toMinutes(a) - toMinutes(b)).at(-1);
+  await queueDigest(tenantId, key, await lastDigestAt(tenantId), slot === lastSlot);
 }
 
-async function queueDigest(tenantId: string, key: string, since: Date): Promise<boolean> {
+async function queueDigest(tenantId: string, key: string, since: Date, withClientAlerts = false): Promise<boolean> {
   const owner = await getOwnerMember(tenantId);
-  const d = await buildDigest(tenantId, since);
+  const d = await buildDigest(tenantId, since, withClientAlerts);
   await enqueueNotification({
     tenantId,
     kind: 'digest',
@@ -153,6 +169,7 @@ async function queueDigest(tenantId: string, key: string, since: Date): Promise<
     skipped: d.empty
   });
   // Lo que ya salió como «sin respuesta» no se repite en el siguiente resumen.
+  if (!d.empty && d.clientAlerts.length) await markClientAlertsShown(d.clientAlerts);
   if (!d.empty && d.unansweredIds.length) {
     await db.update(opsRequests).set({ unansweredListedAt: new Date() }).where(inArray(opsRequests.id, d.unansweredIds));
   }
@@ -161,6 +178,6 @@ async function queueDigest(tenantId: string, key: string, since: Date): Promise<
 
 // Botón «Enviar resumen de la bandeja ahora» (pruebas): fuerza un resumen con las últimas 24 h.
 export async function sendDigestNow(tenantId: string): Promise<{ sent: boolean }> {
-  const sent = await queueDigest(tenantId, `digest-manual:${Date.now()}`, new Date(Date.now() - 24 * 3600 * 1000));
+  const sent = await queueDigest(tenantId, `digest-manual:${Date.now()}`, new Date(Date.now() - 24 * 3600 * 1000), true);
   return { sent };
 }

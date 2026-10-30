@@ -10,13 +10,16 @@ import {
   deleteClient,
   deleteLevel,
   deleteService,
+  getClientMonthWork,
   importMissingClients,
+  recalcClientActivity,
   saveClient,
   saveLevel,
   saveService,
   setClientActive,
   type ClientDraft,
-  type ClientInput
+  type ClientInput,
+  type MonthWork
 } from '@/lib/operaciones/client-actions';
 
 export type ClientView = {
@@ -28,6 +31,20 @@ export type ClientView = {
   usualListIds: string[];
   level: string;
   deliveryDays: number | null;
+  inactivityDays: number | null;
+  planningDays: number | null;
+  alertsEnabled: boolean;
+  alert: {
+    state: 'red' | 'amber' | 'green' | 'gray';
+    note: string;
+    lastActivityDays: number | null;
+    hasData: boolean;
+    windowDays: number;
+    hoursMonth: number;
+    completedMonth: number;
+    upcoming: number;
+    horizonDays: number;
+  };
   monthlyHours: number | null;
   workDays: number[]; // vacío = lunes a viernes
   tools: { name: string; url: string; note: string }[];
@@ -43,7 +60,7 @@ export type ClientView = {
   requestCount: number;
 };
 
-type Level = { key: string; label: string; defaultDays: number };
+type Level = { key: string; label: string; defaultDays: number; inactivityDays: number; planningDays: number };
 type Service = { key: string; label: string; active: boolean };
 type Member = { id: string; username: string };
 type Space = { id: string; name: string; lists: { id: string; name: string }[] };
@@ -65,6 +82,10 @@ const emptyClient = (level: string): ClientView => ({
   usualListIds: [],
   level,
   deliveryDays: null,
+  inactivityDays: null,
+  planningDays: null,
+  alertsEnabled: true,
+  alert: { state: 'gray', note: '', lastActivityDays: null, hasData: false, windowDays: 0, hoursMonth: 0, completedMonth: 0, upcoming: 0, horizonDays: 0 },
   monthlyHours: null,
   workDays: [],
   tools: [],
@@ -85,6 +106,7 @@ const daysWord = (n: number) => `${n} día${n === 1 ? '' : 's'}`;
 export function ClientesView({
   clients,
   levels,
+  runInfo,
   services,
   members,
   spaces,
@@ -94,6 +116,7 @@ export function ClientesView({
 }: {
   clients: ClientView[];
   levels: Level[];
+  runInfo: { lastRun: string | null; lastError: string | null };
   services: Service[];
   members: Member[];
   spaces: Space[];
@@ -145,6 +168,21 @@ export function ClientesView({
           </p>
         </div>
         <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={pending}
+            onClick={() =>
+              startTransition(async () => {
+                setMsg(null);
+                const res = await recalcClientActivity();
+                setMsg(res.ok ? { type: 'ok', text: res.message } : { type: 'error', text: res.error });
+                router.refresh();
+              })
+            }
+          >
+            {pending ? 'Calculando…' : 'Recalcular actividad'}
+          </Button>
           <Button size="sm" variant="outline" onClick={() => setShowConfig((v) => !v)}>
             Niveles y servicios
           </Button>
@@ -155,6 +193,14 @@ export function ClientesView({
       </div>
 
       {msg && <p className={`text-sm ${msg.type === 'ok' ? 'text-green-700' : 'text-red-600'}`}>{msg.text}</p>}
+      <p className="text-xs text-muted-foreground">
+        Actividad calculada{' '}
+        {runInfo.lastRun
+          ? `el ${new Date(runInfo.lastRun).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Madrid' })}`
+          : '— todavía no (pulsa «Recalcular actividad»)'}
+        ; se actualiza sola cada madrugada.
+        {runInfo.lastError && <span className="text-red-600"> Último error: {runInfo.lastError}</span>}
+      </p>
 
       {missingOptions > 0 && (
         <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm flex flex-wrap items-center gap-2">
@@ -313,6 +359,7 @@ export function ClientesView({
                     )}
                   </div>
                 </div>
+                <AlertLine c={c} />
                 {c.aliases.length > 0 && (
                   <p className="text-xs text-muted-foreground">También se le llama: {c.aliases.join(', ')}</p>
                 )}
@@ -328,6 +375,7 @@ export function ClientesView({
                     ))}
                   </div>
                 )}
+                {c.clickupOptionId && <MonthWorkButton clientId={c.id} name={c.name} />}
                 {c.business && <p className="text-sm whitespace-pre-line">{c.business}</p>}
                 {c.notes && (
                   <p className="text-xs text-muted-foreground whitespace-pre-line">
@@ -398,9 +446,9 @@ function ConfigPanel({ levels, services, onClose }: { levels: Level[]; services:
       {msg && <p className={`text-sm ${msg.type === 'ok' ? 'text-green-700' : 'text-red-600'}`}>{msg.text}</p>}
 
       <div className="space-y-2">
-        <Label>Niveles y plazo de entrega por defecto (días laborables)</Label>
+        <Label>Niveles: plazo de entrega (días laborables), días sin actividad para alertar y horizonte de trabajo planificado</Label>
         {levels.map((l) => (
-          <LevelRow key={`${l.key}-${l.label}-${l.defaultDays}`} level={l} disabled={pending} run={run} />
+          <LevelRow key={`${l.key}-${l.label}-${l.defaultDays}-${l.inactivityDays}-${l.planningDays}`} level={l} disabled={pending} run={run} />
         ))}
         <LevelRow level={null} disabled={pending} run={run} />
       </div>
@@ -421,6 +469,8 @@ type Run = (fn: () => Promise<{ ok: boolean; error?: string }>, okText: string) 
 function LevelRow({ level, disabled, run }: { level: Level | null; disabled: boolean; run: Run }) {
   const [label, setLabel] = useState(level?.label ?? '');
   const [days, setDays] = useState(level?.defaultDays ?? 3);
+  const [inact, setInact] = useState(level?.inactivityDays ?? 14);
+  const [plan, setPlan] = useState(level?.planningDays ?? 14);
   return (
     <div className="flex flex-wrap items-center gap-2">
       <Input aria-label="Nombre del nivel" className="w-48" placeholder="Nuevo nivel…" value={label} onChange={(e) => setLabel(e.target.value)} />
@@ -433,12 +483,16 @@ function LevelRow({ level, disabled, run }: { level: Level | null; disabled: boo
         value={days}
         onChange={(e) => setDays(Number(e.target.value))}
       />
-      <span className="text-xs text-muted-foreground">días</span>
+      <span className="text-xs text-muted-foreground">días de entrega ·</span>
+      <Input aria-label="Días sin actividad" type="number" min={1} max={90} className="w-20" value={inact} onChange={(e) => setInact(Number(e.target.value))} />
+      <span className="text-xs text-muted-foreground">sin actividad ·</span>
+      <Input aria-label="Horizonte de trabajo planificado" type="number" min={0} max={60} className="w-20" value={plan} onChange={(e) => setPlan(Number(e.target.value))} />
+      <span className="text-xs text-muted-foreground">planificado (0 = sin alerta)</span>
       <Button
         size="sm"
         variant="outline"
         disabled={disabled || !label.trim()}
-        onClick={() => run(() => saveLevel({ key: level?.key ?? null, label, defaultDays: days }), level ? 'Nivel guardado.' : 'Nivel creado.')}
+        onClick={() => run(() => saveLevel({ key: level?.key ?? null, label, defaultDays: days, inactivityDays: inact, planningDays: plan }), level ? 'Nivel guardado.' : 'Nivel creado.')}
       >
         {level ? 'Guardar' : 'Añadir'}
       </Button>
@@ -564,6 +618,9 @@ function ClientForm({
         usualListIds: f.usualListIds,
         level: f.level,
         deliveryDays: f.deliveryDays,
+        inactivityDays: f.inactivityDays,
+        planningDays: f.planningDays,
+        alertsEnabled: f.alertsEnabled,
         monthlyHours: f.monthlyHours,
         workDays: f.workDays,
         tools: f.tools,
@@ -696,6 +753,48 @@ function ClientForm({
         <p className="text-xs text-muted-foreground pb-2">
           Vacío = {daysWord(levelDefault)} (el del nivel).
         </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label>Alertas</Label>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="h-4 w-4 accent-orange-500"
+            checked={f.alertsEnabled}
+            onChange={(e) => set({ alertsEnabled: e.target.checked })}
+          />
+          Genera alertas (solo si tiene algún servicio contratado u horas al mes)
+        </label>
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="space-y-1">
+            <Label htmlFor="c-inact" className="text-xs">Días sin actividad para alertar</Label>
+            <Input
+              id="c-inact"
+              type="number"
+              min={1}
+              max={90}
+              className="w-28"
+              placeholder={String(levels.find((l) => l.key === f.level)?.inactivityDays ?? '')}
+              value={f.inactivityDays ?? ''}
+              onChange={(e) => set({ inactivityDays: e.target.value === '' ? null : Number(e.target.value) })}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="c-plan" className="text-xs">Horizonte de trabajo planificado (días, 0 = sin alerta)</Label>
+            <Input
+              id="c-plan"
+              type="number"
+              min={0}
+              max={60}
+              className="w-28"
+              placeholder={String(levels.find((l) => l.key === f.level)?.planningDays ?? '')}
+              value={f.planningDays ?? ''}
+              onChange={(e) => set({ planningDays: e.target.value === '' ? null : Number(e.target.value) })}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground pb-2">Vacío = el del nivel.</p>
+        </div>
       </div>
 
       <div className="space-y-2">
@@ -962,6 +1061,151 @@ function AiFill({ name, onDraft }: { name: string; onDraft: (d: ClientDraft) => 
         </Button>
         {msg && <span className={`text-xs ${msg.type === 'ok' ? 'text-green-700' : 'text-red-600'}`}>{msg.text}</span>}
       </div>
+    </div>
+  );
+}
+
+// --- Semáforo y trabajo del mes ---------------------------------------------------------------
+
+const DOT: Record<string, string> = {
+  red: 'bg-red-500',
+  amber: 'bg-amber-400',
+  green: 'bg-green-500',
+  gray: 'bg-gray-300'
+};
+const DOT_LABEL: Record<string, string> = { red: 'Rojo', amber: 'Ámbar', green: 'Verde', gray: 'Gris' };
+
+function AlertLine({ c }: { c: ClientView }) {
+  const a = c.alert;
+  const hours = a.hasData
+    ? `≈${a.hoursMonth.toLocaleString('es-ES', { maximumFractionDigits: 1 })}${c.monthlyHours ? ` / ${c.monthlyHours.toLocaleString('es-ES')}` : ''} h este mes`
+    : null;
+  const last = !a.hasData
+    ? null
+    : a.lastActivityDays === null
+      ? `sin actividad en más de ${a.windowDays} días`
+      : a.lastActivityDays === 0
+        ? 'última actividad hoy'
+        : `última actividad hace ${a.lastActivityDays} día${a.lastActivityDays === 1 ? '' : 's'}`;
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs" data-testid="semaforo">
+      <span className="flex items-center gap-1.5">
+        <span className={`inline-block h-3 w-3 rounded-full ${DOT[a.state]}`} aria-label={DOT_LABEL[a.state]} />
+        <span className="font-medium">{a.state === 'gray' ? a.note : DOT_LABEL[a.state]}</span>
+      </span>
+      {last && <span className="text-muted-foreground">{last}</span>}
+      {hours && <span className="text-muted-foreground">{hours}</span>}
+      {a.hasData && <span className="text-muted-foreground">{a.completedMonth} completadas este mes</span>}
+      {a.hasData && a.horizonDays > 0 && (
+        <span className="text-muted-foreground">
+          {a.upcoming} con fecha en {a.horizonDays} días
+        </span>
+      )}
+      {(a.state === 'red' || a.state === 'amber') && <span className="text-amber-800">{a.note}</span>}
+    </div>
+  );
+}
+
+const fmtDay = (ms: number) => new Date(ms).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', timeZone: 'Europe/Madrid' });
+
+function MonthWorkButton({ clientId, name }: { clientId: string; name: string }) {
+  const [open, setOpen] = useState(false);
+  const [month, setMonth] = useState<'current' | 'previous'>('current');
+  const [work, setWork] = useState<MonthWork | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [pending, startTransition] = useTransition();
+
+  const load = (m: 'current' | 'previous') =>
+    startTransition(async () => {
+      setError(null);
+      setCopied(false);
+      const res = await getClientMonthWork(clientId, m);
+      if (res.ok) setWork(res.work);
+      else {
+        setWork(null);
+        setError(res.error);
+      }
+    });
+
+  const text = work
+    ? [`Trabajo de ${name} · ${work.label}`, ...work.items.map((i) => `• ${i.title} — ${fmtDay(i.doneMs)}${i.people.length ? ` — ${i.people.join(', ')}` : ''}`)].join('\n')
+    : '';
+
+  if (!open) {
+    return (
+      <Button
+        size="sm"
+        variant="outline"
+        data-testid="trabajo-mes"
+        onClick={() => {
+          setOpen(true);
+          load(month);
+        }}
+      >
+        Trabajo de este mes
+      </Button>
+    );
+  }
+  return (
+    <div className="space-y-2 rounded-md border border-gray-200 bg-gray-50 p-3" data-testid="trabajo-mes-panel">
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="text-sm font-medium">Trabajo completado</p>
+        <select
+          aria-label="Mes"
+          className="rounded-md border border-gray-300 bg-white px-2 py-1 text-sm"
+          value={month}
+          onChange={(e) => {
+            const m = e.target.value as 'current' | 'previous';
+            setMonth(m);
+            load(m);
+          }}
+        >
+          <option value="current">Este mes</option>
+          <option value="previous">Mes anterior</option>
+        </select>
+        {work && <span className="text-xs text-muted-foreground first-letter:uppercase">{work.label}</span>}
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={!work || work.items.length === 0}
+          onClick={async () => {
+            try {
+              await navigator.clipboard.writeText(text);
+              setCopied(true);
+            } catch {
+              setError('No se pudo copiar: selecciona el texto a mano.');
+            }
+          }}
+        >
+          {copied ? '✓ Copiado' : 'Copiar'}
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>
+          Cerrar
+        </Button>
+      </div>
+      {pending && <p className="text-sm text-muted-foreground">Cargando de ClickUp…</p>}
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      {work && !pending && (
+        <>
+          {work.truncated && <p className="text-xs text-amber-700">Hay demasiadas tareas y la lista puede estar incompleta.</p>}
+          {work.items.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No hay tareas completadas de este cliente en ese mes.</p>
+          ) : (
+            <ul className="space-y-1 text-sm" data-testid="trabajo-mes-lista">
+              {work.items.map((i, idx) => (
+                <li key={idx}>
+                  • <a href={i.url} target="_blank" rel="noopener noreferrer" className="text-orange-600 hover:underline">{i.title}</a>{' '}
+                  <span className="text-muted-foreground">
+                    — {fmtDay(i.doneMs)}
+                    {i.people.length ? ` — ${i.people.join(', ')}` : ''}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
     </div>
   );
 }

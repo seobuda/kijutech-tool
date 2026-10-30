@@ -20,6 +20,7 @@ import { fillTemplate } from '@/lib/operaciones/format';
 import { getStructure } from '@/lib/operaciones/structure';
 import { canManageProfiles } from '@/lib/operaciones/team-profiles';
 import { getLevels, getServices, requestCountsByOption } from '@/lib/operaciones/clients';
+import { getMonthWork, runActivityNow, type MonthWorkItem } from '@/lib/operaciones/client-activity';
 
 type Ok<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 
@@ -45,6 +46,9 @@ export type ClientInput = {
   usualListIds: string[];
   level: string;
   deliveryDays: number | null; // null = el del nivel
+  inactivityDays: number | null; // null = el del nivel
+  planningDays: number | null; // null = el del nivel; 0 = desactivado
+  alertsEnabled: boolean;
   monthlyHours: number | null;
   workDays: number[]; // vacío = lunes a viernes
   tools: OpsClientTool[];
@@ -134,6 +138,9 @@ export async function saveClient(input: ClientInput): Promise<Ok<{ id: string }>
     }
 
     const days = [...new Set(input.workDays.filter((d) => Number.isInteger(d) && d >= 1 && d <= 7))].sort();
+    const okDays = (n: number | null, min: number, max: number) => n === null || (Number.isInteger(n) && n >= min && n <= max);
+    if (!okDays(input.inactivityDays, 1, 90)) return { ok: false, error: 'Los días sin actividad deben estar entre 1 y 90' };
+    if (!okDays(input.planningDays, 0, 60)) return { ok: false, error: 'El horizonte de trabajo planificado debe estar entre 0 y 60 días (0 = desactivado)' };
     const orNull = (s: string) => (s.trim() ? s.trim() : null);
     const values = {
       name: name.slice(0, 255),
@@ -144,6 +151,9 @@ export async function saveClient(input: ClientInput): Promise<Ok<{ id: string }>
       usualListIds: listIds,
       level: input.level,
       deliveryDays: input.deliveryDays,
+      inactivityDays: input.inactivityDays,
+      planningDays: input.planningDays,
+      alertsEnabled: input.alertsEnabled,
       monthlyHours: input.monthlyHours != null ? String(input.monthlyHours) : null,
       // L–V o vacío = lunes a viernes (null).
       workDays: days.length > 0 && days.join(',') !== '1,2,3,4,5' ? days.join(',') : null,
@@ -264,7 +274,13 @@ const slug = (s: string) =>
     .replace(/^_+|_+$/g, '')
     .slice(0, 30);
 
-export async function saveLevel(input: { key: string | null; label: string; defaultDays: number }): Promise<Ok> {
+export async function saveLevel(input: {
+  key: string | null;
+  label: string;
+  defaultDays: number;
+  inactivityDays: number;
+  planningDays: number;
+}): Promise<Ok> {
   try {
     const user = await requireManager();
     const label = input.label.trim().slice(0, 60);
@@ -272,10 +288,16 @@ export async function saveLevel(input: { key: string | null; label: string; defa
     if (!(Number.isInteger(input.defaultDays) && input.defaultDays >= 0 && input.defaultDays <= 60)) {
       return { ok: false, error: 'El plazo debe ser un número entero de días entre 0 y 60' };
     }
+    if (!(Number.isInteger(input.inactivityDays) && input.inactivityDays >= 1 && input.inactivityDays <= 90)) {
+      return { ok: false, error: 'Los días sin actividad deben estar entre 1 y 90' };
+    }
+    if (!(Number.isInteger(input.planningDays) && input.planningDays >= 0 && input.planningDays <= 60)) {
+      return { ok: false, error: 'El horizonte de trabajo planificado debe estar entre 0 y 60 días (0 = desactivado)' };
+    }
     if (input.key) {
       const res = await db
         .update(opsClientLevels)
-        .set({ label, defaultDays: input.defaultDays })
+        .set({ label, defaultDays: input.defaultDays, inactivityDays: input.inactivityDays, planningDays: input.planningDays })
         .where(and(eq(opsClientLevels.tenantId, user.tenantId), eq(opsClientLevels.key, input.key)))
         .returning({ id: opsClientLevels.id });
       if (res.length === 0) return { ok: false, error: 'El nivel no existe' };
@@ -286,7 +308,15 @@ export async function saveLevel(input: { key: string | null; label: string; defa
       if (levels.some((l) => l.key === key)) return { ok: false, error: 'Ya hay un nivel con ese nombre' };
       await db
         .insert(opsClientLevels)
-        .values({ tenantId: user.tenantId, key, label, defaultDays: input.defaultDays, sortOrder: levels.length + 1 });
+        .values({
+          tenantId: user.tenantId,
+          key,
+          label,
+          defaultDays: input.defaultDays,
+          inactivityDays: input.inactivityDays,
+          planningDays: input.planningDays,
+          sortOrder: levels.length + 1
+        });
     }
     refresh();
     return { ok: true };
@@ -483,5 +513,41 @@ export async function aiFillClient(text: string, currentName: string): Promise<O
     };
   } catch (e) {
     return fail(e, 'No se pudo rellenar con IA');
+  }
+}
+
+// --- Actividad y trabajo del mes (paso 6D) ------------------------------------------------------
+
+// Botón «Recalcular ahora»: misma pasada que la nocturna.
+export async function recalcClientActivity(): Promise<Ok<{ message: string }>> {
+  try {
+    const user = await requireManager();
+    const r = await runActivityNow(user.tenantId);
+    refresh();
+    return {
+      ok: true,
+      message: `Actividad recalculada: ${r.clients} clientes, ${r.tasks} tareas leídas en ${r.requests} ${r.requests === 1 ? 'petición' : 'peticiones'}${r.truncated ? ' (la consulta se cortó: hay demasiadas tareas)' : ''}.`
+    };
+  } catch (e) {
+    return fail(e, 'No se pudo recalcular la actividad');
+  }
+}
+
+export type MonthWork = { label: string; items: MonthWorkItem[]; truncated: boolean };
+
+// «Trabajo de este mes»: tareas completadas del cliente en el mes actual o el anterior.
+export async function getClientMonthWork(clientId: string, month: 'current' | 'previous'): Promise<Ok<{ work: MonthWork }>> {
+  try {
+    const user = await requireManager();
+    const [c] = await db
+      .select({ clickupOptionId: opsClients.clickupOptionId })
+      .from(opsClients)
+      .where(and(eq(opsClients.id, clientId), eq(opsClients.tenantId, user.tenantId)))
+      .limit(1);
+    if (!c) return { ok: false, error: 'La ficha no existe' };
+    if (!c.clickupOptionId) return { ok: false, error: 'Este cliente no está vinculado a una opción de ClickUp' };
+    return { ok: true, work: await getMonthWork(user.tenantId, c, month === 'previous' ? -1 : 0) };
+  } catch (e) {
+    return fail(e, 'No se pudo cargar el trabajo del mes');
   }
 }
