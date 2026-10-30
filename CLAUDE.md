@@ -329,6 +329,19 @@ automatización, una tabla, un prompt de IA o una pieza de un módulo:
   otra familia de tablas), amplíala en el mismo paso.
 - Menciona en el documento de sesión que el mapa se actualizó y que la comprobación pasó.
 
+## docs/ESTADO.md — regla permanente: también es parte de "terminado"
+
+`docs/ESTADO.md` es el documento de estado completo del proyecto (documento vivo). **Ningún paso se considera
+terminado hasta que `docs/ESTADO.md` refleje lo construido**, igual que el Mapa Visual: actualiza las secciones
+afectadas (valores del panel, tablas y conteos, prompts, integraciones, seguridad, datos de prueba, pendientes,
+hoja de ruta, cronología, mapa de archivos), y la fecha de la cabecera. Va en el mismo commit de cierre de paso,
+junto al documento de sesión. Sin secretos ni valores de `.env`.
+
+## Ramas — regla permanente
+
+`main` solo recibe trabajo terminado y aprobado. Cada mejora nueva va en su propia rama (`feature/...`, `fix/...`
+u otra descriptiva), nunca directamente sobre `main`. Las ramas ya fusionadas (p. ej. `operaciones`) se mantienen.
+
 
 ## ClickUp: caché y consultas agrupadas — regla permanente
 

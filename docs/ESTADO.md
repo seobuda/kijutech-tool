@@ -298,7 +298,7 @@ Construido en agosto de 2026 (Fases A–D). Detalle y auditoría completa en `do
 **Riesgos abiertos (heredados y de Operaciones)**
 1. **Alto — registro abierto:** `/sign-up` mete a cualquiera en el tenant Kijutech; las acciones comprueban la cuenta pero no el rol, así que un desconocido con cuenta vería y editaría proyectos.
 2. **Alto — sin comprobación de rol en acciones SEO:** un `lector` puede crear, editar y borrar.
-3. **Alto — Operaciones sin control de roles:** cualquier usuario del tenant puede ver, cambiar o borrar el token de ClickUp, cambiar automatizaciones, fichas y clientes, y enviar pruebas (`canManageProfiles` devuelve `true` para cualquier usuario).
+3. **Alto — Operaciones sin control de roles:** cualquier usuario del tenant puede ver, cambiar o borrar el token de ClickUp, cambiar automatizaciones, fichas y clientes, y enviar pruebas (`canManageProfiles` devuelve `true` para cualquier usuario). **Condición obligatoria: resolver este riesgo (control de roles en Operaciones) ANTES de dar acceso a la web a cualquier miembro del equipo y antes de subir a un servidor.** Decisión de Enric, sin excepciones.
 4. **Medio — `/api/user` devuelve el usuario completo (con el hash) y `/api/team` los miembros.**
 5. **Medio — middleware excluye `/api`**; la protección depende de cada ruta.
 6. **Medio — enlaces públicos `/share/[token]`:** UUID sin caducidad, sin revocar ni regenerar, sin límite de peticiones.
