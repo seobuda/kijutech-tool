@@ -1098,9 +1098,16 @@ export const opsRequests = pgTable(
     // null = sin revisión; 'owner' = la persona que lleva las operaciones; futuro: revisores automáticos.
     reviewerKey: varchar('reviewer_key', { length: 30 }),
     doneNote: text('done_note'),
+    // Paso 6C: 'clickup' = encargo espejo de una tarea creada o asignada directamente en ClickUp.
+    origin: varchar('origin', { length: 20 }).notNull().default('herramienta'),
+    // Responsables avisados a la vez (tareas con varios asignados); quien pulsa Empezar queda como responsable.
+    candidateIds: jsonb('candidate_ids').$type<string[]>().notNull().default([]),
+    remindedAt: timestamp('reminded_at'),
+    unansweredListedAt: timestamp('unanswered_listed_at'),
   },
   (table) => [
     index('ops_requests_note_idx').on(table.noteId),
+    check('ops_requests_origin_check', sql`${table.origin} IN ('herramienta', 'clickup')`),
     check(
       'ops_requests_work_status_check',
       sql`${table.workStatus} IN ('asignado', 'en_curso', 'bloqueado', 'en_revision', 'devuelto', 'completado')`
@@ -1120,6 +1127,36 @@ export const opsRequests = pgTable(
       .on(table.clickupTaskId)
       .where(sql`${table.clickupTaskId} IS NOT NULL`),
   ]
+);
+
+// Vigilancia de ClickUp (paso 6C): estado de la consulta periódica y última situación conocida de cada tarea.
+export const opsClickupWatch = pgTable('ops_clickup_watch', {
+  tenantId: uuid('tenant_id')
+    .primaryKey()
+    .references(() => tenants.id, { onDelete: 'cascade' }),
+  enabled: boolean('enabled').notNull().default(false),
+  activatedAt: timestamp('activated_at'),
+  cursorMs: bigint('cursor_ms', { mode: 'number' }),
+  lastRunAt: timestamp('last_run_at'),
+  lastError: text('last_error'),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const opsClickupTaskSnapshots = pgTable(
+  'ops_clickup_task_snapshots',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    clickupTaskId: varchar('clickup_task_id', { length: 50 }).notNull(),
+    assigneeIds: jsonb('assignee_ids').$type<string[]>().notNull().default([]),
+    status: varchar('status', { length: 100 }),
+    statusType: varchar('status_type', { length: 30 }),
+    dateUpdatedMs: bigint('date_updated_ms', { mode: 'number' }),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [unique('ops_clickup_task_snapshots_unique').on(table.tenantId, table.clickupTaskId)]
 );
 
 export type OpsRequest = typeof opsRequests.$inferSelect;
@@ -1212,7 +1249,7 @@ export const opsNotifications = pgTable(
     check('ops_notifications_status_check', sql`${table.status} IN ('pendiente', 'enviado', 'fallido')`),
     check(
       'ops_notifications_kind_check',
-      sql`${table.kind} IN ('new_request', 'daily_summary', 'test', 'review_request', 'block_alert', 'reply', 'returned', 'digest')`
+      sql`${table.kind} IN ('new_request', 'daily_summary', 'test', 'review_request', 'block_alert', 'reply', 'returned', 'digest', 'reminder')`
     ),
   ]
 );

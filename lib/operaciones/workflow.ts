@@ -9,6 +9,7 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { opsRequests, type OpsRequest } from '@/lib/db/schema';
+import { sql } from 'drizzle-orm';
 import { logEvent, type Actor } from '@/lib/operaciones/events';
 import { enqueueOutbox } from '@/lib/operaciones/outbox';
 import { getStatusMapFor } from '@/lib/operaciones/status-map';
@@ -119,13 +120,46 @@ export async function notifyPerson(
 }
 
 // ▶️ Empezar
-export async function startWork(req: OpsRequest, actor: Actor): Promise<ActionResult> {
-  const row = await transition(req, 'en_curso', ['asignado', 'devuelto', 'bloqueado']);
+// principal: si el encargo tenía varios responsables avisados, quien pulsa Empezar pasa a ser el principal.
+export async function startWork(
+  req: OpsRequest,
+  actor: Actor,
+  principal?: { id: string; name: string }
+): Promise<ActionResult> {
+  const takeOver = principal && principal.id !== req.assigneeClickupId && (req.candidateIds ?? []).includes(principal.id);
+  const row = await transition(req, 'en_curso', ['asignado', 'devuelto', 'bloqueado'], {
+    seenAt: req.seenAt ?? new Date(),
+    ...(takeOver ? { assigneeClickupId: principal.id, assigneeName: principal.name } : {})
+  });
   if (!row) return { ok: false, reason: 'Este encargo ya no está pendiente de empezar.' };
-  await logEvent(req.tenantId, { requestId: req.id, actor, type: 'start' });
+  await logEvent(req.tenantId, {
+    requestId: req.id,
+    actor,
+    type: 'start',
+    payload: takeOver ? { principal: principal.name } : undefined
+  });
   await pushToClickUp(row, 'inProgress', actor.name);
   await refreshNotice(req.tenantId, req.id);
   return { ok: true, req: row };
+}
+
+// 🕐 Más tarde: la persona ha visto el aviso y empezará después. Cuenta como «visto»; no cambia el estado.
+export async function laterWork(req: OpsRequest, person: Actor): Promise<ActionResult> {
+  if (req.workStatus !== 'asignado') return { ok: false, reason: 'Este encargo ya no está pendiente de empezar.' };
+  await db
+    .update(opsRequests)
+    .set({ seenAt: sql`coalesce(${opsRequests.seenAt}, now())`, seenBy: sql`coalesce(${opsRequests.seenBy}, ${person.name})` })
+    .where(eq(opsRequests.id, req.id));
+  await logEvent(req.tenantId, { requestId: req.id, actor: person, type: 'later' });
+  // El aviso de esa persona recuerda que pulsó «Más tarde» (ya no se le ofrece ese botón).
+  if (person.clickupUserId) {
+    await db.execute(sql`
+      UPDATE ops_notifications SET payload = jsonb_set(payload, '{later}', 'true')
+      WHERE tenant_id = ${req.tenantId} AND request_id = ${req.id} AND kind = 'new_request'
+        AND for_clickup_user_id = ${person.clickupUserId}`);
+  }
+  await refreshNotice(req.tenantId, req.id);
+  return { ok: true, req };
 }
 
 // ✅ Hecho / 👀 Hecho, ¿lo revisas?  (note = enlace o comentario, opcional)

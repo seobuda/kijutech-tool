@@ -7,6 +7,8 @@ import { getStatusGroups } from '@/lib/operaciones/status-map';
 import { getWorkTypes } from '@/lib/operaciones/work-types';
 import { AjustesClickUp } from './ajustes-clickup';
 import { FlujoAjustes } from './flujo-ajustes';
+import { VigilanciaAjustes } from './vigilancia-ajustes';
+import { getUnlinkedWithTasks, getWatch } from '@/lib/operaciones/watch';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,6 +23,7 @@ export default async function AjustesClickUpPage() {
     getClickUpRequestStats(user.tenantId)
   ]);
 
+  const [watch, unlinked] = await Promise.all([getWatch(user.tenantId), getUnlinkedWithTasks(user.tenantId)]);
   const [statusGroups, workTypes] = await Promise.all([
     getStatusGroups(user.tenantId),
     getWorkTypes(user.tenantId, true)
@@ -44,6 +47,13 @@ export default async function AjustesClickUpPage() {
           }))
         }}
         stats={stats}
+      />
+      <VigilanciaAjustes
+        enabled={Boolean(watch?.enabled)}
+        activatedAt={watch?.activatedAt?.toISOString() ?? null}
+        lastRunAt={watch?.lastRunAt?.toISOString() ?? null}
+        lastError={watch?.lastError ?? null}
+        unlinked={unlinked}
       />
       <FlujoAjustes
         groups={statusGroups.map((g) => ({

@@ -11,6 +11,7 @@ import { getTelegramConfig, getOwnerMember } from '@/lib/operaciones/telegram-co
 import { escapeHtml } from '@/lib/operaciones/telegram';
 import { getInbox, waitLabel } from '@/lib/operaciones/inbox';
 import { getOwnerTimezone } from '@/lib/operaciones/team-profiles';
+import { getUnanswered } from '@/lib/operaciones/reminders';
 
 const MAX_LIST = 8;
 const MAX_BUTTON_ROWS = 5;
@@ -20,7 +21,7 @@ const short = (t: string, n = 28) => (t.length > n ? `${t.slice(0, n - 1)}…` :
 async function buildDigest(
   tenantId: string,
   since: Date
-): Promise<{ text: string; buttons: { text: string; data: string }[][]; empty: boolean }> {
+): Promise<{ text: string; buttons: { text: string; data: string }[][]; empty: boolean; unansweredIds: string[] }> {
   const events = await db
     .select()
     .from(opsRequestEvents)
@@ -67,6 +68,16 @@ async function buildDigest(
     sections.push(`🤖 <b>Resuelto por el agente (${agent.length})</b>\n${lines.join('\n')}`);
   }
 
+  // Encargos recordados que siguen sin empezar al terminar la jornada de su responsable: salen una vez.
+  const unanswered = await getUnanswered(tenantId);
+  if (unanswered.length) {
+    const lines = unanswered.slice(0, MAX_LIST).map(
+      (r) => `• ${escapeHtml(r.title)} <i>(${escapeHtml(r.assigneeName ?? '—')} · sin respuesta desde el ${r.remindedAt!.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', timeZone: 'Europe/Madrid' })})</i>`
+    );
+    if (unanswered.length > MAX_LIST) lines.push(`… y ${unanswered.length - MAX_LIST} más`);
+    sections.push(`⏳ <b>Sin respuesta (${unanswered.length})</b>\n${lines.join('\n')}`);
+  }
+
   const buttons: { text: string; data: string }[][] = [];
   if (inbox.length) {
     const lines = inbox.slice(0, MAX_LIST).map((i) => {
@@ -90,7 +101,8 @@ async function buildDigest(
   return {
     text: sections.length ? `📋 <b>Resumen</b>\n\n${sections.join('\n\n')}` : '',
     buttons,
-    empty: sections.length === 0
+    empty: sections.length === 0,
+    unansweredIds: unanswered.map((r) => r.id)
   };
 }
 
@@ -140,6 +152,10 @@ async function queueDigest(tenantId: string, key: string, since: Date): Promise<
     payload: { text: d.text, toOwner: true, buttons: d.buttons.length ? d.buttons : undefined, skipped: d.empty ? 'sin novedades' : undefined },
     skipped: d.empty
   });
+  // Lo que ya salió como «sin respuesta» no se repite en el siguiente resumen.
+  if (!d.empty && d.unansweredIds.length) {
+    await db.update(opsRequests).set({ unansweredListedAt: new Date() }).where(inArray(opsRequests.id, d.unansweredIds));
+  }
   return !d.empty;
 }
 

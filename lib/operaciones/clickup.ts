@@ -594,3 +594,105 @@ export async function getListStatuses(token: string, listId: string): Promise<Cl
   const list = await cu<{ statuses?: { status: string; type: string }[] }>(token, `/list/${listId}`);
   return (list.statuses ?? []).map((x) => ({ status: x.status, type: x.type }));
 }
+
+// ---------------------------------------------------------------------------
+// Vigilancia de tareas (paso 6C): consulta agrupada de lo creado o actualizado
+// ---------------------------------------------------------------------------
+
+export type WatchTask = {
+  id: string;
+  name: string;
+  url: string;
+  description: string;
+  statusName: string;
+  statusType: string;
+  listId: string;
+  listName: string;
+  assignees: { id: string; username: string }[];
+  creatorId: string | null;
+  createdMs: number;
+  updatedMs: number;
+  dueMs: number | null;
+  priority: number | null;
+  // Campos personalizados de tipo desplegable: id del campo → id y texto de la opción elegida.
+  dropdowns: Record<string, { optionId: string; label: string; fieldName: string }>;
+};
+
+type RawWatchTask = {
+  id: string;
+  name: string;
+  url: string;
+  description?: string;
+  text_content?: string;
+  status?: { status: string; type?: string };
+  list?: { id: string; name: string };
+  assignees?: { id: number; username?: string }[];
+  creator?: { id: number };
+  date_created?: string;
+  date_updated?: string;
+  due_date?: string | null;
+  priority?: { id?: string } | null;
+  custom_fields?: {
+    id: string;
+    name: string;
+    type: string;
+    value?: unknown;
+    type_config?: { options?: { id: string; name?: string; label?: string; orderindex?: number }[] };
+  }[];
+};
+
+function toWatchTask(t: RawWatchTask): WatchTask {
+  const dropdowns: WatchTask['dropdowns'] = {};
+  for (const f of t.custom_fields ?? []) {
+    if (f.type !== 'drop_down' || f.value === undefined || f.value === null || f.value === '') continue;
+    const opts = f.type_config?.options ?? [];
+    // ClickUp devuelve el valor como posición (orderindex) o como id de la opción.
+    const o = opts.find((x) => x.id === f.value) ?? opts.find((x) => x.orderindex === Number(f.value));
+    if (o) dropdowns[f.id] = { optionId: o.id, label: o.name ?? o.label ?? '', fieldName: f.name };
+  }
+  const prio = Number(t.priority?.id);
+  return {
+    id: t.id,
+    name: t.name,
+    url: t.url,
+    description: (t.text_content || t.description || '').trim(),
+    statusName: t.status?.status ?? '',
+    statusType: t.status?.type ?? '',
+    listId: t.list?.id ?? '',
+    listName: t.list?.name ?? '—',
+    assignees: (t.assignees ?? []).map((a) => ({ id: String(a.id), username: a.username ?? '' })),
+    creatorId: t.creator?.id != null ? String(t.creator.id) : null,
+    createdMs: Number(t.date_created) || 0,
+    updatedMs: Number(t.date_updated) || 0,
+    dueMs: t.due_date ? Number(t.due_date) : null,
+    priority: prio >= 1 && prio <= 4 ? prio : null,
+    dropdowns
+  };
+}
+
+// UNA consulta de workspace (paginada de 100 en 100) con las tareas creadas o actualizadas desde un
+// instante, en los espacios dados. Con updatedAfterMs = null, todas las abiertas (lectura inicial).
+export async function fetchWatchTasks(
+  token: string,
+  workspaceId: string,
+  opts: { spaceIds: string[]; updatedAfterMs: number | null }
+): Promise<{ tasks: WatchTask[]; truncated: boolean; requests: number }> {
+  const tasks: WatchTask[] = [];
+  let requests = 0;
+  for (let page = 0; ; page++) {
+    if (page >= MAX_TASK_PAGES) return { tasks, truncated: true, requests };
+    const q = new URLSearchParams();
+    q.set('page', String(page));
+    q.set('subtasks', 'true');
+    q.set('include_closed', opts.updatedAfterMs !== null ? 'true' : 'false');
+    for (const s of opts.spaceIds) q.append('space_ids[]', s);
+    if (opts.updatedAfterMs !== null) {
+      q.set('date_updated_gt', String(opts.updatedAfterMs));
+      q.set('order_by', 'updated');
+    }
+    const res = await cu<{ tasks: RawWatchTask[] }>(token, `/team/${workspaceId}/task?${q.toString()}`);
+    requests++;
+    tasks.push(...res.tasks.map(toWatchTask));
+    if (res.tasks.length < 100) return { tasks, truncated: false, requests };
+  }
+}

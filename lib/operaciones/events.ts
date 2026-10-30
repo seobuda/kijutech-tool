@@ -8,6 +8,11 @@ export type Actor = { clickupUserId: string | null; name: string };
 
 export type EventType =
   | 'seen'
+  | 'later'
+  | 'clickup_closed'
+  | 'reassigned'
+  | 'mirror_created'
+  | 'reminder_sent'
   | 'start'
   | 'blocked'
   | 'done'

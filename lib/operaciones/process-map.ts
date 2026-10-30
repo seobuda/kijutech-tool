@@ -97,7 +97,7 @@ export const OPS_REQUEST_PROCESS_MAP: ProcessStep[] = [
     id: 'ops-telegram-notify',
     name: 'Aviso por Telegram',
     description:
-      'Cuando ClickUp confirma la tarea, el responsable recibe en Telegram el título, la lista, la fecha de entrega (en su zona horaria), un resumen y el enlace, con un botón "✅ Visto". En modo pruebas todo llega al dueño indicando a quién iba.',
+      'Cuando ClickUp confirma la tarea, el responsable recibe en Telegram el título, la lista, la fecha de entrega (en su zona horaria), un resumen y el enlace, con los botones "▶️ Empezar ahora" y "🕐 Más tarde" (después, Bloqueado / Hecho / Hecho, ¿lo revisas?). En modo pruebas todo llega al dueño indicando a quién iba.',
     status: 'built',
     file: 'lib/operaciones/notifications.ts',
     technicalDetail: {
@@ -107,7 +107,7 @@ export const OPS_REQUEST_PROCESS_MAP: ProcessStep[] = [
       keyDecisions: [
         'Escucha por consulta periódica (long polling) en local; ruta /api/telegram/webhook preparada para un servidor',
         'Un candado de PostgreSQL asegura un solo proceso escuchando; un 409 de Telegram se muestra en Ajustes',
-        'Chats no vinculados se ignoran; los códigos de vinculación sirven una sola vez; "Visto" solo cuenta desde el chat del responsable',
+        'Chats no vinculados se ignoran; los códigos de vinculación sirven una sola vez; los botones solo cuentan desde el chat del responsable',
       ],
     },
   },
@@ -203,6 +203,25 @@ export const OPS_REQUEST_PROCESS_MAP: ProcessStep[] = [
         'Un cliente desactivado se sigue reconociendo, pero la tarjeta de revisión muestra un aviso ámbar',
         'Una ficha con encargos no se puede borrar, solo desactivar',
         'En webs y herramientas no se guardan contraseñas',
+      ],
+    },
+  },
+  {
+    id: 'ops-clickup-watch',
+    name: 'Tareas de ClickUp en el circuito y recordatorios',
+    description:
+      'Cada 2-3 minutos se consulta ClickUp (una sola petición de workspace): una tarea creada o asignada allí a alguien con Telegram vinculado se convierte en encargo espejo y recibe el aviso con botones; si se cierra en ClickUp, el encargo se completa; si se reasigna, el aviso pasa a la nueva persona. Un recordatorio único si nadie empieza en 2 horas laborables.',
+    status: 'built',
+    file: 'lib/operaciones/watch.ts',
+    technicalDetail: {
+      summary:
+        'Sin webhooks: el planificador (30 s) llama a runWatch, que se limita a una pasada cada ~2,5 min con date_updated_gt y un cursor guardado. Las decisiones son del código: marca [kiju:] = nuestra; tarea nueva (creada tras activar) o recién asignada (comparada con su instantánea) = espejo; el creador no se avisa a sí mismo; lo anterior a la activación solo se anota. Los recordatorios usan el horario de la ficha del Equipo; lo que sigue sin respuesta al terminar la jornada sale una vez en el primer resumen del dueño.',
+      stack: ['Tablas ops_clickup_watch y ops_clickup_task_snapshots', 'ops_requests.origin / candidate_ids / reminded_at', 'Cliente de clickup.ts con contador de peticiones', 'ops_notifications (aviso y recordatorio con clave única)'],
+      keyDecisions: [
+        'Quien pulsa Empezar entre varios responsables avisados queda como responsable principal',
+        'Quien pulsa «Más tarde» no recibe el recordatorio de 2 h, pero sí uno si vence hoy y pasa la mitad de su jornada',
+        'Exige Telegram vinculado (en modo pruebas basta ser miembro de ClickUp)',
+        'El cliente del encargo espejo se copia del campo Cliente de la tarea',
       ],
     },
   },

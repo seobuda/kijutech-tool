@@ -29,7 +29,7 @@ import {
 } from '@/lib/operaciones/telegram-config';
 import { logEvent, type Actor } from '@/lib/operaciones/events';
 import { refreshNotice } from '@/lib/operaciones/notifications';
-import { acceptWork, finishWork, getRequest, returnWork, startWork } from '@/lib/operaciones/workflow';
+import { acceptWork, finishWork, getRequest, laterWork, returnWork, startWork } from '@/lib/operaciones/workflow';
 import { getBlocker, ownerAnswerBlocker, reportBlock } from '@/lib/operaciones/blockers';
 
 export async function handleUpdate(tenantId: string, token: string, update: TgUpdate): Promise<void> {
@@ -208,11 +208,12 @@ async function handleWorkflowCallback(
   messageId: number,
   answer: Answer
 ): Promise<void> {
-  const m = cb.data?.match(/^(st|bl|dn|dr|ok|rt|rp):([0-9a-f-]{36})$/);
+  const m = cb.data?.match(/^(st|lt|bl|dn|dr|ok|rt|rp):([0-9a-f-]{36})(?::(d{1,20}))?$/);
   const sk = cb.data?.match(/^sk:([dr]):([0-9a-f-]{36})$/);
   if (!m && !sk) return void (await answer());
   const code = m ? m[1] : 'sk';
   const id = m ? m[2] : sk![2];
+  const forUser = m?.[3] ?? null; // varios responsables avisados: de quién es el botón
 
   const cfg = await getTelegramConfig(tenantId);
   const owner = await getOwnerMember(tenantId);
@@ -235,17 +236,30 @@ async function handleWorkflowCallback(
 
   // Aceptar y Devolver: solo el dueño. Los demás: solo el responsable (o el dueño en modo pruebas).
   const reviewerAction = code === 'ok' || code === 'rt';
+  const mine = (id: string | null) => Boolean(id) && (id === req.assigneeClickupId || (req.candidateIds ?? []).includes(id!));
   const allowed = reviewerAction
     ? isOwner
-    : presser.clickupUserId === req.assigneeClickupId || (Boolean(cfg?.testMode) && isOwner);
+    : mine(presser.clickupUserId) || (Boolean(cfg?.testMode) && isOwner);
   if (!allowed) {
     await logEvent(tenantId, { requestId: req.id, actor, type: 'button_rejected', payload: { button: code } });
     return void (await answer('No puedes usar este botón.', true));
   }
 
+  // Persona a la que corresponde el botón: la del aviso (varios responsables) o la que lo pulsa.
+  const target = forUser && mine(forUser) ? forUser : mine(presser.clickupUserId) ? presser.clickupUserId : req.assigneeClickupId;
+  const targetMember = target ? await getMemberByUser(tenantId, target) : null;
+
   if (code === 'st') {
-    const res = await startWork(req, actor);
+    const res = await startWork(req, actor, target && targetMember ? { id: target, name: targetMember.username } : undefined);
+    if (res.ok) await closeIfReviewMessage(tenantId, token, chatId, messageId);
     return void (await answer(res.ok ? '▶️ En curso' : res.reason, !res.ok));
+  }
+
+  if (code === 'lt') {
+    const person = targetMember ? actorOf(targetMember) : actor;
+    const res = await laterWork(req, person);
+    if (res.ok) await closeIfReviewMessage(tenantId, token, chatId, messageId);
+    return void (await answer(res.ok ? '🕐 Te lo recordaré' : res.reason, !res.ok));
   }
 
   if (code === 'bl') {
@@ -332,7 +346,7 @@ async function closeIfReviewMessage(tenantId: string, token: string, chatId: num
       )
     )
     .limit(1);
-  if (n?.kind === 'review_request') await closeButtons(token, chatId, messageId);
+  if (n?.kind === 'review_request' || n?.kind === 'reminder') await closeButtons(token, chatId, messageId);
 }
 
 

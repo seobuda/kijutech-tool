@@ -38,6 +38,7 @@ type Payload = {
   text: string; // cuerpo en HTML (sin la cabecera de modo pruebas)
   testMode: boolean;
   seenButton?: boolean;
+  later?: boolean; // esta persona pulsó «Más tarde»
   actions?: boolean; // aviso de encargo con los botones del flujo (Empezar, Bloqueado, Hecho…)
   buttons?: { text: string; data: string }[][]; // botones propios de otros avisos (revisión, bloqueo, resumen…)
   toOwner?: boolean; // aviso dirigido al dueño: en modo pruebas no lleva la cabecera "iba dirigido a"
@@ -102,22 +103,27 @@ export function buildDailyText(name: string, b: TeamMemberToday, timezone: strin
 // ---------------------------------------------------------------------------
 
 // SOLO se llama cuando ClickUp ha confirmado la tarea (estado "creado").
-export async function enqueueNewRequestNotification(requestId: string): Promise<void> {
+// forUser / label / dedupeSuffix: avisos a cada responsable de una tarea de ClickUp y reasignaciones.
+export async function enqueueNewRequestNotification(
+  requestId: string,
+  opts: { forUserId?: string; forName?: string; label?: string; dedupeSuffix?: string } = {}
+): Promise<void> {
   const [req] = await db.select().from(opsRequests).where(eq(opsRequests.id, requestId)).limit(1);
   if (!req || req.status !== 'creado' || !req.clickupTaskUrl) return;
 
   const cfg = await getTelegramConfig(req.tenantId);
   if (!cfg) return; // Telegram no está configurado
-  if (!req.assigneeClickupId) return; // sin responsable no hay a quién avisar
+  const userId = opts.forUserId ?? req.assigneeClickupId;
+  if (!userId) return; // sin responsable no hay a quién avisar
+  const userName = opts.forName ?? req.assigneeName;
 
-  const member = await getMemberByUser(req.tenantId, req.assigneeClickupId);
-  const tz = await getMemberTimezone(req.tenantId, req.assigneeClickupId);
+  const tz = await getMemberTimezone(req.tenantId, userId);
   const due = req.dueDate ? `\n📅 Entrega: <b>${escapeHtml(fmtDay(madridNoonMs(req.dueDate), tz))}</b>` : '';
   const summary = summarize(req.preparedDescription);
 
   const text = clampMessage(
     [
-      `📌 <b>Nuevo encargo</b>`,
+      `📌 <b>Nuevo encargo</b>${opts.label ? ` <i>(${escapeHtml(opts.label)})</i>` : ''}`,
       `<b>${escapeHtml(req.title)}</b>`,
       `📂 Lista: ${escapeHtml(req.clickupListName ?? '—')}${due}`,
       summary ? `\n${escapeHtml(summary)}` : '',
@@ -127,16 +133,16 @@ export async function enqueueNewRequestNotification(requestId: string): Promise<
       .join('\n')
   );
 
-  const payload: Payload = { text, testMode: cfg.testMode, seenButton: true, actions: true };
+  const payload: Payload = { text, testMode: cfg.testMode, actions: true };
   const inserted = await db
     .insert(opsNotifications)
     .values({
       id: randomUUID(),
       tenantId: req.tenantId,
       kind: 'new_request',
-      dedupeKey: `new_request:${req.id}`,
-      forClickupUserId: req.assigneeClickupId,
-      forName: req.assigneeName,
+      dedupeKey: opts.forUserId ? `new_request:${req.id}:${userId}${opts.dedupeSuffix ? `:${opts.dedupeSuffix}` : ''}` : `new_request:${req.id}`,
+      forClickupUserId: userId,
+      forName: userName,
       requestId: req.id,
       payload
     })
@@ -150,7 +156,7 @@ export async function enqueueNewRequestNotification(requestId: string): Promise<
 // (dedupe_key único) y se envía después. Nunca lanza: un fallo de Telegram no rompe la acción.
 export async function enqueueNotification(input: {
   tenantId: string;
-  kind: 'review_request' | 'block_alert' | 'reply' | 'returned' | 'digest';
+  kind: 'review_request' | 'block_alert' | 'reply' | 'returned' | 'digest' | 'reminder';
   dedupeKey: string;
   forClickupUserId: string | null;
   forName: string | null;
@@ -176,25 +182,32 @@ export async function enqueueNotification(input: {
   if (!input.skipped) void processNotifications(input.tenantId);
 }
 
-// Teclado del aviso de encargo según el estado del encargo: solo se ofrece lo que tiene sentido ahora.
+// Teclado del aviso de encargo según el estado y la persona: solo se ofrece lo que tiene sentido ahora.
+//  - Sin empezar: «▶️ Empezar ahora» y «🕐 Más tarde» (tras «Más tarde», solo Empezar).
+//  - En curso o devuelto: «🚫 Bloqueado», «✅ Hecho» y «👀 Hecho, ¿lo revisas?».
+//  - Con varios responsables avisados, los botones llevan el id de la persona (st:ID:USUARIO) para saber
+//    quién pulsó Empezar y dejarlo como responsable principal.
 export function noticeKeyboard(
-  req: { id: string; seenAt: Date | null; workStatus: string },
-  notifId: string
+  req: { id: string; workStatus: string; candidateIds?: string[] | null },
+  opts: { forUser: string | null; later: boolean }
 ): { text: string; callback_data: string }[][] {
+  const multi = (req.candidateIds?.length ?? 0) > 1 && Boolean(opts.forUser);
+  const sfx = multi ? `:${opts.forUser}` : '';
   const rows: { text: string; callback_data: string }[][] = [];
-  const open = ['asignado', 'en_curso', 'devuelto', 'bloqueado'].includes(req.workStatus);
-  if (!req.seenAt) rows.push([{ text: '✅ Visto', callback_data: `seen:${notifId}` }]);
-  if (!open) return rows;
-  const first: { text: string; callback_data: string }[] = [];
-  if (['asignado', 'devuelto', 'bloqueado'].includes(req.workStatus)) {
-    first.push({ text: '▶️ Empezar', callback_data: `st:${req.id}` });
-  }
-  if (req.workStatus !== 'bloqueado') first.push({ text: '🚫 Bloqueado', callback_data: `bl:${req.id}` });
-  if (first.length) rows.push(first);
-  rows.push([
+  const start = { text: '▶️ Empezar ahora', callback_data: `st:${req.id}${sfx}` };
+  const done = [
     { text: '✅ Hecho', callback_data: `dn:${req.id}` },
     { text: '👀 Hecho, ¿lo revisas?', callback_data: `dr:${req.id}` }
-  ]);
+  ];
+  if (req.workStatus === 'asignado') {
+    rows.push(opts.later ? [start] : [start, { text: '🕐 Más tarde', callback_data: `lt:${req.id}${sfx}` }]);
+  } else if (req.workStatus === 'en_curso' || req.workStatus === 'devuelto') {
+    rows.push([{ text: '🚫 Bloqueado', callback_data: `bl:${req.id}` }]);
+    rows.push(done);
+  } else if (req.workStatus === 'bloqueado') {
+    rows.push([start]);
+    rows.push(done);
+  }
   return rows;
 }
 
@@ -207,7 +220,9 @@ const STATUS_LINE: Record<string, string> = {
   completado: '✅ Completado'
 };
 
-// Reescribe el aviso de encargo ya enviado (estado actual y botones vigentes). Nunca lanza.
+// Reescribe los avisos de encargo ya enviados (estado actual y botones vigentes). Un encargo puede tener
+// varios avisos (una persona por aviso, o uno viejo y otro nuevo tras una reasignación): solo el más
+// reciente de la persona que lleva el encargo conserva botones. Nunca lanza.
 export async function refreshNotice(tenantId: string, requestId: string): Promise<void> {
   try {
     const [req] = await db
@@ -216,7 +231,7 @@ export async function refreshNotice(tenantId: string, requestId: string): Promis
       .where(and(eq(opsRequests.id, requestId), eq(opsRequests.tenantId, tenantId)))
       .limit(1);
     if (!req) return;
-    const [n] = await db
+    const notices = await db
       .select()
       .from(opsNotifications)
       .where(
@@ -226,25 +241,48 @@ export async function refreshNotice(tenantId: string, requestId: string): Promis
           eq(opsNotifications.kind, 'new_request'),
           eq(opsNotifications.status, 'enviado')
         )
-      )
-      .limit(1);
+      );
     const cfg = await getTelegramConfig(tenantId);
-    if (!n || !cfg || !n.chatId || !n.telegramMessageId) return;
-    const payload = n.payload as Payload;
-    const lines: string[] = [];
-    if (req.seenAt) lines.push('✅ <b>Visto</b>');
-    if (STATUS_LINE[req.workStatus]) lines.push(`<b>${STATUS_LINE[req.workStatus]}</b>`);
-    const text = `${payload.sentText ?? payload.text}${lines.length ? `\n\n${lines.join(' · ')}` : ''}`;
-    await tg(decodeBotToken(cfg), 'editMessageText', {
-      chat_id: n.chatId,
-      message_id: n.telegramMessageId,
-      text: clampMessage(text),
-      parse_mode: 'HTML',
-      disable_web_page_preview: true,
-      reply_markup: { inline_keyboard: noticeKeyboard(req, n.id) }
-    });
+    if (notices.length === 0 || !cfg) return;
+
+    // Solo el aviso más reciente de cada persona puede tener botones.
+    const latest = new Map<string, string>();
+    for (const n of [...notices].sort((x, y) => (x.sentAt?.getTime() ?? 0) - (y.sentAt?.getTime() ?? 0))) {
+      latest.set(n.forClickupUserId ?? '', n.id);
+    }
+
+    for (const n of notices) {
+      if (!n.chatId || !n.telegramMessageId) continue;
+      const payload = n.payload as Payload;
+      const user = n.forClickupUserId ?? '';
+      const isLatest = latest.get(user) === n.id;
+      const carries =
+        req.workStatus === 'asignado'
+          ? (req.assigneeClickupId === user || (req.candidateIds ?? []).includes(user)) && isLatest
+          : req.assigneeClickupId === user && isLatest;
+      const lines: string[] = [];
+      let keyboard: { text: string; callback_data: string }[][] = [];
+      if (carries) {
+        if (STATUS_LINE[req.workStatus]) lines.push(`<b>${STATUS_LINE[req.workStatus]}</b>`);
+        if (req.workStatus === 'asignado' && payload.later) lines.push('<b>🕐 Lo verás más tarde</b>');
+        keyboard = noticeKeyboard(req, { forUser: user, later: Boolean(payload.later) });
+      } else if (req.workStatus === 'completado') {
+        lines.push(`<b>${STATUS_LINE.completado}</b>`);
+      } else if (req.assigneeName) {
+        lines.push(`<b>ℹ️ Ahora lo lleva ${escapeHtml(req.assigneeName)}</b>`);
+      }
+      const text = `${payload.sentText ?? payload.text}${lines.length ? `\n\n${lines.join(' · ')}` : ''}`;
+      await tg(decodeBotToken(cfg), 'editMessageText', {
+        chat_id: n.chatId,
+        message_id: n.telegramMessageId,
+        text: clampMessage(text),
+        parse_mode: 'HTML',
+        disable_web_page_preview: true,
+        reply_markup: { inline_keyboard: keyboard }
+      }).catch(() => undefined); // el mensaje pudo borrarse o no haber cambiado: no es crítico
+    }
   } catch {
-    // el mensaje pudo borrarse o no haber cambiado: no es crítico
+    // no es crítico
   }
 }
 
@@ -322,8 +360,8 @@ async function sendOne(c: Claimed): Promise<void> {
         ? await db.select().from(opsRequests).where(eq(opsRequests.id, c.request_id)).limit(1)
         : [];
       keyboard = req
-        ? noticeKeyboard(req, c.id)
-        : [[{ text: '✅ Visto', callback_data: `seen:${c.id}` }]];
+        ? noticeKeyboard(req, { forUser: c.for_clickup_user_id, later: Boolean(c.payload.later) })
+        : [];
     } else if (c.payload.seenButton) {
       keyboard = [[{ text: '✅ Visto', callback_data: `seen:${c.id}` }]];
     } else if (c.payload.buttons?.length) {

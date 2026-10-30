@@ -2,7 +2,8 @@
 // servidor de Next, dentro del propio contenedor (sin servicios nuevos):
 //   - Escucha: consulta periódica larga (getUpdates) para recibir mensajes en local.
 //   - Planificador (cada 30 s): envía avisos pendientes, reintenta fallidos y comprueba qué
-//     personas han llegado a su hora de entrada para su resumen diario.
+//     personas han llegado a su hora de entrada para su resumen diario, vigila ClickUp
+//     (tareas creadas o asignadas allí) y envía los recordatorios de encargos sin empezar.
 // Solo UN proceso escucha el bot: un candado de PostgreSQL (advisory lock) elige al líder.
 // Si Telegram responde 409 (otro oyente con el mismo bot, p. ej. otro entorno), se anota en
 // la configuración y Ajustes lo muestra.
@@ -16,6 +17,8 @@ import { handleUpdate } from '@/lib/operaciones/telegram-handler';
 import { processNotifications, runDailySummaries } from '@/lib/operaciones/notifications';
 import { processOutbox } from '@/lib/operaciones/outbox';
 import { runDigests } from '@/lib/operaciones/digest';
+import { runReminders } from '@/lib/operaciones/reminders';
+import { runWatch } from '@/lib/operaciones/watch';
 
 const LOCK_KEY = 74200126; // identifica "oyente de Telegram de Kijutech"
 const POLL_TIMEOUT_S = 50;
@@ -201,6 +204,8 @@ async function schedulerLoop(state: WorkerState) {
         await runDailySummaries(cfg.tenantId);
         await runDigests(cfg.tenantId);
         await processOutbox(cfg.tenantId);
+        await runWatch(cfg.tenantId); // tareas creadas o asignadas en ClickUp (cada ~2,5 min)
+        await runReminders(cfg.tenantId);
       }
     } catch (e) {
       console.error('[telegram] planificador:', e instanceof Error ? e.message : e);

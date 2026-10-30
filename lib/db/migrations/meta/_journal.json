@@ -225,6 +225,20 @@
       "when": 1793340000000,
       "tag": "0031_ops_clients",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1793350000000,
+      "tag": "0032_ops_clickup_watch",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1793351000000,
+      "tag": "0033_ops_notifications_reminder",
+      "breakpoints": true
     }
   ]
 }
