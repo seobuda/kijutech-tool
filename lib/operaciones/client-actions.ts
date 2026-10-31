@@ -533,7 +533,7 @@ export async function recalcClientActivity(): Promise<Ok<{ message: string }>> {
   }
 }
 
-export type MonthWork = { label: string; items: MonthWorkItem[]; truncated: boolean };
+export type MonthWork = { label: string; items: MonthWorkItem[]; cleaned: MonthWorkItem[]; truncated: boolean };
 
 // «Trabajo de este mes»: tareas completadas del cliente en el mes actual o el anterior.
 export async function getClientMonthWork(clientId: string, month: 'current' | 'previous'): Promise<Ok<{ work: MonthWork }>> {

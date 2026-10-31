@@ -77,3 +77,19 @@ export const escapeHtml = (s: string) =>
 export function clampMessage(html: string, max = 4000): string {
   return html.length <= max ? html : `${html.slice(0, max - 20)}…\n(mensaje recortado)`;
 }
+
+// Descarga un archivo (p. ej. una captura) que alguien mandó al bot. El token va en la URL: nunca en errores.
+export async function tgDownloadFile(token: string, fileId: string): Promise<{ data: ArrayBuffer; contentType: string }> {
+  const info = await tg<{ file_path?: string }>(token, 'getFile', { file_id: fileId });
+  if (!info.file_path) throw new TelegramError('Telegram no devolvió la ruta del archivo');
+  let res: Response;
+  try {
+    res = await fetch(`${API}/file/bot${token}/${info.file_path}`, { signal: AbortSignal.timeout(30_000), cache: 'no-store' });
+  } catch {
+    throw new TelegramError('No se pudo descargar el archivo de Telegram');
+  }
+  if (!res.ok) throw new TelegramError(`Telegram no entregó el archivo (${res.status})`);
+  const ext = info.file_path.split('.').pop()?.toLowerCase();
+  const contentType = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+  return { data: await res.arrayBuffer(), contentType };
+}

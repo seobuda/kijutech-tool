@@ -3,6 +3,7 @@ import { getUser } from '@/lib/db/queries';
 import { AUTOMATIONS, DEF, getAutoAll, listChanges, sampleValues, renderTemplate } from '@/lib/operaciones/automations';
 import { getUpcoming } from '@/lib/operaciones/upcoming';
 import { getTelegramConfig } from '@/lib/operaciones/telegram-config';
+import { getCleanupPeople } from '@/lib/operaciones/cleanup';
 import { AutomatizacionesView, type CardView } from './automatizaciones-view';
 
 export const dynamic = 'force-dynamic';
@@ -11,11 +12,12 @@ export default async function AutomatizacionesPage() {
   const user = await getUser();
   if (!user) redirect('/sign-in');
 
-  const [autos, upcoming, changes, tg] = await Promise.all([
+  const [autos, upcoming, changes, tg, cleanupPeople] = await Promise.all([
     getAutoAll(user.tenantId),
     getUpcoming(user.tenantId),
     listChanges(user.tenantId),
-    getTelegramConfig(user.tenantId)
+    getTelegramConfig(user.tenantId),
+    getCleanupPeople(user.tenantId)
   ]);
 
   const cards: CardView[] = AUTOMATIONS.map((d) => {
@@ -62,6 +64,7 @@ export default async function AutomatizacionesPage() {
         titles={titles}
         testMode={tg?.testMode ?? true}
         hasBot={Boolean(tg)}
+        cleanupPeople={cleanupPeople}
       />
     </div>
   );

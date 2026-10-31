@@ -13,6 +13,7 @@ import { getClickUpToken } from '@/lib/operaciones/queries';
 import { getStructure, selectedSpaces } from '@/lib/operaciones/structure';
 import { localParts, toMinutes } from '@/lib/operaciones/notifications';
 import { getAuto, num } from '@/lib/operaciones/automations';
+import { getCleanupTouched } from '@/lib/operaciones/cleanup';
 import { getScheduleMap, scheduleOrDefault } from '@/lib/operaciones/team-profiles';
 import { workingMinutesBetween } from '@/lib/operaciones/reminders';
 import {
@@ -99,6 +100,19 @@ export async function runActivityScan(tenantId: string, now = Date.now()): Promi
   const todayStart = startOfDayMs(today);
   const month = monthRange(0, now);
 
+  // Lo que tocó una limpieza de vencidas no es actividad real del cliente: las tareas cerradas o descartadas ahí
+  // no cuentan como completadas, y su fecha de cambio no cuenta como última actividad el día en que se tocaron.
+  const dayOf = (ms: number) => new Intl.DateTimeFormat('en-CA', { timeZone: OPS_TIMEZONE }).format(new Date(ms));
+  const touchedDays = new Map<string, Set<string>>();
+  const cleanedClosed = new Set<string>();
+  for (const x of await getCleanupTouched(tenantId, now - windowDays * DAY_MS)) {
+    const days = touchedDays.get(x.taskId) ?? new Set<string>();
+    days.add(dayOf(x.answeredAt.getTime()));
+    touchedDays.set(x.taskId, days);
+    if (x.status !== 'reprogramada') cleanedClosed.add(x.taskId);
+  }
+  const unlessCleanupDay = (taskId: string, ms: number | null) => (ms && touchedDays.get(taskId)?.has(dayOf(ms)) ? 0 : (ms ?? 0));
+
   type Agg = { last: number | null; completed: number; upcoming: number };
   const agg = new Map<string, Agg>(linked.map((c) => [c.id, { last: null, completed: 0, upcoming: 0 }]));
   for (const t of tasks) {
@@ -106,10 +120,10 @@ export async function runActivityScan(tenantId: string, now = Date.now()): Promi
     const client = opt ? byOption.get(opt) : undefined;
     if (!client) continue;
     const a = agg.get(client.id)!;
-    a.last = Math.max(a.last ?? 0, t.updatedMs, t.createdMs, t.closedMs ?? 0) || a.last;
+    a.last = Math.max(a.last ?? 0, unlessCleanupDay(t.id, t.updatedMs), t.createdMs, unlessCleanupDay(t.id, t.closedMs)) || a.last;
     if (isClosedType(t.statusType)) {
       const done = t.closedMs ?? t.updatedMs;
-      if (done >= month.startMs && done < month.endMs) a.completed++;
+      if (done >= month.startMs && done < month.endMs && !cleanedClosed.has(t.id)) a.completed++;
     } else {
       const horizon = clientPlanningDays(client, levels);
       if (horizon > 0 && t.dueMs !== null && t.dueMs >= todayStart && t.dueMs < todayStart + (horizon + 1) * DAY_MS) a.upcoming++;
@@ -266,6 +280,14 @@ export async function markClientAlertsShown(items: ClientAlertItem[]): Promise<v
 
 export type MonthWorkItem = { title: string; url: string; doneMs: number; people: string[] };
 
+export type MonthWorkResult = {
+  label: string;
+  items: MonthWorkItem[];
+  // «Cerradas en limpieza»: tareas cerradas o descartadas en una limpieza de vencidas; no cuentan en el total.
+  cleaned: MonthWorkItem[];
+  truncated: boolean;
+};
+
 const monthCache = new Map<string, { at: number; tasks: WatchTask[] }>();
 const MONTH_CACHE_MS = 2 * 60 * 1000;
 
@@ -275,9 +297,9 @@ export async function getMonthWork(
   tenantId: string,
   client: Pick<ClientWithServices, 'clickupOptionId'>,
   offset: 0 | -1
-): Promise<{ label: string; items: MonthWorkItem[]; truncated: boolean }> {
+): Promise<MonthWorkResult> {
   const range = monthRange(offset);
-  if (!client.clickupOptionId) return { label: range.label, items: [], truncated: false };
+  if (!client.clickupOptionId) return { label: range.label, items: [], cleaned: [], truncated: false };
   const conn = await getClickUpToken(tenantId);
   if (!conn?.workspaceId) throw new Error('ClickUp no está conectado');
   const structure = await getStructure(tenantId);
@@ -295,16 +317,27 @@ export async function getMonthWork(
     monthCache.set(key, entry);
   }
   const names = new Map(structure.members.map((m) => [m.id, m.username]));
-  const items = entry.tasks
+  const cleanedClosed = new Set(
+    (await getCleanupTouched(tenantId, range.startMs - 31 * DAY_MS)).filter((x) => x.status !== 'reprogramada').map((x) => x.taskId)
+  );
+  const all = entry.tasks
     .filter((t) => isClosedType(t.statusType) && taskClientOption(t, fieldIds) === client.clickupOptionId)
     .map((t) => ({ t, done: t.closedMs ?? t.updatedMs }))
     .filter(({ done }) => done >= range.startMs && done < range.endMs)
     .sort((a, b) => a.done - b.done)
     .map(({ t, done }) => ({
-      title: t.name,
-      url: t.url,
-      doneMs: done,
-      people: t.assignees.map((a) => names.get(a.id) ?? a.username).filter(Boolean)
+      id: t.id,
+      item: {
+        title: t.name,
+        url: t.url,
+        doneMs: done,
+        people: t.assignees.map((a) => names.get(a.id) ?? a.username).filter(Boolean)
+      } satisfies MonthWorkItem
     }));
-  return { label: range.label, items, truncated };
+  return {
+    label: range.label,
+    items: all.filter((x) => !cleanedClosed.has(x.id)).map((x) => x.item),
+    cleaned: all.filter((x) => cleanedClosed.has(x.id)).map((x) => x.item),
+    truncated
+  };
 }

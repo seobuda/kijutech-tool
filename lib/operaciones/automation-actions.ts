@@ -21,6 +21,7 @@ import { getOwnerMember } from '@/lib/operaciones/telegram-config';
 import { processNotifications } from '@/lib/operaciones/notifications';
 import { clampMessage, escapeHtml } from '@/lib/operaciones/telegram';
 import { disableWatch, enableWatch } from '@/lib/operaciones/watch';
+import { buildStartupText, getLastHeartbeat } from '@/lib/operaciones/startup';
 
 type Res<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 
@@ -114,6 +115,8 @@ export async function sendAutomationTestAction(key: string, draft?: string): Pro
       const err = validateTemplate(def, tpl);
       if (err) return { ok: false, error: err };
       body = renderTemplate(def, tpl, sampleValues(def));
+    } else if (key === 'startup') {
+      body = await buildStartupText(user.tenantId, await getLastHeartbeat(user.tenantId));
     } else {
       const cfg = def.fields.map((f) => `• ${escapeHtml(f.label)}: <b>${escapeHtml(String(auto.cfg[f.key]))}</b>${f.unit ? ` ${escapeHtml(f.unit)}` : ''}`);
       body = [escapeHtml(def.testNote ?? ''), `Estado: <b>${auto.enabled ? 'encendida' : 'apagada'}</b>`, ...cfg].filter(Boolean).join('\n');

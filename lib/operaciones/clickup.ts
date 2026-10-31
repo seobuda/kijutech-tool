@@ -308,6 +308,7 @@ export type OpsTask = {
   dueDate: number | null;
   status: string;
   listName: string;
+  listId: string | null;
   assigneeIds: number[];
 };
 
@@ -319,6 +320,7 @@ function toOpsTask(t: RawTask): OpsTask {
     dueDate: t.due_date ? Number(t.due_date) : null,
     status: t.status?.status ?? '',
     listName: t.list?.name ?? '—',
+    listId: t.list?.id ?? null,
     assigneeIds: t.assignees.map((a) => a.id)
   };
 }
@@ -552,6 +554,11 @@ async function cuPut<T>(token: string, path: string, body: unknown): Promise<T> 
 
 export async function updateTaskStatus(token: string, taskId: string, status: string): Promise<void> {
   await cuPut(token, `/task/${taskId}`, { status });
+}
+
+// Cambia la fecha de entrega (sin hora): mediodía de Madrid, igual que al crear la tarea.
+export async function updateTaskDue(token: string, taskId: string, ymd: string): Promise<void> {
+  await cuPut(token, `/task/${taskId}`, { due_date: madridNoonMs(ymd), due_date_time: false });
 }
 
 export async function addTaskComment(token: string, taskId: string, text: string): Promise<void> {

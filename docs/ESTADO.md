@@ -3,9 +3,9 @@
 > **Documento vivo y de referencia.** Recoge todo lo que existe, cómo funciona, qué está decidido, qué se ha probado y qué falta. Se actualiza al cerrar cada paso de trabajo (junto al documento de sesión y al Mapa Visual).
 > **No contiene claves, contraseñas ni valores de `.env`** (solo sus nombres).
 
-**Fecha de esta versión:** 2026-10-30
-**Rama de trabajo:** `operaciones` (28 commits por delante de `main`; **Operaciones aún no está fusionada en `main`**). Último commit: `342a421c`.
-**Rama `main`:** llega hasta `a4b3dbb5` (informe de estado del 29 oct, antes de Operaciones). Ramas antiguas de SEO (`feature/fase-d-*`, `feature/mapa-visual-sistema`) ya fusionadas.
+**Fecha de esta versión:** 2026-10-31 (paso 7: preparar el piloto del lunes 2 nov)
+**Rama de trabajo:** `feature/paso-7-piloto` (creada desde `main`; cada mejora nueva va en su propia rama). **Operaciones ya está fusionada en `main`** (fast-forward, 30 oct): `main` y `operaciones` coinciden en `9110754f`; la rama `operaciones` se mantiene.
+**Rama `main`:** `9110754f` hasta que se apruebe y fusione el paso 7. Ramas antiguas de SEO (`feature/fase-d-*`, `feature/mapa-visual-sistema`) ya fusionadas.
 **Repositorio:** `https://github.com/seobuda/kijutech-tool` (origen `origin`).
 **Informes anteriores:** `docs/INFORME-ESTADO.md` (auditoría del 29 oct, previa a Operaciones; su análisis de SEO y de seguridad sigue vigente) y `docs/sessions/` (un documento por sesión, 45 hasta hoy).
 
@@ -47,6 +47,8 @@ Herramienta **interna de la agencia Kijutech** para gestionar proyectos SEO y, d
 - **Módulos:** `seo` (Fase A–D construida en agosto) y `operaciones` (octubre). Un módulo nunca importa a otro; se comunican a través del núcleo.
 
 ## 2. Cómo se levanta y se despliega
+
+Desde el paso 7 los dos contenedores llevan `restart: unless-stopped` (arrancan solos si el ordenador se reinicia). **Para que funcione tras reiniciar Windows:** Docker Desktop → Settings → General → «Start Docker Desktop when you sign in»; iniciar sesión en Windows (o inicio de sesión automático con `netplwiz`); desactivar suspensión e hibernación en el horario del piloto; fijar las horas activas de Windows Update.
 
 Todo corre **dentro de Docker**. **Nunca** se ejecuta `pnpm`/`npm` en el host Windows (en una sesión anterior, `pnpm install` en Windows generó binarios nativos que colgaban Turbopack en silencio).
 
@@ -180,10 +182,18 @@ Una ficha por persona (`ops_team_profiles`, 5): puesto, descripción, notas, **t
 **Pasada diaria** (03:00 Madrid) con **una consulta agrupada** (≈3 peticiones para ~300 tareas) → `ops_client_activity` (52): última actividad, completadas del mes, abiertas con fecha en el horizonte del cliente y **horas aproximadas** (tiempo laboral entre Empezar y Hecho de los encargos del cliente). **Semáforo** en Clientes: 🔴 sin actividad, 🟠 sin trabajo planificado, 🟢 bien, ⚪ gris (no genera alertas o «Ficha sin completar»). Solo vigila clientes activos, vinculados, con servicio u horas al mes y «Genera alertas» encendido (**hoy 50 de 52 están en gris** hasta que Enric las complete; Kijutech tiene las alertas apagadas). Umbrales por nivel (inactividad: Top 7 / Estándar 14 / Mantenimiento 30 días; horizonte planificado: 7 / 14 / desactivado) y por cliente. Las alertas nuevas salen en el último resumen del día con recordatorio semanal si siguen; la marca «ya avisada» se borra al desaparecer la condición. Botón «Recalcular actividad» y **«Trabajo de este mes»** (actual o anterior, con «Copiar»). Si la pasada falla se reintenta cada 30 min y el error se ve en Clientes.
 
 ### 6.12 Panel de Automatizaciones (6E)
-Pestaña **Automatizaciones**: 10 tarjetas con interruptor, tiempos con límites, texto con huecos y vista previa, «Enviarme una prueba» y «Restaurar valores»; **Próximos envíos** (24 h, calculado al vuelo) y **Registro de cambios** (quién, qué, cuándo, valor anterior y nuevo). Detalle y valores por defecto en §7.
+Pestaña **Automatizaciones**: 12 tarjetas con interruptor, tiempos con límites, texto con huecos y vista previa, «Enviarme una prueba» y «Restaurar valores»; **Próximos envíos** (24 h, calculado al vuelo) y **Registro de cambios** (quién, qué, cuándo, valor anterior y nuevo). Detalle y valores por defecto en §7.
 
 ### 6.13 Fiabilidad y seguridad (resumen)
 Envío sin duplicados (marca `[kiju:]` + índice único); copia local del Bloc y audio antes de transcribir; contador de peticiones y espera ante el límite; un único oyente del bot; códigos de vinculación de un solo uso; chats no vinculados ignorados; botones solo desde el chat del responsable; avisos con clave única (nunca dos veces); cambios a ClickUp por bandeja de salida con reintentos; token de ClickUp cifrado.
+
+### 6.14 Paso 7: preparar el piloto (31 oct)
+- **Limpieza de vencidas** (`lib/operaciones/cleanup.ts`, `cleanup-actions.ts`, `cleanup-panel.tsx`): botón «Enviar limpieza de vencidas» en **Equipo** y en **Automatizaciones**, a una persona o a todas (con confirmación). Una consulta agrupada de ClickUp (la de «Equipo hoy») da las vencidas de los espacios seleccionados, de la más antigua a la más reciente, con tope por tanda (`maxTasks` 30). El bot envía **una tarea cada vez** (aviso con clave única) con ✅ Ya está hecha (estado «hecho» de la lista), 📅 Nueva fecha (mañana, en 3 días, lunes de la semana que viene o ✍️ escribir `dd/mm` o `dd/mm/aaaa`), 🗑 Ya no aplica (estado de tipo «closed» de la lista, o «hecho» si no existe, más un comentario) y ⏹ Parar limpieza. Todo cambio en ClickUp va por `ops_clickup_outbox` (nueva acción `set_due`). Al terminar, la persona recibe las gracias con su resumen y a Enric le llega **dentro de sus resúmenes de las 13:00 y 18:00** (no inmediato). **Modo pruebas:** todo llega a Enric; las tareas de **otras personas se simulan** (se registra, no se escribe en ClickUp); solo las de Enric son reales.
+- **La limpieza no falsea informes:** lo cerrado o descartado en una limpieza **no cuenta** en «Trabajo de este mes» ni en «completadas del mes»; sale aparte en «Cerradas en limpieza» sin contar en el total. Los cambios de una limpieza no cuentan como **última actividad del cliente** el día en que se tocaron (se excluyen con `ops_cleanup_items`).
+- **Pestaña Piloto** (`lib/operaciones/pilot.ts`): por semana (lunes a domingo, Madrid) y por persona: encargos creados por origen (bloc, Nuevo encargo, ClickUp), del aviso a Empezar y de Empezar a Hecho (media y mediana, en minutos laborables), bloqueos resueltos por la IA frente a los que llegaron a Enric, revisiones aceptadas y devueltas, recordatorios, encargos sin respuesta, tareas revisadas en limpiezas, y «Tu bandeja» (interrupciones inmediatas frente a lo que fue a los resúmenes). Se calcula al vuelo; fecha de inicio configurable (`pilot_start` en `ops_settings`, por defecto el próximo lunes: **2026-11-02**). Sección **Sugerencias** con capturas (se piden al bot al verlas, ruta `/api/operaciones/suggestion-photo/[id]`).
+- **Voz del equipo en el bot:** `/sugerencia` (texto o captura, guarda persona y hora; sale una vez en el resumen de las 18:00) y `/ayuda` (qué hace cada botón; texto fijo en el código).
+- **Fiabilidad:** aviso «🟢 Sistema en marcha» al arrancar el proceso líder, con el tiempo apagado (por el latido `worker_heartbeat` de cada vuelta de 30 s), cuánto cayó en horario laboral del equipo y qué quedó pendiente (avisos y cambios de ClickUp en cola). Llega siempre a Enric. Cada `docker compose up --build` también lo envía (se puede apagar en Automatizaciones → «Aviso Sistema en marcha»).
+- **Migración 0036** (backup `backups/backup_pre_piloto_20261031.sql`): tablas `ops_cleanup_runs`, `ops_cleanup_items`, `ops_suggestions`; columna `ops_telegram_pending.cleanup_item_id`; nuevos valores en las comprobaciones de `ops_notifications.kind` (`cleanup`, `cleanup_summary`, `startup`) y `ops_clickup_outbox.action` (`set_due`).
 
 ## 7. Panel de Automatizaciones: todos los valores
 
@@ -199,6 +209,8 @@ Los valores por defecto viven en el código (`lib/operaciones/automations.ts`); 
 | `client_alerts` Alertas de clientes | Sección «Clientes en alerta» | `remindDays` 7 → 1–30 | `{total}` `{lista}` |
 | `activity_scan` Pasada diaria de actividad | Calcula la actividad por cliente | `time` 03:00 (Madrid); `retryMin` 30 → 5–240 | — |
 | `watch` Vigilancia de ClickUp | Mira ClickUp (interruptor con su propia lógica de activación) | `everySec` 150 → 60–900 | — |
+| `cleanup` Limpieza de vencidas | Envía las vencidas de cada persona de una en una | `maxTasks` 30 → 5–100 | `{nombre}` `{total}` (texto de introducción) |
+| `startup` Aviso «Sistema en marcha» | Avisa al arrancar y mide las paradas | `minDownMin` 3 → 1–120 min | — |
 | `urgent_block` Aviso urgente de bloqueo | Instantáneo si prioridad 1 | — | `{detalle}` |
 | `urgent_review` Aviso urgente de revisión | Instantáneo si prioridad 1 | — | `{detalle}` |
 | `delivery` Envío y respuestas por Telegram | Reintentos y tiempo para contestar al bot | `maxAttempts` 6 → 1–10; `pendingMinutes` 30 → 5–240 | — |
@@ -237,7 +249,7 @@ Construido en agosto de 2026 (Fases A–D). Detalle y auditoría completa en `do
 
 ## 10. Base de datos
 
-**Total: 63 tablas** (11 núcleo, 15 SEO, 7 IA, 30 Operaciones). Conteos reales a 2026-10-30.
+**Total: 66 tablas** (11 núcleo, 15 SEO, 7 IA, 33 Operaciones). Conteos reales a 2026-10-30; las 3 tablas del paso 7 (`ops_cleanup_runs`, `ops_cleanup_items`, `ops_suggestions`) se crearon el 31 oct (1 tanda de limpieza real en curso para Enric, 30 tareas).
 
 **Núcleo / plantilla:** `tenants` 1 · `users` 2 · `roles` 4 · `user_roles` 1 · `projects` 1 · `modules` 1 · `project_modules` 0 · `teams` 2 · `team_members` 2 · `invitations` 0 · `activity_logs` 10 (`teams`, `team_members` e `invitations` son restos de la plantilla pendientes de limpieza).
 
@@ -283,11 +295,11 @@ Construido en agosto de 2026 (Fases A–D). Detalle y auditoría completa en `do
 
 ## 12. Mapa Visual del Sistema y su comprobación
 
-- **`/dashboard/architecture`** (solo super admin): React Flow en **tres niveles** con migas de pan. Nivel 1: Núcleo, Motor de IA, Cerebro, Admin SEO, **Operaciones (construido)**, **Integraciones**, Análisis de competidores, el wizard SEO y **10 pendientes en gris**. Nivel 2: 13 procesos y piezas de Operaciones. Nivel 3: 65 pasos en 11 mapas con *cuándo se ejecuta, qué decide la IA, qué decide el código, tablas, prompts, ajustes con sus valores actuales y enlace al ajuste*.
+- **`/dashboard/architecture`** (solo super admin): React Flow en **tres niveles** con migas de pan. Nivel 1: Núcleo, Motor de IA, Cerebro, Admin SEO, **Operaciones (construido)**, **Integraciones**, Análisis de competidores, el wizard SEO y **10 pendientes en gris**. Nivel 2: 15 procesos y piezas de Operaciones (nuevas: Limpieza de vencidas y Piloto). Nivel 3: 77 pasos en 13 mapas con *cuándo se ejecuta, qué decide la IA, qué decide el código, tablas, prompts, ajustes con sus valores actuales y enlace al ajuste*.
 - **Mapa vivo:** muestra los **valores actuales del panel** y la **última ejecución / error** de vigilancia, pasada de actividad, resúmenes, recordatorios, cola de avisos, bandeja de salida, Telegram, planificador y caché de ClickUp (`lib/operaciones/map-live.ts`).
 - **Recorrido nota → completada** con botones «Sigue en…».
 - **Datos:** `lib/operaciones/process-map.ts` (`OPS_MAPS`), `lib/architecture-map/registry.ts` (nivel 1, `FUTURE_NODES`, `PROCESS_MAP_IDS`); SEO usa `CLUSTERING_PROCESS_MAP` y `COMPETITOR_ANALYSIS_PROCESS_MAP`.
-- **Comprobación automática:** `scripts/check-architecture-map.js` falla si una automatización del panel, una tarea del planificador, un prompt de IA o una tabla `ops_*` no tiene su entrada, o si el mapa está roto. **Estado: pasa** (11 automatizaciones, 7 tareas del planificador, 6 prompts, 30 tablas, 65 pasos, 11 mapas). Solo cubre Operaciones y valida presencia y coherencia, no la veracidad de las descripciones.
+- **Comprobación automática:** `scripts/check-architecture-map.js` falla si una automatización del panel, una tarea del planificador, un prompt de IA o una tabla `ops_*` no tiene su entrada, o si el mapa está roto. **Estado: pasa** (13 automatizaciones, 7 tareas del planificador, 6 prompts, 33 tablas, 77 pasos, 13 mapas). Solo cubre Operaciones y valida presencia y coherencia, no la veracidad de las descripciones.
 
 ## 13. Seguridad
 
@@ -308,6 +320,8 @@ Construido en agosto de 2026 (Fases A–D). Detalle y auditoría completa en `do
 
 ## 14. Datos y elementos de prueba (a limpiar antes de servidor)
 
+> **Paso 7:** antes del piloto se borran de la base de datos los encargos, eventos, avisos y notas de prueba anteriores (sin tocar fichas, clientes, configuración, cachés ni `ops_clickup_task_snapshots`), con recuento previo y OK de Enric. El usuario de pruebas se queda hasta antes de subir a un servidor.
+
 - **Usuario de pruebas** de desarrollo: `ops-test@kijutech.test` (contraseña solo en `.env`; accede por `http://ops-test.localhost:3000`). **Debe borrarse antes de subir a un servidor.**
 - **Tareas de ClickUp** en «Pruebas Kiju» que Enric debe borrar: `[PRUEBA PASO 5]` A–E · `[PRUEBA 6C]` · `[PRUEBA 6C-2]` A, B, B2, C, D (el asistente no borra tareas de ClickUp).
 - **Datos de prueba en la BD:** encargos y notas de prueba (de los 27 encargos y 2 notas), eventos, avisos, un bloqueo, la ficha «RF Serveis» rellenada como prueba (revisar sus datos), entradas del registro de cambios del panel, y la tarea de Eury de «CP Poblenou» (real, asignada en ClickUp).
@@ -319,7 +333,9 @@ Construido en agosto de 2026 (Fases A–D). Detalle y auditoría completa en `do
 
 **Probado con datos reales:** conversión de notas con IA; envío a ClickUp (tareas reales en «Pruebas Kiju»); caché y contador; Bloc con autoguardado, fallo simulado, copia local y reintento; flujo de botones con Telegram simulado y ClickUp/IA reales; Telegram real para avisos y la prueba del panel (llegan al dueño); recordatorios (sin respuesta, tras «Más tarde», «Sin respuesta» en el resumen); vigilancia (aviso por tarea nueva, cierre en ClickUp → completado, reasignación); semáforo de clientes con datos reales (RF Serveis verde, «san bernardo» rojo temporal); «Trabajo de este mes»; panel (cambio de un tiempo aplicado sin tocar código, texto editado con la prueba recibida); lógica del silencio (cálculo de huecos); Mapa Visual (recorrido por clics y valores reales); `tsc` en cada build y log del servidor sin `ReferenceError`.
 
-**No probado:** pulsaciones de botones reales desde el móvil de cada persona (salvo las de Enric); un 409/429 real; audio de extremo a extremo (clave de Gemini sin créditos; formato `webm`); silencio con envíos reales (modo pruebas desactivado); varios servidores; alertas con clientes completados (hoy 50 de 52 en gris); cualquier prueba automática (no existen).
+**Probado en el paso 7:** pestañas Piloto, Equipo y Automatizaciones (cargan, métricas con datos reales de las pruebas previas, fecha de inicio guardada y restaurada); envío real de la limpieza de las vencidas de Enric a su Telegram (30 tareas + 1 para otra tanda; llegó el primer mensaje con botones); «Sistema en marcha» tras reconstruir y tras `docker restart` de los dos contenedores («Reinicio rápido»); política `unless-stopped` en ambos contenedores.
+
+**No probado:** las pulsaciones de la limpieza (cerrar, nueva fecha, escribir fecha, descartar, parar) y `/sugerencia`/`/ayuda` desde el móvil (las pulsa Enric); la simulación de tareas de otras personas en la práctica; la exclusión de tareas limpiadas en «Trabajo de este mes» y en la pasada de actividad con datos reales; un apagado real en horario laboral (mensaje con tiempo y pendientes); el arranque automático tras reiniciar Windows; pulsaciones de botones reales desde el móvil de cada persona (salvo las de Enric); un 409/429 real; audio de extremo a extremo (clave de Gemini sin créditos; formato `webm`); silencio con envíos reales (modo pruebas desactivado); varios servidores; alertas con clientes completados (hoy 50 de 52 en gris); cualquier prueba automática (no existen).
 
 ## 16. Pendientes y deuda técnica
 
@@ -364,6 +380,7 @@ Cada uno con su nodo en el nivel 1 del Mapa Visual:
 - **Ago 2026 (SEO y núcleo):** Docker Compose y auth verificada; esquema núcleo y tenant Kijutech (16 ago); Fase B (onboarding, kickoff, asistente); Fase C (Keyword Research, importación CSV de SE Ranking, pasarela de IA, clustering con embeddings + HDBSCAN, noise recovery, feedback, Panel del Cerebro, tokens y costes); Fase D (competidores SERP, análisis IA, plan pilar-satélite); Mapa Visual (21–22 ago).
 - **29 oct:** informe de estado (`INFORME-ESTADO.md`); módulo Operaciones y conexión con ClickUp; nuevo encargo hacia ClickUp (envío fiable); Bloc de notas con audio; fix de la conversión; red de seguridad del Bloc y usuario de pruebas; caché de ClickUp y contador; tareas propias; avisos por Telegram; historial y pestaña Telegram; campo Cliente.
 - **30 oct:** paso 5 (flujo desde Telegram, bloqueos con IA, cortafuegos, Mi bandeja, eventos) · 6A Equipo · 6B Clientes · 6C botones por fases, recordatorios y vigilancia de ClickUp · «Última acción» · 6D alertas de clientes · 6E panel de Automatizaciones · Mapa Visual de Operaciones con regla y comprobación.
+- **31 oct:** paso 7, preparar el piloto: limpieza asistida de vencidas, pestaña Piloto, `/sugerencia` y `/ayuda`, «Sistema en marcha» y arranque automático de los contenedores; la limpieza no falsea alertas ni informes.
 - Historial completo: `git log` (233 commits) y `docs/sessions/` (45 documentos).
 
 ## 19. Mapa de archivos

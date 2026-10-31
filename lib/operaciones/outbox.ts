@@ -8,7 +8,7 @@ import { sql } from 'drizzle-orm';
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { opsClickupOutbox } from '@/lib/db/schema';
-import { addTaskComment, updateTaskStatus } from '@/lib/operaciones/clickup';
+import { addTaskComment, updateTaskDue, updateTaskStatus } from '@/lib/operaciones/clickup';
 import { getClickUpToken } from '@/lib/operaciones/queries';
 
 const MAX_ATTEMPTS = 6;
@@ -16,12 +16,13 @@ const LEASE_SECONDS = 90;
 
 export type OutboxPayload =
   | { taskId: string; status: string } // set_status
-  | { taskId: string; text: string }; // comment
+  | { taskId: string; text: string } // comment
+  | { taskId: string; dueYmd: string }; // set_due (YYYY-MM-DD)
 
 export async function enqueueOutbox(input: {
   tenantId: string;
-  requestId: string;
-  action: 'set_status' | 'comment';
+  requestId?: string | null; // null en acciones sin encargo (limpieza de vencidas)
+  action: 'set_status' | 'comment' | 'set_due';
   payload: OutboxPayload;
   dedupeKey: string;
 }): Promise<void> {
@@ -29,7 +30,7 @@ export async function enqueueOutbox(input: {
     .insert(opsClickupOutbox)
     .values({
       tenantId: input.tenantId,
-      requestId: input.requestId,
+      requestId: input.requestId ?? null,
       action: input.action,
       payload: input.payload,
       dedupeKey: input.dedupeKey
@@ -41,7 +42,7 @@ export async function enqueueOutbox(input: {
 type Claimed = {
   id: string;
   tenant_id: string;
-  action: 'set_status' | 'comment';
+  action: 'set_status' | 'comment' | 'set_due';
   payload: OutboxPayload;
   attempts: number;
 };
@@ -87,6 +88,9 @@ async function sendOne(c: Claimed) {
     if (c.action === 'set_status') {
       const p = c.payload as { taskId: string; status: string };
       await updateTaskStatus(conn.token, p.taskId, p.status);
+    } else if (c.action === 'set_due') {
+      const p = c.payload as { taskId: string; dueYmd: string };
+      await updateTaskDue(conn.token, p.taskId, p.dueYmd);
     } else {
       const p = c.payload as { taskId: string; text: string };
       await addTaskComment(conn.token, p.taskId, p.text);

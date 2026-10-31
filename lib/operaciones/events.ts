@@ -23,7 +23,13 @@ export type EventType =
   | 'agent_answered'
   | 'escalated'
   | 'owner_replied'
-  | 'button_rejected';
+  | 'button_rejected'
+  | 'cleanup_started'
+  | 'cleanup_done'
+  | 'cleanup_rescheduled'
+  | 'cleanup_discarded'
+  | 'cleanup_finished'
+  | 'suggestion';
 
 export async function logEvent(
   tenantId: string,

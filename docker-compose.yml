@@ -2,6 +2,7 @@ services:
   postgres:
     image: pgvector/pgvector:pg16
     container_name: kijutech_db
+    restart: unless-stopped
     environment:
       POSTGRES_USER: kijutech
       POSTGRES_PASSWORD: kijutech2024
@@ -21,6 +22,7 @@ services:
       context: .
       dockerfile: Dockerfile.dev
     container_name: kijutech_app
+    restart: unless-stopped
     ports:
       - "3000:3000"
     environment:

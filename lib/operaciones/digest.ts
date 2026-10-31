@@ -3,9 +3,9 @@
 // 18:00, hora de Madrid; configurables): qué se ha completado, qué ha resuelto el agente solo y
 // qué necesita de ti. Se inserta primero (dedupe por fecha y hora) para no duplicar ni perder
 // el resumen aunque el servidor se reinicie; si estuvo apagado a esa hora, se envía hasta 3 h después.
-import { and, desc, eq, gte, inArray, like } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNull, like } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { opsNotifications, opsRequestEvents, opsRequests, type OpsRequest } from '@/lib/db/schema';
+import { opsNotifications, opsRequestEvents, opsRequests, opsSuggestions, type OpsRequest } from '@/lib/db/schema';
 import { enqueueNotification, localParts, toMinutes } from '@/lib/operaciones/notifications';
 import { DEF, getAuto, num, renderTemplate } from '@/lib/operaciones/automations';
 import { nearestAllowedMinute } from '@/lib/operaciones/quiet';
@@ -25,7 +25,7 @@ async function buildDigest(
   tenantId: string,
   since: Date,
   withClientAlerts = false
-): Promise<{ text: string; buttons: { text: string; data: string }[][]; empty: boolean; unansweredIds: string[]; clientAlerts: ClientAlertItem[] }> {
+): Promise<{ text: string; buttons: { text: string; data: string }[][]; empty: boolean; unansweredIds: string[]; clientAlerts: ClientAlertItem[]; suggestionIds: string[] }> {
   const events = await db
     .select()
     .from(opsRequestEvents)
@@ -33,7 +33,7 @@ async function buildDigest(
       and(
         eq(opsRequestEvents.tenantId, tenantId),
         gte(opsRequestEvents.createdAt, since),
-        inArray(opsRequestEvents.eventType, ['done', 'accepted', 'agent_answered'])
+        inArray(opsRequestEvents.eventType, ['done', 'accepted', 'agent_answered', 'cleanup_finished'])
       )
     )
     .orderBy(opsRequestEvents.createdAt);
@@ -70,6 +70,29 @@ async function buildDigest(
       return `• ${escapeHtml(r?.title ?? '(encargo borrado)')} <i>(${escapeHtml(e.personName ?? '—')}${src ? ` · fuente: ${escapeHtml(src)}` : ''})</i>`;
     });
     sections.push(`🤖 <b>Resuelto por el agente (${agent.length})</b>\n${lines.join('\n')}`);
+  }
+
+  // Limpiezas de vencidas terminadas (o paradas) desde el último resumen.
+  const cleanups = events.filter((e) => e.eventType === 'cleanup_finished');
+  if (cleanups.length) {
+    const lines = cleanups.slice(0, MAX_LIST).map((e) => {
+      const p = (e.payload ?? {}) as { reviewed?: number; total?: number; closed?: number; rescheduled?: number; discarded?: number; status?: string; simulated?: boolean };
+      const flags = [p.status === 'parada' ? 'parada' : '', p.simulated ? 'simulada: no se tocó ClickUp' : ''].filter(Boolean).join(' · ');
+      return `• ${escapeHtml(e.personName ?? '—')}: revisó ${p.reviewed ?? 0} de ${p.total ?? 0} (${p.closed ?? 0} cerradas, ${p.rescheduled ?? 0} con nueva fecha, ${p.discarded ?? 0} descartadas)${flags ? ` <i>(${flags})</i>` : ''}`;
+    });
+    sections.push(`🧹 <b>Limpiezas de vencidas (${cleanups.length})</b>\n${lines.join('\n')}`);
+  }
+
+  // Sugerencias del equipo (/sugerencia): solo en el último resumen del día; cada una sale una vez.
+  const suggestions = withClientAlerts
+    ? await db.select().from(opsSuggestions).where(and(eq(opsSuggestions.tenantId, tenantId), isNull(opsSuggestions.digestShownAt))).orderBy(opsSuggestions.createdAt)
+    : [];
+  if (suggestions.length) {
+    const lines = suggestions.slice(0, MAX_LIST).map(
+      (x) => `• <i>${escapeHtml(x.personName)}</i>: ${escapeHtml(x.text.length > 160 ? `${x.text.slice(0, 159)}…` : x.text)}${x.photoFileId ? ' 📷' : ''}`
+    );
+    if (suggestions.length > MAX_LIST) lines.push(`… y ${suggestions.length - MAX_LIST} más (en la pestaña Piloto)`);
+    sections.push(`💡 <b>Sugerencias del equipo (${suggestions.length})</b>\n${lines.join('\n')}`);
   }
 
   // Encargos recordados que siguen sin empezar al terminar la jornada de su responsable: salen una vez.
@@ -120,7 +143,8 @@ async function buildDigest(
     buttons,
     empty: sections.length === 0,
     unansweredIds: unanswered.map((r) => r.id),
-    clientAlerts
+    clientAlerts,
+    suggestionIds: suggestions.map((x) => x.id)
   };
 }
 
@@ -180,6 +204,9 @@ async function queueDigest(tenantId: string, key: string, since: Date, withClien
   });
   // Lo que ya salió como «sin respuesta» no se repite en el siguiente resumen.
   if (!d.empty && d.clientAlerts.length) await markClientAlertsShown(d.clientAlerts);
+  if (!d.empty && d.suggestionIds.length) {
+    await db.update(opsSuggestions).set({ digestShownAt: new Date() }).where(inArray(opsSuggestions.id, d.suggestionIds));
+  }
   if (!d.empty && d.unansweredIds.length) {
     await db.update(opsRequests).set({ unansweredListedAt: new Date() }).where(inArray(opsRequests.id, d.unansweredIds));
   }

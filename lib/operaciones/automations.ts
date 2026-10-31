@@ -166,6 +166,30 @@ export const AUTOMATIONS: AutomationDef[] = [
     testNote: 'No envía mensajes por sí misma: la prueba te confirma su estado y su configuración.'
   },
   {
+    key: 'cleanup',
+    title: 'Limpieza de vencidas',
+    what: 'A petición tuya (botón en Equipo o aquí), el bot envía a cada persona sus tareas vencidas de una en una para cerrarlas, reprogramarlas o descartarlas. El resumen de cada limpieza va en tus resúmenes.',
+    canDisable: true,
+    link: { href: '/dashboard/operaciones/equipo', label: 'Se lanza desde Equipo (a una persona o a todas)' },
+    fields: [{ key: 'maxTasks', label: 'Tareas por tanda', type: 'number', unit: 'tareas', min: 5, max: 100, default: 30, help: 'Si hay más, las más antiguas van primero y puedes lanzar otra tanda después' }],
+    template: {
+      default: '🧹 <b>Limpieza de vencidas</b>\nHola {nombre}, vamos a revisar <b>{total}</b> tareas vencidas, de una en una: ciérrala, ponle una fecha nueva o descártala.',
+      placeholders: [
+        { name: 'nombre', label: 'Nombre de la persona', sample: 'Mayelin', required: true },
+        { name: 'total', label: 'Número de tareas de esta tanda', sample: '10', required: true }
+      ]
+    },
+    testNote: 'La prueba te muestra el texto de introducción; las limpiezas reales se lanzan desde Equipo.'
+  },
+  {
+    key: 'startup',
+    title: 'Aviso «Sistema en marcha»',
+    what: 'Al arrancar el sistema te avisa por Telegram y, si estuvo apagado en horario laboral del equipo, te dice cuánto tiempo y qué quedó pendiente.',
+    canDisable: true,
+    fields: [{ key: 'minDownMin', label: 'Contar como apagado a partir de', type: 'number', unit: 'min', min: 1, max: 120, default: 3, help: 'Un reinicio más corto no se considera interrupción' }],
+    testNote: 'Te envía el aviso de arranque con el estado actual de la cola.'
+  },
+  {
     key: 'urgent_block',
     title: 'Aviso urgente de bloqueo',
     what: 'Cuando alguien queda bloqueado en un encargo urgente (prioridad 1) y su pregunta llega a ti, te avisa al instante; lo no urgente va al resumen.',

@@ -1249,7 +1249,7 @@ export const opsNotifications = pgTable(
     check('ops_notifications_status_check', sql`${table.status} IN ('pendiente', 'enviado', 'fallido')`),
     check(
       'ops_notifications_kind_check',
-      sql`${table.kind} IN ('new_request', 'daily_summary', 'test', 'review_request', 'block_alert', 'reply', 'returned', 'digest', 'reminder')`
+      sql`${table.kind} IN ('new_request', 'daily_summary', 'test', 'review_request', 'block_alert', 'reply', 'returned', 'digest', 'reminder', 'cleanup', 'cleanup_summary', 'startup')`
     ),
   ]
 );
@@ -1368,7 +1368,7 @@ export const opsClickupOutbox = pgTable(
     unique('ops_clickup_outbox_tenant_dedupe_unique').on(table.tenantId, table.dedupeKey),
     index('ops_outbox_status_idx').on(table.status, table.nextAttemptAt),
     check('ops_outbox_status_check', sql`${table.status} IN ('pendiente', 'hecho', 'fallido')`),
-    check('ops_outbox_action_check', sql`${table.action} IN ('set_status', 'comment')`),
+    check('ops_outbox_action_check', sql`${table.action} IN ('set_status', 'comment', 'set_due')`),
   ]
 );
 
@@ -1381,6 +1381,7 @@ export const opsTelegramPending = pgTable('ops_telegram_pending', {
   kind: varchar('kind', { length: 20 }).notNull(),
   requestId: uuid('request_id').references(() => opsRequests.id, { onDelete: 'cascade' }),
   blockerId: uuid('blocker_id').references(() => opsBlockers.id, { onDelete: 'cascade' }),
+  cleanupItemId: uuid('cleanup_item_id').references(() => opsCleanupItems.id, { onDelete: 'cascade' }),
   expiresAt: timestamp('expires_at').notNull(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
@@ -1558,6 +1559,9 @@ export const opsClientActivity = pgTable(
 
 export type OpsClientActivity = typeof opsClientActivity.$inferSelect;
 export type OpsClient = typeof opsClients.$inferSelect;
+export type OpsCleanupRun = typeof opsCleanupRuns.$inferSelect;
+export type OpsCleanupItem = typeof opsCleanupItems.$inferSelect;
+export type OpsSuggestion = typeof opsSuggestions.$inferSelect;
 export type OpsTeamProfile = typeof opsTeamProfiles.$inferSelect;
 export type OpsBlocker = typeof opsBlockers.$inferSelect;
 export type OpsWorkType = typeof opsWorkTypes.$inferSelect;
@@ -1623,4 +1627,81 @@ export const opsAutomationChanges = pgTable(
     changedAt: timestamp('changed_at').notNull().defaultNow(),
   },
   (table) => [index('ops_automation_changes_tenant_at_idx').on(table.tenantId, table.changedAt)]
+);
+
+// ---------------------------------------------------------------------------
+// Operaciones · paso 7: preparación del piloto
+// ---------------------------------------------------------------------------
+
+// Limpieza asistida de tareas vencidas: una tanda por persona, con una fila por tarea.
+export const opsCleanupRuns = pgTable(
+  'ops_cleanup_runs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    clickupUserId: varchar('clickup_user_id', { length: 50 }).notNull(),
+    personName: varchar('person_name', { length: 255 }).notNull(),
+    startedBy: varchar('started_by', { length: 255 }),
+    status: varchar('status', { length: 12 }).notNull().default('en_curso'),
+    total: integer('total').notNull().default(0),
+    closed: integer('closed').notNull().default(0),
+    rescheduled: integer('rescheduled').notNull().default(0),
+    discarded: integer('discarded').notNull().default(0),
+    skipped: integer('skipped').notNull().default(0),
+    startedAt: timestamp('started_at').notNull().defaultNow(),
+    finishedAt: timestamp('finished_at'),
+  },
+  (table) => [
+    uniqueIndex('ops_cleanup_runs_active_unique')
+      .on(table.tenantId, table.clickupUserId)
+      .where(sql`${table.status} = 'en_curso'`),
+    check('ops_cleanup_runs_status_check', sql`${table.status} IN ('en_curso', 'completada', 'parada')`),
+  ]
+);
+
+export const opsCleanupItems = pgTable(
+  'ops_cleanup_items',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    runId: uuid('run_id')
+      .notNull()
+      .references(() => opsCleanupRuns.id, { onDelete: 'cascade' }),
+    position: integer('position').notNull(),
+    clickupTaskId: varchar('clickup_task_id', { length: 50 }).notNull(),
+    taskName: varchar('task_name', { length: 500 }).notNull(),
+    taskUrl: text('task_url'),
+    listId: varchar('list_id', { length: 50 }),
+    listName: varchar('list_name', { length: 255 }),
+    dueMs: bigint('due_ms', { mode: 'number' }),
+    status: varchar('status', { length: 14 }).notNull().default('pendiente'),
+    newDue: date('new_due'),
+    answeredAt: timestamp('answered_at'),
+  },
+  (table) => [
+    index('ops_cleanup_items_run_idx').on(table.runId, table.position),
+    check(
+      'ops_cleanup_items_status_check',
+      sql`${table.status} IN ('pendiente', 'enviada', 'cerrada', 'reprogramada', 'descartada', 'omitida')`
+    ),
+  ]
+);
+
+// Sugerencias del equipo (/sugerencia en el bot).
+export const opsSuggestions = pgTable(
+  'ops_suggestions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    personClickupUserId: varchar('person_clickup_user_id', { length: 50 }),
+    personName: varchar('person_name', { length: 255 }).notNull(),
+    text: text('text').notNull(),
+    photoFileId: text('photo_file_id'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    digestShownAt: timestamp('digest_shown_at'),
+  },
+  (table) => [index('ops_suggestions_tenant_idx').on(table.tenantId, table.createdAt)]
 );

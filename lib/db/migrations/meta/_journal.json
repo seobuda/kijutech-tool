@@ -253,6 +253,13 @@
       "when": 1793370000000,
       "tag": "0035_ops_automations",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1793456400000,
+      "tag": "0036_ops_piloto",
+      "breakpoints": true
     }
   ]
 }
