@@ -1,10 +1,7 @@
 import type { NextConfig } from 'next';
 
-const nextConfig: NextConfig = {
-  experimental: {
-    ppr: true,
-    clientSegmentCache: true
-  }
-};
+// Next.js 16: `experimental.ppr` y `clientSegmentCache` ya no existen
+// (PPR pasó a Cache Components, que no usamos). Se retiran sin sustituto.
+const nextConfig: NextConfig = {};
 
 export default nextConfig;
