@@ -41,7 +41,8 @@ export const createProject = validatedActionWithUser(
     await db.insert(projects).values(newProject);
 
     redirect('/dashboard/projects');
-  }
+  },
+  'edit'
 );
 
 const updateProjectSchema = createProjectSchema.extend({
@@ -74,7 +75,8 @@ export const updateProject = validatedActionWithUser(
       .where(eq(projects.id, id));
 
     redirect('/dashboard/projects');
-  }
+  },
+  'edit'
 );
 
 async function assertCanManageProject(projectId: string) {

@@ -5,7 +5,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { aiJobs, seoKwClusterKeywords, seoKwClusters, seoKwRaw } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
-import { assertUserInProjectTenant } from '@/lib/seo/actions';
+import { assertUserInProjectTenant } from '@/lib/seo/access';
 import { getKwRaw, getKwCompetitors } from '@/lib/seo/kw-queries';
 import { completeStep3 } from '@/lib/seo/kw-actions';
 import { callAI, resolveActiveProvider, getEmbeddingConfig } from '@/lib/ai/gateway';

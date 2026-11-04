@@ -33,12 +33,14 @@ const dateTimeFmt = new Intl.DateTimeFormat('es-ES', {
 
 export function AjustesClickUp({
   hasToken,
+  maskedToken,
   updatedAt,
   transcriptionModel,
   structure,
   stats
 }: {
   hasToken: boolean;
+  maskedToken: string | null;
   updatedAt: string | null;
   transcriptionModel: string;
   structure: StructureView;
@@ -97,7 +99,7 @@ export function AjustesClickUp({
             En ClickUp: tu avatar → Ajustes → Aplicaciones → «API Token». Se guarda cifrado y nunca
             se vuelve a mostrar.
             {hasToken && updatedAt && (
-              <> Hay un token guardado (actualizado el {new Date(updatedAt).toLocaleString('es-ES')}).</>
+              <> Hay un token guardado{maskedToken ? ` (${maskedToken})` : ''} (actualizado el {new Date(updatedAt).toLocaleString('es-ES')}).</>
             )}
           </CardDescription>
         </CardHeader>

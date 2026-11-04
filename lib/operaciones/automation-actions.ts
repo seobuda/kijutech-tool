@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { db } from '@/lib/db/drizzle';
 import { opsNotifications } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
+import { getUserIfAllowed, requirePermission, type Permission } from '@/lib/auth/permissions';
 import {
   DEF,
   getAuto,
@@ -25,10 +26,8 @@ import { buildStartupText, getLastHeartbeat } from '@/lib/operaciones/startup';
 
 type Res<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 
-async function requireUser() {
-  const user = await getUser();
-  if (!user) throw new Error('No autenticado');
-  return user;
+async function requireUser(permission: Permission = 'edit') {
+  return requirePermission(permission);
 }
 
 const fail = (e: unknown, fallback: string): { ok: false; error: string } => ({
@@ -40,7 +39,7 @@ const refresh = () => revalidatePath('/dashboard/operaciones/automatizaciones');
 
 export async function saveAutomationAction(key: string, input: SaveInput): Promise<Res> {
   try {
-    const user = await requireUser();
+    const user = await requireUser('admin');
     const res = await saveAutomation(user.tenantId, user.id, key, input);
     refresh();
     return res;
@@ -51,7 +50,7 @@ export async function saveAutomationAction(key: string, input: SaveInput): Promi
 
 export async function resetAutomationAction(key: string): Promise<Res> {
   try {
-    const user = await requireUser();
+    const user = await requireUser('admin');
     await resetAutomation(user.tenantId, user.id, key);
     refresh();
     return { ok: true };
@@ -63,7 +62,7 @@ export async function resetAutomationAction(key: string): Promise<Res> {
 // La vigilancia se enciende con su propia lógica (lectura inicial sin avisar); aquí solo se registra el cambio.
 export async function setWatchEnabledAction(enabled: boolean): Promise<Res<{ message: string }>> {
   try {
-    const user = await requireUser();
+    const user = await requireUser('admin');
     const before = (await getAuto(user.tenantId, 'watch')).enabled;
     let message = 'Vigilancia desactivada.';
     if (enabled) {
@@ -87,7 +86,7 @@ export async function setWatchEnabledAction(enabled: boolean): Promise<Res<{ mes
 // Vista previa de un texto con datos de ejemplo (sin guardar nada).
 export async function previewTemplateAction(key: string, template: string): Promise<Res<{ html: string }>> {
   try {
-    await requireUser();
+    await requireUser('admin');
     const def = DEF.get(key);
     if (!def?.template) return { ok: false, error: 'Sin texto editable' };
     const err = validateTemplate(def, template);
@@ -102,7 +101,7 @@ export async function previewTemplateAction(key: string, template: string): Prom
 // rellenado con datos de ejemplo y el mismo código de formato que los avisos reales.
 export async function sendAutomationTestAction(key: string, draft?: string): Promise<Res<{ message: string }>> {
   try {
-    const user = await requireUser();
+    const user = await requireUser('admin');
     const def = DEF.get(key);
     if (!def) return { ok: false, error: 'Automatización desconocida' };
     const owner = await getOwnerMember(user.tenantId);

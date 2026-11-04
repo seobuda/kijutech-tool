@@ -1,5 +1,8 @@
 import { redirect } from 'next/navigation';
 import { getUser } from '@/lib/db/queries';
+import { decrypt } from '@/lib/ai/encryption';
+import { maskSecret } from '@/lib/auth/mask';
+import { requirePagePermission } from '@/lib/auth/permissions';
 import { getClickUpConnection, getClickUpRequestStats } from '@/lib/operaciones/queries';
 import { getTranscriptionModel } from '@/lib/operaciones/settings';
 import { getStructure } from '@/lib/operaciones/structure';
@@ -15,6 +18,7 @@ export const dynamic = 'force-dynamic';
 export default async function AjustesClickUpPage() {
   const user = await getUser();
   if (!user) redirect('/sign-in');
+  await requirePagePermission('admin');
 
   const [conn, transcriptionModel, structure, stats] = await Promise.all([
     getClickUpConnection(user.tenantId),
@@ -33,6 +37,7 @@ export default async function AjustesClickUpPage() {
     <div className="space-y-6">
       <AjustesClickUp
         hasToken={Boolean(conn)}
+        maskedToken={conn ? maskSecret(decrypt(conn.apiKeyEncrypted, conn.apiKeyIv)) : null}
         updatedAt={conn?.updatedAt.toISOString() ?? null}
         transcriptionModel={transcriptionModel}
         structure={{

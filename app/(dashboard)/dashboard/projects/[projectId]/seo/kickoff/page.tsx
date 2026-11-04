@@ -1,5 +1,5 @@
 import { getKickoffAnswers, getStageProgress } from '@/lib/seo/queries';
-import { ensureStageInProgress } from '@/lib/seo/actions';
+import { ensureStageInProgress } from '@/lib/seo/access';
 import { KickoffForm } from './kickoff-form';
 
 export default async function KickoffStagePage({

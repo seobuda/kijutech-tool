@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
 import { opsTeamProfileWorkTypes, opsTeamProfiles, opsWorkTypes } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
+import { getUserIfAllowed, requirePermission, type Permission } from '@/lib/auth/permissions';
 import { callAI, getPrompt } from '@/lib/ai/gateway';
 import { extractJsonFromLLMResponse } from '@/lib/ai/parsers/json-extractor';
 import { fillTemplate } from '@/lib/operaciones/format';
@@ -27,10 +28,8 @@ const fail = (e: unknown, fallback: string): { ok: false; error: string } => ({
   error: e instanceof Error ? e.message : fallback
 });
 
-async function requireManager() {
-  const user = await getUser();
-  if (!user || !canManageProfiles(user)) throw new Error('No autenticado');
-  return user;
+async function requireManager(permission: Permission = 'edit') {
+  return requirePermission(permission);
 }
 
 const refresh = () => {
@@ -61,7 +60,7 @@ export type ProfileInput = {
 
 export async function saveProfile(input: ProfileInput): Promise<Ok<{ id: string }>> {
   try {
-    const user = await requireManager();
+    const user = await requireManager('edit');
     const name = input.name.trim();
     if (!name) return { ok: false, error: 'El nombre es obligatorio' };
     if (!isValidTimezone(input.timezone)) {
@@ -164,7 +163,7 @@ export async function saveProfile(input: ProfileInput): Promise<Ok<{ id: string 
 // Ficha nueva para un miembro de ClickUp que aún no la tiene.
 export async function createProfileForMember(clickupUserId: string): Promise<Ok<{ id: string }>> {
   try {
-    const user = await requireManager();
+    const user = await requireManager('edit');
     const structure = await getStructure(user.tenantId);
     const m = structure.members.find((x) => x.id === clickupUserId);
     if (!m) return { ok: false, error: 'Miembro de ClickUp no encontrado' };
@@ -187,7 +186,7 @@ export async function createProfileForMember(clickupUserId: string): Promise<Ok<
 
 export async function setProfileActive(id: string, active: boolean): Promise<Ok> {
   try {
-    const user = await requireManager();
+    const user = await requireManager('edit');
     await db
       .update(opsTeamProfiles)
       .set({ active, updatedAt: new Date() })
@@ -201,7 +200,7 @@ export async function setProfileActive(id: string, active: boolean): Promise<Ok>
 
 export async function deleteProfile(id: string): Promise<Ok> {
   try {
-    const user = await requireManager();
+    const user = await requireManager('admin');
     await db.delete(opsTeamProfiles).where(and(eq(opsTeamProfiles.id, id), eq(opsTeamProfiles.tenantId, user.tenantId)));
     refresh();
     return { ok: true };
@@ -245,7 +244,7 @@ export type ProfileDraft = {
 
 export async function aiFillProfile(text: string): Promise<Ok<{ draft: ProfileDraft }>> {
   try {
-    const user = await requireManager();
+    const user = await requireManager('edit');
     const clean = text.trim();
     if (clean.length < 10) return { ok: false, error: 'Escribe o graba algo más de la persona (mínimo una frase).' };
     if (clean.length > 12000) return { ok: false, error: 'El texto es demasiado largo (máximo 12.000 caracteres).' };

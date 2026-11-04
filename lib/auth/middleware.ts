@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { TeamDataWithMembers, User } from '@/lib/db/schema';
 import { getTeamForUser, getUser } from '@/lib/db/queries';
 import { redirect } from 'next/navigation';
+import { checkPermission, type Permission } from '@/lib/auth/permissions';
 
 export type ActionState = {
   error?: string;
@@ -36,12 +37,18 @@ type ValidatedActionWithUserFunction<S extends z.ZodType<any, any>, T> = (
 
 export function validatedActionWithUser<S extends z.ZodType<any, any>, T>(
   schema: S,
-  action: ValidatedActionWithUserFunction<S, T>
+  action: ValidatedActionWithUserFunction<S, T>,
+  permission?: Permission
 ) {
   return async (prevState: ActionState, formData: FormData) => {
     const user = await getUser();
     if (!user) {
       throw new Error('User is not authenticated');
+    }
+    // Si la acción exige un permiso, se comprueba aquí, en el servidor.
+    if (permission) {
+      const perm = await checkPermission(permission);
+      if (!perm.ok) return { error: perm.error };
     }
 
     const result = schema.safeParse(Object.fromEntries(formData));

@@ -1,4 +1,4 @@
-import { ensureKwStepInProgress } from '@/lib/seo/kw-actions';
+import { ensureKwStepInProgress } from '@/lib/seo/access';
 import { getKwClusters, getKwStepProgress, getShareToken } from '@/lib/seo/kw-queries';
 import { ClustersBoard } from './clusters-board';
 

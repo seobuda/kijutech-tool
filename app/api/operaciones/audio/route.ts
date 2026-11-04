@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { opsNoteAudios, opsNotes } from '@/lib/db/schema';
-import { getUser } from '@/lib/db/queries';
+import { getUserIfAllowed } from '@/lib/auth/permissions';
 import { transcribeAudio } from '@/lib/operaciones/transcribe';
 
 // Los audios entran por una ruta (y no por una acción de servidor) porque las
@@ -14,7 +14,7 @@ const MAX_AUDIO_BYTES = 20 * 1024 * 1024;
 // El archivo se guarda SIEMPRE antes de transcribir: si la transcripción falla,
 // el audio no se pierde (y se adjuntará igualmente a las tareas).
 export async function POST(request: Request) {
-  const user = await getUser();
+  const user = await getUserIfAllowed('edit');
   if (!user) return Response.json({ error: 'No autenticado' }, { status: 401 });
 
   const form = await request.formData();

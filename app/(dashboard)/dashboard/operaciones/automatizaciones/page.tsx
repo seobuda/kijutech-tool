@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { getUser } from '@/lib/db/queries';
+import { requirePagePermission } from '@/lib/auth/permissions';
 import { AUTOMATIONS, DEF, getAutoAll, listChanges, sampleValues, renderTemplate } from '@/lib/operaciones/automations';
 import { getUpcoming } from '@/lib/operaciones/upcoming';
 import { getTelegramConfig } from '@/lib/operaciones/telegram-config';
@@ -11,6 +12,7 @@ export const dynamic = 'force-dynamic';
 export default async function AutomatizacionesPage() {
   const user = await getUser();
   if (!user) redirect('/sign-in');
+  await requirePagePermission('admin');
 
   const [autos, upcoming, changes, tg, cleanupPeople] = await Promise.all([
     getAutoAll(user.tenantId),

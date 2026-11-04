@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
 import { opsRequests } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
+import { getUserIfAllowed, requirePermission, type Permission } from '@/lib/auth/permissions';
 import { callAI, getPrompt } from '@/lib/ai/gateway';
 import { extractJsonFromLLMResponse } from '@/lib/ai/parsers/json-extractor';
 import { OPS_TIMEZONE } from '@/lib/operaciones/clickup';
@@ -42,8 +43,8 @@ export async function prepareRequestWithAI(input: {
   listName: string;
   listId?: string;
 }): Promise<{ ok: true; prepared: PreparedRequest } | { ok: false; error: string }> {
-  const user = await getUser();
-  if (!user) return { ok: false, error: 'No autenticado' };
+  const user = await getUserIfAllowed('edit');
+  if (!user) return { ok: false, error: 'No tienes permiso para hacer esto' };
 
   const request = input.request.trim();
   if (!request) return { ok: false, error: 'Escribe primero la petición en texto libre' };
@@ -135,8 +136,8 @@ export type CreateRequestInput = z.input<typeof createSchema>;
 export async function createRequest(
   raw: CreateRequestInput
 ): Promise<SyncResult | { ok: false; requestId?: undefined; error: string }> {
-  const user = await getUser();
-  if (!user) return { ok: false, error: 'No autenticado' };
+  const user = await getUserIfAllowed('edit');
+  if (!user) return { ok: false, error: 'No tienes permiso para hacer esto' };
 
   const parsed = createSchema.safeParse(raw);
   if (!parsed.success) return { ok: false, error: parsed.error.errors[0].message };
@@ -169,7 +170,7 @@ export async function createRequest(
 }
 
 export async function retryRequest(requestId: string): Promise<SyncResult> {
-  const user = await getUser();
-  if (!user) return { ok: false, requestId, error: 'No autenticado' };
+  const user = await getUserIfAllowed('edit');
+  if (!user) return { ok: false, requestId, error: 'No tienes permiso para hacer esto' };
   return syncToClickUp(requestId, user.tenantId, true);
 }

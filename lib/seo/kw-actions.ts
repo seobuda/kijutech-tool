@@ -13,65 +13,9 @@ import {
   seoShareTokens,
   type NewSeoKwProgress
 } from '@/lib/db/schema';
-import { assertUserInProjectTenant, upsertStageStatus } from '@/lib/seo/actions';
+import { KW_STEPS, assertUserInProjectTenant, ensureKwStepInProgress, setKwStepStatus, upsertStageStatus } from '@/lib/seo/access';
 import { getKwCompetitors, getKwRaw, getKwStepProgress, getShareToken } from '@/lib/seo/kw-queries';
 import { buildSeRankingInstructions, buildTutorPrompt } from '@/lib/seo/kw-instructions';
-
-const KW_STEPS = ['competitors', 'keywords', 'clustering', 'clusters'] as const;
-
-async function syncKeywordResearchStageStatus(projectId: string) {
-  const rows = await db
-    .select()
-    .from(seoKwProgress)
-    .where(eq(seoKwProgress.projectId, projectId));
-
-  const byStep = new Map(rows.map((r) => [r.step, r]));
-  const allCompleted = KW_STEPS.every((step) => byStep.get(step)?.status === 'completed');
-  const anyStarted = KW_STEPS.some((step) => {
-    const status = byStep.get(step)?.status;
-    return status === 'in_progress' || status === 'completed';
-  });
-
-  const overallStatus = allCompleted ? 'completed' : anyStarted ? 'in_progress' : 'pending';
-  await upsertStageStatus(projectId, 'keyword_research', overallStatus);
-}
-
-async function setKwStepStatus(
-  projectId: string,
-  step: (typeof KW_STEPS)[number],
-  status: string,
-  extra: Partial<NewSeoKwProgress> = {}
-) {
-  await db
-    .insert(seoKwProgress)
-    .values({
-      projectId,
-      step,
-      status,
-      completedAt: status === 'completed' ? new Date() : null,
-      ...extra
-    })
-    .onConflictDoUpdate({
-      target: [seoKwProgress.projectId, seoKwProgress.step],
-      set: {
-        status,
-        completedAt: status === 'completed' ? new Date() : null,
-        ...extra
-      }
-    });
-
-  await syncKeywordResearchStageStatus(projectId);
-}
-
-export async function ensureKwStepInProgress(
-  projectId: string,
-  step: (typeof KW_STEPS)[number]
-) {
-  const current = await getKwStepProgress(projectId, step);
-  if (!current || current.status === 'pending') {
-    await setKwStepStatus(projectId, step, 'in_progress');
-  }
-}
 
 async function findRawKeywordMatch(projectId: string, keywordText: string) {
   const normalized = keywordText.trim().toLowerCase();

@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { seoKwClusters, seoKwClusterKeywords, type SeoClusterContentPlan } from '@/lib/db/schema';
-import { assertUserInProjectTenant } from '@/lib/seo/actions';
+import { assertUserInProjectTenant } from '@/lib/seo/access';
 import {
   getContentPlan,
   saveManualQuestions,

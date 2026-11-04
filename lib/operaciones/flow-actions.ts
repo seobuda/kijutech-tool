@@ -7,6 +7,8 @@ import { revalidatePath } from 'next/cache';
 import { db } from '@/lib/db/drizzle';
 import { opsWorkTypes } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
+import { getUserIfAllowed, requirePermission, type Permission } from '@/lib/auth/permissions';
+import { requireInboxOwner } from '@/lib/operaciones/inbox-owner';
 import { getClickUpConnection } from '@/lib/operaciones/queries';
 import { saveStatusGroup } from '@/lib/operaciones/status-map';
 import { slugKey } from '@/lib/operaciones/work-types';
@@ -17,10 +19,8 @@ import type { Actor } from '@/lib/operaciones/events';
 
 type Ok<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 
-async function requireUser() {
-  const user = await getUser();
-  if (!user) throw new Error('No autenticado');
-  return user;
+async function requireUser(permission: Permission = 'edit') {
+  return requirePermission(permission);
 }
 
 const fail = (e: unknown, fallback: string): { ok: false; error: string } => ({
@@ -46,7 +46,7 @@ export async function saveStatusMapping(
   values: { inProgress: string | null; inReview: string | null; done: string | null }
 ): Promise<Ok> {
   try {
-    const user = await requireUser();
+    const user = await requireUser('admin');
     const clean = (v: string | null) => (v && v.trim() ? v.trim() : null);
     await saveStatusGroup(user.tenantId, listIds, {
       inProgress: clean(values.inProgress),
@@ -64,7 +64,7 @@ export async function saveStatusMapping(
 
 export async function addWorkType(label: string): Promise<Ok> {
   try {
-    const user = await requireUser();
+    const user = await requireUser('admin');
     const clean = label.trim();
     const key = slugKey(clean);
     if (!clean || !key) return { ok: false, error: 'Escribe un nombre' };
@@ -85,7 +85,7 @@ export async function addWorkType(label: string): Promise<Ok> {
 
 export async function updateWorkType(key: string, patch: { label?: string; active?: boolean }): Promise<Ok> {
   try {
-    const user = await requireUser();
+    const user = await requireUser('admin');
     const set: Partial<typeof opsWorkTypes.$inferInsert> = {};
     if (patch.label !== undefined) {
       if (!patch.label.trim()) return { ok: false, error: 'El nombre no puede estar vacío' };
@@ -107,7 +107,7 @@ export async function updateWorkType(key: string, patch: { label?: string; activ
 
 export async function sendDigestNowAction(): Promise<Ok<{ sent: boolean }>> {
   try {
-    const user = await requireUser();
+    const user = await requireUser('admin');
     const res = await sendDigestNow(user.tenantId);
     revalidatePath('/dashboard/operaciones/telegram');
     return { ok: true, ...res };
@@ -120,7 +120,7 @@ export async function sendDigestNowAction(): Promise<Ok<{ sent: boolean }>> {
 
 export async function inboxAccept(requestId: string): Promise<Ok> {
   try {
-    const user = await requireUser();
+    const user = await requireInboxOwner();
     const req = await getRequest(user.tenantId, requestId);
     if (!req) return { ok: false, error: 'Encargo no encontrado' };
     const res = await acceptWork(req, await ownerActor(user.tenantId));
@@ -133,7 +133,7 @@ export async function inboxAccept(requestId: string): Promise<Ok> {
 
 export async function inboxReturn(requestId: string, reason: string): Promise<Ok> {
   try {
-    const user = await requireUser();
+    const user = await requireInboxOwner();
     if (!reason.trim()) return { ok: false, error: 'Escribe el motivo de la devolución' };
     const req = await getRequest(user.tenantId, requestId);
     if (!req) return { ok: false, error: 'Encargo no encontrado' };
@@ -147,7 +147,7 @@ export async function inboxReturn(requestId: string, reason: string): Promise<Ok
 
 export async function inboxAnswer(blockerId: string, answer: string): Promise<Ok> {
   try {
-    const user = await requireUser();
+    const user = await requireInboxOwner();
     const blocker = await getBlocker(user.tenantId, blockerId);
     if (!blocker) return { ok: false, error: 'Bloqueo no encontrado' };
     const res = await ownerAnswerBlocker(blocker, await ownerActor(user.tenantId), answer);

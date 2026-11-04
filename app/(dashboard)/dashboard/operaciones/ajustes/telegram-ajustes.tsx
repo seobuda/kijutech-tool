@@ -52,6 +52,7 @@ export type TelegramView = {
   digestTimes: string;
   digestTimezone: string;
   hasBot: boolean;
+  maskedToken: string | null;
   botName: string | null;
   botUsername: string | null;
   testMode: boolean;
@@ -157,7 +158,7 @@ export function TelegramAjustes({ view }: { view: TelegramView }) {
         {/* Token */}
         <div className="space-y-2">
           <Label htmlFor="tg-token">
-            {view.hasBot ? 'Sustituir token del bot' : 'Token del bot'} <span className="text-red-500">*</span>
+            {view.hasBot ? `Sustituir token del bot${view.maskedToken ? ` (actual: ${view.maskedToken})` : ''}` : 'Token del bot'} <span className="text-red-500">*</span>
           </Label>
           <Input
             id="tg-token"

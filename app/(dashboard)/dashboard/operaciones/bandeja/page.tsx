@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { getUser } from '@/lib/db/queries';
 import { getInbox, waitLabel } from '@/lib/operaciones/inbox';
+import { isInboxOwner } from '@/lib/operaciones/inbox-owner';
 import { BandejaList, type BandejaItem } from './bandeja-list';
 
 export const dynamic = 'force-dynamic';
@@ -8,6 +9,15 @@ export const dynamic = 'force-dynamic';
 export default async function BandejaPage() {
   const user = await getUser();
   if (!user) redirect('/sign-in');
+
+  // «Mi bandeja» es solo del dueño: a los demás ni se les consulta ni se les muestra.
+  if (!(await isInboxOwner(user))) {
+    return (
+      <p className="text-sm text-muted-foreground max-w-3xl">
+        Mi bandeja es personal: solo la ve quien lleva las operaciones.
+      </p>
+    );
+  }
 
   const now = new Date();
   const inbox = await getInbox(user.tenantId);

@@ -1,5 +1,5 @@
 import { getOnboardingChecklist, getStageProgress } from '@/lib/seo/queries';
-import { ensureOnboardingInitialized } from '@/lib/seo/actions';
+import { ensureOnboardingInitialized } from '@/lib/seo/access';
 import { OnboardingChecklist } from './onboarding-checklist';
 
 export default async function OnboardingStagePage({
