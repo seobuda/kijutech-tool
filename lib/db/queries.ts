@@ -44,34 +44,6 @@ export async function getUser() {
   return user[0];
 }
 
-export async function getTeamByStripeCustomerId(customerId: string) {
-  const result = await db
-    .select()
-    .from(teams)
-    .where(eq(teams.stripeCustomerId, customerId))
-    .limit(1);
-
-  return result.length > 0 ? result[0] : null;
-}
-
-export async function updateTeamSubscription(
-  teamId: number,
-  subscriptionData: {
-    stripeSubscriptionId: string | null;
-    stripeProductId: string | null;
-    planName: string | null;
-    subscriptionStatus: string;
-  }
-) {
-  await db
-    .update(teams)
-    .set({
-      ...subscriptionData,
-      updatedAt: new Date()
-    })
-    .where(eq(teams.id, teamId));
-}
-
 export async function getUserWithTeam(userId: number) {
   const result = await db
     .select({
@@ -190,4 +162,28 @@ export async function getTeamForUser() {
   });
 
   return result?.team || null;
+}
+
+// --- Versiones seguras para el navegador --------------------------------------------------
+// getUser() devuelve la fila completa (incluido password_hash): SOLO para uso en servidor.
+// Lo que viaja al navegador (HTML inicial, /api/user, /api/team) pasa por estas funciones.
+export type SafeUser = { id: number; name: string | null; email: string };
+
+export async function getSafeUser(): Promise<SafeUser | null> {
+  const user = await getUser();
+  return user ? { id: user.id, name: user.name, email: user.email } : null;
+}
+
+export type SafeTeam = { members: SafeUser[] };
+
+export async function getSafeTeam(): Promise<SafeTeam | null> {
+  const team = await getTeamForUser();
+  if (!team) return null;
+  return {
+    members: team.teamMembers.map((m) => ({
+      id: m.user.id,
+      name: m.user.name,
+      email: m.user.email
+    }))
+  };
 }

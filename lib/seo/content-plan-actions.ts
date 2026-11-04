@@ -15,6 +15,7 @@ import {
 import { buildContentPlanPrompt, type ContentPlanKeyword } from '@/lib/seo/content-plan-prompt';
 import { callAI, getModelPricing } from '@/lib/ai/gateway';
 import { extractJsonFromLLMResponse } from '@/lib/ai/parsers/json-extractor';
+import { publicError } from '@/lib/errors';
 
 const MAX_CLUSTER_KEYWORDS_IN_PROMPT = 5;
 const CONTENT_PLAN_MAX_TOKENS = 4096;
@@ -199,7 +200,7 @@ export async function generateContentPlan(
       maxTokens: CONTENT_PLAN_MAX_TOKENS,
     });
   } catch (error) {
-    return { error: error instanceof Error ? error.message : 'Error al llamar a la IA' };
+    return { error: publicError(error, 'Error al llamar a la IA')};
   }
 
   let parsed: ContentPlanAnalysis;
@@ -218,7 +219,7 @@ export async function generateContentPlan(
       }),
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'No se pudo interpretar la respuesta de la IA';
+    const message = publicError(error, 'No se pudo interpretar la respuesta de la IA');
     await saveContentPlanAnalysis({
       clusterId,
       tenantId,

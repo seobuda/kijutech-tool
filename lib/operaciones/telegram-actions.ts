@@ -20,12 +20,13 @@ import {
   retryNotification,
   sendDailySummariesNow
 } from '@/lib/operaciones/notifications';
+import { publicError } from '@/lib/errors';
 
 type Ok<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 
 const fail = (e: unknown, fallback: string): { ok: false; error: string } => ({
   ok: false,
-  error: e instanceof Error ? e.message : fallback
+  error: publicError(e, fallback)
 });
 
 async function requireUser(permission: Permission = 'edit') {

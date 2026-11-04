@@ -42,12 +42,12 @@ export default function DashboardLayout({
   const canAccessAi = isSuperAdmin || (isTenantAdmin && isByokTenant);
 
   const navItems = [
-    { href: '/dashboard', icon: Users, label: 'Team' },
     { href: '/dashboard/projects', icon: FolderKanban, label: 'Proyectos' },
     { href: '/dashboard/operaciones', icon: ClipboardList, label: 'Operaciones' },
     { href: '/dashboard/general', icon: Settings, label: 'General' },
     { href: '/dashboard/activity', icon: Activity, label: 'Activity' },
     { href: '/dashboard/security', icon: Shield, label: 'Security' },
+    ...(isSuperAdmin ? [{ href: '/dashboard/usuarios', icon: Users, label: 'Usuarios' }] : []),
     ...(isSeoAdmin
       ? [
           {

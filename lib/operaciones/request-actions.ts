@@ -13,6 +13,7 @@ import { syncToClickUp, type SyncResult } from '@/lib/operaciones/sync';
 import { buildDescription, fillTemplate } from '@/lib/operaciones/format';
 import { validWorkTypeKey } from '@/lib/operaciones/work-types';
 import { clientFieldForList, getStructure, matchClientOption, validClient } from '@/lib/operaciones/structure';
+import { publicError } from '@/lib/errors';
 
 const PREPARE_MAX_TOKENS = 2000;
 const PREPARE_PROMPT_KEY = 'ops_prepare_request';
@@ -88,7 +89,7 @@ export async function prepareRequestWithAI(input: {
       ]
     });
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'La llamada a la IA falló' };
+    return { ok: false, error: publicError(e, 'La llamada a la IA falló')};
   }
 
   try {

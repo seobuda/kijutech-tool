@@ -1,5 +1,6 @@
 import { getUserIfAllowed } from '@/lib/auth/permissions';
 import { transcribeAudio } from '@/lib/operaciones/transcribe';
+import { publicError } from '@/lib/errors';
 
 // Audio de «Rellenar con IA» (ficha del Equipo): solo se transcribe, no se guarda.
 const MAX_AUDIO_BYTES = 20 * 1024 * 1024;
@@ -24,6 +25,6 @@ export async function POST(request: Request) {
     });
     return Response.json({ transcript });
   } catch (e) {
-    return Response.json({ error: e instanceof Error ? e.message : 'No se pudo transcribir el audio' });
+    return Response.json({ error: publicError(e, 'No se pudo transcribir el audio')});
   }
 }

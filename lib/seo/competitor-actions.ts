@@ -19,6 +19,7 @@ import {
   parseCompetitorAnalysisResponse,
   CompetitorAnalysisParseError,
 } from '@/lib/ai/parsers/competitor-analysis';
+import { publicError } from '@/lib/errors';
 
 const MAX_COMPETITOR_URLS = 5;
 
@@ -175,7 +176,7 @@ export async function generateCompetitorAnalysis(clusterId: string) {
       ],
     });
   } catch (error) {
-    return { error: error instanceof Error ? error.message : 'Error al llamar a la IA' };
+    return { error: publicError(error, 'Error al llamar a la IA')};
   }
 
   try {

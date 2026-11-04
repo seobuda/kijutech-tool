@@ -7,6 +7,7 @@ import { getUserIfAllowed, requirePermission, type Permission } from '@/lib/auth
 import { canManageProfiles } from '@/lib/operaciones/team-profiles';
 import { startCleanup } from '@/lib/operaciones/cleanup';
 import { getTelegramConfig } from '@/lib/operaciones/telegram-config';
+import { publicError } from '@/lib/errors';
 
 type Res = { ok: true; message: string } | { ok: false; error: string };
 
@@ -32,6 +33,6 @@ export async function sendCleanupAction(target: string): Promise<Res> {
       message: `Limpieza enviada → ${parts.join(' · ')}.${cfg?.testMode ? ' Modo pruebas: te llega todo a ti; solo tus tareas son reales, las de otras personas se simulan.' : ''}`
     };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'No se pudo lanzar la limpieza' };
+    return { ok: false, error: publicError(e, 'No se pudo lanzar la limpieza')};
   }
 }

@@ -23,6 +23,7 @@ import { processNotifications } from '@/lib/operaciones/notifications';
 import { clampMessage, escapeHtml } from '@/lib/operaciones/telegram';
 import { disableWatch, enableWatch } from '@/lib/operaciones/watch';
 import { buildStartupText, getLastHeartbeat } from '@/lib/operaciones/startup';
+import { publicError } from '@/lib/errors';
 
 type Res<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 
@@ -32,7 +33,7 @@ async function requireUser(permission: Permission = 'edit') {
 
 const fail = (e: unknown, fallback: string): { ok: false; error: string } => ({
   ok: false,
-  error: e instanceof Error ? e.message : fallback
+  error: publicError(e, fallback)
 });
 
 const refresh = () => revalidatePath('/dashboard/operaciones/automatizaciones');

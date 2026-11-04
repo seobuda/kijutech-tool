@@ -16,6 +16,7 @@ import {
 import { KW_STEPS, assertUserInProjectTenant, ensureKwStepInProgress, setKwStepStatus, upsertStageStatus } from '@/lib/seo/access';
 import { getKwCompetitors, getKwRaw, getKwStepProgress, getShareToken } from '@/lib/seo/kw-queries';
 import { buildSeRankingInstructions, buildTutorPrompt } from '@/lib/seo/kw-instructions';
+import { publicError } from '@/lib/errors';
 
 async function findRawKeywordMatch(projectId: string, keywordText: string) {
   const normalized = keywordText.trim().toLowerCase();
@@ -406,7 +407,7 @@ export async function updateClusterStrategy(
   try {
     await assertClusterAccess(clusterId);
   } catch (err) {
-    return { error: err instanceof Error ? err.message : 'No autorizado' };
+    return { error: publicError(err, 'No autorizado')};
   }
 
   const column = STRATEGY_FIELD_COLUMNS[field as StrategyField];
@@ -545,7 +546,7 @@ export async function moveKeywordBetweenClusters(
 
     return { success: true };
   } catch (err) {
-    return { error: err instanceof Error ? err.message : 'No se pudo mover la keyword' };
+    return { error: publicError(err, 'No se pudo mover la keyword')};
   }
 }
 
@@ -577,4 +578,21 @@ export async function generateShareToken(projectId: string) {
 
   const row = await getShareToken(projectId);
   return row!.token;
+}
+
+// Apaga el enlace público: el token se borra, así que la URL deja de funcionar al instante.
+export async function disableShareToken(projectId: string) {
+  await assertUserInProjectTenant(projectId);
+  await db.delete(seoShareTokens).where(eq(seoShareTokens.projectId, projectId));
+}
+
+// Invalida el enlace anterior y crea uno nuevo (para cuando se ha compartido por error).
+export async function regenerateShareToken(projectId: string) {
+  await assertUserInProjectTenant(projectId);
+  const token = randomUUID();
+  await db.transaction(async (tx) => {
+    await tx.delete(seoShareTokens).where(eq(seoShareTokens.projectId, projectId));
+    await tx.insert(seoShareTokens).values({ projectId, token });
+  });
+  return token;
 }

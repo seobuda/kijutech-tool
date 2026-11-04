@@ -3,6 +3,7 @@ import { db } from '@/lib/db/drizzle';
 import { opsNoteAudios, opsNotes } from '@/lib/db/schema';
 import { getUserIfAllowed } from '@/lib/auth/permissions';
 import { transcribeAudio } from '@/lib/operaciones/transcribe';
+import { publicError } from '@/lib/errors';
 
 // Los audios entran por una ruta (y no por una acción de servidor) porque las
 // acciones tienen un límite de 1 MB por defecto. 10 min de audio webm/opus ≈ 5 MB.
@@ -78,7 +79,7 @@ export async function POST(request: Request) {
     // El audio ya está guardado; se devuelve el motivo para mostrarlo.
     return Response.json({
       audioId,
-      error: e instanceof Error ? e.message : 'No se pudo transcribir el audio'
+      error: publicError(e, 'No se pudo transcribir el audio')
     });
   }
 }

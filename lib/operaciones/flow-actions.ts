@@ -16,6 +16,7 @@ import { sendDigestNow } from '@/lib/operaciones/digest';
 import { acceptWork, getRequest, returnWork } from '@/lib/operaciones/workflow';
 import { getBlocker, ownerAnswerBlocker } from '@/lib/operaciones/blockers';
 import type { Actor } from '@/lib/operaciones/events';
+import { publicError } from '@/lib/errors';
 
 type Ok<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 
@@ -25,7 +26,7 @@ async function requireUser(permission: Permission = 'edit') {
 
 const fail = (e: unknown, fallback: string): { ok: false; error: string } => ({
   ok: false,
-  error: e instanceof Error ? e.message : fallback
+  error: publicError(e, fallback)
 });
 
 // Quien actúa desde la web es quien lleva las operaciones (dueño del token de ClickUp).

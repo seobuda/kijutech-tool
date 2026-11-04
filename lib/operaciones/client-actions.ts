@@ -22,12 +22,13 @@ import { getStructure } from '@/lib/operaciones/structure';
 import { canManageProfiles } from '@/lib/operaciones/team-profiles';
 import { getLevels, getServices, requestCountsByOption } from '@/lib/operaciones/clients';
 import { getMonthWork, runActivityNow, type MonthWorkItem } from '@/lib/operaciones/client-activity';
+import { publicError } from '@/lib/errors';
 
 type Ok<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 
 const fail = (e: unknown, fallback: string): { ok: false; error: string } => ({
   ok: false,
-  error: e instanceof Error ? e.message : fallback
+  error: publicError(e, fallback)
 });
 
 async function requireManager(permission: Permission = 'edit') {
@@ -466,7 +467,7 @@ export async function aiFillClient(text: string, currentName: string): Promise<O
         ]
       });
     } catch (e) {
-      return { ok: false, error: `La IA falló: ${e instanceof Error ? e.message : 'error desconocido'}` };
+      return { ok: false, error: `La IA falló: ${publicError(e, 'error desconocido')}` };
     }
     let p;
     try {

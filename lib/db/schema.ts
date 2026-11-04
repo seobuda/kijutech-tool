@@ -1705,3 +1705,17 @@ export const opsSuggestions = pgTable(
   },
   (table) => [index('ops_suggestions_tenant_idx').on(table.tenantId, table.createdAt)]
 );
+
+// Intentos de inicio de sesión: sirve para bloquear temporalmente tras demasiados fallos
+// (lib/auth/rate-limit.ts). Guarda el correo y la IP, nunca la contraseña.
+export const authLoginAttempts = pgTable(
+  'auth_login_attempts',
+  {
+    id: serial('id').primaryKey(),
+    email: varchar('email', { length: 255 }).notNull(),
+    ip: varchar('ip', { length: 64 }),
+    succeeded: boolean('succeeded').notNull().default(false),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('auth_login_attempts_email_created_idx').on(table.email, table.createdAt)]
+);

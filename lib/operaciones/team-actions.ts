@@ -3,6 +3,7 @@
 import { getUser } from '@/lib/db/queries';
 import { getUserIfAllowed, requirePermission, type Permission } from '@/lib/auth/permissions';
 import { getNoDateCounts, getTeamToday, type NoDateResult } from '@/lib/operaciones/team-today';
+import { publicError } from '@/lib/errors';
 
 // Botón "Actualizar ahora": se salta la caché de 2 minutos.
 export async function refreshTeamToday(): Promise<{ ok: true } | { ok: false; error: string }> {
@@ -12,7 +13,7 @@ export async function refreshTeamToday(): Promise<{ ok: true } | { ok: false; er
     await getTeamToday(user.tenantId, { force: true });
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'No se pudo actualizar' };
+    return { ok: false, error: publicError(e, 'No se pudo actualizar')};
   }
 }
 

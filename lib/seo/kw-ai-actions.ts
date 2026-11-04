@@ -13,6 +13,7 @@ import { buildClusteringPrompt } from '@/lib/ai/prompts/cluster-keywords';
 import { clusterKeywords } from '@/lib/ai/clustering/pipeline';
 import { captureClusteringFeedback } from '@/lib/ai/clustering/feedback/capture';
 import type { KeywordInput, ClusterProposal, ReasonedItem } from '@/lib/ai/clustering/types';
+import { publicError } from '@/lib/errors';
 
 // Estas acciones viven en lib/seo/ (no en lib/ai/actions.ts, aunque el
 // pedido original las situaba ahí) porque leen y escriben tablas del
@@ -40,7 +41,7 @@ async function safeAssertUserInProjectTenant(projectId: string) {
   } catch (err) {
     return {
       ok: false as const,
-      error: err instanceof Error ? err.message : 'No autorizado',
+      error: publicError(err, 'No autorizado'),
     };
   }
 }
@@ -65,7 +66,7 @@ export async function analyzeKeywordsWithAI(projectId: string): Promise<AnalyzeR
     embeddingConfig = await getEmbeddingConfig(auth.user.tenantId, activeProvider.keyMode as 'platform' | 'byok');
   } catch (err) {
     return {
-      error: err instanceof Error ? err.message : 'No hay ningún proveedor de IA activo',
+      error: publicError(err, 'No hay ningún proveedor de IA activo'),
     };
   }
 
@@ -93,7 +94,7 @@ export async function analyzeKeywordsWithAI(projectId: string): Promise<AnalyzeR
       embeddingApiKey: embeddingConfig.apiKey,
     });
   } catch (err) {
-    return { error: err instanceof Error ? err.message : 'El análisis con IA falló' };
+    return { error: publicError(err, 'El análisis con IA falló')};
   }
 
   return {
@@ -210,7 +211,7 @@ export async function confirmAIClusters(
     });
   } catch (err) {
     return {
-      error: err instanceof Error ? err.message : 'No se pudieron crear los clusters',
+      error: publicError(err, 'No se pudieron crear los clusters'),
     };
   }
 
@@ -332,7 +333,7 @@ export async function testAiPrompt(
       ],
     });
   } catch (err) {
-    return { error: err instanceof Error ? err.message : 'La llamada a la IA falló' };
+    return { error: publicError(err, 'La llamada a la IA falló')};
   }
 
   const [job] = await db

@@ -33,6 +33,7 @@ import {
   type ConversionState,
   type ProposalItem
 } from '@/lib/operaciones/note-types';
+import { publicError } from '@/lib/errors';
 
 const NOTE_PROMPT_KEY = 'ops_note_to_requests';
 // Cada encargo ocupa ~400-600 tokens de salida: 8000 da para unos 12-15.
@@ -226,7 +227,7 @@ async function runConversion(
     await Promise.race([doConversion(note, tenantId, conn, prompt, step, ctl), watchdog]);
   } catch (e) {
     ctl.cancelled = true;
-    const message = e instanceof Error ? e.message : 'Error desconocido al convertir la nota';
+    const message = publicError(e, 'Error desconocido al convertir la nota');
     try {
       await setConversionState(note.id, { state: 'error', error: message });
     } catch {
@@ -353,7 +354,7 @@ async function doConversion(
       ]
     });
   } catch (e) {
-    throw new Error(`La IA falló: ${e instanceof Error ? e.message : 'error desconocido'}`);
+    throw new Error(`La IA falló: ${publicError(e, 'error desconocido')}`);
   }
 
   await step('Revisando la respuesta de la IA…');
