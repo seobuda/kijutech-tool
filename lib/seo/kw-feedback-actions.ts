@@ -3,7 +3,7 @@
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { aiClusteringFeedback, aiIntentModifiers } from '@/lib/db/schema';
-import { assertUserInProjectTenant } from '@/lib/seo/actions';
+import { assertUserInProjectTenant } from '@/lib/seo/access';
 import { getKwClusterById } from '@/lib/seo/kw-queries';
 import { wordsOf, extractModifier } from '@/lib/ai/clustering/layers/0-intent-normalizer';
 

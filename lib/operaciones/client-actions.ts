@@ -14,6 +14,7 @@ import {
   type OpsClientTool
 } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
+import { getUserIfAllowed, requirePermission, type Permission } from '@/lib/auth/permissions';
 import { callAI, getPrompt } from '@/lib/ai/gateway';
 import { extractJsonFromLLMResponse } from '@/lib/ai/parsers/json-extractor';
 import { fillTemplate } from '@/lib/operaciones/format';
@@ -21,18 +22,17 @@ import { getStructure } from '@/lib/operaciones/structure';
 import { canManageProfiles } from '@/lib/operaciones/team-profiles';
 import { getLevels, getServices, requestCountsByOption } from '@/lib/operaciones/clients';
 import { getMonthWork, runActivityNow, type MonthWorkItem } from '@/lib/operaciones/client-activity';
+import { publicError } from '@/lib/errors';
 
 type Ok<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 
 const fail = (e: unknown, fallback: string): { ok: false; error: string } => ({
   ok: false,
-  error: e instanceof Error ? e.message : fallback
+  error: publicError(e, fallback)
 });
 
-async function requireManager() {
-  const user = await getUser();
-  if (!user || !canManageProfiles(user)) throw new Error('No autenticado');
-  return user;
+async function requireManager(permission: Permission = 'edit') {
+  return requirePermission(permission);
 }
 
 const refresh = () => revalidatePath('/dashboard/operaciones/clientes');
@@ -76,7 +76,7 @@ function clientOptions(structure: StructureLike): Map<string, string> {
 
 export async function saveClient(input: ClientInput): Promise<Ok<{ id: string }>> {
   try {
-    const user = await requireManager();
+    const user = await requireManager('edit');
     const name = input.name.trim();
     if (!name) return { ok: false, error: 'El nombre es obligatorio' };
 
@@ -202,7 +202,7 @@ export async function saveClient(input: ClientInput): Promise<Ok<{ id: string }>
 
 export async function setClientActive(id: string, active: boolean): Promise<Ok> {
   try {
-    const user = await requireManager();
+    const user = await requireManager('edit');
     await db
       .update(opsClients)
       .set({ active, updatedAt: new Date() })
@@ -217,7 +217,7 @@ export async function setClientActive(id: string, active: boolean): Promise<Ok> 
 // Solo se borra una ficha sin encargos; si los tiene, hay que desactivarla.
 export async function deleteClient(id: string): Promise<Ok> {
   try {
-    const user = await requireManager();
+    const user = await requireManager('admin');
     const [c] = await db
       .select()
       .from(opsClients)
@@ -239,7 +239,7 @@ export async function deleteClient(id: string): Promise<Ok> {
 // Crea una ficha (solo nombre y vinculación) por cada opción del campo Cliente que aún no la tiene.
 export async function importMissingClients(): Promise<Ok<{ created: number }>> {
   try {
-    const user = await requireManager();
+    const user = await requireManager('edit');
     const structure = await getStructure(user.tenantId);
     const linked = new Set(
       (
@@ -282,7 +282,7 @@ export async function saveLevel(input: {
   planningDays: number;
 }): Promise<Ok> {
   try {
-    const user = await requireManager();
+    const user = await requireManager('admin');
     const label = input.label.trim().slice(0, 60);
     if (!label) return { ok: false, error: 'El nombre del nivel es obligatorio' };
     if (!(Number.isInteger(input.defaultDays) && input.defaultDays >= 0 && input.defaultDays <= 60)) {
@@ -327,7 +327,7 @@ export async function saveLevel(input: {
 
 export async function deleteLevel(key: string): Promise<Ok> {
   try {
-    const user = await requireManager();
+    const user = await requireManager('admin');
     const used = await db
       .select({ id: opsClients.id })
       .from(opsClients)
@@ -345,7 +345,7 @@ export async function deleteLevel(key: string): Promise<Ok> {
 
 export async function saveService(input: { key: string | null; label: string; active: boolean }): Promise<Ok> {
   try {
-    const user = await requireManager();
+    const user = await requireManager('admin');
     const label = input.label.trim().slice(0, 100);
     if (!label) return { ok: false, error: 'El nombre del servicio es obligatorio' };
     if (input.key) {
@@ -371,7 +371,7 @@ export async function saveService(input: { key: string | null; label: string; ac
 
 export async function deleteService(key: string): Promise<Ok> {
   try {
-    const user = await requireManager();
+    const user = await requireManager('admin');
     const ids = (await db.select({ id: opsClients.id }).from(opsClients).where(eq(opsClients.tenantId, user.tenantId))).map((c) => c.id);
     const used =
       ids.length === 0
@@ -432,7 +432,7 @@ export type ClientDraft = {
 
 export async function aiFillClient(text: string, currentName: string): Promise<Ok<{ draft: ClientDraft }>> {
   try {
-    const user = await requireManager();
+    const user = await requireManager('edit');
     const clean = text.trim();
     if (clean.length < 10) return { ok: false, error: 'Escribe o graba algo más del cliente (mínimo una frase).' };
     if (clean.length > 12000) return { ok: false, error: 'El texto es demasiado largo (máximo 12.000 caracteres).' };
@@ -467,7 +467,7 @@ export async function aiFillClient(text: string, currentName: string): Promise<O
         ]
       });
     } catch (e) {
-      return { ok: false, error: `La IA falló: ${e instanceof Error ? e.message : 'error desconocido'}` };
+      return { ok: false, error: `La IA falló: ${publicError(e, 'error desconocido')}` };
     }
     let p;
     try {
@@ -521,7 +521,7 @@ export async function aiFillClient(text: string, currentName: string): Promise<O
 // Botón «Recalcular ahora»: misma pasada que la nocturna.
 export async function recalcClientActivity(): Promise<Ok<{ message: string }>> {
   try {
-    const user = await requireManager();
+    const user = await requireManager('edit');
     const r = await runActivityNow(user.tenantId);
     refresh();
     return {
@@ -533,12 +533,12 @@ export async function recalcClientActivity(): Promise<Ok<{ message: string }>> {
   }
 }
 
-export type MonthWork = { label: string; items: MonthWorkItem[]; truncated: boolean };
+export type MonthWork = { label: string; items: MonthWorkItem[]; cleaned: MonthWorkItem[]; truncated: boolean };
 
 // «Trabajo de este mes»: tareas completadas del cliente en el mes actual o el anterior.
 export async function getClientMonthWork(clientId: string, month: 'current' | 'previous'): Promise<Ok<{ work: MonthWork }>> {
   try {
-    const user = await requireManager();
+    const user = await requireManager('view');
     const [c] = await db
       .select({ clickupOptionId: opsClients.clickupOptionId })
       .from(opsClients)

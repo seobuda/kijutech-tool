@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { projects, seoKwClusters } from '@/lib/db/schema';
-import { getUser } from '@/lib/db/queries';
+import { getUserIfAllowed } from '@/lib/auth/permissions';
 import { getCompetitorsByCluster, getCompetitorAnalysis } from '@/lib/seo/competitor-queries';
 
 export async function GET(
@@ -10,7 +10,7 @@ export async function GET(
 ) {
   const { projectId, clusterId } = await params;
 
-  const user = await getUser();
+  const user = await getUserIfAllowed('view');
   if (!user) {
     return Response.json({ competitors: [], analysis: null }, { status: 401 });
   }

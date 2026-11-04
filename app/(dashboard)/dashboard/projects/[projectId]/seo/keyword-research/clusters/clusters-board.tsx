@@ -17,6 +17,8 @@ import {
 import {
   createKwCluster,
   generateShareToken,
+  disableShareToken,
+  regenerateShareToken,
   completeStep4,
   resetStep4
 } from '@/lib/seo/kw-actions';
@@ -101,6 +103,21 @@ export function ClustersBoard({
     return token;
   }
 
+  function handleDisableLink() {
+    if (!window.confirm('El enlace público dejará de funcionar. ¿Desactivarlo?')) return;
+    startTransition(async () => {
+      await disableShareToken(projectId);
+      setShareToken(null);
+    });
+  }
+
+  function handleRegenerateLink() {
+    if (!window.confirm('El enlace anterior dejará de funcionar y se creará uno nuevo. ¿Continuar?')) return;
+    startTransition(async () => {
+      setShareToken(await regenerateShareToken(projectId));
+    });
+  }
+
   function handleViewAsClient() {
     startTransition(async () => {
       const token = await ensureShareToken();
@@ -181,6 +198,16 @@ export function ClustersBoard({
             <ExternalLink className="mr-2 h-4 w-4" />
             Ver como cliente
           </Button>
+          {shareToken && (
+            <>
+              <Button type="button" variant="outline" size="sm" onClick={handleRegenerateLink} disabled={isPending}>
+                Regenerar enlace
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={handleDisableLink} disabled={isPending}>
+                Desactivar enlace
+              </Button>
+            </>
+          )}
           <Button
             type="button"
             size="sm"

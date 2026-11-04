@@ -18,6 +18,7 @@ import { openaiAdapter } from '@/lib/ai/adapters/openai';
 import { geminiAdapter } from '@/lib/ai/adapters/gemini';
 import { deepseekAdapter } from '@/lib/ai/adapters/deepseek';
 import type { AIAdapter } from '@/lib/ai/types';
+import { publicError } from '@/lib/errors';
 
 // Server Actions pierden el mensaje de los `throw` en el build de
 // producción (Next.js los sustituye por un digest genérico). Por eso
@@ -143,7 +144,7 @@ export async function saveProviderSettings(
     try {
       await adapter.sendMessage([{ role: 'user', content: 'di solo: ok' }], model, newKey);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Error desconocido';
+      const message = publicError(err, 'Error desconocido');
       return { error: `La llamada de prueba a ${params.provider} falló: ${message}` };
     }
 

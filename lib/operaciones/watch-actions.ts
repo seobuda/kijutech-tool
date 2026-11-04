@@ -3,13 +3,15 @@
 // Interruptor «Vigilar ClickUp» (Ajustes): activa o desactiva la consulta periódica de tareas.
 import { revalidatePath } from 'next/cache';
 import { getUser } from '@/lib/db/queries';
+import { getUserIfAllowed, requirePermission, type Permission } from '@/lib/auth/permissions';
 import { disableWatch, enableWatch } from '@/lib/operaciones/watch';
+import { publicError } from '@/lib/errors';
 
 type Res = { ok: true; message: string } | { ok: false; error: string };
 
 export async function setClickupWatch(enabled: boolean): Promise<Res> {
-  const user = await getUser();
-  if (!user) return { ok: false, error: 'No autenticado' };
+  const user = await getUserIfAllowed('admin');
+  if (!user) return { ok: false, error: 'No tienes permiso para hacer esto' };
   try {
     if (enabled) {
       const r = await enableWatch(user.tenantId);
@@ -21,6 +23,6 @@ export async function setClickupWatch(enabled: boolean): Promise<Res> {
     revalidatePath('/dashboard/operaciones/ajustes');
     return { ok: true, message: 'Vigilancia desactivada.' };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'No se pudo cambiar la vigilancia' };
+    return { ok: false, error: publicError(e, 'No se pudo cambiar la vigilancia')};
   }
 }

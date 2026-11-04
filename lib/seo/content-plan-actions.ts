@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { seoKwClusters, seoKwClusterKeywords, type SeoClusterContentPlan } from '@/lib/db/schema';
-import { assertUserInProjectTenant } from '@/lib/seo/actions';
+import { assertUserInProjectTenant, requireEditPermission } from '@/lib/seo/access';
 import {
   getContentPlan,
   saveManualQuestions,
@@ -15,6 +15,7 @@ import {
 import { buildContentPlanPrompt, type ContentPlanKeyword } from '@/lib/seo/content-plan-prompt';
 import { callAI, getModelPricing } from '@/lib/ai/gateway';
 import { extractJsonFromLLMResponse } from '@/lib/ai/parsers/json-extractor';
+import { publicError } from '@/lib/errors';
 
 const MAX_CLUSTER_KEYWORDS_IN_PROMPT = 5;
 const CONTENT_PLAN_MAX_TOKENS = 4096;
@@ -22,6 +23,7 @@ const CONTENT_PLAN_MAX_TOKENS = 4096;
 // Mismo patrón que assertClusterAccess() en competitor-actions.ts (no
 // exportado desde allí, así que se repite aquí en vez de importarlo).
 async function assertClusterAccess(clusterId: string) {
+  await requireEditPermission();
   const [cluster] = await db.select().from(seoKwClusters).where(eq(seoKwClusters.id, clusterId)).limit(1);
 
   if (!cluster) {
@@ -199,7 +201,7 @@ export async function generateContentPlan(
       maxTokens: CONTENT_PLAN_MAX_TOKENS,
     });
   } catch (error) {
-    return { error: error instanceof Error ? error.message : 'Error al llamar a la IA' };
+    return { error: publicError(error, 'Error al llamar a la IA')};
   }
 
   let parsed: ContentPlanAnalysis;
@@ -218,7 +220,7 @@ export async function generateContentPlan(
       }),
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'No se pudo interpretar la respuesta de la IA';
+    const message = publicError(error, 'No se pudo interpretar la respuesta de la IA');
     await saveContentPlanAnalysis({
       clusterId,
       tenantId,

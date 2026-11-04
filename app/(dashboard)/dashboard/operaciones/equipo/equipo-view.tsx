@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { CleanupPanel, type CleanupPersonView } from '../cleanup-panel';
 import {
   aiFillProfile,
   createProfileForMember,
@@ -84,8 +85,12 @@ export function EquipoView({
   profiles,
   members,
   withoutProfile,
-  workTypes
+  workTypes,
+  cleanupPeople,
+  testMode
 }: {
+  cleanupPeople: CleanupPersonView[];
+  testMode: boolean;
   profiles: ProfileView[];
   members: Member[];
   withoutProfile: Member[];
@@ -127,6 +132,8 @@ export function EquipoView({
       </div>
 
       {msg && <p className={`text-sm ${msg.type === 'ok' ? 'text-green-700' : 'text-red-600'}`}>{msg.text}</p>}
+
+      <CleanupPanel people={cleanupPeople} testMode={testMode} />
 
       {withoutProfile.length > 0 && (
         <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm space-y-2">

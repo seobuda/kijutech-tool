@@ -1,13 +1,15 @@
+# Los secretos NO van aquí: se leen de .env (ignorado por Git). Plantilla: .env.example
 services:
   postgres:
     image: pgvector/pgvector:pg16
     container_name: kijutech_db
+    restart: unless-stopped
     environment:
       POSTGRES_USER: kijutech
-      POSTGRES_PASSWORD: kijutech2024
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Define POSTGRES_PASSWORD en .env}
       POSTGRES_DB: kijutech_db
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5433:5432"  # 5433 en el equipo: el 5432 lo ocupa un PostgreSQL de Windows; solo escucha en local
     volumes:
       - kijutech_pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -21,13 +23,14 @@ services:
       context: .
       dockerfile: Dockerfile.dev
     container_name: kijutech_app
+    restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
-      POSTGRES_URL: postgresql://kijutech:kijutech2024@postgres:5432/kijutech_db
-      AUTH_SECRET: super-secret-key-local-development-only-change-in-production
+      POSTGRES_URL: postgresql://kijutech:${POSTGRES_PASSWORD}@postgres:5432/kijutech_db
+      AUTH_SECRET: ${AUTH_SECRET:?Define AUTH_SECRET en .env}
       BASE_URL: http://localhost:3000
-      AI_ENCRYPTION_KEY: e90acf0978876f19768b99a69e00c1c6652b94fb93d765146f51543900e81714
+      AI_ENCRYPTION_KEY: ${AI_ENCRYPTION_KEY:?Define AI_ENCRYPTION_KEY en .env}
     depends_on:
       postgres:
         condition: service_healthy

@@ -1,5 +1,5 @@
 import { getAuditFindings, getStageProgress } from '@/lib/seo/queries';
-import { ensureStageInProgress } from '@/lib/seo/actions';
+import { ensureStageInProgress } from '@/lib/seo/access';
 import { AuditForm } from './audit-form';
 
 export default async function AuditStagePage({

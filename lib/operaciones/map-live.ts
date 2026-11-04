@@ -52,7 +52,7 @@ export async function getMapLive(tenantId: string): Promise<LiveData> {
   const settings = await db
     .select()
     .from(opsSettings)
-    .where(and(eq(opsSettings.tenantId, tenantId), inArray(opsSettings.key, ['client_activity_last_run', 'client_activity_last_error'])));
+    .where(and(eq(opsSettings.tenantId, tenantId), inArray(opsSettings.key, ['client_activity_last_run', 'client_activity_last_error', 'worker_heartbeat'])));
   const setting = (k: string) => settings.find((s) => s.key === k)?.value ?? '';
 
   const notif = (await db.execute(sql`
@@ -69,6 +69,20 @@ export async function getMapLive(tenantId: string): Promise<LiveData> {
            (array_agg(last_error ORDER BY created_at DESC) FILTER (WHERE status = 'fallido'))[1] AS err
     FROM ops_clickup_outbox
     WHERE tenant_id = ${tenantId} AND created_at > now() - interval '7 days'`)) as unknown as Agg[];
+  const [cleanup] = (await db.execute(sql`
+    SELECT max(started_at) AS last_start,
+           count(*) FILTER (WHERE status = 'en_curso')::int AS running,
+           count(*) FILTER (WHERE status <> 'en_curso')::int AS finished
+    FROM ops_cleanup_runs WHERE tenant_id = ${tenantId}`)) as unknown as { last_start: Date | null; running: number; finished: number }[];
+  const [startupRow] = (await db.execute(sql`
+    SELECT max(CASE WHEN status = 'enviado' THEN coalesce(sent_at, created_at) END) AS last_ok,
+           count(*) FILTER (WHERE status = 'fallido')::int AS failed,
+           (array_agg(last_error ORDER BY created_at DESC) FILTER (WHERE status = 'fallido'))[1] AS err
+    FROM ops_notifications WHERE tenant_id = ${tenantId} AND kind = 'startup' AND created_at > now() - interval '7 days'`)) as unknown as Agg[];
+  const [sugg] = (await db.execute(sql`
+    SELECT max(created_at) AS last_at, count(*)::int AS total, count(*) FILTER (WHERE digest_shown_at IS NULL)::int AS pending
+    FROM ops_suggestions WHERE tenant_id = ${tenantId}`)) as unknown as { last_at: Date | null; total: number; pending: number }[];
+  const beat = settings.find((s) => s.key === 'worker_heartbeat')?.value ?? '';
   const [reqCount] = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(opsClickupRequests)
@@ -122,6 +136,24 @@ export async function getMapLive(tenantId: string): Promise<LiveData> {
       at: worker?.since ?? null,
       error: null,
       note: worker ? (worker.role === 'leader' ? 'Este proceso es el líder' : worker.role === 'standby' ? 'En espera: otro proceso es el líder' : 'Arrancando') : 'Proceso de fondo no arrancado'
+    },
+    cleanup: {
+      label: 'Última limpieza lanzada',
+      at: ms(cleanup?.last_start),
+      error: null,
+      note: cleanup ? `${cleanup.running} en curso · ${cleanup.finished} terminadas en total` : null
+    },
+    startup: {
+      label: 'Último aviso «Sistema en marcha»',
+      at: ms(startupRow?.last_ok),
+      error: startupRow?.failed ? `${startupRow.failed} fallido${startupRow.failed === 1 ? '' : 's'}: ${startupRow.err ?? 'sin detalle'}` : null,
+      note: beat ? `Latido del planificador: hace ${Math.max(0, Math.round((Date.now() - Number(beat)) / 1000))} s` : 'Aún sin latido registrado'
+    },
+    suggestions: {
+      label: 'Última sugerencia recibida',
+      at: ms(sugg?.last_at),
+      error: null,
+      note: sugg ? `${sugg.total} en total, ${sugg.pending} aún sin salir en un resumen` : null
     },
     clickup_cache: {
       label: 'Estructura sincronizada',

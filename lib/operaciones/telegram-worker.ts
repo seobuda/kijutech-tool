@@ -20,6 +20,7 @@ import { runDigests } from '@/lib/operaciones/digest';
 import { runReminders } from '@/lib/operaciones/reminders';
 import { runWatch } from '@/lib/operaciones/watch';
 import { runActivityDaily } from '@/lib/operaciones/client-activity';
+import { sendStartupNotice, writeHeartbeat } from '@/lib/operaciones/startup';
 
 const LOCK_KEY = 74200126; // identifica "oyente de Telegram de Kijutech"
 const POLL_TIMEOUT_S = 50;
@@ -31,6 +32,7 @@ export type WorkerState = {
   since: number;
   lockConn?: ReturnType<typeof postgres>;
   webhookCleared: Set<string>;
+  startupSent?: boolean;
 };
 
 const g = globalThis as unknown as { __opsTgWorker?: WorkerState };
@@ -201,6 +203,9 @@ async function schedulerLoop(state: WorkerState) {
     try {
       const configs = await db.select().from(opsTelegramConfig);
       for (const cfg of configs) {
+        // Una vez por arranque: «Sistema en marcha»; en cada vuelta, el latido que mide las paradas.
+        if (!state.startupSent) await sendStartupNotice(cfg.tenantId);
+        else await writeHeartbeat(cfg.tenantId);
         await processNotifications(cfg.tenantId);
         await runDailySummaries(cfg.tenantId);
         await runDigests(cfg.tenantId);
@@ -209,6 +214,7 @@ async function schedulerLoop(state: WorkerState) {
         await runReminders(cfg.tenantId);
         await runActivityDaily(cfg.tenantId); // actividad por cliente (una vez al día, de madrugada)
       }
+      state.startupSent = true;
     } catch (e) {
       console.error('[telegram] planificador:', e instanceof Error ? e.message : e);
     }

@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { projects } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
+import { requirePagePermission } from '@/lib/auth/permissions';
 import { getSeoManifest } from '@/lib/seo/manifest';
 import { getKnowledgeCardsByStage, getSeoSettingValue, getStageProgress } from '@/lib/seo/queries';
 import { getKwCompetitors, getKwProgress, getKwRawStats } from '@/lib/seo/kw-queries';
@@ -21,6 +22,7 @@ export default async function SeoWizardLayout({
   if (!user) {
     redirect('/sign-in');
   }
+  await requirePagePermission('view');
 
   const [project] = await db
     .select()

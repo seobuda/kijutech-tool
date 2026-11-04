@@ -3,6 +3,8 @@ import { getUser, getUserTenantRoleNames } from '@/lib/db/queries';
 import { getAiProviderSettings, getTenantAiMode } from '@/lib/ai/queries';
 import { AI_PROVIDERS } from '@/lib/ai/provider-meta';
 import { ProviderSettingsSection, type ProviderRowData } from '../provider-settings-section';
+import { decrypt } from '@/lib/ai/encryption';
+import { maskSecret } from '@/lib/auth/mask';
 
 const ADMIN_ROLES = ['admin', 'super_admin'];
 
@@ -29,6 +31,10 @@ export default async function AiMyKeysPage() {
       isActive: existing?.isActive ?? false,
       isDefault: existing?.isDefault ?? false,
       hasKey: Boolean(existing?.apiKeyEncrypted),
+      maskedKey:
+        existing?.apiKeyEncrypted && existing.apiKeyIv
+          ? maskSecret(decrypt(existing.apiKeyEncrypted, existing.apiKeyIv))
+          : null,
       embeddingProvider: existing?.embeddingProvider ?? null,
       embeddingModel: existing?.embeddingModel ?? '',
       hasEmbeddingKey: Boolean(existing?.embeddingApiKeyEncrypted),

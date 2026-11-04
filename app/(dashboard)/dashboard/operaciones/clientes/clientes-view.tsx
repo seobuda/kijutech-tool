@@ -1204,6 +1204,20 @@ function MonthWorkButton({ clientId, name }: { clientId: string; name: string })
               ))}
             </ul>
           )}
+          {work.cleaned.length > 0 && (
+            <div className="space-y-1 border-t border-gray-200 pt-2" data-testid="trabajo-mes-limpieza">
+              <p className="text-xs font-medium text-muted-foreground">
+                Cerradas en limpieza ({work.cleaned.length}): trabajo antiguo o que no se hizo; no cuentan en el total.
+              </p>
+              <ul className="space-y-1 text-sm text-muted-foreground">
+                {work.cleaned.map((i, idx) => (
+                  <li key={idx}>
+                    • <a href={i.url} target="_blank" rel="noopener noreferrer" className="hover:underline">{i.title}</a> — {fmtDay(i.doneMs)}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </>
       )}
     </div>

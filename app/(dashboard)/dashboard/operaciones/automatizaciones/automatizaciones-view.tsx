@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { CleanupPanel, type CleanupPersonView } from '../cleanup-panel';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   previewTemplateAction,
@@ -62,7 +63,7 @@ function whenLabel(ms: number): string {
 
 const FIELD_LABEL: Record<string, string> = { enabled: 'Encendida', template: 'Texto', reset: 'Restaurar valores' };
 
-function Card1({ card, hasBot }: { card: CardView; hasBot: boolean }) {
+function Card1({ card, hasBot, extra }: { card: CardView; hasBot: boolean; extra?: React.ReactNode }) {
   const router = useRouter();
   const [enabled, setEnabled] = useState(card.enabled);
   const [vals, setVals] = useState<Record<string, string | boolean>>(() =>
@@ -247,6 +248,8 @@ function Card1({ card, hasBot }: { card: CardView; hasBot: boolean }) {
           </div>
         )}
 
+        {extra}
+
         <div className="flex flex-wrap items-center gap-2 pt-1">
           {(card.fields.length > 0 || card.template) && (
             <Button size="sm" disabled={pending || !dirty || ('error' in preview && Boolean(card.template))} onClick={save} data-testid={`auto-${card.key}-save`}>
@@ -287,8 +290,10 @@ export function AutomatizacionesView({
   changes,
   titles,
   testMode,
-  hasBot
+  hasBot,
+  cleanupPeople
 }: {
+  cleanupPeople: CleanupPersonView[];
   cards: CardView[];
   upcoming: Upcoming[];
   changes: Change[];
@@ -358,7 +363,12 @@ export function AutomatizacionesView({
       <section className="space-y-3">
         <h2 className="font-medium">Automatizaciones</h2>
         {cards.map((c) => (
-          <Card1 key={c.key} card={c} hasBot={hasBot} />
+          <Card1
+            key={c.key}
+            card={c}
+            hasBot={hasBot}
+            extra={c.key === 'cleanup' ? <CleanupPanel people={cleanupPeople} testMode={testMode} /> : undefined}
+          />
         ))}
       </section>
 

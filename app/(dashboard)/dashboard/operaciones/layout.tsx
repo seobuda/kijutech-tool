@@ -1,6 +1,8 @@
+import { requirePagePermission } from '@/lib/auth/permissions';
 import { OperacionesTabs } from './operaciones-tabs';
 
-export default function OperacionesLayout({ children }: { children: React.ReactNode }) {
+export default async function OperacionesLayout({ children }: { children: React.ReactNode }) {
+  await requirePagePermission('view');
   return (
     <section className="flex-1 p-4 lg:p-8 space-y-6">
       <div>

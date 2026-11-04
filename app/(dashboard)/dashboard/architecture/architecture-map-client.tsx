@@ -17,6 +17,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import {
   FolderKanban,
+  Shield,
   Sparkles,
   Brain,
   BookOpen,
@@ -50,6 +51,7 @@ import type { LiveData, LiveRun } from '@/lib/operaciones/map-live';
 
 const ICONS: Record<string, LucideIcon> = {
   FolderKanban,
+  Shield,
   Sparkles,
   Brain,
   BookOpen,

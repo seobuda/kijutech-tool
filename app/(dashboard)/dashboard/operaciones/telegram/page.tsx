@@ -3,7 +3,9 @@ import { desc, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { opsNotifications } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
-import { ensureTelegramMembers, getOwnerMember, getTelegramConfig, linkUrl } from '@/lib/operaciones/telegram-config';
+import { requirePagePermission } from '@/lib/auth/permissions';
+import { maskSecret } from '@/lib/auth/mask';
+import { decodeBotToken, ensureTelegramMembers, getOwnerMember, getTelegramConfig, linkUrl } from '@/lib/operaciones/telegram-config';
 import { getOwnerTimezone, getScheduleMap, scheduleOrDefault } from '@/lib/operaciones/team-profiles';
 import { getAuto } from '@/lib/operaciones/automations';
 import { getWorkerState } from '@/lib/operaciones/telegram-worker';
@@ -14,6 +16,7 @@ export const dynamic = 'force-dynamic';
 export default async function TelegramPage() {
   const user = await getUser();
   if (!user) redirect('/sign-in');
+  await requirePagePermission('admin');
 
   const tgCfg = await getTelegramConfig(user.tenantId);
 
@@ -33,6 +36,7 @@ export default async function TelegramPage() {
 
   const telegram: TelegramView = {
     hasBot: Boolean(tgCfg),
+    maskedToken: tgCfg ? maskSecret(decodeBotToken(tgCfg)) : null,
     botName: tgCfg?.botName ?? null,
     botUsername: tgCfg?.botUsername ?? null,
     testMode: tgCfg?.testMode ?? true,

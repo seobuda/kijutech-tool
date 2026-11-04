@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
 import { opsNotes, opsRequests, type OpsNote } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
+import { getUserIfAllowed, requirePermission, type Permission } from '@/lib/auth/permissions';
 import { callAI, getPrompt } from '@/lib/ai/gateway';
 import { extractJsonFromLLMResponse } from '@/lib/ai/parsers/json-extractor';
 import { getClickUpToken } from '@/lib/operaciones/queries';
@@ -32,6 +33,7 @@ import {
   type ConversionState,
   type ProposalItem
 } from '@/lib/operaciones/note-types';
+import { publicError } from '@/lib/errors';
 
 const NOTE_PROMPT_KEY = 'ops_note_to_requests';
 // Cada encargo ocupa ~400-600 tokens de salida: 8000 da para unos 12-15.
@@ -54,8 +56,8 @@ export type SaveNoteInput = {
 export async function saveNote(
   input: SaveNoteInput
 ): Promise<{ ok: true; id: string; savedAt: string } | { ok: false; error: string }> {
-  const user = await getUser();
-  if (!user) return { ok: false, error: 'No autenticado' };
+  const user = await getUserIfAllowed('edit');
+  if (!user) return { ok: false, error: 'No tienes permiso para hacer esto' };
 
   const values = {
     content: input.content,
@@ -90,8 +92,8 @@ export async function saveNote(
 }
 
 export async function deleteNote(noteId: string): Promise<{ ok: true } | { ok: false; error: string }> {
-  const user = await getUser();
-  if (!user) return { ok: false, error: 'No autenticado' };
+  const user = await getUserIfAllowed('edit');
+  if (!user) return { ok: false, error: 'No tienes permiso para hacer esto' };
   await db.delete(opsNotes).where(and(eq(opsNotes.id, noteId), eq(opsNotes.tenantId, user.tenantId)));
   revalidatePath('/dashboard/operaciones');
   return { ok: true };
@@ -99,7 +101,7 @@ export async function deleteNote(noteId: string): Promise<{ ok: true } | { ok: f
 
 // Vuelve de la pantalla de revisión a la nota (descarta la propuesta de la IA).
 export async function discardProposal(noteId: string): Promise<{ ok: true }> {
-  const user = await getUser();
+  const user = await getUserIfAllowed('edit');
   if (user) {
     await db
       .update(opsNotes)
@@ -148,8 +150,8 @@ async function setConversionState(noteId: string, state: ConversionState) {
 export async function startConversion(
   noteId: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const user = await getUser();
-  if (!user) return { ok: false, error: 'No autenticado' };
+  const user = await getUserIfAllowed('edit');
+  if (!user) return { ok: false, error: 'No tienes permiso para hacer esto' };
 
   const [note] = await db
     .select()
@@ -187,7 +189,7 @@ export async function startConversion(
 }
 
 export async function getConversionState(noteId: string): Promise<ConversionState | null> {
-  const user = await getUser();
+  const user = await getUserIfAllowed('edit');
   if (!user) return null;
   const [note] = await db
     .select({ proposal: opsNotes.proposal })
@@ -225,7 +227,7 @@ async function runConversion(
     await Promise.race([doConversion(note, tenantId, conn, prompt, step, ctl), watchdog]);
   } catch (e) {
     ctl.cancelled = true;
-    const message = e instanceof Error ? e.message : 'Error desconocido al convertir la nota';
+    const message = publicError(e, 'Error desconocido al convertir la nota');
     try {
       await setConversionState(note.id, { state: 'error', error: message });
     } catch {
@@ -352,7 +354,7 @@ async function doConversion(
       ]
     });
   } catch (e) {
-    throw new Error(`La IA falló: ${e instanceof Error ? e.message : 'error desconocido'}`);
+    throw new Error(`La IA falló: ${publicError(e, 'error desconocido')}`);
   }
 
   await step('Revisando la respuesta de la IA…');
@@ -500,8 +502,8 @@ export async function sendNoteRequests(
   noteId: string,
   rawItems: z.input<typeof sendItemSchema>[]
 ): Promise<SendNoteResult> {
-  const user = await getUser();
-  if (!user) return { ok: false, error: 'No autenticado' };
+  const user = await getUserIfAllowed('edit');
+  if (!user) return { ok: false, error: 'No tienes permiso para hacer esto' };
 
   const parsed = z.array(sendItemSchema).min(1, 'No hay encargos que enviar').safeParse(rawItems);
   if (!parsed.success) return { ok: false, error: parsed.error.errors[0].message };

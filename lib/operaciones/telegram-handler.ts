@@ -17,10 +17,11 @@ import {
   opsNotifications,
   opsRequests,
   opsTelegramMembers,
+  opsSuggestions,
   opsTelegramPending,
-
   type OpsTelegramMember
 } from '@/lib/db/schema';
+import { handleCleanupCallback, handleCleanupDateReply } from '@/lib/operaciones/cleanup';
 import { escapeHtml, tg, type TgCallbackQuery, type TgMessage, type TgUpdate } from '@/lib/operaciones/telegram';
 import {
   getMemberByChat,
@@ -93,6 +94,17 @@ async function handleMessage(tenantId: string, token: string, msg: TgMessage): P
   if (start) {
     await reply(token, chatId, `Ya estás conectado, <b>${escapeHtml(linked.username)}</b>. Aquí recibirás tus avisos.`);
   }
+
+  // Comandos de la voz del equipo (no tocan la conversación pendiente).
+  if (/^\/ayuda(?:@\w+)?(?:\s|$)/i.test(text)) return void (await reply(token, chatId, HELP_TEXT));
+  const sug = text.match(/^\/sugerencia(?:@\w+)?(?:\s+([\s\S]+))?$/i);
+  if (sug) {
+    const fileId = msg.photo?.length ? msg.photo[msg.photo.length - 1].file_id : null;
+    const body = (sug[1] ?? '').trim();
+    if (body || fileId) return void (await saveSuggestion(tenantId, token, linked, chatId, body, fileId));
+    await setPending(tenantId, chatId, 'suggestion', {});
+    return void (await reply(token, chatId, '💡 Cuéntame tu sugerencia: escríbela o manda una captura con su texto (o /cancelar).'));
+  }
   // ¿El bot esperaba una respuesta de esta persona? Si no, el mensaje se ignora.
   await handlePending(tenantId, token, linked, msg, text);
 }
@@ -105,7 +117,7 @@ async function handleMessage(tenantId: string, token: string, msg: TgMessage): P
 async function setPending(
   tenantId: string,
   chatId: number,
-  kind: 'done_note' | 'done_review' | 'block_question' | 'return_reason' | 'owner_reply',
+  kind: 'done_note' | 'done_review' | 'block_question' | 'return_reason' | 'owner_reply' | 'suggestion',
   ids: { requestId?: string; blockerId?: string }
 ) {
   const row = {
@@ -120,6 +132,47 @@ async function setPending(
     .insert(opsTelegramPending)
     .values({ chatId, ...row })
     .onConflictDoUpdate({ target: opsTelegramPending.chatId, set: row });
+}
+
+const HELP_TEXT = [
+  '<b>Qué hace cada botón</b>',
+  '',
+  '▶️ <b>Empezar ahora</b>: te pones con el encargo; queda «en curso» en ClickUp.',
+  '🕐 <b>Más tarde</b>: lo dejas para luego; si vence hoy te lo recuerdo.',
+  '🚫 <b>Bloqueado</b>: te falta algo. Escribes tu duda (o una captura) y te contesto, o se la paso a quien lleva las operaciones.',
+  '✅ <b>Hecho</b>: lo terminaste; puedes añadir un enlace o un comentario.',
+  '👀 <b>Hecho, ¿lo revisas?</b>: lo terminaste pero quieres que lo revisen antes de darlo por cerrado.',
+  '✅ <b>Visto</b>: solo confirma que lo has leído.',
+  '',
+  '<b>En una limpieza de vencidas</b>',
+  '✅ <b>Ya está hecha</b>: la cierra en ClickUp.',
+  '📅 <b>Nueva fecha</b>: mañana, en 3 días, la semana que viene o la que escribas.',
+  '🗑 <b>Ya no aplica</b>: la descarta (queda cerrada con un comentario).',
+  '⏹ <b>Parar limpieza</b>: lo que queda sigue como está.',
+  '',
+  '<b>Comandos</b>',
+  '/sugerencia: cuéntanos qué mejorarías (texto o captura).',
+  '/ayuda: este mensaje.',
+  '/cancelar: anula lo que el bot esté esperando.'
+].join('\n');
+
+async function saveSuggestion(
+  tenantId: string,
+  token: string,
+  member: OpsTelegramMember,
+  chatId: number,
+  body: string,
+  fileId: string | null
+) {
+  await db.insert(opsSuggestions).values({
+    tenantId,
+    personClickupUserId: member.clickupUserId,
+    personName: member.username,
+    text: body.slice(0, 3000) || '(captura sin texto)',
+    photoFileId: fileId
+  });
+  await logEvent(tenantId, { actor: { clickupUserId: member.clickupUserId, name: member.username }, type: 'suggestion', payload: { photo: Boolean(fileId) } });
+  await reply(token, chatId, '💡 Gracias, anotado. Quien lleva las operaciones la verá en su próximo resumen.');
 }
 
 const actorOf = (m: OpsTelegramMember): Actor => ({ clickupUserId: m.clickupUserId, name: m.username });
@@ -171,6 +224,18 @@ async function handlePending(
       res.ok ? '🚫 Anotado. Reviso tu pregunta y te contesto por aquí en cuanto pueda.' : res.reason
     );
     return;
+  }
+
+  if (p.kind === 'suggestion') {
+    const fileId = msg.photo?.length ? msg.photo[msg.photo.length - 1].file_id : null;
+    if (!text && !fileId) return void (await reply(token, chatId, 'Escribe tu sugerencia o manda una captura con su texto.'));
+    await saveSuggestion(tenantId, token, member, chatId, text, fileId);
+    return;
+  }
+
+  if (p.kind === 'cleanup_date' && p.cleanupItemId) {
+    if (!text) return void (await reply(token, chatId, 'Escribe la fecha (por ejemplo 24/11) o /cancelar.'));
+    return void (await reply(token, chatId, await handleCleanupDateReply(tenantId, token, member, chatId, p.cleanupItemId, text)));
   }
 
   // Lo que sigue solo lo hace el dueño.
@@ -373,6 +438,9 @@ async function handleCallback(tenantId: string, token: string, cb: TgCallbackQue
 
   const presser = await getMemberByChat(tenantId, chatId);
   if (!presser) return void (await answer()); // chat no vinculado: se ignora
+
+  // Limpieza de vencidas (cl:…).
+  if (cb.data?.startsWith('cl:')) return handleCleanupCallback(tenantId, token, cb, presser, chatId, messageId, answer);
 
   // Botones del flujo de trabajo (Empezar, Bloqueado, Hecho, Aceptar, Devolver, Responder…).
   if (!m) return handleWorkflowCallback(tenantId, token, cb, presser, chatId, messageId, answer);

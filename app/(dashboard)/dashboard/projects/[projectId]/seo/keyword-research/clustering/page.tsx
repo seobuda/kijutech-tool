@@ -1,4 +1,4 @@
-import { ensureKwStepInProgress } from '@/lib/seo/kw-actions';
+import { ensureKwStepInProgress } from '@/lib/seo/access';
 import { getKwStepProgress, getKwRaw, getKwClusters } from '@/lib/seo/kw-queries';
 import { getSeoSettingValue } from '@/lib/seo/queries';
 import { getUser } from '@/lib/db/queries';

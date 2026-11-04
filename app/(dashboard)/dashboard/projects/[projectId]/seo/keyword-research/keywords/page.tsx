@@ -1,4 +1,4 @@
-import { ensureKwStepInProgress } from '@/lib/seo/kw-actions';
+import { ensureKwStepInProgress } from '@/lib/seo/access';
 import { getKwRaw, getKwStepProgress } from '@/lib/seo/kw-queries';
 import { KeywordsPanel } from './keywords-panel';
 

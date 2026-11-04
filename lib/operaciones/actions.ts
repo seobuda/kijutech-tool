@@ -10,6 +10,7 @@ import {
   opsClickupSpaces
 } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
+import { getUserIfAllowed, requirePermission, type Permission } from '@/lib/auth/permissions';
 import { encrypt } from '@/lib/ai/encryption';
 import { setTranscriptionModel } from '@/lib/operaciones/settings';
 import { getWorkspaces, registerTokenTenant, ClickUpError } from '@/lib/operaciones/clickup';
@@ -18,8 +19,8 @@ import { getStructure, setSelectedSpaces, syncStructure } from '@/lib/operacione
 export async function saveClickUpToken(
   token: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const user = await getUser();
-  if (!user) return { ok: false, error: 'No autenticado' };
+  const user = await getUserIfAllowed('admin');
+  if (!user) return { ok: false, error: 'No tienes permiso para hacer esto' };
 
   const clean = token.trim();
   if (!clean) return { ok: false, error: 'Pega el token de ClickUp' };
@@ -56,8 +57,8 @@ export async function saveClickUpToken(
 }
 
 export async function removeClickUpToken(): Promise<{ ok: true } | { ok: false; error: string }> {
-  const user = await getUser();
-  if (!user) return { ok: false, error: 'No autenticado' };
+  const user = await getUserIfAllowed('admin');
+  if (!user) return { ok: false, error: 'No tienes permiso para hacer esto' };
   await db.delete(opsClickupConnections).where(eq(opsClickupConnections.tenantId, user.tenantId));
   // La caché pertenece a esa conexión: sin token no tiene sentido conservarla.
   await db.delete(opsClickupLists).where(eq(opsClickupLists.tenantId, user.tenantId));
@@ -70,8 +71,8 @@ export async function removeClickUpToken(): Promise<{ ok: true } | { ok: false; 
 export async function saveTranscriptionModel(
   model: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const user = await getUser();
-  if (!user) return { ok: false, error: 'No autenticado' };
+  const user = await getUserIfAllowed('admin');
+  if (!user) return { ok: false, error: 'No tienes permiso para hacer esto' };
   const clean = model.trim();
   if (!/^[\w.\-]{3,100}$/.test(clean)) {
     return { ok: false, error: 'Nombre de modelo no válido (ej.: gemini-flash-latest)' };
@@ -87,8 +88,8 @@ export type SyncSummary =
 
 // "Probar conexión" y "Actualizar desde ClickUp": sincroniza la caché ahora mismo.
 export async function syncClickUpNow(): Promise<SyncSummary> {
-  const user = await getUser();
-  if (!user) return { ok: false, error: 'No autenticado' };
+  const user = await getUserIfAllowed('edit');
+  if (!user) return { ok: false, error: 'No tienes permiso para hacer esto' };
 
   const res = await syncStructure(user.tenantId);
   if (!res.ok) return res;
@@ -109,8 +110,8 @@ export async function syncClickUpNow(): Promise<SyncSummary> {
 export async function saveSelectedSpaces(
   spaceIds: string[]
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const user = await getUser();
-  if (!user) return { ok: false, error: 'No autenticado' };
+  const user = await getUserIfAllowed('admin');
+  if (!user) return { ok: false, error: 'No tienes permiso para hacer esto' };
   if (spaceIds.length === 0) return { ok: false, error: 'Deja al menos un espacio seleccionado' };
 
   const res = await setSelectedSpaces(user.tenantId, spaceIds);

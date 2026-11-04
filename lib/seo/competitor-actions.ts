@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { seoKwClusters, seoClusterCompetitors } from '@/lib/db/schema';
-import { assertUserInProjectTenant } from '@/lib/seo/actions';
+import { assertUserInProjectTenant, requireEditPermission } from '@/lib/seo/access';
 import {
   deleteCompetitorUrl,
   updateScrapeResult,
@@ -19,6 +19,7 @@ import {
   parseCompetitorAnalysisResponse,
   CompetitorAnalysisParseError,
 } from '@/lib/ai/parsers/competitor-analysis';
+import { publicError } from '@/lib/errors';
 
 const MAX_COMPETITOR_URLS = 5;
 
@@ -27,6 +28,7 @@ const MAX_COMPETITOR_URLS = 5;
 // bloque guardan tenant_id directamente (seo_kw_clusters no lo tiene, solo
 // project_id).
 async function assertClusterAccess(clusterId: string) {
+  await requireEditPermission();
   const [cluster] = await db
     .select()
     .from(seoKwClusters)
@@ -175,7 +177,7 @@ export async function generateCompetitorAnalysis(clusterId: string) {
       ],
     });
   } catch (error) {
-    return { error: error instanceof Error ? error.message : 'Error al llamar a la IA' };
+    return { error: publicError(error, 'Error al llamar a la IA')};
   }
 
   try {

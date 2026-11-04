@@ -9,32 +9,9 @@ import {
   seoOnboardingChecklist,
   seoStageProgress
 } from '@/lib/db/schema';
-import { getUser } from '@/lib/db/queries';
+import { assertUserInProjectTenant, upsertStageStatus } from '@/lib/seo/access';
 import { getStageProgress } from '@/lib/seo/queries';
 import { ONBOARDING_CHECKLIST_ITEMS } from '@/lib/seo/onboarding-checklist-items';
-
-export async function assertUserInProjectTenant(projectId: string) {
-  const user = await getUser();
-  if (!user) {
-    throw new Error('No autenticado');
-  }
-
-  const [project] = await db
-    .select()
-    .from(projects)
-    .where(eq(projects.id, projectId))
-    .limit(1);
-
-  if (!project) {
-    throw new Error('Proyecto no encontrado');
-  }
-
-  if (project.tenantId !== user.tenantId) {
-    throw new Error('No autorizado: el proyecto no pertenece a tu tenant');
-  }
-
-  return { user, project };
-}
 
 export async function saveKickoffAnswers(
   projectId: string,
@@ -99,28 +76,6 @@ export async function saveAuditFindings(
   }
 }
 
-export async function upsertStageStatus(
-  projectId: string,
-  stageKey: string,
-  status: string
-) {
-  await db
-    .insert(seoStageProgress)
-    .values({
-      projectId,
-      stageKey,
-      status,
-      completedAt: status === 'completed' ? new Date() : null
-    })
-    .onConflictDoUpdate({
-      target: [seoStageProgress.projectId, seoStageProgress.stageKey],
-      set: {
-        status,
-        completedAt: status === 'completed' ? new Date() : null
-      }
-    });
-}
-
 export async function markStageComplete(projectId: string, stageKey: string) {
   await assertUserInProjectTenant(projectId);
   await upsertStageStatus(projectId, stageKey, 'completed');
@@ -129,39 +84,6 @@ export async function markStageComplete(projectId: string, stageKey: string) {
 export async function markStageInProgress(projectId: string, stageKey: string) {
   await assertUserInProjectTenant(projectId);
   await upsertStageStatus(projectId, stageKey, 'in_progress');
-}
-
-export async function ensureStageInProgress(projectId: string, stageKey: string) {
-  const progress = await getStageProgress(projectId);
-  const current = progress.find((p) => p.stageKey === stageKey);
-  if (!current || current.status === 'pending') {
-    await markStageInProgress(projectId, stageKey);
-  }
-}
-
-export async function ensureOnboardingInitialized(projectId: string) {
-  const progress = await getStageProgress(projectId);
-  const current = progress.find((p) => p.stageKey === 'onboarding');
-
-  if (!current) {
-    // Primera visita a Onboarding para este proyecto: siembra los items
-    // fijos una única vez. A partir de aquí, si el usuario elimina uno,
-    // no debe volver a aparecer — por eso esto no se repite en visitas
-    // posteriores ni tras un "Reiniciar etapa" (que conserva esta fila).
-    await db
-      .insert(seoOnboardingChecklist)
-      .values(
-        ONBOARDING_CHECKLIST_ITEMS.map((item) => ({
-          projectId,
-          itemKey: item.itemKey,
-          isCustom: false,
-          checked: false
-        }))
-      )
-      .onConflictDoNothing();
-  }
-
-  await ensureStageInProgress(projectId, 'onboarding');
 }
 
 export async function toggleOnboardingChecklistItem(

@@ -161,7 +161,7 @@ export async function enqueueNewRequestNotification(
 // (dedupe_key único) y se envía después. Nunca lanza: un fallo de Telegram no rompe la acción.
 export async function enqueueNotification(input: {
   tenantId: string;
-  kind: 'review_request' | 'block_alert' | 'reply' | 'returned' | 'digest' | 'reminder';
+  kind: 'review_request' | 'block_alert' | 'reply' | 'returned' | 'digest' | 'reminder' | 'cleanup' | 'cleanup_summary' | 'startup';
   dedupeKey: string;
   forClickupUserId: string | null;
   forName: string | null;

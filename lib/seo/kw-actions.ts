@@ -13,65 +13,10 @@ import {
   seoShareTokens,
   type NewSeoKwProgress
 } from '@/lib/db/schema';
-import { assertUserInProjectTenant, upsertStageStatus } from '@/lib/seo/actions';
+import { KW_STEPS, assertUserInProjectTenant, ensureKwStepInProgress, setKwStepStatus, upsertStageStatus, requireEditPermission } from '@/lib/seo/access';
 import { getKwCompetitors, getKwRaw, getKwStepProgress, getShareToken } from '@/lib/seo/kw-queries';
 import { buildSeRankingInstructions, buildTutorPrompt } from '@/lib/seo/kw-instructions';
-
-const KW_STEPS = ['competitors', 'keywords', 'clustering', 'clusters'] as const;
-
-async function syncKeywordResearchStageStatus(projectId: string) {
-  const rows = await db
-    .select()
-    .from(seoKwProgress)
-    .where(eq(seoKwProgress.projectId, projectId));
-
-  const byStep = new Map(rows.map((r) => [r.step, r]));
-  const allCompleted = KW_STEPS.every((step) => byStep.get(step)?.status === 'completed');
-  const anyStarted = KW_STEPS.some((step) => {
-    const status = byStep.get(step)?.status;
-    return status === 'in_progress' || status === 'completed';
-  });
-
-  const overallStatus = allCompleted ? 'completed' : anyStarted ? 'in_progress' : 'pending';
-  await upsertStageStatus(projectId, 'keyword_research', overallStatus);
-}
-
-async function setKwStepStatus(
-  projectId: string,
-  step: (typeof KW_STEPS)[number],
-  status: string,
-  extra: Partial<NewSeoKwProgress> = {}
-) {
-  await db
-    .insert(seoKwProgress)
-    .values({
-      projectId,
-      step,
-      status,
-      completedAt: status === 'completed' ? new Date() : null,
-      ...extra
-    })
-    .onConflictDoUpdate({
-      target: [seoKwProgress.projectId, seoKwProgress.step],
-      set: {
-        status,
-        completedAt: status === 'completed' ? new Date() : null,
-        ...extra
-      }
-    });
-
-  await syncKeywordResearchStageStatus(projectId);
-}
-
-export async function ensureKwStepInProgress(
-  projectId: string,
-  step: (typeof KW_STEPS)[number]
-) {
-  const current = await getKwStepProgress(projectId, step);
-  if (!current || current.status === 'pending') {
-    await setKwStepStatus(projectId, step, 'in_progress');
-  }
-}
+import { publicError } from '@/lib/errors';
 
 async function findRawKeywordMatch(projectId: string, keywordText: string) {
   const normalized = keywordText.trim().toLowerCase();
@@ -101,6 +46,7 @@ export async function saveTargetKeyword(projectId: string, keyword: string) {
 }
 
 async function assertCompetitorAccess(id: string) {
+  await requireEditPermission();
   const [competitor] = await db
     .select()
     .from(seoKwCompetitors)
@@ -311,6 +257,7 @@ export async function addKwRawManual(
 }
 
 async function assertRawAccess(id: string) {
+  await requireEditPermission();
   const [row] = await db.select().from(seoKwRaw).where(eq(seoKwRaw.id, id)).limit(1);
   if (!row) {
     throw new Error('Keyword no encontrada');
@@ -387,6 +334,7 @@ type ClusterInput = {
 };
 
 async function assertClusterAccess(id: string) {
+  await requireEditPermission();
   const [cluster] = await db
     .select()
     .from(seoKwClusters)
@@ -462,7 +410,7 @@ export async function updateClusterStrategy(
   try {
     await assertClusterAccess(clusterId);
   } catch (err) {
-    return { error: err instanceof Error ? err.message : 'No autorizado' };
+    return { error: publicError(err, 'No autorizado')};
   }
 
   const column = STRATEGY_FIELD_COLUMNS[field as StrategyField];
@@ -475,6 +423,7 @@ export async function updateClusterStrategy(
 }
 
 async function assertClusterKeywordAccess(id: string) {
+  await requireEditPermission();
   const [row] = await db
     .select()
     .from(seoKwClusterKeywords)
@@ -601,7 +550,7 @@ export async function moveKeywordBetweenClusters(
 
     return { success: true };
   } catch (err) {
-    return { error: err instanceof Error ? err.message : 'No se pudo mover la keyword' };
+    return { error: publicError(err, 'No se pudo mover la keyword')};
   }
 }
 
@@ -633,4 +582,21 @@ export async function generateShareToken(projectId: string) {
 
   const row = await getShareToken(projectId);
   return row!.token;
+}
+
+// Apaga el enlace público: el token se borra, así que la URL deja de funcionar al instante.
+export async function disableShareToken(projectId: string) {
+  await assertUserInProjectTenant(projectId);
+  await db.delete(seoShareTokens).where(eq(seoShareTokens.projectId, projectId));
+}
+
+// Invalida el enlace anterior y crea uno nuevo (para cuando se ha compartido por error).
+export async function regenerateShareToken(projectId: string) {
+  await assertUserInProjectTenant(projectId);
+  const token = randomUUID();
+  await db.transaction(async (tx) => {
+    await tx.delete(seoShareTokens).where(eq(seoShareTokens.projectId, projectId));
+    await tx.insert(seoShareTokens).values({ projectId, token });
+  });
+  return token;
 }

@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { db } from '@/lib/db/drizzle';
 import { opsTelegramConfig, opsTelegramMembers } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
+import { getUserIfAllowed, requirePermission, type Permission } from '@/lib/auth/permissions';
 import { encrypt } from '@/lib/ai/encryption';
 import { tg, TelegramError } from '@/lib/operaciones/telegram';
 import {
@@ -19,18 +20,17 @@ import {
   retryNotification,
   sendDailySummariesNow
 } from '@/lib/operaciones/notifications';
+import { publicError } from '@/lib/errors';
 
 type Ok<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 
 const fail = (e: unknown, fallback: string): { ok: false; error: string } => ({
   ok: false,
-  error: e instanceof Error ? e.message : fallback
+  error: publicError(e, fallback)
 });
 
-async function requireUser() {
-  const user = await getUser();
-  if (!user) throw new Error('No autenticado');
-  return user;
+async function requireUser(permission: Permission = 'edit') {
+  return requirePermission(permission);
 }
 
 const refresh = () => revalidatePath('/dashboard/operaciones/telegram');
@@ -40,7 +40,7 @@ export async function saveTelegramToken(
   token: string
 ): Promise<Ok<{ botName: string; botUsername: string }>> {
   try {
-    const user = await requireUser();
+    const user = await requireUser('admin');
     const clean = token.trim();
     if (!clean) return { ok: false, error: 'Pega el token del bot' };
 
@@ -91,7 +91,7 @@ export async function saveTelegramToken(
 // Botón "Probar": pregunta a Telegram quién es el bot.
 export async function testTelegram(): Promise<Ok<{ botName: string; botUsername: string }>> {
   try {
-    const user = await requireUser();
+    const user = await requireUser('admin');
     const cfg = await getTelegramConfig(user.tenantId);
     if (!cfg) return { ok: false, error: 'Todavía no hay token del bot guardado' };
     const me = await tg<{ first_name: string; username: string }>(decodeBotToken(cfg), 'getMe');
@@ -108,7 +108,7 @@ export async function testTelegram(): Promise<Ok<{ botName: string; botUsername:
 
 export async function removeTelegramToken(): Promise<Ok> {
   try {
-    const user = await requireUser();
+    const user = await requireUser('admin');
     const cfg = await getTelegramConfig(user.tenantId);
     if (cfg && cfg.receiveMode === 'webhook') {
       await tg(decodeBotToken(cfg), 'deleteWebhook', {}).catch(() => undefined);
@@ -123,7 +123,7 @@ export async function removeTelegramToken(): Promise<Ok> {
 
 export async function setTestMode(enabled: boolean): Promise<Ok> {
   try {
-    const user = await requireUser();
+    const user = await requireUser('admin');
     await db
       .update(opsTelegramConfig)
       .set({ testMode: enabled, updatedAt: new Date() })
@@ -141,7 +141,7 @@ export async function saveMemberSettings(input: {
   dailyEnabled: boolean;
 }): Promise<Ok> {
   try {
-    const user = await requireUser();
+    const user = await requireUser('admin');
     await db
       .update(opsTelegramMembers)
       .set({
@@ -164,7 +164,7 @@ export async function saveMemberSettings(input: {
 // Genera un código nuevo (el anterior deja de valer). No desvincula a quien ya esté vinculado.
 export async function regenerateLinkCode(clickupUserId: string): Promise<Ok> {
   try {
-    const user = await requireUser();
+    const user = await requireUser('admin');
     await db
       .update(opsTelegramMembers)
       .set({ linkCode: newLinkCode(), updatedAt: new Date() })
@@ -183,7 +183,7 @@ export async function regenerateLinkCode(clickupUserId: string): Promise<Ok> {
 
 export async function unlinkMember(clickupUserId: string): Promise<Ok> {
   try {
-    const user = await requireUser();
+    const user = await requireUser('admin');
     await db
       .update(opsTelegramMembers)
       .set({ telegramChatId: null, telegramUsername: null, linkedAt: null, updatedAt: new Date() })
@@ -203,7 +203,7 @@ export async function unlinkMember(clickupUserId: string): Promise<Ok> {
 // Botón "Enviar resumen ahora".
 export async function sendDailyNow(): Promise<Ok<{ queued: number; withoutTasks: number }>> {
   try {
-    const user = await requireUser();
+    const user = await requireUser('admin');
     const res = await sendDailySummariesNow(user.tenantId);
     refresh();
     return { ok: true, ...res };
@@ -214,7 +214,7 @@ export async function sendDailyNow(): Promise<Ok<{ queued: number; withoutTasks:
 
 export async function sendTestMessage(): Promise<Ok> {
   try {
-    const user = await requireUser();
+    const user = await requireUser('admin');
     await enqueueTestNotification(user.tenantId);
     refresh();
     return { ok: true };
@@ -225,7 +225,7 @@ export async function sendTestMessage(): Promise<Ok> {
 
 export async function retryFailedNotification(id: string): Promise<Ok> {
   try {
-    const user = await requireUser();
+    const user = await requireUser('admin');
     await retryNotification(user.tenantId, id);
     refresh();
     return { ok: true };
@@ -238,7 +238,7 @@ export async function retryFailedNotification(id: string): Promise<Ok> {
 
 export async function activateWebhook(publicBaseUrl: string): Promise<Ok> {
   try {
-    const user = await requireUser();
+    const user = await requireUser('admin');
     const cfg = await getTelegramConfig(user.tenantId);
     if (!cfg) return { ok: false, error: 'Primero guarda el token del bot' };
 
@@ -265,7 +265,7 @@ export async function activateWebhook(publicBaseUrl: string): Promise<Ok> {
 
 export async function backToPolling(): Promise<Ok> {
   try {
-    const user = await requireUser();
+    const user = await requireUser('admin');
     const cfg = await getTelegramConfig(user.tenantId);
     if (!cfg) return { ok: false, error: 'No hay bot configurado' };
     await tg(decodeBotToken(cfg), 'deleteWebhook', { drop_pending_updates: false });

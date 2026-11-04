@@ -24,6 +24,7 @@ export type ProviderRowData = {
   isActive: boolean;
   isDefault: boolean;
   hasKey: boolean;
+  maskedKey: string | null;
   embeddingProvider: string | null;
   embeddingModel: string;
   hasEmbeddingKey: boolean;
@@ -179,7 +180,7 @@ function ProviderRow({
                 setApiKey(e.target.value);
                 setSaved(false);
               }}
-              placeholder={row.hasKey ? '••••••••' : 'Introduce una API key'}
+              placeholder={row.hasKey ? (row.maskedKey ?? '••••••••') : 'Introduce una API key'}
             />
           </div>
         </div>

@@ -16,6 +16,8 @@ import { TenantControlSection } from './tenant-control-section';
 import { PromptsSection } from './prompts-section';
 import { UsageMonitor } from './usage-monitor';
 import { SettingsTabs } from './settings-tabs';
+import { decrypt } from '@/lib/ai/encryption';
+import { maskSecret } from '@/lib/auth/mask';
 
 export default async function AiSettingsPage() {
   const user = await getUser();
@@ -46,6 +48,10 @@ export default async function AiSettingsPage() {
       isActive: existing?.isActive ?? false,
       isDefault: existing?.isDefault ?? false,
       hasKey: Boolean(existing?.apiKeyEncrypted),
+      maskedKey:
+        existing?.apiKeyEncrypted && existing.apiKeyIv
+          ? maskSecret(decrypt(existing.apiKeyEncrypted, existing.apiKeyIv))
+          : null,
       embeddingProvider: existing?.embeddingProvider ?? null,
       embeddingModel: existing?.embeddingModel ?? '',
       hasEmbeddingKey: Boolean(existing?.embeddingApiKeyEncrypted),
