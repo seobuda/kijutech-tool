@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { seoKwClusters, seoClusterCompetitors } from '@/lib/db/schema';
-import { assertUserInProjectTenant } from '@/lib/seo/access';
+import { assertUserInProjectTenant, requireEditPermission } from '@/lib/seo/access';
 import {
   deleteCompetitorUrl,
   updateScrapeResult,
@@ -28,6 +28,7 @@ const MAX_COMPETITOR_URLS = 5;
 // bloque guardan tenant_id directamente (seo_kw_clusters no lo tiene, solo
 // project_id).
 async function assertClusterAccess(clusterId: string) {
+  await requireEditPermission();
   const [cluster] = await db
     .select()
     .from(seoKwClusters)

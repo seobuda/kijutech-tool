@@ -13,7 +13,7 @@ import {
   seoShareTokens,
   type NewSeoKwProgress
 } from '@/lib/db/schema';
-import { KW_STEPS, assertUserInProjectTenant, ensureKwStepInProgress, setKwStepStatus, upsertStageStatus } from '@/lib/seo/access';
+import { KW_STEPS, assertUserInProjectTenant, ensureKwStepInProgress, setKwStepStatus, upsertStageStatus, requireEditPermission } from '@/lib/seo/access';
 import { getKwCompetitors, getKwRaw, getKwStepProgress, getShareToken } from '@/lib/seo/kw-queries';
 import { buildSeRankingInstructions, buildTutorPrompt } from '@/lib/seo/kw-instructions';
 import { publicError } from '@/lib/errors';
@@ -46,6 +46,7 @@ export async function saveTargetKeyword(projectId: string, keyword: string) {
 }
 
 async function assertCompetitorAccess(id: string) {
+  await requireEditPermission();
   const [competitor] = await db
     .select()
     .from(seoKwCompetitors)
@@ -256,6 +257,7 @@ export async function addKwRawManual(
 }
 
 async function assertRawAccess(id: string) {
+  await requireEditPermission();
   const [row] = await db.select().from(seoKwRaw).where(eq(seoKwRaw.id, id)).limit(1);
   if (!row) {
     throw new Error('Keyword no encontrada');
@@ -332,6 +334,7 @@ type ClusterInput = {
 };
 
 async function assertClusterAccess(id: string) {
+  await requireEditPermission();
   const [cluster] = await db
     .select()
     .from(seoKwClusters)
@@ -420,6 +423,7 @@ export async function updateClusterStrategy(
 }
 
 async function assertClusterKeywordAccess(id: string) {
+  await requireEditPermission();
   const [row] = await db
     .select()
     .from(seoKwClusterKeywords)

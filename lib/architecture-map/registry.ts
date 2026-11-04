@@ -2,6 +2,7 @@ import { getSeoManifest } from '@/lib/seo/manifest';
 import { CLUSTERING_PROCESS_MAP, type ProcessStep, type TechnicalDetail } from '@/lib/ai/clustering/pipeline';
 import { COMPETITOR_ANALYSIS_PROCESS_MAP } from '@/lib/seo/competitor-analysis-builder';
 import { OPS_MAPS } from '@/lib/operaciones/process-map';
+import { SECURITY_PROCESS_MAP } from '@/lib/auth/security-process-map';
 
 export interface SystemNode {
   id: string;
@@ -25,6 +26,21 @@ export interface SystemNode {
 // Infraestructura núcleo real (no son etapas del wizard SEO, así que no
 // viven en modules/seo/manifest.json).
 const CORE_NODES: SystemNode[] = [
+  {
+    id: 'core-security',
+    name: 'Seguridad',
+    description:
+      'Quién entra y qué puede hacer: inicio de sesión sin registro público, permisos por rol comprobados en el servidor, secretos fuera del código y pruebas automáticas.',
+    status: 'built',
+    icon: 'Shield',
+    detailMapId: 'security',
+    group: 'infrastructure',
+    technicalDetail: {
+      summary:
+        'Defensa en capas: sesión firmada, límite de intentos, permisos por rol en cada acción y ruta de API, aislamiento entre cuentas, tokens enmascarados, secretos en .env, cabeceras de seguridad y una batería de pruebas (pnpm test) que falla si alguna capa se rompe.',
+      stack: ['JWT (jose) + bcryptjs', 'Roles: lector, editor, admin, super_admin', 'Vitest'],
+    },
+  },
   {
     id: 'core-projects',
     name: 'Proyectos y Núcleo',
@@ -117,7 +133,7 @@ const CORE_NODES: SystemNode[] = [
 
 // Pendientes (en gris): todavía sin construir. Cada uno con una frase de qué será.
 const FUTURE_NODES: SystemNode[] = [
-  { id: 'future-servidor', name: 'Servidor', status: 'planned', icon: 'Circle', group: 'future', description: 'Subir la herramienta a un servidor con dirección pública: Telegram por webhook, copias de seguridad, usuarios y roles con seguridad real y limpieza de la plantilla.' },
+  { id: 'future-servidor', name: 'Servidor', status: 'planned', icon: 'Circle', group: 'future', description: 'Subir la herramienta a un servidor con dirección pública: Telegram por webhook, copias de seguridad, HTTPS, rotar la clave de cifrado, borrar el usuario de pruebas y poner contraseña y secreto de sesión nuevos.' },
   { id: 'future-jornada', name: 'Jornada y rendimiento', status: 'planned', icon: 'Circle', group: 'future', description: 'Medir rendimiento y no presencia, con flexibilidad: botones «tengo que salir» y «he vuelto», y la hora de entrada frente a la primera actividad real (se apoya en el registro de eventos).' },
   { id: 'future-niveles', name: 'Niveles y recompensas', status: 'planned', icon: 'Circle', group: 'future', description: 'Progreso visible, carreras con formaciones desbloqueables y bonos mensuales que se pueden perder, con un salario base que solo sube.' },
   { id: 'future-subagentes', name: 'Subagentes por área', status: 'planned', icon: 'Circle', group: 'future', description: 'Agentes de IA por área o por cliente que revisan el trabajo antes que tú, con su ficha y su criterio (por ejemplo, redacción con el tono de cada cliente o diseño web con tu criterio). Se enchufan como revisor intercambiable.' },
@@ -204,7 +220,7 @@ export function getSystemMap(): SystemNode[] {
 }
 
 // Todos los mapas de detalle conocidos (el Server Component los resuelve y los pasa al cliente).
-export const PROCESS_MAP_IDS = ['clustering', 'competitor_analysis', ...Object.keys(OPS_MAPS)];
+export const PROCESS_MAP_IDS = ['clustering', 'competitor_analysis', 'security', ...Object.keys(OPS_MAPS)];
 
 export function getProcessMap(detailMapId: string): ProcessStep[] {
   switch (detailMapId) {
@@ -212,6 +228,8 @@ export function getProcessMap(detailMapId: string): ProcessStep[] {
       return CLUSTERING_PROCESS_MAP;
     case 'competitor_analysis':
       return COMPETITOR_ANALYSIS_PROCESS_MAP;
+    case 'security':
+      return SECURITY_PROCESS_MAP;
     default:
       return OPS_MAPS[detailMapId] ?? [];
   }

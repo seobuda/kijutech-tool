@@ -3,11 +3,11 @@
 > **Documento vivo y de referencia.** Recoge todo lo que existe, cómo funciona, qué está decidido, qué se ha probado y qué falta. Se actualiza al cerrar cada paso de trabajo (junto al documento de sesión y al Mapa Visual).
 > **No contiene claves, contraseñas ni valores de `.env`** (solo sus nombres).
 
-**Fecha de esta versión:** 2026-10-31 (paso 7: preparar el piloto del lunes 2 nov)
-**Rama de trabajo:** `feature/paso-7-piloto` (creada desde `main`; cada mejora nueva va en su propia rama). **Operaciones ya está fusionada en `main`** (fast-forward, 30 oct): `main` y `operaciones` coinciden en `9110754f`; la rama `operaciones` se mantiene.
+**Fecha de esta versión:** 2026-11-04 (paso 8: seguridad antes de subir a un servidor)
+**Rama de trabajo:** `feature/seguridad` (creada desde `feature/paso-7-piloto`, que aún no está fusionada en `main`; el paso 8 depende del 7). **No se ha unido a `main`: espera la aprobación de Enric.** **Operaciones ya está fusionada en `main`** (fast-forward, 30 oct): `main` y `operaciones` coinciden en `9110754f`; la rama `operaciones` se mantiene.
 **Rama `main`:** `9110754f` hasta que se apruebe y fusione el paso 7. Ramas antiguas de SEO (`feature/fase-d-*`, `feature/mapa-visual-sistema`) ya fusionadas.
 **Repositorio:** `https://github.com/seobuda/kijutech-tool` (origen `origin`).
-**Informes anteriores:** `docs/INFORME-ESTADO.md` (auditoría del 29 oct, previa a Operaciones; su análisis de SEO y de seguridad sigue vigente) y `docs/sessions/` (un documento por sesión, 45 hasta hoy).
+**Informes anteriores:** `docs/INFORME-ESTADO.md` (auditoría del 29 oct, previa a Operaciones; su análisis de SEO y de seguridad sigue vigente) y `docs/sessions/` (un documento por sesión, 47 hasta hoy). Reglas y comandos de seguridad: §13.
 
 ---
 
@@ -60,22 +60,25 @@ Todo corre **dentro de Docker**. **Nunca** se ejecuta `pnpm`/`npm` en el host Wi
 | Backup antes de migrar un módulo | `docker exec kijutech_db pg_dump -U kijutech -d kijutech_db > backups/backup_pre_<modulo>_<fecha>.sql` |
 | Restaurar (sobre BD limpia) | `docker exec -i kijutech_db psql -U kijutech -d kijutech_db < backups/backup_pre_<modulo>_<fecha>.sql` |
 | Comprobar el Mapa Visual | `node scripts/check-architecture-map.js` (o `pnpm check:map` en el contenedor) |
+| **Pruebas de seguridad** (70 pruebas; reconstruir antes para que lleven el código actual) | `docker exec kijutech_app pnpm test` |
 | Logs | `docker logs kijutech_app` |
 
 - **URL de la app:** `http://127.0.0.1:3000` (**nunca `localhost`**: da `ERR_CONNECTION_RESET` en esta máquina por IPv6 + WSL2 + Docker Desktop). Para el usuario de pruebas se usa `http://ops-test.localhost:3000` (host aparte, para tener otra sesión).
-- **Contenedores:** `kijutech_app` (Next.js, puerto 3000) y `kijutech_db` (PostgreSQL 16 con `pgvector`, puerto 5432, volumen `kijutech_pgdata`).
-- **Variables de entorno** (solo nombres): `POSTGRES_URL`, `BASE_URL`, `AUTH_SECRET`, `AI_ENCRYPTION_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `OPS_TEST_EMAIL`, `OPS_TEST_PASSWORD` (estas dos en `.env`, no versionado). Opcionales de desarrollo: `OPS_DEV_REMINDER_MINUTES` (acorta los recordatorios) y `OPS_SIMULATE_FAILURE` (simula fallo de ClickUp).
+- **Contenedores:** `kijutech_app` (Next.js, puerto 3000) y `kijutech_db` (PostgreSQL 16 con `pgvector`; **solo escucha en `127.0.0.1:5433`** del equipo, porque el 5432 lo ocupa un PostgreSQL de Windows; volumen `kijutech_pgdata`).
+- **Variables de entorno** (solo nombres; todas en `.env`, no versionado, plantilla en `.env.example`): `POSTGRES_PASSWORD`, `POSTGRES_URL`, `BASE_URL`, `AUTH_SECRET`, `AI_ENCRYPTION_KEY`, `OPS_TEST_EMAIL`, `OPS_TEST_PASSWORD`, `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD` (solo para `db:seed`). `docker-compose.yml` ya no lleva secretos: los lee de `.env` con `${…}` y se niega a arrancar si faltan. Opcionales de desarrollo: `OPS_DEV_REMINDER_MINUTES` (acorta los recordatorios) y `OPS_SIMULATE_FAILURE` (simula fallo de ClickUp).
 - **Procesos de fondo:** `instrumentation.ts` arranca, dentro de `kijutech_app`, la escucha del bot de Telegram y el planificador (cada 30 s). No hay servicios aparte.
-- **Dockerfile.dev:** fija `pnpm 11.21.0` (`packageManager` + corepack) para que la imagen reconstruya.
+- **Dockerfile.dev:** fija `pnpm 11.21.0` (`packageManager` + corepack). Copia también `pnpm-workspace.yaml` (lleva las excepciones de `minimumReleaseAge` de Next 16.4.5; se pueden quitar cuando el paquete cumpla 2 días) y compila con un `POSTGRES_URL` de relleno solo durante el build.
+- **`.dockerignore`** (arreglado en el paso 8: tenía comillas invertidas y no excluía nada): deja fuera `.env`, `.git`, `backups/`, `node_modules` y `.next` de la imagen.
+- **Para cambiar dependencias sin tocar Windows** (patrón usado en el paso 8): `docker run --rm -v "C:\dev\kijutech-tool:/work" -v /work/node_modules -w /work node:24-alpine sh -c "corepack enable && pnpm …"` (el volumen anónimo evita que `node_modules` aterrice en el host).
 - **Nunca** `docker compose down -v` ni nada que borre el volumen de la base de datos.
-- **Migraciones:** `lib/db/migrations/0000`…`0035` (36). Las de Operaciones son `0022`–`0035`. Hay scripts SQL sueltos de prompts en `scripts/` (ver §8).
+- **Migraciones:** `lib/db/migrations/0000`…`0037` (38). Las de Operaciones son `0022`–`0036`; `0037_auth_login_attempts` es la del límite de intentos de inicio de sesión (a mano, como las anteriores: el journal no tiene snapshots desde la 0029). Hay scripts SQL sueltos de prompts en `scripts/` (ver §8).
 
 ## 3. Stack y versiones
 
 | Pieza | Versión / detalle |
 |---|---|
-| Next.js | `15.6.0-canary.59` (App Router; canary, no estable) |
-| React | 19.1 |
+| Next.js | **`16.4.5`** (estable; App Router; Turbopack). `middleware.ts` pasó a **`proxy.ts`**. Subida desde `15.6.0-canary.59` en el paso 8 |
+| React | 19.3.1 |
 | Node (contenedor) | 24.x (`node:24-alpine`) |
 | PostgreSQL | 16 con extensión `vector` (imagen `pgvector/pgvector:pg16`) |
 | ORM | Drizzle (`drizzle-orm` 0.43, `drizzle-kit` 0.31) |
@@ -83,9 +86,9 @@ Todo corre **dentro de Docker**. **Nunca** se ejecuta `pnpm`/`npm` en el host Wi
 | Auth | JWT en cookie httpOnly con `jose` + `bcryptjs` (incluida en la plantilla; **no** NextAuth ni Clerk) |
 | Mapa Visual | `@xyflow/react` |
 | Clustering | embeddings + `hdbscan-ts` |
-| Otras | `zod`, `swr`, `stripe` (**instalado pero INACTIVO**, no configurar sin orden explícita) |
+| Otras | `zod`, `swr`. **Stripe eliminado** en el paso 8 (rutas, `lib/payments`, dependencia, `db:setup`); las columnas `stripe_*` de `teams` siguen en la BD (deuda) |
 | Gestor | `pnpm` (dentro de Docker) |
-| Pruebas automáticas | **No hay** (ni vitest ni jest); solo `tsc` (en el build) y la comprobación del Mapa Visual |
+| Pruebas automáticas | **Vitest 5.1.0** (`pnpm test` dentro del contenedor: 70 pruebas de seguridad), `tsc` en el build y la comprobación del Mapa Visual |
 
 ## 4. Reglas de trabajo y restricciones vigentes
 
@@ -100,12 +103,13 @@ Todo corre **dentro de Docker**. **Nunca** se ejecuta `pnpm`/`npm` en el host Wi
 - **ClickUp:** caché en BD y consultas agrupadas por workspace; todo pasa por `lib/operaciones/clickup.ts` (contador por minuto, espera ante el límite, reintento ante 429; nunca `fetch` directo); medir las peticiones de cualquier pantalla nueva; tareas de prueba SOLO en la lista «Pruebas Kiju», asignadas al dueño del token.
 - **Telegram:** un solo oyente del bot (candado de PostgreSQL 74200126); todo aviso por `ops_notifications`; todo cambio hacia ClickUp que dispare el flujo por `ops_clickup_outbox`; cada pulsación con `logEvent`.
 - **Verificación tras cada despliegue** con el usuario de pruebas (ver §20).
+- **Seguridad (regla permanente desde el paso 8):** toda acción del servidor o ruta de API nueva llama a su guard de `lib/auth/permissions.ts` (`getUserIfAllowed`, `requirePermission`, `checkPermission`…) antes de hacer nada; las funciones internas no se exportan desde archivos `'use server'` (van en un módulo con `server-only`); nada de secretos en archivos versionados; **`docker exec kijutech_app pnpm test` debe pasar antes de cada commit de cierre de paso** (una auditoría estática falla si una acción nueva no tiene guard).
 - **Arquitectura:** el núcleo nunca depende de un módulo; si para resolver algo de un módulo parece necesario tocar el núcleo, se para y se pregunta.
 
 ### Dadas por Enric durante el trabajo (no están todas en `CLAUDE.md`)
 - **No incluir claves, contraseñas ni `.env`** en informes; no repetir valores de credenciales. La contraseña del usuario de pruebas solo vive en `.env`.
 - **Fichas de cliente sin contraseñas** (el código rechaza textos del tipo «contraseña: …»).
-- **Seguridad de plantilla, registro abierto, roles, pruebas automáticas y limpieza de plantilla: aplazados «ahora»**; se harán antes de subir a un servidor.
+- **Seguridad de plantilla, registro abierto, roles y pruebas automáticas: hechos en el paso 8 (4 nov)**, en la rama `feature/seguridad`. Queda la limpieza de la plantilla y lo de §16.
 - **SQL:** mostrar el SQL de toda tabla o columna nueva y **esperar aprobación** antes de aplicar; siempre con backup previo.
 - **ClickUp real:** tareas SOLO en «Pruebas Kiju» (espacio «🎨 Desarrollo y Diseño Web», lista `1200940000008801`, workspace `90151902543`), **asignadas a Enric Tabilo** (se denegó asignar a otras personas); las notas de prueba se borran al terminar; **las tareas de ClickUp no las borra el asistente**, las borra Enric.
 - **Telegram Web sin sesión:** el asistente no inicia sesión; las pulsaciones de botones reales las hace Enric.
@@ -119,7 +123,7 @@ Todo corre **dentro de Docker**. **Nunca** se ejecuta `pnpm`/`npm` en el host Wi
 - **Módulos:** toda tabla lleva el prefijo del módulo (`seo_*`, `ops_*`, `ai_*` para la pasarela de IA).
 - **Pasarela de IA** (`lib/ai/gateway.ts`, `callAI()`): punto único para todo modelo (proveedor y clave, cifrado AES-256-GCM, timeout de 60 s, `max_tokens` configurable, coste, registro en `ai_jobs`).
 - **Panel (rutas bajo `/dashboard`):** `projects` (SEO), `ai` (Configuración, Cerebro, Mis claves, prompts), `seo` (admin de tarjetas y ajustes), `operaciones`, `architecture` (Mapa Visual, solo super admin), y restos de la plantilla (`general`, `activity`, `security`).
-- **API:** `/api/operaciones/{audio,equipo-audio}`, `/api/telegram/webhook` (preparada para servidor), `/api/projects/[id]/…` (progreso), `/api/user`, `/api/team`, `/api/stripe/*` (sin uso).
+- **API:** `/api/operaciones/{audio,equipo-audio}`, `/api/telegram/webhook` (preparada para servidor), `/api/projects/[id]/…` (progreso), `/api/user` (solo id, nombre y correo), `/api/team` (solo nombre y correo, con sesión y rol). Las rutas de Stripe ya no existen.
 
 ## 6. Módulo Operaciones (detalle completo)
 
@@ -249,7 +253,7 @@ Construido en agosto de 2026 (Fases A–D). Detalle y auditoría completa en `do
 
 ## 10. Base de datos
 
-**Total: 66 tablas** (11 núcleo, 15 SEO, 7 IA, 33 Operaciones). Conteos reales a 2026-10-30; las 3 tablas del paso 7 (`ops_cleanup_runs`, `ops_cleanup_items`, `ops_suggestions`) se crearon el 31 oct (1 tanda de limpieza real en curso para Enric, 30 tareas).
+**Total: 67 tablas** (12 núcleo, 15 SEO, 7 IA, 33 Operaciones; la nueva del paso 8 es `auth_login_attempts`, intentos de inicio de sesión, migración 0037). Conteos reales a 2026-10-30; las 3 tablas del paso 7 (`ops_cleanup_runs`, `ops_cleanup_items`, `ops_suggestions`) se crearon el 31 oct (1 tanda de limpieza real en curso para Enric, 30 tareas).
 
 **Núcleo / plantilla:** `tenants` 1 · `users` 2 · `roles` 4 · `user_roles` 1 · `projects` 1 · `modules` 1 · `project_modules` 0 · `teams` 2 · `team_members` 2 · `invitations` 0 · `activity_logs` 10 (`teams`, `team_members` e `invitations` son restos de la plantilla pendientes de limpieza).
 
@@ -291,38 +295,67 @@ Construido en agosto de 2026 (Fases A–D). Detalle y auditoría completa en `do
 | **Anthropic** | Modelo por defecto de todas las funciones de IA | Funciona |
 | **SE Ranking** | Importación de keywords por CSV | Funciona (manual) |
 | **DataForSEO** | Volúmenes, SERP, auditoría | **No integrado** (planeado) |
-| **Stripe** | Plantilla | Instalado e **inactivo**; la clave inválida genera «Invalid API Key» al visitar la zona de pagos |
+| ~~Stripe~~ | Plantilla | **Eliminado** en el paso 8 (rutas, `lib/payments`, dependencia) |
 
 ## 12. Mapa Visual del Sistema y su comprobación
 
-- **`/dashboard/architecture`** (solo super admin): React Flow en **tres niveles** con migas de pan. Nivel 1: Núcleo, Motor de IA, Cerebro, Admin SEO, **Operaciones (construido)**, **Integraciones**, Análisis de competidores, el wizard SEO y **10 pendientes en gris**. Nivel 2: 15 procesos y piezas de Operaciones (nuevas: Limpieza de vencidas y Piloto). Nivel 3: 77 pasos en 13 mapas con *cuándo se ejecuta, qué decide la IA, qué decide el código, tablas, prompts, ajustes con sus valores actuales y enlace al ajuste*.
+- **`/dashboard/architecture`** (solo super admin): React Flow en **tres niveles** con migas de pan. Nivel 1: Núcleo, **Seguridad (nuevo en el paso 8; abre un mapa de 7 pasos: inicio de sesión, límite de intentos, permisos por rol, secretos y claves, enlaces públicos, errores y cabeceras, pruebas)**, Motor de IA, Cerebro, Admin SEO, **Operaciones (construido)**, **Integraciones**, Análisis de competidores, el wizard SEO y **10 pendientes en gris**. Nivel 2: 15 procesos y piezas de Operaciones (nuevas: Limpieza de vencidas y Piloto). Nivel 3: 77 pasos en 13 mapas con *cuándo se ejecuta, qué decide la IA, qué decide el código, tablas, prompts, ajustes con sus valores actuales y enlace al ajuste*.
 - **Mapa vivo:** muestra los **valores actuales del panel** y la **última ejecución / error** de vigilancia, pasada de actividad, resúmenes, recordatorios, cola de avisos, bandeja de salida, Telegram, planificador y caché de ClickUp (`lib/operaciones/map-live.ts`).
 - **Recorrido nota → completada** con botones «Sigue en…».
-- **Datos:** `lib/operaciones/process-map.ts` (`OPS_MAPS`), `lib/architecture-map/registry.ts` (nivel 1, `FUTURE_NODES`, `PROCESS_MAP_IDS`); SEO usa `CLUSTERING_PROCESS_MAP` y `COMPETITOR_ANALYSIS_PROCESS_MAP`.
-- **Comprobación automática:** `scripts/check-architecture-map.js` falla si una automatización del panel, una tarea del planificador, un prompt de IA o una tabla `ops_*` no tiene su entrada, o si el mapa está roto. **Estado: pasa** (13 automatizaciones, 7 tareas del planificador, 6 prompts, 33 tablas, 77 pasos, 13 mapas). Solo cubre Operaciones y valida presencia y coherencia, no la veracidad de las descripciones.
+- **Datos:** `lib/operaciones/process-map.ts` (`OPS_MAPS`), `lib/architecture-map/registry.ts` (nivel 1, `FUTURE_NODES`, `PROCESS_MAP_IDS`); SEO usa `CLUSTERING_PROCESS_MAP` y `COMPETITOR_ANALYSIS_PROCESS_MAP`; Seguridad usa `SECURITY_PROCESS_MAP` (`lib/auth/security-process-map.ts`).
+- **Comprobación automática:** `scripts/check-architecture-map.js` falla si una automatización del panel, una tarea del planificador, un prompt de IA o una tabla `ops_*` no tiene su entrada, o si el mapa está roto. **Estado: pasa** (13 automatizaciones, 7 tareas del planificador, 6 prompts, 33 tablas, 77 pasos, 13 mapas; desde el paso 8 también comprueba que existan los archivos que cita el mapa de Seguridad). Solo cubre Operaciones y Seguridad y valida presencia y coherencia, no la veracidad de las descripciones.
 
 ## 13. Seguridad
 
-**Decisión vigente:** la seguridad de plantilla, el registro, los roles y las pruebas automáticas se **aplazan** y se hacen **antes de subir a un servidor**.
+**Estado (4 nov, paso 8, rama `feature/seguridad`, sin fusionar en `main`):** los riesgos altos y medios heredados están cerrados y comprobados con 70 pruebas automáticas (`docker exec kijutech_app pnpm test`). Lo que queda para producción está al final de esta sección.
 
-**Bien hecho:** las acciones de SEO y proyectos comprueban usuario y que el proyecto sea de su tenant; las de IA y ajustes exigen super admin; claves de IA y token de ClickUp **cifrados**; ids de tenant derivados del usuario; Telegram con vinculación de un solo uso, chats no vinculados ignorados y botones restringidos; avisos y envíos con claves únicas.
+**Permisos por rol** (`lib/auth/permissions.ts`, comprobados en el servidor en **todas** las acciones y rutas de API; ocultar un botón no cuenta):
 
-**Riesgos abiertos (heredados y de Operaciones)**
-1. **Alto — registro abierto:** `/sign-up` mete a cualquiera en el tenant Kijutech; las acciones comprueban la cuenta pero no el rol, así que un desconocido con cuenta vería y editaría proyectos.
-2. **Alto — sin comprobación de rol en acciones SEO:** un `lector` puede crear, editar y borrar.
-3. **Alto — Operaciones sin control de roles:** cualquier usuario del tenant puede ver, cambiar o borrar el token de ClickUp, cambiar automatizaciones, fichas y clientes, y enviar pruebas (`canManageProfiles` devuelve `true` para cualquier usuario). **Condición obligatoria: resolver este riesgo (control de roles en Operaciones) ANTES de dar acceso a la web a cualquier miembro del equipo y antes de subir a un servidor.** Decisión de Enric, sin excepciones.
-4. **Medio — `/api/user` devuelve el usuario completo (con el hash) y `/api/team` los miembros.**
-5. **Medio — middleware excluye `/api`**; la protección depende de cada ruta.
-6. **Medio — enlaces públicos `/share/[token]`:** UUID sin caducidad, sin revocar ni regenerar, sin límite de peticiones.
-7. **Bajo — secretos de desarrollo en `docker-compose.yml`** versionados (contraseña de BD, `AUTH_SECRET`, `AI_ENCRYPTION_KEY`): rotar si el repositorio sale de esta máquina.
-8. **Bajo — mensajes de error internos** visibles al usuario.
-9. **Telegram:** con varios servidores el candado impide dos oyentes, pero las cachés en memoria (Equipo hoy 2 min, panel 10 s, mes de clientes 2 min, contador de peticiones) son **por proceso**. Un duplicado teórico es posible si el servidor cae justo entre enviar y anotar un mensaje (Telegram no tiene clave de idempotencia).
+| Quién | Puede |
+|---|---|
+| `lector` | solo ver |
+| `editor` | además: Bloc, encargos, fichas (editar), SEO (modificar), crear/editar proyectos |
+| `admin` | además: tokens de ClickUp y Telegram, Automatizaciones, Niveles y servicios, estados y tipos de trabajo, Piloto y limpiezas, vigilancia, borrar fichas o clientes, archivar/borrar proyectos |
+| `super_admin` | además: gestionar usuarios, ajustes de IA y de SEO |
+
+- **Mi bandeja:** solo del dueño (la persona cuya ficha de equipo está enlazada al usuario de ClickUp del token; si no hay ficha enlazada, solo `super_admin`).
+- **Un usuario sin ningún rol no puede ni ver.** El usuario de pruebas `ops-test` tiene rol `editor` (asignado el 4 nov).
+- Las pantallas de Ajustes ClickUp, Automatizaciones, Telegram y Piloto redirigen a quien no es admin. **Pendiente cosmético:** sus pestañas aún se ven (la acción se rechaza igual).
+- **Tokens** (ClickUp, Telegram, claves de IA): nunca viajan al navegador; en pantalla solo enmascarados (`pk_…a1b2`, `lib/auth/mask.ts`).
+- **Funciones internas** de SEO (`ensure*`, `upsert*`, `assert*`) viven en `lib/seo/access.ts` con `server-only`; en un archivo `'use server'` cada función exportada es un endpoint. `assertUserInProjectTenant` **devolvía el usuario completo (con el hash)** a quien la invocara: corregido.
+
+**Puertas cerradas**
+- **Sin registro público:** `/sign-up` y `/pricing` redirigen a `/sign-in`. Los usuarios los da de alta un `super_admin` en `/dashboard/usuarios` (contraseña de 12+ caracteres y rol obligatorio; nace en la cuenta de quien lo crea).
+- **Límite de intentos:** 5 fallos en 15 min bloquean ese correo (tabla `auth_login_attempts`, por correo y no solo por IP; un acierto borra los fallos). Mensaje idéntico exista o no el correo.
+- **Fuga corregida:** `app/layout.tsx` serializaba el usuario completo (con `password_hash`) en el HTML de todas las páginas con sesión, y `/api/user` lo devolvía. Ahora solo `id`, `name`, `email`. `/api/team` solo devuelve nombre y correo, y exige sesión con rol.
+- **Secretos:** fuera de `docker-compose.yml` (que los lee de `.env`, ignorado por Git y por Docker); `.env.example` sin valores; el compose se niega a arrancar si faltan. **Siguen en el historial de Git** (estuvieron versionados): `scripts/rotate-encryption-key.js` re-cifra las claves guardadas con una clave nueva (prueba en seco por defecto, `--apply` en una transacción). Se ejecutará al migrar a producción; `AUTH_SECRET` y la contraseña de la BD también serán nuevos allí.
+- **`.dockerignore` roto:** tenía comillas invertidas y no excluía nada, así que la imagen llevaba `.env`, `.git` y `backups/` (volcados de la BD). Arreglado.
+- **PostgreSQL** ya no escucha en todas las interfaces: solo `127.0.0.1:5433`.
+- **Enlaces `/share`:** botones **Regenerar** (invalida el anterior) y **Desactivar** (borra el token) por proyecto.
+- **Errores:** `publicError()` (`lib/errors.ts`) oculta el detalle técnico (BD, red, trazas) y lo deja en `docker logs`; `app/error.tsx` es genérica y en español.
+- **Cabeceras** en `next.config.ts`: `X-Frame-Options`, `nosniff`, `Referrer-Policy`, `Permissions-Policy`, HSTS y una CSP básica **sin `script-src`** (Next usa scripts en línea; una CSP con nonce se monta aparte).
+- **Fachada:** Stripe eliminado; `/` redirige al inicio de sesión; «Kijutech Tool» en lugar de «ACME» y en el título; inicio de sesión, 404 y error en español; `seed.ts` sin credenciales por defecto.
+- **Aislamiento entre cuentas:** una cuenta ajena (aunque sea `super_admin` de la suya) no lee ni modifica nada de Kijutech, y recibe el mismo mensaje para «no existe» que para «es de otra cuenta».
+
+**Pruebas automáticas** (`tests/`, Vitest, dentro del contenedor; usan cookies de sesión **reales** firmadas con `AUTH_SECRET`, no simulan la autenticación; crean usuarios `seg-test-*` por rol y otra cuenta, y los borran al terminar): aislamiento entre cuentas, lector sin escritura, editor sin tokens/automatizaciones/usuarios, sin sesión sin acceso, `/api/user` sin hash, `/sign-up` sin efecto, límite de intentos, cabeceras, y **auditorías estáticas** (toda acción exportada tiene guard; las funciones internas no se exportan; ningún valor real de `AUTH_SECRET`/`AI_ENCRYPTION_KEY` en archivos; sin Stripe ni registro; el usuario completo no llega al navegador). Se comprobó que **fallan si se rompe un guard** (dos guards rotos a propósito, pruebas en rojo, restaurados).
+
+**Riesgos que quedan**
+1. **Antes de producción — rotar secretos:** ejecutar `rotate-encryption-key.js`; `AUTH_SECRET` y contraseña de la BD nuevos; borrar el usuario de pruebas. Los valores de desarrollo siguen en el historial de Git.
+2. **Medio — el matcher de `proxy.ts` excluye `/api`**: la protección depende de cada ruta (ahora la vigila una auditoría), no de un punto único.
+3. **Medio — sin CSP con `script-src`** (necesita nonce) ni HTTPS hasta que haya servidor.
+4. **Medio — `x-forwarded-for` es falsificable:** el límite de intentos cuenta por correo, así que no depende de la IP, pero la IP guardada no es fiable sin un proxy de confianza.
+5. **Bajo — enlaces `/share`:** UUID sin caducidad ni límite de peticiones (ahora se pueden revocar a mano).
+6. **Bajo — mensajes de error:** `publicError` filtra por patrones técnicos; un mensaje técnico que no encaje en ellos podría verse.
+7. **Bajo — el cambio de rol o la baja de un usuario** se hacen en la BD (no hay pantalla); la sesión dura 1 día y no se invalida al cambiar el rol (el rol se lee en cada acción, así que el cambio sí surte efecto de inmediato).
+8. **Telegram:** con varios servidores el candado impide dos oyentes, pero las cachés en memoria (Equipo hoy 2 min, panel 10 s, mes de clientes 2 min, contador de peticiones) son **por proceso**. Un duplicado teórico es posible si el servidor cae justo entre enviar y anotar un mensaje.
+9. **Puntos no verificables con el usuario de pruebas:** las pantallas de administración (Arquitectura, IA, SEO admin) y el alta de usuarios por la interfaz se comprobaron por pruebas automáticas, no con un clic de `super_admin` en el navegador.
 
 ## 14. Datos y elementos de prueba (a limpiar antes de servidor)
 
 > **Paso 7:** antes del piloto se borran de la base de datos los encargos, eventos, avisos y notas de prueba anteriores (sin tocar fichas, clientes, configuración, cachés ni `ops_clickup_task_snapshots`), con recuento previo y OK de Enric. El usuario de pruebas se queda hasta antes de subir a un servidor.
 
-- **Usuario de pruebas** de desarrollo: `ops-test@kijutech.test` (contraseña solo en `.env`; accede por `http://ops-test.localhost:3000`). **Debe borrarse antes de subir a un servidor.**
+- **Usuarios de las pruebas de seguridad:** `seg-test-*` (uno por rol y una cuenta ajena `seg-test-otra-cuenta`); los crea y borra `pnpm test`. Si una ejecución se corta a medias, la siguiente los limpia al empezar.
+- **Usuario de pruebas** de desarrollo (rol `editor`): `ops-test@kijutech.test` (contraseña solo en `.env`; accede por `http://ops-test.localhost:3000`). **Debe borrarse antes de subir a un servidor.**
 - **Tareas de ClickUp** en «Pruebas Kiju» que Enric debe borrar: `[PRUEBA PASO 5]` A–E · `[PRUEBA 6C]` · `[PRUEBA 6C-2]` A, B, B2, C, D (el asistente no borra tareas de ClickUp).
 - **Datos de prueba en la BD:** encargos y notas de prueba (de los 27 encargos y 2 notas), eventos, avisos, un bloqueo, la ficha «RF Serveis» rellenada como prueba (revisar sus datos), entradas del registro de cambios del panel, y la tarea de Eury de «CP Poblenou» (real, asignada en ClickUp).
 - **Sesión de Chrome:** el navegador de automatización tiene sesión de ClickUp de **Mayelin** (se usó como «otra persona»); Telegram Web no tiene sesión.
@@ -333,14 +366,19 @@ Construido en agosto de 2026 (Fases A–D). Detalle y auditoría completa en `do
 
 **Probado con datos reales:** conversión de notas con IA; envío a ClickUp (tareas reales en «Pruebas Kiju»); caché y contador; Bloc con autoguardado, fallo simulado, copia local y reintento; flujo de botones con Telegram simulado y ClickUp/IA reales; Telegram real para avisos y la prueba del panel (llegan al dueño); recordatorios (sin respuesta, tras «Más tarde», «Sin respuesta» en el resumen); vigilancia (aviso por tarea nueva, cierre en ClickUp → completado, reasignación); semáforo de clientes con datos reales (RF Serveis verde, «san bernardo» rojo temporal); «Trabajo de este mes»; panel (cambio de un tiempo aplicado sin tocar código, texto editado con la prueba recibida); lógica del silencio (cálculo de huecos); Mapa Visual (recorrido por clics y valores reales); `tsc` en cada build y log del servidor sin `ReferenceError`.
 
+**Probado en el paso 8 (seguridad):** Next 16.4.5 con todas las pantallas de Operaciones y SEO, bot y planificador arrancados y logs limpios; inicio de sesión (acierto, fallo, bloqueo a los 5 intentos y desbloqueo al borrar los fallos) en el navegador; redirecciones de `/`, `/sign-up`, `/pricing`; cabeceras; ausencia de `passwordHash` en el HTML y en `/api/user`; rol editor con páginas de administración redirigidas y Mi bandeja privada; migración 0037; `pnpm test` (70 pruebas) y su sensibilidad a guards rotos.
+
 **Probado en el paso 7:** pestañas Piloto, Equipo y Automatizaciones (cargan, métricas con datos reales de las pruebas previas, fecha de inicio guardada y restaurada); envío real de la limpieza de las vencidas de Enric a su Telegram (30 tareas + 1 para otra tanda; llegó el primer mensaje con botones); «Sistema en marcha» tras reconstruir y tras `docker restart` de los dos contenedores («Reinicio rápido»); política `unless-stopped` en ambos contenedores.
 
-**No probado:** las pulsaciones de la limpieza (cerrar, nueva fecha, escribir fecha, descartar, parar) y `/sugerencia`/`/ayuda` desde el móvil (las pulsa Enric); la simulación de tareas de otras personas en la práctica; la exclusión de tareas limpiadas en «Trabajo de este mes» y en la pasada de actividad con datos reales; un apagado real en horario laboral (mensaje con tiempo y pendientes); el arranque automático tras reiniciar Windows; pulsaciones de botones reales desde el móvil de cada persona (salvo las de Enric); un 409/429 real; audio de extremo a extremo (clave de Gemini sin créditos; formato `webm`); silencio con envíos reales (modo pruebas desactivado); varios servidores; alertas con clientes completados (hoy 50 de 52 en gris); cualquier prueba automática (no existen).
+**No probado:** las pulsaciones de la limpieza (cerrar, nueva fecha, escribir fecha, descartar, parar) y `/sugerencia`/`/ayuda` desde el móvil (las pulsa Enric); la simulación de tareas de otras personas en la práctica; la exclusión de tareas limpiadas en «Trabajo de este mes» y en la pasada de actividad con datos reales; un apagado real en horario laboral (mensaje con tiempo y pendientes); el arranque automático tras reiniciar Windows; pulsaciones de botones reales desde el móvil de cada persona (salvo las de Enric); un 409/429 real; audio de extremo a extremo (clave de Gemini sin créditos; formato `webm`); silencio con envíos reales (modo pruebas desactivado); varios servidores; alertas con clientes completados (hoy 50 de 52 en gris); las pantallas de administración y el alta de usuarios con un clic real de `super_admin` en el navegador.
 
 ## 16. Pendientes y deuda técnica
 
 **Antes de subir a un servidor**
-- Seguridad, roles y registro abierto (§13); limpieza de la plantilla (logo ACME, portada, Stripe, textos en inglés, `README.md`, título «Next.js SaaS Starter», tablas `teams`/`invitations`, TODO de email de invitación en `app/(login)/actions.ts`); pruebas automáticas; rotar secretos.
+- **Seguridad:** hecha en el paso 8 (§13); falta **rotar secretos** al migrar (`scripts/rotate-encryption-key.js`, `AUTH_SECRET` y contraseña de la BD nuevos) y decidir cuándo se fusiona `feature/seguridad`.
+- **Limpieza de la plantilla que queda:** `README.md`, tablas `teams`/`team_members`/`invitations` y columnas `stripe_*` de `teams` (migración futura), páginas `general`, `activity` y `security` heredadas del starter (revisar o quitar), textos sobrantes en inglés.
+- Pantalla para cambiar el rol o dar de baja a un usuario (hoy solo alta); ocultar las pestañas de administración a quien no es admin.
+- CSP con `script-src` por nonce cuando haya servidor y HTTPS.
 - Borrar el usuario de pruebas, tareas `[PRUEBA …]` y datos de prueba (§14); apagar el modo pruebas; pasar Telegram a webhook; copias de seguridad programadas.
 - Redirección para el enlace «Abrir tarea» de Encargos (hoy no registra clics): pasar por la herramienta.
 - Cachés por proceso (un solo servidor por ahora).
@@ -359,7 +397,7 @@ Construido en agosto de 2026 (Fases A–D). Detalle y auditoría completa en `do
 - El adjunto de audios: si falla a mitad de varios, al reintentar se vuelven a adjuntar los primeros. No hay precio del modelo de transcripción, así que su coste sale vacío.
 - Al desactivar o borrar una ficha de Equipo no se cambian los encargos ya asignados.
 - Las fichas de **Eury y Mayelin** las crea Enric (solo Jesús está rellenado). **Posibles duplicados de clientes** sin resolver (los resuelve Enric; no fusionar nada): `sih` / `Sihbou.com`; «clubpilatesindautxu.es» frente a la familia «CP …» y `PilatesClubSpain.com`; `Spid2005.com` / `SonidoFundamental`.
-- SEO: 0 hallazgos de auditoría; análisis de competidores sin filas guardadas; el botón «Activar» del pre-filtrado del Cerebro es un placeholder; `ai_jobs` no guarda el mensaje de error; Next.js en canary; sin hot-reload.
+- SEO: 0 hallazgos de auditoría; análisis de competidores sin filas guardadas; el botón «Activar» del pre-filtrado del Cerebro es un placeholder; `ai_jobs` no guarda el mensaje de error; sin hot-reload (reconstruir tras cada cambio; las pruebas también corren sobre la imagen).
 
 ## 17. Hoja de ruta (lo planeado, en gris en el mapa)
 
@@ -381,17 +419,21 @@ Cada uno con su nodo en el nivel 1 del Mapa Visual:
 - **29 oct:** informe de estado (`INFORME-ESTADO.md`); módulo Operaciones y conexión con ClickUp; nuevo encargo hacia ClickUp (envío fiable); Bloc de notas con audio; fix de la conversión; red de seguridad del Bloc y usuario de pruebas; caché de ClickUp y contador; tareas propias; avisos por Telegram; historial y pestaña Telegram; campo Cliente.
 - **30 oct:** paso 5 (flujo desde Telegram, bloqueos con IA, cortafuegos, Mi bandeja, eventos) · 6A Equipo · 6B Clientes · 6C botones por fases, recordatorios y vigilancia de ClickUp · «Última acción» · 6D alertas de clientes · 6E panel de Automatizaciones · Mapa Visual de Operaciones con regla y comprobación.
 - **31 oct:** paso 7, preparar el piloto: limpieza asistida de vencidas, pestaña Piloto, `/sugerencia` y `/ayuda`, «Sistema en marcha» y arranque automático de los contenedores; la limpieza no falsea alertas ni informes.
-- Historial completo: `git log` (233 commits) y `docs/sessions/` (45 documentos).
+- **4 nov:** paso 8, seguridad antes de subir a un servidor (rama `feature/seguridad`): Next.js 16.4.5, permisos por rol en el servidor, cierre del registro y de la fuga del hash, límite de intentos, secretos fuera del repo y del contenedor, Stripe fuera, fachada en español, 70 pruebas automáticas y bloque Seguridad en el Mapa Visual.
+- Historial completo: `git log` (240 commits) y `docs/sessions/` (47 documentos).
 
 ## 19. Mapa de archivos
 
 - **`lib/operaciones/`** — lógica del módulo: `clickup.ts` (cliente con contador), `structure.ts` (caché), `queries.ts`, `note-actions.ts` / `note-types.ts` / `transcribe.ts` (Bloc), `request-actions.ts` (encargos), `workflow.ts` (estados), `blockers.ts`, `reviewers.ts`, `inbox.ts`, `events.ts`, `outbox.ts`, `status-map.ts`, `telegram.ts` / `telegram-config.ts` / `telegram-handler.ts` / `telegram-worker.ts` / `telegram-actions.ts`, `notifications.ts` (cola y resumen del equipo), `digest.ts`, `reminders.ts`, `watch.ts` / `watch-actions.ts`, `quiet.ts`, `team-profiles.ts` / `profile-actions.ts`, `clients.ts` / `client-actions.ts` / `client-activity.ts`, `team-today.ts` / `team-actions.ts`, `automations.ts` / `automation-actions.ts` / `upcoming.ts`, `map-live.ts`, `process-map.ts`, `settings.ts`, `work-types.ts`, `flow-actions.ts`.
 - **`app/(dashboard)/dashboard/operaciones/`** — una carpeta por pestaña (`bandeja`, `equipo`, `equipo-hoy`, `clientes`, `encargos`, `nuevo`, `automatizaciones`, `telegram`, `ajustes`) más `bloc-notas.tsx` y `operaciones-tabs.tsx`.
+- **`lib/auth/`** — `session.ts` (JWT, bcrypt), `permissions.ts` (roles y guards), `rate-limit.ts` (intentos), `mask.ts` (tokens enmascarados), `middleware.ts` (acciones validadas), `security-process-map.ts` (mapa de Seguridad). **`lib/errors.ts`** (`publicError`), **`proxy.ts`** (antes `middleware.ts`), **`lib/seo/access.ts`** (funciones internas de SEO), **`lib/operaciones/inbox-owner.ts`**.
+- **`tests/`** — Vitest (`seguridad`, `permisos`, `auditoria`, `http`), `setup.ts` (simula solo cookies/cabeceras/redirecciones de Next), `fixtures.ts`.
+- **`app/(dashboard)/dashboard/usuarios/`** — alta de usuarios (solo `super_admin`).
 - **`lib/ai/`** — pasarela (`gateway.ts`, adaptadores), clustering (`clustering/pipeline.ts`), cifrado, precios.
 - **`lib/seo/`**, **`modules/seo/manifest.json`** — módulo SEO.
 - **`lib/architecture-map/registry.ts`** y **`app/(dashboard)/dashboard/architecture/`** — Mapa Visual.
 - **`lib/db/`** — `schema.ts`, `migrations/`, semillas.
-- **`scripts/`** — `check-architecture-map.js` y scripts SQL de prompts y semillas.
+- **`scripts/`** — `check-architecture-map.js`, `rotate-encryption-key.js` y scripts SQL de prompts y semillas.
 - **`instrumentation.ts`** — arranque de los procesos de fondo.
 - **`docs/`** — este documento, `INFORME-ESTADO.md` y `sessions/`.
 
@@ -400,7 +442,7 @@ Cada uno con su nodo en el nivel 1 del Mapa Visual:
 1. `docker compose up --build -d` y, si hay migración, backup + `docker exec kijutech_app pnpm db:migrate`.
 2. Iniciar sesión con el usuario de pruebas en `http://ops-test.localhost:3000` y recorrer **Bloc de notas, Equipo hoy y Encargos** (y la pestaña tocada): cargan sin errores y el autoguardado confirma.
 3. `docker logs kijutech_app` sin `ReferenceError`.
-4. `node scripts/check-architecture-map.js` pasa.
+4. `node scripts/check-architecture-map.js` pasa y **`docker exec kijutech_app pnpm test` pasa** (70 pruebas de seguridad).
 5. Si se tocó Telegram: comprobar la pestaña Telegram (sin conflicto 409) y enviar una prueba desde Automatizaciones.
 6. Documento de sesión, commit y push a `operaciones` (con autorización).
 

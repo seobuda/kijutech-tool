@@ -70,9 +70,14 @@ for (const k of promptKeys) if (!liveSrc.includes(`'${k}'`)) fail(`map-live.ts n
 // 5. Archivos citados
 for (const f of uniq(all(/file: '([^']+)'/g, mapSrc))) if (!fs.existsSync(path.join(root, f))) fail(`El mapa cita un archivo que no existe: ${f}`);
 
+// 5b. Mapa de Seguridad (lib/auth/security-process-map.ts): sus archivos deben existir
+const securitySrc = read('lib/auth/security-process-map.ts');
+for (const f of uniq(all(/file: '([^']+)'/g, securitySrc))) if (!fs.existsSync(path.join(root, f))) fail(`El mapa de Seguridad cita un archivo que no existe: ${f}`);
+if (all(/^ {4}id: '([\w-]+)',/gm, securitySrc).length < 5) fail('El mapa de Seguridad parece vacío o roto (menos de 5 pasos).');
+
 // 6. Enlaces entre mapas
 const mapIds = all(/^ {2}(\w+): [A-Z_]+,$/gm, mapSrc.slice(mapSrc.indexOf('export const OPS_MAPS')));
-const known = new Set([...mapIds, 'clustering', 'competitor_analysis']);
+const known = new Set([...mapIds, 'clustering', 'competitor_analysis', 'security']);
 for (const id of uniq([...all(/detailMapId: '(\w+)'/g, mapSrc), ...all(/detailMapId: '(\w+)'/g, registrySrc)])) {
   if (!known.has(id)) fail(`detailMapId «${id}» no corresponde a ningún mapa registrado en OPS_MAPS.`);
 }

@@ -20,11 +20,11 @@ Documentación completa de arquitectura, decisiones y roadmap vive en el proyect
 
 
 
-\- Next.js 15 App Router + PostgreSQL + Drizzle ORM + shadcn/ui + Tailwind
+\- Next.js 16 App Router + PostgreSQL + Drizzle ORM + shadcn/ui + Tailwind
 
 \- Auth: JWT en cookies httpOnly, ya incluida en el starter — no usar NextAuth ni Clerk
 
-\- Stripe instalado pero \*\*INACTIVO\*\* — no configurar ni activar hasta indicación explícita
+\- Stripe se eliminó en el paso 8 (4 nov 2026); no se reintroduce sin indicación explícita
 
 
 
@@ -389,3 +389,34 @@ pantalla que llamaba a ClickUp en directo tardaba segundos (el Bloc y
   bandeja de salida `ops_clickup_outbox` (`lib/operaciones/outbox.ts`): clave única, reintentos y el cliente con
   contador. No llamar a `updateTaskStatus` / `addTaskComment` directamente desde otras funcionalidades.
 - Cada pulsación de botón y acción del bot se registra con `logEvent` (`ops_request_events`).
+
+## Seguridad — regla permanente (desde el paso 8, 4 nov 2026)
+
+La seguridad es parte de "terminado", igual que el Mapa Visual y ESTADO.md. Detalle completo en
+`docs/ESTADO.md` §13.
+
+- **Permisos por rol, siempre en el servidor.** Toda acción del servidor o ruta de API nueva llama a su
+  guard de `lib/auth/permissions.ts` (`getUserIfAllowed`, `requirePermission`, `checkPermission`, o el
+  tercer parámetro de `validatedActionWithUser`) antes de hacer nada. Ocultar un botón no cuenta.
+  Niveles: `view` (lector), `edit` (editor: Bloc, encargos, fichas, SEO), `admin` (tokens,
+  automatizaciones, niveles y servicios, borrar), `users` (solo super_admin). Un usuario sin rol no puede ni ver.
+- **Las funciones internas no se exportan desde archivos `'use server'`** (cada export sería un endpoint
+  público): van en un módulo con `import 'server-only'` (ver `lib/seo/access.ts`).
+- **Nada sensible al navegador:** nunca devolver la fila completa de `users` (lleva `password_hash`) ni
+  pasarla a un componente; usar `getSafeUser()`. Los tokens solo se muestran enmascarados (`maskSecret`).
+- **Secretos:** solo en `.env` (ignorado por Git y por Docker); `docker-compose.yml` los lee con `${VAR}`.
+  `.env.example` lleva los nombres sin valores. Nunca escribir un valor real en un archivo versionado.
+- **Errores:** al usuario, mensajes genéricos (`publicError()` de `lib/errors.ts`); el detalle va a los logs.
+- **Pruebas de seguridad:** `docker exec kijutech_app pnpm test` (Vitest, dentro del contenedor; reconstruir
+  antes con `docker compose up --build -d` para que lleve el código actual). **Debe pasar antes de cada
+  commit de cierre de paso**, junto a `node scripts/check-architecture-map.js`. Una auditoría estática
+  falla si una acción exportada no tiene guard. Si añades una acción o pantalla con un permiso nuevo,
+  añade su prueba en `tests/seguridad.test.ts`; si cambia una capa de seguridad, actualiza el bloque
+  Seguridad del Mapa Visual (`lib/auth/security-process-map.ts`).
+- **Cambiar dependencias sin tocar Windows** (nunca `pnpm` en el host): montar el repo en un contenedor
+  temporal con un volumen anónimo para `node_modules`, por ejemplo
+  `docker run --rm -v "C:\dev\kijutech-tool:/work" -v /work/node_modules -w /work node:24-alpine sh -c "corepack enable && pnpm add -D <paquete>"`
+  (en Git Bash anteponer `MSYS_NO_PATHCONV=1`).
+- **Shell del asistente:** los heredocs y `node -e` con comillas, apóstrofos, `${}` o backticks se rompen
+  (los backticks se ejecutan como comandos). Los archivos y scripts se escriben con la herramienta de
+  archivos, no con la shell.

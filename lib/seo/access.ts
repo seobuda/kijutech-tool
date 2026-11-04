@@ -41,6 +41,16 @@ export async function assertUserInProjectTenant(projectId: string) {
   return { user, project };
 }
 
+// Para los helpers que buscan una entidad (cluster, competidor...) ANTES de llegar a
+// assertUserInProjectTenant: comprobar el permiso primero evita que alguien sin rol (o sin
+// sesión) averigüe si un id existe por la diferencia de mensajes.
+export async function requireEditPermission() {
+  const perm = await checkPermission('edit');
+  if (!perm.ok) {
+    throw new Error(perm.error === 'No autenticado' ? 'No autenticado' : 'No tienes permiso para modificar SEO');
+  }
+}
+
 // Para las páginas: ¿puede esta persona modificar este proyecto? Sin lanzar errores.
 async function canEditProject(projectId: string): Promise<boolean> {
   try {

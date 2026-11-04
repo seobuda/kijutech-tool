@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { seoKwClusters, seoKwClusterKeywords, type SeoClusterContentPlan } from '@/lib/db/schema';
-import { assertUserInProjectTenant } from '@/lib/seo/access';
+import { assertUserInProjectTenant, requireEditPermission } from '@/lib/seo/access';
 import {
   getContentPlan,
   saveManualQuestions,
@@ -23,6 +23,7 @@ const CONTENT_PLAN_MAX_TOKENS = 4096;
 // Mismo patrón que assertClusterAccess() en competitor-actions.ts (no
 // exportado desde allí, así que se repite aquí en vez de importarlo).
 async function assertClusterAccess(clusterId: string) {
+  await requireEditPermission();
   const [cluster] = await db.select().from(seoKwClusters).where(eq(seoKwClusters.id, clusterId)).limit(1);
 
   if (!cluster) {
