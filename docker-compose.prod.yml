@@ -1,0 +1,55 @@
+# PRODUCCIÓN (servidor kijutech-brain). Los secretos NO van aquí: se leen de /opt/kijutech/.env
+# Uso en el servidor:  docker compose -f docker-compose.prod.yml up -d --build
+# Solo Caddy escucha en internet (80/443). Postgres y la app no publican ningún puerto.
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: kijutech_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: kijutech
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Define POSTGRES_PASSWORD en .env}
+      POSTGRES_DB: kijutech_db
+    volumes:
+      - kijutech_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kijutech -d kijutech_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: kijutech_app
+    restart: unless-stopped
+    expose:
+      - "3000"
+    environment:
+      POSTGRES_URL: postgresql://kijutech:${POSTGRES_PASSWORD}@postgres:5432/kijutech_db
+      AUTH_SECRET: ${AUTH_SECRET:?Define AUTH_SECRET en .env}
+      BASE_URL: https://brain.kijutech.com
+      AI_ENCRYPTION_KEY: ${AI_ENCRYPTION_KEY:?Define AI_ENCRYPTION_KEY en .env}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  caddy:
+    image: caddy:2
+    container_name: kijutech_caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+
+volumes:
+  kijutech_pgdata:
+  caddy_data:
+  caddy_config:
