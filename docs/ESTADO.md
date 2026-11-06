@@ -3,7 +3,7 @@
 > **Documento vivo y de referencia.** Recoge todo lo que existe, cómo funciona, qué está decidido, qué se ha probado y qué falta. Se actualiza al cerrar cada paso de trabajo (junto al documento de sesión y al Mapa Visual).
 > **No contiene claves, contraseñas ni valores de `.env`** (solo sus nombres).
 
-**Fecha de esta versión:** 2026-11-06 (paso 9 en curso: despliegue en DigitalOcean, Telegram ya por webhook; antes, paso 8: seguridad)
+**Fecha de esta versión:** 2026-11-06 (producción en marcha con Telegram por webhook; en la rama `feature/memoria-cliente-email` se construye «Operaciones como puesto de trabajo»: paso A, memoria y contactos de cliente, hecho; paso B, entrada por email, pendiente)
 **Producción:** `https://brain.kijutech.com` (droplet `kijutech-brain`, Frankfurt). Procedimiento en `docs/DESPLIEGUE.md`. Rama de trabajo del despliegue: `feature/despliegue`.
 **Rama de trabajo:** `feature/seguridad` (creada desde `feature/paso-7-piloto`, que aún no está fusionada en `main`; el paso 8 depende del 7). **No se ha unido a `main`: espera la aprobación de Enric.** **Operaciones ya está fusionada en `main`** (fast-forward, 30 oct): `main` y `operaciones` coinciden en `9110754f`; la rama `operaciones` se mantiene.
 **Rama `main`:** `9110754f` hasta que se apruebe y fusione el paso 7. Ramas antiguas de SEO (`feature/fase-d-*`, `feature/mapa-visual-sistema`) ya fusionadas.
@@ -61,7 +61,7 @@ Todo corre **dentro de Docker**. **Nunca** se ejecuta `pnpm`/`npm` en el host Wi
 | Backup antes de migrar un módulo | `docker exec kijutech_db pg_dump -U kijutech -d kijutech_db > backups/backup_pre_<modulo>_<fecha>.sql` |
 | Restaurar (sobre BD limpia) | `docker exec -i kijutech_db psql -U kijutech -d kijutech_db < backups/backup_pre_<modulo>_<fecha>.sql` |
 | Comprobar el Mapa Visual | `node scripts/check-architecture-map.js` (o `pnpm check:map` en el contenedor) |
-| **Pruebas de seguridad** (70 pruebas; reconstruir antes para que lleven el código actual) | `docker exec kijutech_app pnpm test` |
+| **Pruebas de seguridad** (91 pruebas; reconstruir antes para que lleven el código actual) | `docker exec kijutech_app pnpm test` |
 | Logs | `docker logs kijutech_app` |
 
 - **URL de la app:** `http://127.0.0.1:3000` (**nunca `localhost`**: da `ERR_CONNECTION_RESET` en esta máquina por IPv6 + WSL2 + Docker Desktop). Para el usuario de pruebas se usa `http://ops-test.localhost:3000` (host aparte, para tener otra sesión).
@@ -72,7 +72,7 @@ Todo corre **dentro de Docker**. **Nunca** se ejecuta `pnpm`/`npm` en el host Wi
 - **`.dockerignore`** (arreglado en el paso 8: tenía comillas invertidas y no excluía nada): deja fuera `.env`, `.git`, `backups/`, `node_modules` y `.next` de la imagen.
 - **Para cambiar dependencias sin tocar Windows** (patrón usado en el paso 8): `docker run --rm -v "C:\dev\kijutech-tool:/work" -v /work/node_modules -w /work node:24-alpine sh -c "corepack enable && pnpm …"` (el volumen anónimo evita que `node_modules` aterrice en el host).
 - **Nunca** `docker compose down -v` ni nada que borre el volumen de la base de datos.
-- **Migraciones:** `lib/db/migrations/0000`…`0037` (38). Las de Operaciones son `0022`–`0036`; `0037_auth_login_attempts` es la del límite de intentos de inicio de sesión (a mano, como las anteriores: el journal no tiene snapshots desde la 0029). Hay scripts SQL sueltos de prompts en `scripts/` (ver §8).
+- **Migraciones:** `lib/db/migrations/0000`…`0038` (39). `0038_ops_client_memory` (memoria y contactos de cliente, escrita a mano: **no usar `pnpm db:generate`**, porque sin snapshots desde la 0029 genera SQL para tablas que ya existen). Las de Operaciones son `0022`–`0036`; `0037_auth_login_attempts` es la del límite de intentos de inicio de sesión (a mano, como las anteriores: el journal no tiene snapshots desde la 0029). Hay scripts SQL sueltos de prompts en `scripts/` (ver §8).
 
 ## 3. Stack y versiones
 
@@ -89,7 +89,7 @@ Todo corre **dentro de Docker**. **Nunca** se ejecuta `pnpm`/`npm` en el host Wi
 | Clustering | embeddings + `hdbscan-ts` |
 | Otras | `zod`, `swr`. **Stripe eliminado** en el paso 8 (rutas, `lib/payments`, dependencia, `db:setup`); las columnas `stripe_*` de `teams` siguen en la BD (deuda) |
 | Gestor | `pnpm` (dentro de Docker) |
-| Pruebas automáticas | **Vitest 5.1.0** (`pnpm test` dentro del contenedor: 70 pruebas de seguridad), `tsc` en el build y la comprobación del Mapa Visual |
+| Pruebas automáticas | **Vitest 5.1.0** (`pnpm test` dentro del contenedor: 91 pruebas de seguridad), `tsc` en el build y la comprobación del Mapa Visual |
 
 ## 4. Reglas de trabajo y restricciones vigentes
 
@@ -183,6 +183,8 @@ Una ficha por persona (`ops_team_profiles`, 5): puesto, descripción, notas, **t
 ### 6.10 Fichas de Clientes (6B)
 **52 fichas sembradas** (`ops_clients`, 52 activas): nombres alternativos/alias, nivel y plazo en días laborables (`ops_client_levels`: Top, Estándar, Mantenimiento), servicios con responsable habitual (`ops_services`: seo, google_ads, web, mantenimiento, gohighlevel; `ops_client_services`), listas habituales, negocio y estrategia. «Kijutech» tiene nota interna. «Rellenar con IA» (`ops_client_fill`). El agente propone cliente por alias, lista habitual, responsable habitual del servicio y fecha por plazo. **Sin contraseñas** en las fichas. Una ficha con encargos no se borra, solo se desactiva. Niveles y servicios son tablas editables sin CHECK de valores.
 
+**Contactos y memoria (6 nov, rama `feature/memoria-cliente-email`, paso A):** dentro de la ficha de un cliente ya guardado, sección «Contactos y memoria», que se guarda al momento (no depende de «Guardar ficha»). *Contactos* (`ops_client_senders`): correos exactos o dominios con nombre y rol, para reconocer de quién es un email; los dominios públicos (gmail.com, outlook.com…) se rechazan como dominio y solo valen como correo exacto, y un contacto no puede estar en dos fichas. *Memoria* (`ops_client_memory`): preferencia, promesa, decisión, contexto o restricción, con estado `propuesto` (lo propondrá la IA), `aceptado` o `descartado`, origen (manual, email, nota, encargo), quién lo decidió y cuándo; máx. 1000 caracteres y sin contraseñas. Un editor añade, edita, acepta y descarta; **borrar de verdad es solo de administrador** (la pantalla solo ofrece «Eliminar» a quien puede). Cada acción comprueba permisos y que el cliente sea de la cuenta del usuario. `matchSender` (`lib/operaciones/client-memory-rules.ts`) resuelve de qué cliente es un remitente: la dirección exacta gana al dominio, un subdominio no hereda, y si dos clientes reclaman lo mismo no adivina. **Todavía no la lee ninguna función**: la usará la entrada por email (paso B) para reconocer al cliente y dar contexto a la IA, usando solo lo aceptado.
+
 ### 6.11 Alertas de clientes (6D)
 **Pasada diaria** (03:00 Madrid) con **una consulta agrupada** (≈3 peticiones para ~300 tareas) → `ops_client_activity` (52): última actividad, completadas del mes, abiertas con fecha en el horizonte del cliente y **horas aproximadas** (tiempo laboral entre Empezar y Hecho de los encargos del cliente). **Semáforo** en Clientes: 🔴 sin actividad, 🟠 sin trabajo planificado, 🟢 bien, ⚪ gris (no genera alertas o «Ficha sin completar»). Solo vigila clientes activos, vinculados, con servicio u horas al mes y «Genera alertas» encendido (**hoy 50 de 52 están en gris** hasta que Enric las complete; Kijutech tiene las alertas apagadas). Umbrales por nivel (inactividad: Top 7 / Estándar 14 / Mantenimiento 30 días; horizonte planificado: 7 / 14 / desactivado) y por cliente. Las alertas nuevas salen en el último resumen del día con recordatorio semanal si siguen; la marca «ya avisada» se borra al desaparecer la condición. Botón «Recalcular actividad» y **«Trabajo de este mes»** (actual o anterior, con «Copiar»). Si la pasada falla se reintenta cada 30 min y el error se ve en Clientes.
 
@@ -254,7 +256,7 @@ Construido en agosto de 2026 (Fases A–D). Detalle y auditoría completa en `do
 
 ## 10. Base de datos
 
-**Total: 67 tablas** (12 núcleo, 15 SEO, 7 IA, 33 Operaciones; la nueva del paso 8 es `auth_login_attempts`, intentos de inicio de sesión, migración 0037). Conteos reales a 2026-10-30; las 3 tablas del paso 7 (`ops_cleanup_runs`, `ops_cleanup_items`, `ops_suggestions`) se crearon el 31 oct (1 tanda de limpieza real en curso para Enric, 30 tareas).
+**Total: 69 tablas** (12 núcleo, 15 SEO, 7 IA, 35 Operaciones; las 2 nuevas, `ops_client_senders` y `ops_client_memory`, de la migración 0038; la nueva del paso 8 es `auth_login_attempts`, intentos de inicio de sesión, migración 0037). Conteos reales a 2026-10-30; las 3 tablas del paso 7 (`ops_cleanup_runs`, `ops_cleanup_items`, `ops_suggestions`) se crearon el 31 oct (1 tanda de limpieza real en curso para Enric, 30 tareas).
 
 **Núcleo / plantilla:** `tenants` 1 · `users` 2 · `roles` 4 · `user_roles` 1 · `projects` 1 · `modules` 1 · `project_modules` 0 · `teams` 2 · `team_members` 2 · `invitations` 0 · `activity_logs` 10 (`teams`, `team_members` e `invitations` son restos de la plantilla pendientes de limpieza).
 
@@ -281,6 +283,8 @@ Construido en agosto de 2026 (Fases A–D). Detalle y auditoría completa en `do
 | `ops_team_profiles` / `ops_team_profile_work_types` | Fichas de Equipo | 5 / 3 |
 | `ops_clients` / `ops_client_levels` / `ops_services` / `ops_client_services` | Fichas de Clientes | 52 / 3 / 5 / 2 |
 | `ops_client_activity` | Actividad por cliente | 52 |
+| `ops_client_senders` | Contactos del cliente (correo exacto o dominio) para reconocer de quién es un email | 0 |
+| `ops_client_memory` | Memoria del cliente: hechos con tipo, estado (propuesto/aceptado/descartado) y origen | 0 |
 | `ops_settings` | Ajustes clave-valor (modelo de transcripción, estado de la pasada de actividad) | 2 |
 | `ops_automations` / `ops_automation_changes` | Panel de Automatizaciones | 3 / 4 |
 
@@ -383,6 +387,8 @@ Construido en agosto de 2026 (Fases A–D). Detalle y auditoría completa en `do
 - **Servidor (5 nov, hecho):** HTTPS, secretos nuevos, base de datos limpia sin usuario de pruebas ni datos de prueba, copia diaria `pg_dump` en `/opt/kijutech/backups` y snapshots de DigitalOcean.
 - **Servidor (6 nov, hecho):** contraseña inicial del admin cambiada y archivo borrado del servidor; tokens de ClickUp, Telegram e IA introducidos en el panel; Telegram por webhook; app local parada para evitar el 409. **Aparcado por decisión de Enric:** proxy de Cloudflare (SSL Full strict), no necesario por ahora.
 - **Servidor (pendiente):** **sacar las copias diarias fuera de DigitalOcean (NAS de Enric y Google Drive de la agencia)**: proyecto crítico, hay que protegerlo bien; CSP con nonce; apagar el modo pruebas de Telegram cuando el equipo vincule su chat; la base local de desarrollo conserva los datos de prueba.
+- **Objetivo de producto (6 nov):** que Operaciones cubra el puesto de un humano que gestiona el departamento. Orden acordado: (A) memoria de cliente y contactos, **hecho**; (B) **entrada por email**: buzón de Gmail gratuito aparte (`kijutech.agency@gmail.com`, a confirmar: Enric escribió «gmial») al que una regla de Gmail reenvía copia de los clientes elegidos; la app lo lee (IMAP con contraseña de aplicación), identifica al cliente por `matchSender`, propone encargo, responsable y fecha y lo manda a Telegram con botones Aprobar/Corregir/Descartar (nada se crea en ClickUp sin pulsación); después asignación inteligente, seguimiento proactivo e informes. Cada función subirá por niveles de autonomía (sombra, con aprobación, autónomo). Los correos son entrada no fiable: la IA solo puede producir propuestas estructuradas y nunca actuar por instrucciones del correo.
+- **Riesgo local (6 nov):** la base local aún tiene el bot de Telegram configurado en polling; arrancar `kijutech_app` en local ejecuta `deleteWebhook` sobre el bot de producción. No arrancarla con esa base (para ver la interfaz, usar una copia sin `ops_telegram_config`, `ops_clickup_connections` ni `ops_clickup_outbox`). Pendiente: proponer borrar esa configuración de la base local.
 - Redirección para el enlace «Abrir tarea» de Encargos (hoy no registra clics): pasar por la herramienta.
 - Cachés por proceso (un solo servidor por ahora).
 
@@ -425,6 +431,7 @@ Cada uno con su nodo en el nivel 1 del Mapa Visual:
 - **4 nov:** paso 8, seguridad antes de subir a un servidor (rama `feature/seguridad`): Next.js 16.4.5, permisos por rol en el servidor, cierre del registro y de la fuga del hash, límite de intentos, secretos fuera del repo y del contenedor, Stripe fuera, fachada en español, 70 pruebas automáticas y bloque Seguridad en el Mapa Visual.
 - **5 nov:** paso 9, despliegue (rama `feature/despliegue`): droplet `kijutech-brain` (Ubuntu 24.04, Docker, firewall 22/80/443, SSH solo con clave), DNS `brain.kijutech.com`, `docker-compose.prod.yml` + Caddy con HTTPS automático, secretos nuevos generados en el servidor, base de datos limpia (migraciones + prompts de IA copiados + super_admin `enrique@kijutech.com`), cron diario de `pg_dump` (7 días) y snapshots semanales de DigitalOcean.
 - **6 nov:** cierre del arranque en producción: Enric cambia la contraseña inicial (archivo borrado con `shred`), introduce los tokens, se desbloquea un bloqueo por intentos (5 fallos propios en `auth_login_attempts`), se configura el bot en modo pruebas y se activa el webhook de Telegram (verificado con `getWebhookInfo` y `/ayuda`). Cloudflare proxy aparcado.
+- **6 nov (noche):** `feature/despliegue` fusionada en `main` (`abd1d4f4`) y subida a origin. Nueva rama `feature/memoria-cliente-email`: paso A, memoria y contactos de cliente (migración 0038, `client-memory-rules.ts`, `client-memory-actions.ts`, `client-memoria.tsx`, nodo del Mapa Visual y 21 pruebas nuevas).
 - Historial completo: `git log` (240 commits) y `docs/sessions/` (47 documentos).
 
 ## 19. Mapa de archivos
@@ -432,7 +439,8 @@ Cada uno con su nodo en el nivel 1 del Mapa Visual:
 - **`lib/operaciones/`** — lógica del módulo: `clickup.ts` (cliente con contador), `structure.ts` (caché), `queries.ts`, `note-actions.ts` / `note-types.ts` / `transcribe.ts` (Bloc), `request-actions.ts` (encargos), `workflow.ts` (estados), `blockers.ts`, `reviewers.ts`, `inbox.ts`, `events.ts`, `outbox.ts`, `status-map.ts`, `telegram.ts` / `telegram-config.ts` / `telegram-handler.ts` / `telegram-worker.ts` / `telegram-actions.ts`, `notifications.ts` (cola y resumen del equipo), `digest.ts`, `reminders.ts`, `watch.ts` / `watch-actions.ts`, `quiet.ts`, `team-profiles.ts` / `profile-actions.ts`, `clients.ts` / `client-actions.ts` / `client-activity.ts`, `team-today.ts` / `team-actions.ts`, `automations.ts` / `automation-actions.ts` / `upcoming.ts`, `map-live.ts`, `process-map.ts`, `settings.ts`, `work-types.ts`, `flow-actions.ts`.
 - **`app/(dashboard)/dashboard/operaciones/`** — una carpeta por pestaña (`bandeja`, `equipo`, `equipo-hoy`, `clientes`, `encargos`, `nuevo`, `automatizaciones`, `telegram`, `ajustes`) más `bloc-notas.tsx` y `operaciones-tabs.tsx`.
 - **`lib/auth/`** — `session.ts` (JWT, bcrypt), `permissions.ts` (roles y guards), `rate-limit.ts` (intentos), `mask.ts` (tokens enmascarados), `middleware.ts` (acciones validadas), `security-process-map.ts` (mapa de Seguridad). **`lib/errors.ts`** (`publicError`), **`proxy.ts`** (antes `middleware.ts`), **`lib/seo/access.ts`** (funciones internas de SEO), **`lib/operaciones/inbox-owner.ts`**.
-- **`tests/`** — Vitest (`seguridad`, `permisos`, `auditoria`, `http`), `setup.ts` (simula solo cookies/cabeceras/redirecciones de Next), `fixtures.ts`.
+- **Memoria de cliente:** `lib/operaciones/client-memory-rules.ts` (reglas puras), `client-memory-actions.ts` (acciones con guards), `app/(dashboard)/dashboard/operaciones/clientes/client-memoria.tsx` (sección de la ficha).
+- **`tests/`** — Vitest (`seguridad`, `permisos`, `auditoria`, `http`, `client-memoria`), `setup.ts` (simula solo cookies/cabeceras/redirecciones de Next), `fixtures.ts`.
 - **`app/(dashboard)/dashboard/usuarios/`** — alta de usuarios (solo `super_admin`).
 - **`lib/ai/`** — pasarela (`gateway.ts`, adaptadores), clustering (`clustering/pipeline.ts`), cifrado, precios.
 - **`lib/seo/`**, **`modules/seo/manifest.json`** — módulo SEO.
@@ -447,7 +455,7 @@ Cada uno con su nodo en el nivel 1 del Mapa Visual:
 1. `docker compose up --build -d` y, si hay migración, backup + `docker exec kijutech_app pnpm db:migrate`.
 2. Iniciar sesión con el usuario de pruebas en `http://ops-test.localhost:3000` y recorrer **Bloc de notas, Equipo hoy y Encargos** (y la pestaña tocada): cargan sin errores y el autoguardado confirma.
 3. `docker logs kijutech_app` sin `ReferenceError`.
-4. `node scripts/check-architecture-map.js` pasa y **`docker exec kijutech_app pnpm test` pasa** (70 pruebas de seguridad).
+4. `node scripts/check-architecture-map.js` pasa y **`docker exec kijutech_app pnpm test` pasa** (91 pruebas de seguridad; las 8 de `tests/http.test.ts` necesitan el servidor en `127.0.0.1:3000`, ver §16 antes de arrancarlo en local).
 5. Si se tocó Telegram: comprobar la pestaña Telegram (sin conflicto 409) y enviar una prueba desde Automatizaciones.
 6. Documento de sesión, commit y push a `operaciones` (con autorización).
 
