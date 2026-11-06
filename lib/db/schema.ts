@@ -1557,6 +1557,70 @@ export const opsClientActivity = pgTable(
   (table) => [index('ops_client_activity_tenant_idx').on(table.tenantId)]
 );
 
+// Quién escribe en nombre de un cliente: un correo concreto o un dominio entero. Sirve para saber de qué
+// cliente es un email recibido. Los dominios públicos (gmail.com…) no se aceptan como dominio.
+export const opsClientSenders = pgTable(
+  'ops_client_senders',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => opsClients.id, { onDelete: 'cascade' }),
+    // 'email' = una dirección exacta; 'domain' = cualquier dirección de ese dominio.
+    kind: varchar('kind', { length: 10 }).notNull(),
+    // Siempre en minúsculas y sin espacios.
+    value: varchar('value', { length: 255 }).notNull(),
+    name: varchar('name', { length: 255 }),
+    role: varchar('role', { length: 120 }),
+    active: boolean('active').notNull().default(true),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    unique('ops_client_senders_unique').on(table.tenantId, table.kind, table.value),
+    index('ops_client_senders_client_idx').on(table.clientId),
+    check('ops_client_senders_kind_check', sql`${table.kind} IN ('email', 'domain')`),
+  ]
+);
+
+// Memoria de cada cliente: hechos con fecha y origen. La IA propone («propuesto») y una persona acepta;
+// solo lo aceptado se usa como contexto. Nunca contraseñas.
+export const opsClientMemory = pgTable(
+  'ops_client_memory',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => opsClients.id, { onDelete: 'cascade' }),
+    // preferencia | promesa | decision | contexto | restriccion
+    kind: varchar('kind', { length: 20 }).notNull(),
+    text: text('text').notNull(),
+    // propuesto | aceptado | descartado
+    status: varchar('status', { length: 12 }).notNull().default('aceptado'),
+    // De dónde sale: manual | email | nota | encargo (y el id de ese origen, si lo hay).
+    sourceType: varchar('source_type', { length: 12 }).notNull().default('manual'),
+    sourceId: varchar('source_id', { length: 100 }),
+    createdBy: integer('created_by').references(() => users.id, { onDelete: 'set null' }),
+    decidedBy: integer('decided_by').references(() => users.id, { onDelete: 'set null' }),
+    decidedAt: timestamp('decided_at'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    index('ops_client_memory_client_idx').on(table.clientId, table.status),
+    check('ops_client_memory_kind_check', sql`${table.kind} IN ('preferencia', 'promesa', 'decision', 'contexto', 'restriccion')`),
+    check('ops_client_memory_status_check', sql`${table.status} IN ('propuesto', 'aceptado', 'descartado')`),
+    check('ops_client_memory_source_check', sql`${table.sourceType} IN ('manual', 'email', 'nota', 'encargo')`),
+  ]
+);
+
+export type OpsClientSender = typeof opsClientSenders.$inferSelect;
+export type OpsClientMemory = typeof opsClientMemory.$inferSelect;
 export type OpsClientActivity = typeof opsClientActivity.$inferSelect;
 export type OpsClient = typeof opsClients.$inferSelect;
 export type OpsCleanupRun = typeof opsCleanupRuns.$inferSelect;

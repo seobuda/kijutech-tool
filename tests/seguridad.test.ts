@@ -2,10 +2,20 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { eq, like } from 'drizzle-orm';
 import { NextRequest } from 'next/server';
 import { db } from '@/lib/db/drizzle';
-import { projects, users } from '@/lib/db/schema';
+import { opsClientMemory, opsClients, projects, users } from '@/lib/db/schema';
 import { cleanupFixtures, createFixtures, emailFor, FIXTURE_PASSWORD, loginAs, PREFIX, type Fixtures } from './fixtures';
 
 import { deleteClient, setClientActive } from '@/lib/operaciones/client-actions';
+import {
+  addClientMemory,
+  addClientSender,
+  decideClientMemory,
+  deleteClientMemory,
+  deleteClientSender,
+  listClientMemory,
+  setClientSenderActive,
+  updateClientMemory
+} from '@/lib/operaciones/client-memory-actions';
 import { deleteProfile, setProfileActive } from '@/lib/operaciones/profile-actions';
 import { deleteNote } from '@/lib/operaciones/note-actions';
 import { saveClickUpToken } from '@/lib/operaciones/actions';
@@ -72,11 +82,19 @@ const ACCIONES_ADMIN: [string, () => unknown][] = [
   ['savePilotStartAction (piloto)', () => savePilotStartAction('no-es-una-fecha')],
   ['sendCleanupAction (limpieza)', () => sendCleanupAction(ZERO)],
   ['deleteClient (borrar cliente)', () => deleteClient(ZERO)],
-  ['deleteProfile (borrar ficha)', () => deleteProfile(ZERO)]
+  ['deleteProfile (borrar ficha)', () => deleteProfile(ZERO)],
+  ['deleteClientMemory (borrar dato de memoria)', () => deleteClientMemory(ZERO)],
+  ['deleteClientSender (borrar contacto)', () => deleteClientSender(ZERO)]
 ];
 const ACCIONES_EDITOR: [string, () => unknown][] = [
   ['deleteNote (Bloc)', () => deleteNote(ZERO)],
   ['setClientActive (fichas)', () => setClientActive(ZERO, false)],
+  ['listClientMemory (memoria)', () => listClientMemory(ZERO)],
+  ['addClientMemory (memoria)', () => addClientMemory({ clientId: ZERO, kind: 'contexto', text: 'x' })],
+  ['updateClientMemory (memoria)', () => updateClientMemory({ id: ZERO, kind: 'contexto', text: 'x' })],
+  ['decideClientMemory (memoria)', () => decideClientMemory(ZERO, 'aceptado')],
+  ['addClientSender (contactos)', () => addClientSender({ clientId: ZERO, kind: 'email', value: 'a@empresa.com', name: '', role: '' })],
+  ['setClientSenderActive (contactos)', () => setClientSenderActive(ZERO, false)],
   ['setProfileActive (fichas)', () => setProfileActive(ZERO, false)],
   ['saveKickoffAnswers (SEO)', () => saveKickoffAnswers(fx.kijutechProjectId, [])],
   ['generateShareToken (SEO)', () => generateShareToken(ZERO)],
@@ -280,5 +298,81 @@ describe('límite de intentos de inicio de sesión', () => {
     expect(r.error).toBe('Correo o contraseña incorrectos.');
     // y no devuelve la contraseña escrita
     expect(JSON.stringify(r)).not.toContain('cualquiera');
+  });
+});
+
+describe('memoria de cliente y contactos', () => {
+  let clientId = '';
+  let memoryId = '';
+
+  beforeAll(async () => {
+    await db.delete(opsClients).where(like(opsClients.name, `${PREFIX}%`));
+    const [c] = await db.insert(opsClients).values({ tenantId: fx.kijutechTenantId, name: `${PREFIX}cliente` }).returning({ id: opsClients.id });
+    clientId = c.id;
+  });
+  afterAll(async () => {
+    // Borrar el cliente de prueba arrastra sus contactos y su memoria (ON DELETE CASCADE).
+    await db.delete(opsClients).where(like(opsClients.name, `${PREFIX}%`));
+  });
+
+  it('un editor puede añadir y aceptar datos (control positivo)', async () => {
+    await loginAs(fx.users.editor);
+    expect((await addClientMemory({ clientId, kind: 'preferencia', text: 'Prefiere que le llamemos antes' })).ok).toBe(true);
+    const lista = await listClientMemory(clientId);
+    expect(lista.ok).toBe(true);
+    if (!lista.ok) return;
+    expect(lista.canDelete).toBe(false);
+    expect(lista.memory).toHaveLength(1);
+    expect(lista.memory[0].status).toBe('aceptado');
+    memoryId = lista.memory[0].id;
+    expect((await decideClientMemory(memoryId, 'descartado')).ok).toBe(true);
+    expect((await decideClientMemory(memoryId, 'aceptado')).ok).toBe(true);
+  });
+
+  it('rechaza contraseñas en la memoria y estados o tipos inventados', async () => {
+    await loginAs(fx.users.editor);
+    expect((await addClientMemory({ clientId, kind: 'contexto', text: 'contraseña: abc' })).ok).toBe(false);
+    expect((await addClientMemory({ clientId, kind: 'inventado', text: 'x' })).ok).toBe(false);
+    expect((await decideClientMemory(memoryId, 'propuesto')).ok).toBe(false);
+    expect(await db.select().from(opsClientMemory).where(eq(opsClientMemory.clientId, clientId))).toHaveLength(1);
+  });
+
+  it('un contacto no puede estar en dos fichas, ni como dominio público', async () => {
+    await loginAs(fx.users.editor);
+    const alta = { clientId, kind: 'email', value: 'Persona@Empresa.com', name: '', role: '' };
+    expect((await addClientSender(alta)).ok).toBe(true);
+    const dup = await addClientSender({ ...alta, value: 'persona@empresa.com' });
+    expect(dup.ok).toBe(false);
+    expect((await addClientSender({ ...alta, kind: 'domain', value: 'gmail.com' })).ok).toBe(false);
+  });
+
+  it('solo un admin borra de verdad; un editor puede descartar', async () => {
+    await loginAs(fx.users.editor);
+    expect(await outcome(() => deleteClientMemory(memoryId))).toBe('denegado');
+    await loginAs(fx.users.admin);
+    const lista = await listClientMemory(clientId);
+    expect(lista.ok && lista.canDelete).toBe(true);
+    expect((await deleteClientMemory(memoryId)).ok).toBe(true);
+    expect(await db.select().from(opsClientMemory).where(eq(opsClientMemory.clientId, clientId))).toHaveLength(0);
+  });
+
+  it('otra cuenta, incluso super_admin, no ve ni toca la memoria de Kijutech', async () => {
+    await loginAs(fx.users.editor);
+    expect((await addClientMemory({ clientId, kind: 'contexto', text: 'Dato de Kijutech' })).ok).toBe(true);
+    const [m] = await db.select().from(opsClientMemory).where(eq(opsClientMemory.clientId, clientId));
+
+    await loginAs(fx.users.otraCuenta);
+    const ajeno = await listClientMemory(clientId);
+    const inexistente = await listClientMemory(ZERO);
+    expect(ajeno).toEqual(inexistente); // mismo error: no revela qué fichas existen
+    expect((await addClientMemory({ clientId, kind: 'contexto', text: 'intruso' })).ok).toBe(false);
+    expect((await addClientSender({ clientId, kind: 'email', value: 'intruso@evil.com', name: '', role: '' })).ok).toBe(false);
+    expect((await updateClientMemory({ id: m.id, kind: 'contexto', text: 'manipulado' })).ok).toBe(false);
+    expect((await decideClientMemory(m.id, 'descartado')).ok).toBe(false);
+    expect((await deleteClientMemory(m.id)).ok).toBe(false);
+
+    const [intacto] = await db.select().from(opsClientMemory).where(eq(opsClientMemory.id, m.id));
+    expect(intacto.text).toBe('Dato de Kijutech');
+    expect(intacto.status).toBe('aceptado');
   });
 });

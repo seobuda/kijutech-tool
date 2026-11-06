@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { ClientMemoria } from './client-memoria';
 import {
   aiFillClient,
   deleteClient,
@@ -904,6 +905,14 @@ function ClientForm({
       {text('c-goals', 'Objetivos', 'goals', 2, 'Ej.: 30 leads al mes')}
       {text('c-strategy', 'Estrategia actual', 'strategy', 3)}
       {text('c-notes', 'Peculiaridades y notas', 'notes', 3)}
+
+      {isNew ? (
+        <p className="rounded-md border border-dashed border-gray-300 p-3 text-sm text-muted-foreground">
+          Guarda la ficha para poder añadir contactos y memoria del cliente.
+        </p>
+      ) : (
+        <ClientMemoria clientId={initial.id} />
+      )}
 
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" className="h-4 w-4 accent-orange-500" checked={f.active} onChange={(e) => set({ active: e.target.checked })} />

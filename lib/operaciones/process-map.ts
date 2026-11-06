@@ -638,6 +638,18 @@ const OPS_MEMORY: ProcessStep[] = [
     tables: ['ops_clients', 'ops_client_services', 'ops_client_levels', 'ops_services'],
   },
   {
+    id: 'ops-mem-client-memory',
+    lane: 'La memoria',
+    name: 'Memoria y contactos de cliente',
+    description: 'Datos que hay que recordar de cada cliente (preferencias, promesas, decisiones, contexto, restricciones) y los correos o dominios con los que escribe.',
+    status: 'in_progress',
+    file: 'lib/operaciones/client-memory-actions.ts',
+    when: 'Se escribe a mano desde la ficha del cliente (sección «Contactos y memoria»). Todavía no la lee ninguna función: la usará la entrada por email para reconocer al cliente y dar contexto a la IA.',
+    ai: 'Nada todavía. La IA solo podrá proponer datos («propuesto») y una persona los acepta; solo lo aceptado se usará como contexto.',
+    code: 'Valida el texto (máx. 1000 caracteres, sin contraseñas), normaliza correos y dominios, rechaza dominios públicos (gmail.com…) y un contacto repetido en dos fichas. Descartar lo puede hacer un editor; borrar de verdad, solo un administrador. Cada acción comprueba permisos y la cuenta del usuario. `matchSender` resuelve de qué cliente es un remitente: la dirección exacta gana al dominio y, si dos clientes reclaman lo mismo, no adivina.',
+    tables: ['ops_client_memory', 'ops_client_senders'],
+  },
+  {
     id: 'ops-mem-panel',
     lane: 'La memoria',
     name: 'Panel de Automatizaciones',
