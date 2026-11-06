@@ -1,0 +1,5 @@
+# HTTPS automático (Let's Encrypt) para brain.kijutech.com. Solo se usa con docker-compose.prod.yml
+brain.kijutech.com {
+	encode gzip
+	reverse_proxy app:3000
+}

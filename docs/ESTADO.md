@@ -3,7 +3,8 @@
 > **Documento vivo y de referencia.** Recoge todo lo que existe, cómo funciona, qué está decidido, qué se ha probado y qué falta. Se actualiza al cerrar cada paso de trabajo (junto al documento de sesión y al Mapa Visual).
 > **No contiene claves, contraseñas ni valores de `.env`** (solo sus nombres).
 
-**Fecha de esta versión:** 2026-11-04 (paso 8: seguridad antes de subir a un servidor)
+**Fecha de esta versión:** 2026-11-06 (paso 9 en curso: despliegue en DigitalOcean, Telegram ya por webhook; antes, paso 8: seguridad)
+**Producción:** `https://brain.kijutech.com` (droplet `kijutech-brain`, Frankfurt). Procedimiento en `docs/DESPLIEGUE.md`. Rama de trabajo del despliegue: `feature/despliegue`.
 **Rama de trabajo:** `feature/seguridad` (creada desde `feature/paso-7-piloto`, que aún no está fusionada en `main`; el paso 8 depende del 7). **No se ha unido a `main`: espera la aprobación de Enric.** **Operaciones ya está fusionada en `main`** (fast-forward, 30 oct): `main` y `operaciones` coinciden en `9110754f`; la rama `operaciones` se mantiene.
 **Rama `main`:** `9110754f` hasta que se apruebe y fusione el paso 7. Ramas antiguas de SEO (`feature/fase-d-*`, `feature/mapa-visual-sistema`) ya fusionadas.
 **Repositorio:** `https://github.com/seobuda/kijutech-tool` (origen `origin`).
@@ -154,7 +155,7 @@ Estados (`ops_requests.work_status`): `asignado → en_curso → (bloqueado) →
 - **Conversaciones pendientes del bot** (`ops_telegram_pending`): enlace, motivo, pregunta o respuesta; caducan (30 min por defecto, ajustable).
 
 ### 6.4 Telegram
-- Bot **KijutechPMBot**, escucha por **long polling** (`receive_mode = polling`); ruta `/api/telegram/webhook` preparada para servidor.
+- Bot **KijutechPMBot**, en **local** escucha por **long polling** (`receive_mode = polling`); en **producción** (desde el 6 nov) recibe por **webhook** (`receive_mode = webhook`, ruta `/api/telegram/webhook?t=<tenant>` con secreto derivado de `AUTH_SECRET`), en modo pruebas hasta que el equipo vincule su chat. Verificado: `getWebhookInfo` sin errores ni pendientes y `/ayuda` responde.
 - **Un solo oyente:** candado de PostgreSQL 74200126; un 409 o un 401 quedan anotados y visibles en la pestaña Telegram.
 - **Vinculación** por enlace `t.me/<bot>?start=<código>`: el código sirve **una sola vez** (UPDATE atómico); un chat no vinculado se ignora. Hoy hay 5 miembros: **Enric, Jesus y Mayelin vinculados; Eury y «Kijutech agencia» sin vincular**.
 - **Modo pruebas ACTIVO** (por defecto): todo aviso llega solo al dueño con la cabecera «iba dirigido a…»; no se aplica el silencio de las fichas.
@@ -379,7 +380,9 @@ Construido en agosto de 2026 (Fases A–D). Detalle y auditoría completa en `do
 - **Limpieza de la plantilla que queda:** `README.md`, tablas `teams`/`team_members`/`invitations` y columnas `stripe_*` de `teams` (migración futura), páginas `general`, `activity` y `security` heredadas del starter (revisar o quitar), textos sobrantes en inglés.
 - Pantalla para cambiar el rol o dar de baja a un usuario (hoy solo alta); ocultar las pestañas de administración a quien no es admin.
 - CSP con `script-src` por nonce cuando haya servidor y HTTPS.
-- Borrar el usuario de pruebas, tareas `[PRUEBA …]` y datos de prueba (§14); apagar el modo pruebas; pasar Telegram a webhook; copias de seguridad programadas.
+- **Servidor (5 nov, hecho):** HTTPS, secretos nuevos, base de datos limpia sin usuario de pruebas ni datos de prueba, copia diaria `pg_dump` en `/opt/kijutech/backups` y snapshots de DigitalOcean.
+- **Servidor (6 nov, hecho):** contraseña inicial del admin cambiada y archivo borrado del servidor; tokens de ClickUp, Telegram e IA introducidos en el panel; Telegram por webhook; app local parada para evitar el 409. **Aparcado por decisión de Enric:** proxy de Cloudflare (SSL Full strict), no necesario por ahora.
+- **Servidor (pendiente):** **sacar las copias diarias fuera de DigitalOcean (NAS de Enric y Google Drive de la agencia)**: proyecto crítico, hay que protegerlo bien; CSP con nonce; apagar el modo pruebas de Telegram cuando el equipo vincule su chat; la base local de desarrollo conserva los datos de prueba.
 - Redirección para el enlace «Abrir tarea» de Encargos (hoy no registra clics): pasar por la herramienta.
 - Cachés por proceso (un solo servidor por ahora).
 
@@ -402,7 +405,7 @@ Construido en agosto de 2026 (Fases A–D). Detalle y auditoría completa en `do
 ## 17. Hoja de ruta (lo planeado, en gris en el mapa)
 
 Cada uno con su nodo en el nivel 1 del Mapa Visual:
-- **Servidor:** subir a un servidor con dirección pública (webhook de Telegram, copias de seguridad, seguridad real de usuarios y roles, limpieza de la plantilla).
+- **Servidor:** **en marcha desde el 5 nov** (ver §16 y `docs/DESPLIEGUE.md`). Telegram por webhook desde el 6 nov. Quedan: copias fuera de DigitalOcean, limpieza de la plantilla (Cloudflare aparcado).
 - **Jornada y rendimiento:** medir rendimiento, no presencia, con flexibilidad: botones «tengo que salir» y «he vuelto», y hora de entrada frente a primera actividad real. Se apoya en `ops_request_events`.
 - **Niveles y recompensas:** progreso visible, carreras con formaciones desbloqueables y bonos mensuales que se pueden perder, con un salario base que solo sube.
 - **Subagentes por área:** agentes de IA por área o por cliente que revisan el trabajo antes que Enric, con su ficha y su criterio (p. ej. redacción con el tono de cada cliente o diseño web con el criterio de Enric); se enchufan como **revisor intercambiable** (`reviewers.ts`: solo tendrán que llamar a `acceptWork()` o `returnWork()`).
@@ -420,6 +423,8 @@ Cada uno con su nodo en el nivel 1 del Mapa Visual:
 - **30 oct:** paso 5 (flujo desde Telegram, bloqueos con IA, cortafuegos, Mi bandeja, eventos) · 6A Equipo · 6B Clientes · 6C botones por fases, recordatorios y vigilancia de ClickUp · «Última acción» · 6D alertas de clientes · 6E panel de Automatizaciones · Mapa Visual de Operaciones con regla y comprobación.
 - **31 oct:** paso 7, preparar el piloto: limpieza asistida de vencidas, pestaña Piloto, `/sugerencia` y `/ayuda`, «Sistema en marcha» y arranque automático de los contenedores; la limpieza no falsea alertas ni informes.
 - **4 nov:** paso 8, seguridad antes de subir a un servidor (rama `feature/seguridad`): Next.js 16.4.5, permisos por rol en el servidor, cierre del registro y de la fuga del hash, límite de intentos, secretos fuera del repo y del contenedor, Stripe fuera, fachada en español, 70 pruebas automáticas y bloque Seguridad en el Mapa Visual.
+- **5 nov:** paso 9, despliegue (rama `feature/despliegue`): droplet `kijutech-brain` (Ubuntu 24.04, Docker, firewall 22/80/443, SSH solo con clave), DNS `brain.kijutech.com`, `docker-compose.prod.yml` + Caddy con HTTPS automático, secretos nuevos generados en el servidor, base de datos limpia (migraciones + prompts de IA copiados + super_admin `enrique@kijutech.com`), cron diario de `pg_dump` (7 días) y snapshots semanales de DigitalOcean.
+- **6 nov:** cierre del arranque en producción: Enric cambia la contraseña inicial (archivo borrado con `shred`), introduce los tokens, se desbloquea un bloqueo por intentos (5 fallos propios en `auth_login_attempts`), se configura el bot en modo pruebas y se activa el webhook de Telegram (verificado con `getWebhookInfo` y `/ayuda`). Cloudflare proxy aparcado.
 - Historial completo: `git log` (240 commits) y `docs/sessions/` (47 documentos).
 
 ## 19. Mapa de archivos
