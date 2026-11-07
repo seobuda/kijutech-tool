@@ -1,0 +1,31 @@
+CREATE TABLE IF NOT EXISTS "ops_inbound_emails" (
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+  "tenant_id" uuid NOT NULL REFERENCES "tenants"("id") ON DELETE CASCADE,
+  "message_id" varchar(500) NOT NULL,
+  "source" varchar(12) DEFAULT 'cloudflare' NOT NULL,
+  "from_address" varchar(320) NOT NULL,
+  "from_name" varchar(255),
+  "to_address" varchar(320),
+  "subject" varchar(500) DEFAULT '' NOT NULL,
+  "body_text" text DEFAULT '' NOT NULL,
+  "attachments" jsonb DEFAULT '[]'::jsonb NOT NULL,
+  "in_reply_to" varchar(500),
+  "sent_at" timestamp,
+  "auth_status" varchar(8) DEFAULT 'none' NOT NULL,
+  "client_id" uuid REFERENCES "ops_clients"("id") ON DELETE SET NULL,
+  "matched_by" varchar(10) DEFAULT 'ninguno' NOT NULL,
+  "status" varchar(14) DEFAULT 'nuevo' NOT NULL,
+  "status_note" varchar(255),
+  "proposal" jsonb,
+  "decided_by" integer REFERENCES "users"("id") ON DELETE SET NULL,
+  "decided_at" timestamp,
+  "created_at" timestamp DEFAULT now() NOT NULL,
+  "updated_at" timestamp DEFAULT now() NOT NULL,
+  CONSTRAINT "ops_inbound_emails_message_unique" UNIQUE("tenant_id", "message_id"),
+  CONSTRAINT "ops_inbound_emails_source_check" CHECK ("source" IN ('cloudflare', 'pegado')),
+  CONSTRAINT "ops_inbound_emails_auth_check" CHECK ("auth_status" IN ('pass', 'fail', 'none')),
+  CONSTRAINT "ops_inbound_emails_match_check" CHECK ("matched_by" IN ('email', 'domain', 'manual', 'ninguno', 'ambiguo')),
+  CONSTRAINT "ops_inbound_emails_status_check" CHECK ("status" IN ('nuevo', 'ignorado', 'sin_cliente', 'informativo', 'interpretando', 'propuesto', 'aprobado', 'descartado', 'error'))
+);
+CREATE INDEX IF NOT EXISTS "ops_inbound_emails_status_idx" ON "ops_inbound_emails" USING btree ("tenant_id", "status", "created_at");
+CREATE INDEX IF NOT EXISTS "ops_inbound_emails_client_idx" ON "ops_inbound_emails" USING btree ("client_id");

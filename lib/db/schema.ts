@@ -1619,6 +1619,58 @@ export const opsClientMemory = pgTable(
   ]
 );
 
+// Correos de clientes recibidos (paso B). Entran por el aviso firmado de Cloudflare o pegados a mano. Un correo
+// es un dato NO fiable: la IA solo propondrá y una persona aprueba. Único por (cuenta, Message-ID).
+export const opsInboundEmails = pgTable(
+  'ops_inbound_emails',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    messageId: varchar('message_id', { length: 500 }).notNull(),
+    // cloudflare | pegado
+    source: varchar('source', { length: 12 }).notNull().default('cloudflare'),
+    fromAddress: varchar('from_address', { length: 320 }).notNull(),
+    fromName: varchar('from_name', { length: 255 }),
+    toAddress: varchar('to_address', { length: 320 }),
+    subject: varchar('subject', { length: 500 }).notNull().default(''),
+    // Texto plano ya limpio (sin HTML ni caracteres invisibles), máx. 20 000 caracteres.
+    bodyText: text('body_text').notNull().default(''),
+    // Solo los nombres de los adjuntos: no se descargan.
+    attachments: jsonb('attachments').notNull().default([]),
+    inReplyTo: varchar('in_reply_to', { length: 500 }),
+    sentAt: timestamp('sent_at'),
+    // Resultado de la autenticación del remitente según Cloudflare: pass | fail | none (pegado o desconocido).
+    authStatus: varchar('auth_status', { length: 8 }).notNull().default('none'),
+    clientId: uuid('client_id').references(() => opsClients.id, { onDelete: 'set null' }),
+    // Cómo se reconoció al cliente: email | domain | manual | ninguno | ambiguo.
+    matchedBy: varchar('matched_by', { length: 10 }).notNull().default('ninguno'),
+    // nuevo | ignorado | sin_cliente | informativo | interpretando | propuesto | aprobado | descartado | error
+    status: varchar('status', { length: 14 }).notNull().default('nuevo'),
+    statusNote: varchar('status_note', { length: 255 }),
+    // Propuesta de encargos (paso B2).
+    proposal: jsonb('proposal'),
+    decidedBy: integer('decided_by').references(() => users.id, { onDelete: 'set null' }),
+    decidedAt: timestamp('decided_at'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    unique('ops_inbound_emails_message_unique').on(table.tenantId, table.messageId),
+    index('ops_inbound_emails_status_idx').on(table.tenantId, table.status, table.createdAt),
+    index('ops_inbound_emails_client_idx').on(table.clientId),
+    check('ops_inbound_emails_source_check', sql`${table.source} IN ('cloudflare', 'pegado')`),
+    check('ops_inbound_emails_auth_check', sql`${table.authStatus} IN ('pass', 'fail', 'none')`),
+    check('ops_inbound_emails_match_check', sql`${table.matchedBy} IN ('email', 'domain', 'manual', 'ninguno', 'ambiguo')`),
+    check(
+      'ops_inbound_emails_status_check',
+      sql`${table.status} IN ('nuevo', 'ignorado', 'sin_cliente', 'informativo', 'interpretando', 'propuesto', 'aprobado', 'descartado', 'error')`
+    ),
+  ]
+);
+
+export type OpsInboundEmail = typeof opsInboundEmails.$inferSelect;
 export type OpsClientSender = typeof opsClientSenders.$inferSelect;
 export type OpsClientMemory = typeof opsClientMemory.$inferSelect;
 export type OpsClientActivity = typeof opsClientActivity.$inferSelect;

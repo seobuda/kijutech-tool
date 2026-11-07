@@ -9,6 +9,7 @@ const TABS = [
   { href: '/dashboard/operaciones/bandeja', label: 'Mi bandeja' },
   { href: '/dashboard/operaciones/equipo', label: 'Equipo' },
   { href: '/dashboard/operaciones/clientes', label: 'Clientes' },
+  { href: '/dashboard/operaciones/correos', label: 'Correos' },
   { href: '/dashboard/operaciones/encargos', label: 'Encargos' },
   { href: '/dashboard/operaciones/nuevo', label: 'Nuevo encargo' },
   { href: '/dashboard/operaciones/automatizaciones', label: 'Automatizaciones' },

@@ -1,6 +1,8 @@
 # Diseño: entrada por email (paso B de «Operaciones como puesto de trabajo»)
 
-**Estado:** propuesta pendiente de aprobación (7 nov 2026). Rama `feature/memoria-cliente-email`.
+**Estado:** B1 construido en local (7 nov 2026). Rama `feature/memoria-cliente-email`.
+
+> **Cambio de rumbo del 7 nov (sustituye al §1 y al §6 de abajo en lo que se contradigan):** tras investigar alternativas se descartó IMAP con contraseña de aplicación (acceso total a un buzón guardado en la base, y dependiente de que Google mantenga las contraseñas de aplicación). La entrada es ahora **Cloudflare Email Routing + un Email Worker** sobre un subdominio (`in.kijutech.com`, nunca el dominio principal: rompería el correo de Workspace). El Worker comprueba la autenticación con las cabeceras de Cloudflare y manda el correo firmado (HMAC con secreto derivado de `AUTH_SECRET`, marca de tiempo de 5 min) a `POST /api/email/entrada?t=<cuenta>`. No hace falta el buzón Gmail de herramientas, ni `imapflow`, ni `mailparser`, ni la tabla `ops_mailbox_config`. La migración 0039 solo crea `ops_inbound_emails`; la ampliación del `CHECK` de `ops_notifications.kind` (`email_proposal`, `email_unknown`) pasa al paso B2, que es donde se usa. Lo que sigue (§2 en adelante: pipeline, aprobación por Telegram, seguridad, fases) sigue vigente.
 **Objetivo:** que un correo de un cliente se convierta, sin que nadie lo copie a mano, en una propuesta de encargo (cliente, tarea, responsable, fecha) que Enric aprueba con un botón en Telegram. Nada se crea en ClickUp sin esa pulsación.
 
 ## 1. Cómo llega el correo
