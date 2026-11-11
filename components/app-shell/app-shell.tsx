@@ -260,7 +260,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const roles = useRoles();
   const groups = visibleNav(roles);
-  const [collapsed, setCollapsed] = useState(false);
+  const [userCollapsed, setCollapsed] = useState(false);
+  // Portátiles con escala del 125-150 % tienen ~900-1250 px útiles: la barra se queda visible
+  // pero en modo iconos para dejar sitio al contenido.
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    const mq = matchMedia('(max-width: 1279px)');
+    const on = () => setNarrow(mq.matches);
+    on();
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  const collapsed = userCollapsed || narrow;
   const [mobileOpen, setMobileOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
 
@@ -299,7 +310,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* Barra lateral (escritorio) */}
       <aside
         className={cn(
-          'sticky top-0 hidden h-[100dvh] shrink-0 flex-col border-r border-sidebar-border bg-sidebar transition-[width] duration-200 ease-out lg:flex',
+          'sticky top-0 hidden h-[100dvh] shrink-0 flex-col border-r border-sidebar-border bg-sidebar transition-[width] duration-200 ease-out md:flex',
           collapsed ? 'w-[68px]' : 'w-64'
         )}
       >
@@ -333,6 +344,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <button
             type="button"
             onClick={toggleCollapsed}
+            hidden={narrow}
             className="flex h-8 items-center justify-center gap-2 rounded-lg text-xs text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
             aria-label={collapsed ? 'Expandir menú' : 'Contraer menú'}
           >
@@ -345,8 +357,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* Menú móvil */}
       <DialogPrimitive.Root open={mobileOpen} onOpenChange={setMobileOpen}>
         <DialogPrimitive.Portal>
-          <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm data-[state=open]:animate-in data-[state=open]:fade-in-0 lg:hidden" />
-          <DialogPrimitive.Content className="fixed inset-y-0 left-0 z-50 flex w-72 flex-col bg-sidebar shadow-lg data-[state=open]:animate-in data-[state=open]:slide-in-from-left lg:hidden">
+          <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm data-[state=open]:animate-in data-[state=open]:fade-in-0 md:hidden" />
+          <DialogPrimitive.Content className="fixed inset-y-0 left-0 z-50 flex w-72 flex-col bg-sidebar shadow-lg data-[state=open]:animate-in data-[state=open]:slide-in-from-left md:hidden">
             <DialogPrimitive.Title className="sr-only">Menú</DialogPrimitive.Title>
             <div className="flex h-16 items-center justify-between px-4">
               <Logo />
@@ -370,7 +382,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <button
             type="button"
             onClick={() => setMobileOpen(true)}
-            className="-ml-1 rounded-lg p-2 text-muted-foreground hover:bg-accent lg:hidden"
+            className="-ml-1 rounded-lg p-2 text-muted-foreground hover:bg-accent md:hidden"
             aria-label="Abrir menú"
           >
             <Menu className="size-5" />
@@ -380,7 +392,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <button
               type="button"
               onClick={() => setPaletteOpen(true)}
-              className="rounded-lg p-2 text-muted-foreground hover:bg-accent lg:hidden"
+              className="rounded-lg p-2 text-muted-foreground hover:bg-accent md:hidden"
               aria-label="Buscar"
             >
               <Search className="size-5" />

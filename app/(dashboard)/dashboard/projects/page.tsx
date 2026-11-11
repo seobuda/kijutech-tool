@@ -1,16 +1,17 @@
 import Link from 'next/link';
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle
-} from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Archive, Pencil, PlusCircle } from 'lucide-react';
+import { Archive, ArrowUpRight, FolderKanban, Globe, Pencil, PlusCircle } from 'lucide-react';
 import { getProjectsForUser, getUser, getUserTenantRoleNames } from '@/lib/db/queries';
+import { Badge, EmptyState, PageContainer, PageHeader } from '@/components/ui/page';
 import { ArchiveProjectButton } from './archive-project-button';
 
 const MANAGE_ROLES = ['admin', 'super_admin'];
+
+const STATUS: Record<string, { label: string; tone: 'success' | 'warning' | 'neutral' }> = {
+  active: { label: 'Activo', tone: 'success' },
+  paused: { label: 'En pausa', tone: 'warning' },
+  archived: { label: 'Archivado', tone: 'neutral' }
+};
 
 export default async function ProjectsPage() {
   const user = await getUser();
@@ -20,74 +21,91 @@ export default async function ProjectsPage() {
   ]);
   const canManage = roleNames.some((r) => MANAGE_ROLES.includes(r));
 
-  return (
-    <section className="mx-auto w-full max-w-[1400px] px-4 py-6 lg:px-8 lg:py-8">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-lg lg:text-2xl font-medium">Proyectos</h1>
-        <div className="flex items-center space-x-2">
-          {canManage && (
-            <Link href="/dashboard/projects/archived">
-              <Button variant="outline">
-                <Archive className="mr-2 h-4 w-4" />
-                Proyectos archivados
-              </Button>
-            </Link>
-          )}
-          <Link href="/dashboard/projects/new">
-            <Button className="bg-brand hover:bg-brand/90 text-white">
-              <PlusCircle className="mr-2 h-4 w-4" />
-              Nuevo proyecto
-            </Button>
-          </Link>
-        </div>
-      </div>
+  const newButton = (
+    <Button asChild className="bg-brand text-white hover:bg-brand/90">
+      <Link href="/dashboard/projects/new">
+        <PlusCircle className="size-4" />
+        Nuevo proyecto
+      </Link>
+    </Button>
+  );
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Todos los proyectos</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {projects.length === 0 ? (
-            <p className="text-muted-foreground">
-              Todavía no hay proyectos. Crea el primero.
-            </p>
-          ) : (
-            <ul className="space-y-4">
-              {projects.map((project) => (
-                <li
-                  key={project.id}
-                  className="flex items-center justify-between"
-                >
-                  <div>
-                    <p className="font-medium">{project.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {project.clientName || '—'} · {project.domain || '—'}
-                    </p>
+  return (
+    <PageContainer className="space-y-6">
+      <PageHeader
+        icon={FolderKanban}
+        title="Proyectos SEO"
+        description="Cada proyecto recorre las etapas del método: onboarding, kickoff, radiografía y keyword research."
+        actions={
+          <>
+            {canManage && (
+              <Button asChild variant="outline">
+                <Link href="/dashboard/projects/archived">
+                  <Archive className="size-4" />
+                  Archivados
+                </Link>
+              </Button>
+            )}
+            {newButton}
+          </>
+        }
+      />
+
+      {projects.length === 0 ? (
+        <EmptyState
+          icon={FolderKanban}
+          title="Todavía no hay proyectos"
+          description="Crea el primero con el nombre del cliente y su dominio; después podrás abrir su recorrido SEO."
+          action={newButton}
+        />
+      ) : (
+        <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {projects.map((project) => {
+            const st = STATUS[project.status] ?? { label: project.status, tone: 'neutral' as const };
+            return (
+              <li
+                key={project.id}
+                className="group flex flex-col rounded-xl border bg-card p-5 shadow-xs transition-shadow hover:shadow-md"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-base font-semibold">{project.name}</p>
+                    <p className="truncate text-sm text-muted-foreground">{project.clientName || 'Sin cliente'}</p>
                   </div>
-                  <div className="flex items-center space-x-4">
-                    <p className="text-sm text-muted-foreground capitalize">
-                      {project.status}
-                    </p>
-                    <Link href={`/dashboard/projects/${project.id}/edit`}>
-                      <Button variant="outline" size="sm">
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                    </Link>
+                  <Badge tone={st.tone} dot>
+                    {st.label}
+                  </Badge>
+                </div>
+                {project.domain && (
+                  <p className="mt-3 flex items-center gap-1.5 truncate text-sm text-muted-foreground">
+                    <Globe className="size-3.5 shrink-0" />
+                    {project.domain}
+                  </p>
+                )}
+                <div className="mt-5 flex items-center gap-2 border-t pt-4">
+                  <Button asChild size="sm" className="bg-brand text-white hover:bg-brand/90">
                     <Link href={`/dashboard/projects/${project.id}/seo`}>
-                      <Button variant="outline" size="sm">
-                        Abrir SEO
-                      </Button>
+                      Abrir SEO
+                      <ArrowUpRight className="size-3.5" />
                     </Link>
-                    {canManage && (
+                  </Button>
+                  <Button asChild variant="outline" size="sm" aria-label="Editar proyecto">
+                    <Link href={`/dashboard/projects/${project.id}/edit`}>
+                      <Pencil className="size-3.5" />
+                      Editar
+                    </Link>
+                  </Button>
+                  {canManage && (
+                    <div className="ml-auto">
                       <ArchiveProjectButton projectId={project.id} />
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
-    </section>
+                    </div>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </PageContainer>
   );
 }
