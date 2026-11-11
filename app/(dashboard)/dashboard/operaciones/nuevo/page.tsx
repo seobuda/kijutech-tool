@@ -1,5 +1,8 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { PlugZap } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/page';
 import { getUser } from '@/lib/db/queries';
 import { getClickUpConnection } from '@/lib/operaciones/queries';
 import { ensureFresh, getStructure, selectedSpaces } from '@/lib/operaciones/structure';
@@ -16,18 +19,16 @@ export default async function NuevoEncargoPage() {
   const conn = await getClickUpConnection(user.tenantId);
   if (!conn) {
     return (
-      <div className="rounded-lg border border-dashed border-input p-8 text-center space-y-3">
-        <p className="font-medium">Todavía no has conectado ClickUp</p>
-        <p className="text-sm text-muted-foreground">
-          Hace falta el token para elegir la lista de destino y crear la tarea.
-        </p>
-        <Link
-          href="/dashboard/operaciones/ajustes"
-          className="inline-block rounded-full bg-brand px-4 py-2 text-sm text-white hover:bg-brand/90"
-        >
-          Ir a Ajustes ClickUp
-        </Link>
-      </div>
+      <EmptyState
+        icon={PlugZap}
+        title="Todavía no has conectado ClickUp"
+        description="Hace falta el token para elegir la lista de destino y crear la tarea."
+        action={
+          <Button asChild className="bg-brand text-white hover:bg-brand/90">
+            <Link href="/dashboard/operaciones/ajustes">Ir a Ajustes ClickUp</Link>
+          </Button>
+        }
+      />
     );
   }
 

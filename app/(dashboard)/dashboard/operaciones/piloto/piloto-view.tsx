@@ -2,8 +2,10 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import { TrendingUp, Bot, CheckCircle2, Inbox, Lightbulb, ListChecks, Timer } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Badge, EmptyState, Section, StatCard } from '@/components/ui/page';
 import { savePilotStartAction } from '@/lib/operaciones/pilot-actions';
 import type { PersonWeek, PilotData, Stat, SuggestionRow } from '@/lib/operaciones/pilot';
 
@@ -51,95 +53,199 @@ export function PilotoView({ data, suggestions }: { data: PilotData; suggestions
       if (r.ok) router.refresh();
     });
 
+  // Resumen de la semana más reciente (solo presentación: sale de los mismos totales de la tabla).
+  const latest = data.hasData ? data.weeks[0] : undefined;
+  const lt = latest?.total;
+
   return (
-    <div className="max-w-5xl space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-medium">Piloto</h2>
-          <p className="text-sm text-muted-foreground">
+    <div className="max-w-6xl space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
+          <h2 className="text-[15px] font-semibold">Piloto</h2>
+          <p className="mt-0.5 max-w-2xl text-sm text-muted-foreground text-pretty">
             Métricas por semana (lunes a domingo) y por persona, calculadas con lo que ya registra el sistema desde la fecha de inicio.
           </p>
         </div>
         <div className="flex items-end gap-2">
-          <label className="text-xs">
-            <span className="mb-1 block font-medium">Inicio del piloto</span>
-            <Input type="date" value={start} onChange={(e) => setStart(e.target.value)} data-testid="piloto-inicio" className="w-40" />
-          </label>
-          <Button size="sm" disabled={pending || start === data.start || !start} onClick={save} data-testid="piloto-guardar">
+          <div className="space-y-1">
+            <label htmlFor="piloto-inicio" className="block text-xs font-medium">
+              Inicio del piloto
+            </label>
+            <Input
+              id="piloto-inicio"
+              type="date"
+              value={start}
+              onChange={(e) => setStart(e.target.value)}
+              data-testid="piloto-inicio"
+              className="w-40"
+            />
+          </div>
+          <Button
+            size="sm"
+            className="h-9 bg-brand text-white hover:bg-brand/90"
+            disabled={pending || start === data.start || !start}
+            onClick={save}
+            data-testid="piloto-guardar"
+          >
             Guardar
           </Button>
         </div>
       </div>
-      {msg && <p className={`text-sm ${msg.type === 'ok' ? 'text-success' : 'text-destructive'}`}>{msg.text}</p>}
+      {msg && (
+        <p
+          role="status"
+          className={`rounded-lg px-3 py-2 text-sm ${msg.type === 'ok' ? 'bg-success-soft text-success' : 'bg-destructive-soft text-destructive'}`}
+        >
+          {msg.text}
+        </p>
+      )}
 
       {!data.hasData && (
-        <div className="rounded-lg border border-dashed border-input p-6 text-center space-y-1">
-          <p className="font-medium">Todavía no hay datos desde el {fmtWeek(data.start)}</p>
-          <p className="text-sm text-muted-foreground">
-            Las métricas aparecerán solas cuando haya encargos y pulsaciones de botón. Puedes cambiar la fecha de inicio arriba.
+        <EmptyState
+          icon={TrendingUp}
+          title={`Todavía no hay datos desde el ${fmtWeek(data.start)}`}
+          description="Las métricas aparecerán solas cuando haya encargos y pulsaciones de botón. Puedes cambiar la fecha de inicio arriba."
+        />
+      )}
+
+      {latest && lt && (
+        <div>
+          <p className="mb-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            Semana del {fmtWeek(latest.weekStart)}
           </p>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <StatCard
+              label="Encargos creados"
+              value={lt.createdBloc + lt.createdNuevo + lt.createdClickup}
+              hint={`Bloc ${lt.createdBloc} · Nuevo ${lt.createdNuevo} · ClickUp ${lt.createdClickup}`}
+              icon={ListChecks}
+              tone="brand"
+            />
+            <StatCard
+              label="Del aviso a Empezar"
+              value={lt.toStart ? mins(lt.toStart.avg) : '—'}
+              hint={lt.toStart ? `Mediana ${mins(lt.toStart.median)} · n=${lt.toStart.n}` : 'Sin datos'}
+              icon={Timer}
+              tone="info"
+            />
+            <StatCard
+              label="Bloqueos resueltos por la IA"
+              value={lt.blocksAi}
+              hint={`${lt.blocksOwner} llegaron a ti`}
+              icon={Bot}
+              tone="success"
+            />
+            <StatCard
+              label="Revisiones aceptadas"
+              value={lt.reviewsAccepted}
+              hint={`${lt.reviewsReturned} devueltas`}
+              icon={CheckCircle2}
+              tone="neutral"
+            />
+          </div>
         </div>
       )}
 
       {data.weeks.map((w) => {
         const ids = data.order.filter((id) => w.people[id]);
         return (
-          <section key={w.weekStart} className="space-y-2" data-testid={`semana-${w.weekStart}`}>
-            <h3 className="text-sm font-medium">Semana del {fmtWeek(w.weekStart)}</h3>
-            <div className="overflow-x-auto rounded-lg border border-border">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
+          <section
+            key={w.weekStart}
+            className="overflow-hidden rounded-xl border bg-card shadow-xs"
+            data-testid={`semana-${w.weekStart}`}
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3">
+              <h3 className="text-sm font-semibold">Semana del {fmtWeek(w.weekStart)}</h3>
+              <Badge tone="neutral">
+                {ids.length} persona{ids.length === 1 ? '' : 's'}
+              </Badge>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="data-table">
+                <thead>
                   <tr>
-                    <th className="px-3 py-2 font-medium">Métrica</th>
+                    <th scope="col" className="sticky left-0 z-10 min-w-44 bg-muted sm:min-w-56">
+                      Métrica
+                    </th>
                     {ids.map((id) => (
-                      <th key={id} className="px-3 py-2 font-medium">{data.names[id] ?? id}</th>
+                      <th key={id} scope="col" className="whitespace-nowrap">
+                        {data.names[id] ?? id}
+                      </th>
                     ))}
-                    <th className="px-3 py-2 font-medium">Total</th>
+                    <th scope="col">Total</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-border">
+                <tbody>
                   {ROWS.map((r) => (
                     <tr key={r.label}>
-                      <td className="px-3 py-1.5" title={r.hint}>{r.label}</td>
+                      <th
+                        scope="row"
+                        className="sticky left-0 z-10 border-b bg-card px-3 py-2.5 text-left font-normal"
+                        title={r.hint}
+                      >
+                        {r.label}
+                      </th>
                       {ids.map((id) => (
-                        <td key={id} className="px-3 py-1.5 tabular-nums">{r.value(w.people[id])}</td>
+                        <td key={id} className="whitespace-nowrap tabular-nums">
+                          {r.value(w.people[id])}
+                        </td>
                       ))}
-                      <td className="px-3 py-1.5 font-medium tabular-nums">{r.value(w.total)}</td>
+                      <td className="whitespace-nowrap font-medium tabular-nums">{r.value(w.total)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <p className="text-sm" data-testid={`interrupciones-${w.weekStart}`}>
-              <span className="font-medium">Tu bandeja:</span> {w.immediate} interrupci{w.immediate === 1 ? 'ón inmediata' : 'ones inmediatas'} (urgentes) frente a{' '}
-              {w.toDigest} cosa{w.toDigest === 1 ? '' : 's'} que fue{w.toDigest === 1 ? '' : 'ron'} a los resúmenes.
+            <p className="flex items-start gap-2 border-t bg-muted/30 px-4 py-3 text-sm" data-testid={`interrupciones-${w.weekStart}`}>
+              <Inbox className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
+              <span>
+                <span className="font-medium">Tu bandeja:</span> {w.immediate} interrupci{w.immediate === 1 ? 'ón inmediata' : 'ones inmediatas'} (urgentes) frente a{' '}
+                {w.toDigest} cosa{w.toDigest === 1 ? '' : 's'} que fue{w.toDigest === 1 ? '' : 'ron'} a los resúmenes.
+              </span>
             </p>
           </section>
         );
       })}
 
-      <section className="space-y-2" data-testid="sugerencias">
-        <h3 className="text-sm font-medium">Sugerencias ({suggestions.length})</h3>
-        {suggestions.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Aún no hay sugerencias. El equipo las envía al bot con /sugerencia.</p>
-        ) : (
-          <ul className="space-y-2">
-            {suggestions.map((s) => (
-              <li key={s.id} className="rounded-md border border-border bg-card p-3 text-sm">
-                <p className="text-xs text-muted-foreground">
-                  <span className="font-medium text-foreground/80">{s.person}</span> · {fmtAt(s.at)}
-                  {!s.shown && <span className="ml-2 rounded bg-brand-soft px-1.5 py-0.5 text-brand">Nueva</span>}
-                </p>
-                <p className="mt-1 whitespace-pre-line">{s.text}</p>
-                {s.hasPhoto && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={`/api/operaciones/suggestion-photo/${s.id}`} alt="Captura de la sugerencia" className="mt-2 max-h-72 rounded border border-border" loading="lazy" />
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      <div data-testid="sugerencias">
+        <Section title={`Sugerencias (${suggestions.length})`}>
+          {suggestions.length === 0 ? (
+            <EmptyState
+              icon={Lightbulb}
+              title="Aún no hay sugerencias"
+              description="El equipo las envía al bot con /sugerencia."
+              className="py-10"
+            />
+          ) : (
+            <ul className="divide-y">
+              {suggestions.map((s) => (
+                <li key={s.id} className="py-3 text-sm first:pt-0 last:pb-0">
+                  <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    <span className="font-medium text-foreground">{s.person}</span>
+                    <span aria-hidden>·</span>
+                    <span>{fmtAt(s.at)}</span>
+                    {!s.shown && (
+                      <Badge tone="brand" dot>
+                        Nueva
+                      </Badge>
+                    )}
+                  </p>
+                  <p className="mt-1 whitespace-pre-line text-pretty">{s.text}</p>
+                  {s.hasPhoto && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={`/api/operaciones/suggestion-photo/${s.id}`}
+                      alt="Captura de la sugerencia"
+                      className="mt-2 max-h-72 rounded-lg border"
+                      loading="lazy"
+                    />
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
+      </div>
     </div>
   );
 }

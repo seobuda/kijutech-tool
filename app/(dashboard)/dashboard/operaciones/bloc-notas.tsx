@@ -1,11 +1,39 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import {
+  AlertCircle,
+  AlertTriangle,
+  ArrowLeft,
+  Bot,
+  CalendarDays,
+  CheckCircle2,
+  Circle,
+  CloudOff,
+  ExternalLink,
+  FileText,
+  History,
+  Inbox,
+  Loader2,
+  Lock,
+  Mic,
+  NotebookPen,
+  Plus,
+  RotateCcw,
+  Send,
+  Sparkles,
+  Square,
+  Trash2,
+  X,
+  type LucideIcon
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Badge, EmptyState, Section, Skeleton } from '@/components/ui/page';
+import { cn } from '@/lib/utils';
 import {
   getConversionState,
   deleteNote,
@@ -110,8 +138,13 @@ const timeFmt = new Intl.DateTimeFormat('es-ES', {
 });
 const MAX_RECORDING_SECONDS = 600;
 
-const selectClass =
-  'w-full rounded-md border border-input bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand';
+// Controles de formulario: mismo lenguaje que Input (borde suave, anillo de foco visible).
+const fieldBase =
+  'w-full rounded-lg border border-input bg-background text-sm shadow-xs transition-[color,box-shadow,border-color] outline-none focus-visible:border-brand focus-visible:ring-[3px] focus-visible:ring-brand/25 disabled:cursor-not-allowed disabled:opacity-60';
+const selectClass = `${fieldBase} h-9 px-3`;
+const textareaClass = `${fieldBase} px-3 py-2 leading-relaxed`;
+const fieldLabel = 'text-xs font-medium text-muted-foreground';
+const brandButton = 'bg-brand text-white hover:bg-brand/90';
 
 const PRIORITIES = [
   { value: 1, label: 'Urgente' },
@@ -543,20 +576,11 @@ export function BlocNotas({
   };
   const removeNote = () => (noteIdRef.current ? removeNoteById(noteIdRef.current, readOnly) : Promise.resolve());
 
-  // "Guardado" solo si la base de datos lo ha confirmado (hora de esa confirmación).
-  const saveLabel = {
-    saved:
-      noteIdRef.current && lastSavedAt
-        ? `Guardado ✓ ${timeFmt.format(new Date(lastSavedAt))}`
-        : 'Sin guardar (empieza a escribir)',
-    dirty: 'Cambios sin guardar…',
-    saving: 'Guardando…',
-    error: 'NO guardado · copia local activada'
-  }[saveState];
+  const hasNote = Boolean(noteIdRef.current);
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_18rem]">
-      <div className="space-y-4 min-w-0">
+    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_19rem]">
+      <div className="min-w-0 space-y-4">
         {conversion?.state === 'done' && !readOnly ? (
           <ReviewPanel
             noteId={noteIdRef.current!}
@@ -574,164 +598,240 @@ export function BlocNotas({
           />
         ) : (
           <>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="space">
-                  Espacio de ClickUp <span className="text-destructive">*</span>
-                </Label>
-                <select
-                  id="space"
-                  className={selectClass}
-                  value={spaceId}
-                  disabled={readOnly}
-                  onChange={(e) => setSpaceId(e.target.value)}
-                >
-                  <option value="">Elige un espacio…</option>
-                  {spaces.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="assignee">Persona responsable (opcional)</Label>
-                <select
-                  id="assignee"
-                  className={selectClass}
-                  value={assigneeId}
-                  disabled={readOnly}
-                  onChange={(e) => setAssigneeId(e.target.value)}
-                >
-                  <option value="">Sin asignar</option>
-                  {members.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.username}
-                      {m.id === meId ? ' (yo)' : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="note">Nota</Label>
-                <span
-                  data-testid="save-status"
-                  className={`text-xs ${
-                    saveState === 'error'
-                      ? 'text-destructive font-medium'
-                      : saveState === 'saved'
-                        ? 'text-success'
-                        : 'text-muted-foreground'
-                  }`}
-                >
-                  {readOnly ? 'Nota convertida (solo lectura)' : saveLabel}
-                </span>
-              </div>
-              {saveState === 'error' && !readOnly && (
-                <div
-                  role="alert"
-                  className="rounded-md border border-destructive/45 bg-destructive-soft p-3 text-sm text-destructive space-y-1"
-                >
-                  <p className="font-medium">No se ha podido guardar. Copia local activada.</p>
-                  <p>
-                    Tu texto está a salvo en este navegador. Motivo: {saveError ?? 'desconocido'}. Se reintenta
-                    solo cada pocos segundos; no cierres la pestaña hasta que vuelva a poner «Guardado».
-                  </p>
+            {saveState === 'error' && !readOnly && (
+              <Callout tone="danger" icon={CloudOff} role="alert" title="No se ha podido guardar. Copia local activada.">
+                <p>
+                  Tu texto está a salvo en este navegador. Motivo: {saveError ?? 'desconocido'}. Se reintenta solo
+                  cada pocos segundos; no cierres la pestaña hasta que vuelva a poner «Guardado».
+                </p>
+                <div className="pt-1">
                   <Button size="sm" variant="outline" onClick={() => void persist(true)}>
+                    <RotateCcw />
                     Reintentar ahora
                   </Button>
                 </div>
+              </Callout>
+            )}
+            {recover && !readOnly && (
+              <Callout
+                tone="warning"
+                icon={AlertTriangle}
+                role="alert"
+                title="Hay una copia local más reciente que la del servidor"
+              >
+                <p>
+                  Guardada en este navegador el {dateFmt.format(new Date(recover.ts))} ({recover.content.length}{' '}
+                  caracteres, frente a {content.length} en el servidor).
+                </p>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <Button
+                    size="sm"
+                    className={brandButton}
+                    onClick={() => {
+                      setContent(recover.content);
+                      setSpaceId(recover.spaceId);
+                      setAssigneeId(recover.assigneeId);
+                      setRecover(null);
+                    }}
+                  >
+                    Recuperar la copia local
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      clearLocal(noteIdRef.current);
+                      setRecover(null);
+                    }}
+                  >
+                    Descartar
+                  </Button>
+                </div>
+              </Callout>
+            )}
+
+            {/* Editor: la nota es la protagonista, como un documento. */}
+            <section
+              className={cn(
+                'overflow-hidden rounded-xl border bg-card shadow-xs transition-[box-shadow,border-color]',
+                !readOnly && 'focus-within:border-brand/50 focus-within:shadow-sm'
               )}
-              {recover && !readOnly && (
-                <div
-                  role="alert"
-                  className="rounded-md border border-warning/45 bg-warning-soft p-3 text-sm text-warning-strong space-y-1"
-                >
-                  <p className="font-medium">Hay una copia local más reciente que la del servidor</p>
-                  <p>
-                    Guardada en este navegador el {dateFmt.format(new Date(recover.ts))} (
-                    {recover.content.length} caracteres, frente a {content.length} en el servidor).
-                  </p>
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      onClick={() => {
-                        setContent(recover.content);
-                        setSpaceId(recover.spaceId);
-                        setAssigneeId(recover.assigneeId);
-                        setRecover(null);
-                      }}
-                    >
-                      Recuperar la copia local
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => {
-                        clearLocal(noteIdRef.current);
-                        setRecover(null);
-                      }}
-                    >
-                      Descartar
+            >
+              <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b px-4 py-3 sm:px-5">
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-brand-soft text-brand">
+                    <NotebookPen className="size-4" aria-hidden />
+                  </span>
+                  <Label htmlFor="note" className="text-[15px] font-semibold">
+                    Nota
+                  </Label>
+                  {readOnly ? (
+                    <Badge tone="success" dot>
+                      Convertida
+                    </Badge>
+                  ) : hasNote ? (
+                    <Badge tone="neutral" dot>
+                      Borrador
+                    </Badge>
+                  ) : (
+                    <Badge tone="outline">Nueva</Badge>
+                  )}
+                </div>
+                <SaveIndicator state={saveState} savedAt={lastSavedAt} hasNote={hasNote} readOnly={readOnly} />
+              </div>
+
+              <div className="grid gap-3 border-b bg-muted/30 px-4 py-3.5 sm:grid-cols-2 sm:px-5">
+                <div className="space-y-1.5">
+                  <Label htmlFor="space" className={fieldLabel}>
+                    Espacio de ClickUp{' '}
+                    <span className="text-destructive" aria-hidden>
+                      *
+                    </span>
+                  </Label>
+                  <select
+                    id="space"
+                    className={selectClass}
+                    value={spaceId}
+                    disabled={readOnly}
+                    required
+                    onChange={(e) => setSpaceId(e.target.value)}
+                  >
+                    <option value="">Elige un espacio…</option>
+                    {spaces.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="assignee" className={fieldLabel}>
+                    Persona responsable (opcional)
+                  </Label>
+                  <select
+                    id="assignee"
+                    className={selectClass}
+                    value={assigneeId}
+                    disabled={readOnly}
+                    onChange={(e) => setAssigneeId(e.target.value)}
+                  >
+                    <option value="">Sin asignar</option>
+                    {members.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.username}
+                        {m.id === meId ? ' (yo)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <textarea
+                id="note"
+                rows={16}
+                className={cn(
+                  'block min-h-[18rem] w-full resize-y border-0 bg-transparent px-4 py-4 text-[15px] leading-7 text-foreground outline-none placeholder:text-muted-foreground/70 sm:min-h-[24rem] sm:px-5 sm:py-5',
+                  (readOnly || processing) && 'cursor-default text-foreground/85'
+                )}
+                placeholder="Escribe o dicta todo lo que tengas en la cabeza: uno o varios trabajos, ideas, recordatorios… La IA lo separará después."
+                value={content}
+                readOnly={readOnly || processing}
+                aria-busy={processing || undefined}
+                onChange={(e) => setContent(e.target.value)}
+              />
+
+              {!readOnly && (
+                <div className="flex flex-wrap items-center justify-between gap-2 border-t bg-muted/30 px-3 py-2.5 sm:px-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {recState === 'recording' ? (
+                      <Button
+                        variant="outline"
+                        onClick={stopRecording}
+                        className="border-destructive/40 text-destructive hover:bg-destructive-soft hover:text-destructive"
+                      >
+                        <span className="relative flex size-2.5" aria-hidden>
+                          <span className="absolute inline-flex size-full animate-ping rounded-full bg-destructive opacity-60" />
+                          <span className="relative inline-flex size-2.5 rounded-full bg-destructive" />
+                        </span>
+                        <Square className="size-3.5 fill-current" aria-hidden />
+                        Parar y transcribir
+                        <span className="tabular-nums">({mmss(seconds)})</span>
+                      </Button>
+                    ) : (
+                      <Button variant="outline" onClick={startRecording} disabled={recState === 'uploading'}>
+                        {recState === 'uploading' ? (
+                          <>
+                            <Loader2 className="animate-spin" aria-hidden />
+                            Transcribiendo…
+                          </>
+                        ) : (
+                          <>
+                            <Mic aria-hidden />
+                            Grabar audio
+                          </>
+                        )}
+                      </Button>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {hasNote && (
+                      <Button
+                        variant="ghost"
+                        onClick={removeNote}
+                        aria-label="Eliminar nota"
+                        title="Eliminar nota"
+                        className="text-muted-foreground hover:bg-destructive-soft hover:text-destructive"
+                      >
+                        <Trash2 aria-hidden />
+                        <span className="hidden sm:inline">Eliminar nota</span>
+                      </Button>
+                    )}
+                    <Button onClick={convert} disabled={!canConvert} className={brandButton}>
+                      {starting || processing ? (
+                        <>
+                          <Loader2 className="animate-spin" aria-hidden />
+                          Convirtiendo…
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles aria-hidden />
+                          Convertir en encargos
+                        </>
+                      )}
                     </Button>
                   </div>
                 </div>
               )}
-              <textarea
-                id="note"
-                rows={16}
-                className={`${selectClass} leading-relaxed`}
-                placeholder="Escribe o dicta todo lo que tengas en la cabeza: uno o varios trabajos, ideas, recordatorios… La IA lo separará después."
-                value={content}
-                readOnly={readOnly || processing}
-                onChange={(e) => setContent(e.target.value)}
-              />
-            </div>
+            </section>
 
-            {!readOnly && (
-              <div className="flex flex-wrap items-center gap-2">
-                {recState === 'recording' ? (
-                  <Button variant="outline" onClick={stopRecording} className="border-destructive/45 text-destructive">
-                    ⏹ Parar y transcribir ({mmss(seconds)})
-                  </Button>
-                ) : (
-                  <Button variant="outline" onClick={startRecording} disabled={recState === 'uploading'}>
-                    {recState === 'uploading' ? 'Transcribiendo…' : '🎙 Grabar audio'}
-                  </Button>
-                )}
-                <Button onClick={convert} disabled={!canConvert}>
-                  {starting || processing ? 'Convirtiendo…' : 'Convertir en encargos'}
-                </Button>
-                {noteIdRef.current && (
-                  <Button variant="ghost" onClick={removeNote}>
-                    Eliminar nota
-                  </Button>
-                )}
-              </div>
-            )}
             {!readOnly && !spaceId && content.trim() && (
-              <p className="text-xs text-muted-foreground">Elige el espacio para poder convertir la nota.</p>
+              <p className="flex items-center gap-1.5 px-1 text-xs text-muted-foreground">
+                <AlertCircle className="size-3.5 shrink-0" aria-hidden />
+                Elige el espacio para poder convertir la nota.
+              </p>
             )}
             {convertError && (
-              <p className="text-sm text-destructive rounded-md border border-destructive/30 bg-destructive-soft p-2">{convertError}</p>
+              <Callout tone="danger" icon={AlertCircle} role="alert">
+                <p>{convertError}</p>
+              </Callout>
             )}
             {conversion?.state === 'processing' && (
-              <div className="rounded-md border border-info/30 bg-info-soft p-3 text-sm text-info">
-                <p className="font-medium">⏳ {conversion.step}</p>
-                <p className="text-xs">
-                  {elapsed} s · Puedes cambiar de pestaña o recargar: el resultado se guarda y lo verás al volver.
-                </p>
+              <div className="space-y-3" aria-live="polite">
+                <Callout tone="info" icon={Loader2} iconClassName="animate-spin" title={conversion.step}>
+                  <p className="text-xs opacity-90">
+                    <span className="tabular-nums">{elapsed} s</span> · Puedes cambiar de pestaña o recargar: el
+                    resultado se guarda y lo verás al volver.
+                  </p>
+                </Callout>
+                <ProposalSkeleton />
               </div>
             )}
             {conversion?.state === 'error' && !readOnly && (
-              <div className="rounded-md border border-destructive/30 bg-destructive-soft p-3 text-sm text-destructive space-y-2">
-                <p className="font-medium">La conversión ha fallado</p>
+              <Callout tone="danger" icon={AlertCircle} role="alert" title="La conversión ha fallado">
                 <p>{conversion.error}</p>
-                <div className="flex gap-2">
-                  <Button size="sm" onClick={convert} disabled={!canConvert}>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <Button size="sm" onClick={convert} disabled={!canConvert} className={brandButton}>
+                    <RotateCcw />
                     Reintentar
                   </Button>
                   <Button
@@ -745,147 +845,345 @@ export function BlocNotas({
                     Cerrar aviso
                   </Button>
                 </div>
-              </div>
+              </Callout>
             )}
             {audioError && (
-              <p className="text-sm text-warning-strong rounded-md border border-warning/45 bg-warning-soft p-2">
-                {audioError}
-              </p>
+              <Callout tone="warning" icon={Mic} role="alert">
+                <p>{audioError}</p>
+              </Callout>
             )}
 
             {audios.length > 0 && (
-              <div className="rounded-md border border-border bg-card p-3 text-sm space-y-1">
-                <p className="font-medium">Audios de esta nota ({audios.length})</p>
-                {audios.map((a, i) => (
-                  <div key={a.id} className="flex flex-wrap items-center gap-2 text-foreground/80">
-                    <span>
-                      Audio {i + 1}
-                      {a.sizeBytes ? ` · ${(a.sizeBytes / 1024).toFixed(0)} KB` : ''}
-                    </span>
-                    {a.hasTranscript ? (
-                      <span className="rounded bg-success-soft px-2 py-0.5 text-xs text-success">Transcrito</span>
-                    ) : (
-                      <>
-                        <span className="rounded bg-warning-soft px-2 py-0.5 text-xs text-warning-strong">
-                          Sin transcribir
+              <Section
+                title={`Audios de esta nota (${audios.length})`}
+                description="Los audios se adjuntan a cada tarea creada desde esta nota."
+                className="[&>div:last-child]:p-0"
+              >
+                <ul className="divide-y">
+                  {audios.map((a, i) => (
+                    <li key={a.id} className="flex flex-wrap items-center gap-3 px-5 py-3 text-sm">
+                      <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
+                        <Mic className="size-4" aria-hidden />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="font-medium">Audio {i + 1}</span>
+                        {a.sizeBytes ? (
+                          <span className="text-muted-foreground"> · {(a.sizeBytes / 1024).toFixed(0)} KB</span>
+                        ) : null}
+                      </span>
+                      {a.hasTranscript ? (
+                        <Badge tone="success" dot>
+                          Transcrito
+                        </Badge>
+                      ) : (
+                        <span className="flex flex-wrap items-center gap-2">
+                          <Badge tone="warning" dot>
+                            Sin transcribir
+                          </Badge>
+                          {!readOnly && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => retryTranscription(a.id)}
+                              disabled={recState !== 'idle'}
+                            >
+                              <RotateCcw />
+                              Transcribir de nuevo
+                            </Button>
+                          )}
                         </span>
-                        {!readOnly && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => retryTranscription(a.id)}
-                            disabled={recState !== 'idle'}
-                          >
-                            Transcribir de nuevo
-                          </Button>
-                        )}
-                      </>
-                    )}
-                  </div>
-                ))}
-                <p className="text-xs text-muted-foreground">
-                  Los audios se adjuntan a cada tarea creada desde esta nota.
-                </p>
-              </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </Section>
             )}
 
             {readOnly && note && (
-              <div className="rounded-md border border-border bg-card p-3 space-y-2">
-                <p className="font-medium text-sm">Encargos creados desde esta nota</p>
-                {note.requests.length === 0 && (
-                  <p className="text-sm text-muted-foreground">Ninguno (se eliminaron o no se llegaron a crear).</p>
-                )}
-                {note.requests.map((r) => (
-                  <div key={r.id} className="flex flex-wrap items-start justify-between gap-2 text-sm">
-                    <div className="min-w-0">
-                      <p className="font-medium">{r.title}</p>
-                      <p className="text-xs text-muted-foreground">{r.listName}</p>
-                      {r.error && r.status !== 'creado' && <p className="text-xs text-destructive">{r.error}</p>}
-                    </div>
-                    {r.url ? (
-                      <a
-                        href={r.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-brand hover:underline whitespace-nowrap"
-                      >
-                        Abrir tarea
-                      </a>
-                    ) : (
-                      <RetryButton requestId={r.id} />
-                    )}
-                  </div>
-                ))}
-                <div className="flex flex-wrap gap-2">
-                  <Link href="/dashboard/operaciones?nueva=1">
-                    <Button size="sm" variant="outline">
-                      Nueva nota
+              <Section
+                title="Encargos creados desde esta nota"
+                className="[&>div:last-child]:p-0"
+                actions={
+                  <>
+                    <Button asChild size="sm" variant="outline">
+                      <Link href="/dashboard/operaciones?nueva=1">
+                        <Plus />
+                        Nueva nota
+                      </Link>
                     </Button>
-                  </Link>
-                  <Button size="sm" variant="ghost" onClick={removeNote}>
-                    Eliminar nota
-                  </Button>
-                </div>
-              </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={removeNote}
+                      className="text-muted-foreground hover:bg-destructive-soft hover:text-destructive"
+                    >
+                      <Trash2 />
+                      Eliminar nota
+                    </Button>
+                  </>
+                }
+              >
+                {note.requests.length === 0 ? (
+                  <p className="px-5 py-4 text-sm text-muted-foreground">
+                    Ninguno (se eliminaron o no se llegaron a crear).
+                  </p>
+                ) : (
+                  <ul className="divide-y">
+                    {note.requests.map((r) => (
+                      <li key={r.id} className="flex flex-wrap items-start justify-between gap-3 px-5 py-3.5 text-sm">
+                        <div className="flex min-w-0 items-start gap-3">
+                          <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
+                            <FileText className="size-4" aria-hidden />
+                          </span>
+                          <div className="min-w-0">
+                            <p className="font-medium text-pretty">{r.title}</p>
+                            {r.listName && <p className="text-xs text-muted-foreground">{r.listName}</p>}
+                            {r.error && r.status !== 'creado' && (
+                              <p className="mt-1 text-xs text-destructive">{r.error}</p>
+                            )}
+                          </div>
+                        </div>
+                        {r.url ? (
+                          <a
+                            href={r.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 whitespace-nowrap rounded-md text-sm font-medium text-brand outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-brand/25"
+                          >
+                            Abrir tarea
+                            <ExternalLink className="size-3.5" aria-hidden />
+                          </a>
+                        ) : (
+                          <RetryButton requestId={r.id} />
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Section>
             )}
           </>
         )}
       </div>
 
-      <aside className="space-y-3">
-        <div className="flex items-center justify-between">
-          <p className="font-medium text-sm">Historial</p>
-          <Link href="/dashboard/operaciones?nueva=1">
-            <Button size="sm" variant="outline">
-              + Nueva nota
+      <aside className="lg:sticky lg:top-4" aria-label="Historial de notas">
+        <div className="overflow-hidden rounded-xl border bg-card shadow-xs">
+          <div className="flex items-center justify-between gap-2 border-b px-4 py-3">
+            <h2 className="flex items-center gap-2 text-[15px] font-semibold">
+              <History className="size-4 text-muted-foreground" aria-hidden />
+              Historial
+              {history.length > 0 && (
+                <span className="text-xs font-normal text-muted-foreground tabular-nums">{history.length}</span>
+              )}
+            </h2>
+            <Button asChild size="sm" variant="outline">
+              <Link href="/dashboard/operaciones?nueva=1">
+                <Plus />
+                Nueva nota
+              </Link>
             </Button>
-          </Link>
-        </div>
-        {history.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            Aún no hay notas. Lo que escribas se guarda solo y aparecerá aquí.
-          </p>
-        ) : (
-          <ul className="space-y-1">
-            {history.map((h) => (
-              <li key={h.id} className="relative">
-                {/* Navegación completa (no de cliente): abrir una nota siempre recarga su contenido. */}
-                <a
-                  href={`/dashboard/operaciones?nota=${h.id}`}
-                  onClick={() => setOpeningId(h.id)}
-                  className={`block rounded-md border p-2 pr-8 text-sm hover:bg-muted ${
-                    h.id === note?.id ? 'border-brand/70 bg-brand-soft' : 'border-border bg-card'
-                  } ${openingId === h.id ? 'opacity-60' : ''}`}
-                >
-                  <span className="flex items-center justify-between gap-2">
-                    <span
-                      className={`rounded px-1.5 py-0.5 text-xs ${
-                        h.status === 'convertida' ? 'bg-success-soft text-success' : 'bg-muted text-muted-foreground'
-                      }`}
+          </div>
+          {history.length === 0 ? (
+            <EmptyState
+              icon={NotebookPen}
+              title="Aún no hay notas"
+              description="Lo que escribas se guarda solo y aparecerá aquí."
+              className="m-3 border-0 bg-transparent py-10"
+            />
+          ) : (
+            <ul className="space-y-1.5 p-2 lg:max-h-[calc(100dvh-12rem)] lg:overflow-y-auto">
+              {history.map((h) => {
+                const active = h.id === note?.id;
+                const opening = openingId === h.id;
+                return (
+                  <li key={h.id} className="group relative">
+                    {/* Navegación completa (no de cliente): abrir una nota siempre recarga su contenido. */}
+                    <a
+                      href={`/dashboard/operaciones?nota=${h.id}`}
+                      onClick={() => setOpeningId(h.id)}
+                      aria-current={active ? 'page' : undefined}
+                      className={cn(
+                        'block rounded-lg border px-3 py-2.5 pr-10 text-sm outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-brand/25',
+                        active
+                          ? 'border-brand/50 bg-brand-soft'
+                          : 'border-transparent hover:border-border hover:bg-muted/60',
+                        opening && 'opacity-60'
+                      )}
                     >
-                      {h.status === 'convertida' ? 'Convertida' : 'Borrador'}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      {openingId === h.id ? 'Abriendo…' : dateFmt.format(new Date(h.updatedAt))}
-                    </span>
-                  </span>
-                  <span className="mt-1 block truncate">{h.preview}</span>
-                  {h.spaceName && <span className="block text-xs text-muted-foreground">{h.spaceName}</span>}
-                </a>
-                <button
-                  type="button"
-                  aria-label="Eliminar nota"
-                  title="Eliminar nota"
-                  onClick={() => void removeNoteById(h.id, h.status === 'convertida')}
-                  className="absolute right-1 bottom-1 rounded px-1.5 text-muted-foreground/70 hover:bg-destructive-soft hover:text-destructive"
-                >
-                  🗑
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+                      <span className="flex items-center justify-between gap-2">
+                        <Badge tone={h.status === 'convertida' ? 'success' : 'neutral'} dot>
+                          {h.status === 'convertida' ? 'Convertida' : 'Borrador'}
+                        </Badge>
+                        <span className="flex items-center gap-1 text-xs text-muted-foreground tabular-nums">
+                          {opening && <Loader2 className="size-3 animate-spin" aria-hidden />}
+                          {opening ? 'Abriendo…' : dateFmt.format(new Date(h.updatedAt))}
+                        </span>
+                      </span>
+                      <span className="mt-1.5 line-clamp-2 block text-foreground/90 text-pretty">{h.preview}</span>
+                      {h.spaceName && (
+                        <span className="mt-1 block truncate text-xs text-muted-foreground">{h.spaceName}</span>
+                      )}
+                    </a>
+                    <button
+                      type="button"
+                      aria-label="Eliminar nota"
+                      title="Eliminar nota"
+                      onClick={() => void removeNoteById(h.id, h.status === 'convertida')}
+                      className="absolute right-1.5 bottom-1.5 grid size-7 place-items-center rounded-md text-muted-foreground/70 outline-none transition-opacity hover:bg-destructive-soft hover:text-destructive focus-visible:opacity-100 focus-visible:ring-[3px] focus-visible:ring-destructive/25 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-focus-within:opacity-100"
+                    >
+                      <Trash2 className="size-3.5" aria-hidden />
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
       </aside>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Piezas de presentación
+// ---------------------------------------------------------------------------
+
+type SaveState = 'saved' | 'dirty' | 'saving' | 'error';
+
+function agoLabel(ts: number, now: number): string | null {
+  const s = Math.max(0, Math.round((now - ts) / 1000));
+  if (s < 5) return 'ahora mismo';
+  if (s < 60) return `hace ${s} s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `hace ${m} min`;
+  return null;
+}
+
+// Indicador discreto de autoguardado. «Guardado» solo si la base de datos lo ha
+// confirmado (hora de esa confirmación); el tiempo relativo se calcula tras montar
+// para no descuadrar el HTML del servidor.
+function SaveIndicator({
+  state,
+  savedAt,
+  hasNote,
+  readOnly
+}: {
+  state: SaveState;
+  savedAt: string | null;
+  hasNote: boolean;
+  readOnly: boolean;
+}) {
+  const [now, setNow] = useState<number | null>(null);
+  useEffect(() => {
+    setNow(Date.now());
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [savedAt]);
+
+  let icon: ReactNode;
+  let text: string;
+  let tone = 'text-muted-foreground';
+  let title: string | undefined;
+
+  if (readOnly) {
+    icon = <Lock className="size-3.5" aria-hidden />;
+    text = 'Nota convertida (solo lectura)';
+  } else if (state === 'saved') {
+    if (hasNote && savedAt) {
+      const ts = Date.parse(savedAt);
+      const rel = now !== null ? agoLabel(ts, now) : null;
+      icon = <CheckCircle2 className="size-3.5 text-success" aria-hidden />;
+      text = `Guardado · ${rel ?? (now !== null && now - ts > 86_400_000 ? dateFmt.format(new Date(ts)) : timeFmt.format(new Date(ts)))}`;
+      title = `Guardado a las ${timeFmt.format(new Date(ts))}`;
+    } else {
+      icon = <Circle className="size-3.5" aria-hidden />;
+      text = 'Sin guardar (empieza a escribir)';
+    }
+  } else if (state === 'dirty') {
+    icon = <span className="size-2 rounded-full bg-warning" aria-hidden />;
+    text = 'Cambios sin guardar…';
+  } else if (state === 'saving') {
+    icon = <Loader2 className="size-3.5 animate-spin" aria-hidden />;
+    text = 'Guardando…';
+  } else {
+    icon = <CloudOff className="size-3.5" aria-hidden />;
+    text = 'NO guardado · copia local activada';
+    tone = 'text-destructive font-medium';
+  }
+
+  return (
+    <span
+      data-testid="save-status"
+      role="status"
+      aria-live="polite"
+      title={title}
+      className={cn('inline-flex items-center gap-1.5 text-xs tabular-nums', tone)}
+    >
+      {icon}
+      {text}
+    </span>
+  );
+}
+
+const calloutTone = {
+  danger: 'border-destructive/30 bg-destructive-soft text-destructive',
+  warning: 'border-warning/40 bg-warning-soft text-warning-strong',
+  info: 'border-info/30 bg-info-soft text-info',
+  success: 'border-success/30 bg-success-soft text-success'
+} as const;
+
+// Aviso con icono (error, advertencia, progreso o éxito).
+function Callout({
+  tone,
+  icon: Icon,
+  iconClassName,
+  title,
+  role,
+  className,
+  testId,
+  children
+}: {
+  tone: keyof typeof calloutTone;
+  icon?: LucideIcon;
+  iconClassName?: string;
+  title?: ReactNode;
+  role?: 'alert' | 'status';
+  className?: string;
+  testId?: string;
+  children?: ReactNode;
+}) {
+  return (
+    <div
+      role={role}
+      data-testid={testId}
+      className={cn('flex gap-3 rounded-xl border px-4 py-3 text-sm', calloutTone[tone], className)}
+    >
+      {Icon && <Icon className={cn('mt-0.5 size-4 shrink-0', iconClassName)} aria-hidden />}
+      <div className="min-w-0 flex-1 space-y-1">
+        {title && <p className="font-medium">{title}</p>}
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// Esqueleto de las propuestas mientras la IA convierte la nota.
+function ProposalSkeleton() {
+  return (
+    <div className="space-y-3" aria-hidden>
+      {[0, 1].map((i) => (
+        <div key={i} className="space-y-3 rounded-xl border bg-card p-5 shadow-xs">
+          <div className="flex items-center gap-3">
+            <Skeleton className="size-7 rounded-lg" />
+            <Skeleton className="h-5 w-2/3" />
+          </div>
+          <Skeleton className="h-20 w-full" />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Skeleton className="h-9 w-full" />
+            <Skeleton className="h-9 w-full" />
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -982,235 +1280,288 @@ function ReviewPanel({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h2 className="text-lg font-medium">Revisión: {items.length} encargo{items.length === 1 ? '' : 's'}</h2>
-          <p className="text-sm text-muted-foreground">
-            Edita lo que quieras antes de enviar. Las listas son las del espacio elegido.
-          </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-brand-soft text-brand">
+            <Sparkles className="size-4" aria-hidden />
+          </span>
+          <div className="min-w-0">
+            <h2 className="text-lg font-semibold tracking-tight">
+              Revisión: {items.length} encargo{items.length === 1 ? '' : 's'}
+            </h2>
+            <p className="text-sm text-muted-foreground text-pretty">
+              Edita lo que quieras antes de enviar. Las listas son las del espacio elegido.
+            </p>
+          </div>
         </div>
         {!sent && (
           <Button variant="ghost" onClick={onBack} disabled={sending}>
-            ← Volver a la nota
+            <ArrowLeft />
+            Volver a la nota
           </Button>
         )}
       </div>
 
       {items.length === 0 && (
-        <div className="rounded-md border border-dashed border-input p-6 text-center text-sm text-muted-foreground">
-          La IA no ha encontrado ningún encargo en la nota. Revisa «No convertido» más abajo o vuelve a la
-          nota.
-        </div>
+        <EmptyState
+          icon={Inbox}
+          title="La IA no ha encontrado ningún encargo en la nota"
+          description="Revisa «No convertido» más abajo o vuelve a la nota."
+          className="py-10"
+        />
       )}
 
       {items.map((item, idx) => {
         const result = results?.[item.key];
+        const fid = `p-${idx}`;
         return (
-          <div key={item.key} className="rounded-lg border border-border bg-card p-4 space-y-3">
-            <div className="flex items-start justify-between gap-2">
-              <p className="text-xs font-medium uppercase text-muted-foreground">Encargo {idx + 1}</p>
-              {!sent && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setItems((prev) => prev.filter((i) => i.key !== item.key))}
-                  disabled={sending}
-                >
-                  Quitar
-                </Button>
+          <article key={item.key} className="overflow-hidden rounded-xl border bg-card shadow-xs">
+            <header className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/30 px-4 py-2.5 sm:px-5">
+              <span className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                <span className="grid size-6 place-items-center rounded-md border bg-card text-foreground tabular-nums">
+                  {idx + 1}
+                </span>
+                Encargo {idx + 1}
+              </span>
+              <div className="flex items-center gap-2">
+                {result?.ok && (
+                  <a
+                    href={result.taskUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 rounded-full bg-success-soft px-2.5 py-0.5 text-xs font-medium text-success outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-success/30"
+                  >
+                    <CheckCircle2 className="size-3.5" aria-hidden />
+                    Creado — abrir tarea
+                    <ExternalLink className="size-3" aria-hidden />
+                  </a>
+                )}
+                {!sent && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setItems((prev) => prev.filter((i) => i.key !== item.key))}
+                    disabled={sending}
+                    className="text-muted-foreground hover:bg-destructive-soft hover:text-destructive"
+                  >
+                    <X />
+                    Quitar
+                  </Button>
+                )}
+              </div>
+            </header>
+
+            <div className="space-y-4 p-4 sm:p-5">
+              {result && !result.ok && (
+                <Callout tone="danger" icon={AlertCircle} role="alert">
+                  <p>No se pudo crear en ClickUp: {result.error}</p>
+                  <RetryButton requestId={result.requestId} />
+                </Callout>
               )}
-              {result?.ok && (
-                <a
-                  href={result.taskUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="rounded bg-success-soft px-2 py-0.5 text-xs text-success hover:underline"
-                >
-                  ✅ Creado — abrir tarea
-                </a>
-              )}
-            </div>
 
-            {result && !result.ok && (
-              <div className="rounded-md border border-destructive/30 bg-destructive-soft p-2 text-sm text-destructive space-y-1">
-                <p>No se pudo crear en ClickUp: {result.error}</p>
-                <RetryButton requestId={result.requestId} />
-              </div>
-            )}
-
-            <div className="space-y-1">
-              <Label>Título</Label>
-              <Input
-                value={item.title}
-                disabled={sent}
-                onChange={(e) => update(item.key, { title: e.target.value })}
-              />
-            </div>
-
-            {item.missingData.length > 0 && (
-              <div className="rounded-md border border-warning/45 bg-warning-soft p-2 text-sm text-warning-strong">
-                <p className="font-medium">Faltan datos:</p>
-                <ul className="list-disc ml-5">
-                  {item.missingData.map((q, i) => (
-                    <li key={i}>{q}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            <div className="space-y-1">
-              <Label>Descripción</Label>
-              <textarea
-                rows={10}
-                className={`${selectClass} font-mono`}
-                value={item.description}
-                disabled={sent}
-                onChange={(e) => update(item.key, { description: e.target.value })}
-              />
-            </div>
-
-            <ClientPicker
-              field={fieldOf(item.listId)}
-              hasList={Boolean(item.listId)}
-              value={item.clientOptionId ?? ''}
-              disabled={sent}
-              onChange={(o) =>
-                update(item.key, { clientOptionId: o?.id ?? '', clientName: o?.label ?? '', clientWarning: '' })
-              }
-            />
-
-            {item.clientWarning && (
-              <p
-                className="rounded-md border border-warning/45 bg-warning-soft p-2 text-sm text-warning-strong"
-                data-testid="client-warning"
-              >
-                ⚠️ {item.clientWarning}. Decide si quieres enviar este encargo igualmente.
-              </p>
-            )}
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1">
-                <Label>Tipo de trabajo</Label>
-                <select
-                  className={selectClass}
-                  value={item.workTypeKey ?? ''}
-                  disabled={sent}
-                  onChange={(e) => update(item.key, { workTypeKey: e.target.value })}
-                >
-                  <option value="">Sin tipo</option>
-                  {workTypes.map((t) => (
-                    <option key={t.key} value={t.key}>
-                      {t.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <label className="flex items-center gap-2 text-sm pt-6">
-                <input
-                  type="checkbox"
-                  checked={Boolean(item.requiresReview)}
-                  disabled={sent}
-                  onChange={(e) => update(item.key, { requiresReview: e.target.checked })}
-                />
-                Requiere mi revisión
-              </label>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-4">
-              <div className="space-y-1">
-                <Label>
-                  Lista <span className="text-destructive">*</span>
+              <div className="space-y-1.5">
+                <Label htmlFor={`${fid}-title`} className={fieldLabel}>
+                  Título
                 </Label>
-                <select
-                  className={`${selectClass} ${!item.listId ? 'border-destructive/70' : ''}`}
-                  value={item.listId}
-                  disabled={sent}
-                  onChange={(e) => {
-                    // Si la nueva lista usa otro campo Cliente, el cliente elegido ya no vale.
-                    const f = fieldOf(e.target.value);
-                    const keep = f?.options.some((o) => o.id === item.clientOptionId);
-                    update(item.key, {
-                      listId: e.target.value,
-                      ...(keep ? {} : { clientOptionId: '', clientName: '', clientWarning: '' })
-                    });
-                  }}
-                >
-                  <option value="">Elige una lista…</option>
-                  {lists.map((l) => (
-                    <option key={l.id} value={l.id}>
-                      {l.folder ? `${l.folder} / ${l.name}` : l.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-1">
-                <Label>Responsable</Label>
-                <select
-                  className={selectClass}
-                  value={item.assigneeId}
-                  disabled={sent}
-                  onChange={(e) =>
-                    update(item.key, {
-                      assigneeId: e.target.value,
-                      assigneeName: members.find((m) => m.id === e.target.value)?.username ?? '',
-                      assigneeReason: ''
-                    })
-                  }
-                >
-                  <option value="">Sin asignar</option>
-                  {members.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.username}
-                    </option>
-                  ))}
-                </select>
-                {item.assigneeReason && (
-                  <p className="text-xs text-muted-foreground" data-testid="assignee-reason">
-                    🤖 Propuesto por la IA: {item.assigneeReason}
-                  </p>
-                )}
-              </div>
-              <div className="space-y-1">
-                <Label>Entrega</Label>
                 <Input
-                  type="date"
-                  value={item.dueDate}
+                  id={`${fid}-title`}
+                  value={item.title}
                   disabled={sent}
-                  onChange={(e) => update(item.key, { dueDate: e.target.value, dueReason: '' })}
+                  aria-invalid={!item.title.trim() || undefined}
+                  className="h-10 text-[15px] font-medium"
+                  onChange={(e) => update(item.key, { title: e.target.value })}
                 />
-                {item.dueReason && (
-                  <p className="text-xs text-muted-foreground" data-testid="due-reason">
-                    📅 {item.dueReason}
-                  </p>
-                )}
               </div>
-              <div className="space-y-1">
-                <Label>Prioridad</Label>
-                <select
-                  className={selectClass}
-                  value={item.priority}
+
+              {item.missingData.length > 0 && (
+                <Callout tone="warning" icon={AlertTriangle} title="Faltan datos:">
+                  <ul className="ml-4 list-disc space-y-0.5">
+                    {item.missingData.map((q, i) => (
+                      <li key={i}>{q}</li>
+                    ))}
+                  </ul>
+                </Callout>
+              )}
+
+              <div className="space-y-1.5">
+                <Label htmlFor={`${fid}-desc`} className={fieldLabel}>
+                  Descripción
+                </Label>
+                <textarea
+                  id={`${fid}-desc`}
+                  rows={10}
+                  className={`${textareaClass} resize-y font-mono text-[13px]`}
+                  value={item.description}
                   disabled={sent}
-                  onChange={(e) => update(item.key, { priority: Number(e.target.value) })}
-                >
-                  {PRIORITIES.map((p) => (
-                    <option key={p.value} value={p.value}>
-                      {p.label}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(e) => update(item.key, { description: e.target.value })}
+                />
+              </div>
+
+              <ClientPicker
+                id={`${fid}-client`}
+                field={fieldOf(item.listId)}
+                hasList={Boolean(item.listId)}
+                value={item.clientOptionId ?? ''}
+                disabled={sent}
+                onChange={(o) =>
+                  update(item.key, { clientOptionId: o?.id ?? '', clientName: o?.label ?? '', clientWarning: '' })
+                }
+              />
+
+              {item.clientWarning && (
+                <Callout tone="warning" icon={AlertTriangle} testId="client-warning">
+                  <p>{item.clientWarning}. Decide si quieres enviar este encargo igualmente.</p>
+                </Callout>
+              )}
+
+              <div className="grid gap-4 rounded-lg border bg-muted/20 p-3.5 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor={`${fid}-list`} className={fieldLabel}>
+                    Lista{' '}
+                    <span className="text-destructive" aria-hidden>
+                      *
+                    </span>
+                  </Label>
+                  <select
+                    id={`${fid}-list`}
+                    className={cn(selectClass, !item.listId && 'border-destructive/70')}
+                    value={item.listId}
+                    disabled={sent}
+                    required
+                    aria-invalid={!item.listId || undefined}
+                    onChange={(e) => {
+                      // Si la nueva lista usa otro campo Cliente, el cliente elegido ya no vale.
+                      const f = fieldOf(e.target.value);
+                      const keep = f?.options.some((o) => o.id === item.clientOptionId);
+                      update(item.key, {
+                        listId: e.target.value,
+                        ...(keep ? {} : { clientOptionId: '', clientName: '', clientWarning: '' })
+                      });
+                    }}
+                  >
+                    <option value="">Elige una lista…</option>
+                    {lists.map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.folder ? `${l.folder} / ${l.name}` : l.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor={`${fid}-assignee`} className={fieldLabel}>
+                    Responsable
+                  </Label>
+                  <select
+                    id={`${fid}-assignee`}
+                    className={selectClass}
+                    value={item.assigneeId}
+                    disabled={sent}
+                    onChange={(e) =>
+                      update(item.key, {
+                        assigneeId: e.target.value,
+                        assigneeName: members.find((m) => m.id === e.target.value)?.username ?? '',
+                        assigneeReason: ''
+                      })
+                    }
+                  >
+                    <option value="">Sin asignar</option>
+                    {members.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.username}
+                      </option>
+                    ))}
+                  </select>
+                  {item.assigneeReason && (
+                    <p
+                      className="flex items-start gap-1.5 text-xs text-muted-foreground"
+                      data-testid="assignee-reason"
+                    >
+                      <Bot className="mt-px size-3.5 shrink-0 text-brand" aria-hidden />
+                      <span>Propuesto por la IA: {item.assigneeReason}</span>
+                    </p>
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor={`${fid}-due`} className={fieldLabel}>
+                    Entrega
+                  </Label>
+                  <Input
+                    id={`${fid}-due`}
+                    type="date"
+                    value={item.dueDate}
+                    disabled={sent}
+                    onChange={(e) => update(item.key, { dueDate: e.target.value, dueReason: '' })}
+                  />
+                  {item.dueReason && (
+                    <p className="flex items-start gap-1.5 text-xs text-muted-foreground" data-testid="due-reason">
+                      <CalendarDays className="mt-px size-3.5 shrink-0" aria-hidden />
+                      <span>{item.dueReason}</span>
+                    </p>
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor={`${fid}-priority`} className={fieldLabel}>
+                    Prioridad
+                  </Label>
+                  <select
+                    id={`${fid}-priority`}
+                    className={selectClass}
+                    value={item.priority}
+                    disabled={sent}
+                    onChange={(e) => update(item.key, { priority: Number(e.target.value) })}
+                  >
+                    {PRIORITIES.map((p) => (
+                      <option key={p.value} value={p.value}>
+                        {p.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor={`${fid}-type`} className={fieldLabel}>
+                    Tipo de trabajo
+                  </Label>
+                  <select
+                    id={`${fid}-type`}
+                    className={selectClass}
+                    value={item.workTypeKey ?? ''}
+                    disabled={sent}
+                    onChange={(e) => update(item.key, { workTypeKey: e.target.value })}
+                  >
+                    <option value="">Sin tipo</option>
+                    {workTypes.map((t) => (
+                      <option key={t.key} value={t.key}>
+                        {t.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <label className="flex cursor-pointer items-center gap-2.5 self-end rounded-lg border bg-background px-3 py-2 text-sm shadow-xs has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60 has-[:focus-visible]:ring-[3px] has-[:focus-visible]:ring-brand/25">
+                  <input
+                    type="checkbox"
+                    className="size-4 accent-brand outline-none"
+                    checked={Boolean(item.requiresReview)}
+                    disabled={sent}
+                    onChange={(e) => update(item.key, { requiresReview: e.target.checked })}
+                  />
+                  Requiere mi revisión
+                </label>
               </div>
             </div>
-          </div>
+          </article>
         );
       })}
 
       {proposal.notConverted.length > 0 && (
-        <div className="rounded-lg border border-border bg-muted/50 p-4">
-          <p className="font-medium text-sm">No convertido en encargos</p>
-          <p className="text-xs text-muted-foreground mb-2">
+        <div className="rounded-xl border border-dashed bg-muted/30 p-4 sm:p-5">
+          <p className="flex items-center gap-2 text-sm font-medium">
+            <FileText className="size-4 text-muted-foreground" aria-hidden />
+            No convertido en encargos
+          </p>
+          <p className="mt-0.5 mb-2 text-xs text-muted-foreground">
             Partes de tu nota que la IA no considera encargos. Nada se pierde: sigue en la nota.
           </p>
-          <ul className="list-disc ml-5 text-sm space-y-0.5">
+          <ul className="ml-5 list-disc space-y-0.5 text-sm text-foreground/85">
             {proposal.notConverted.map((t, i) => (
               <li key={i}>{t}</li>
             ))}
@@ -1218,29 +1569,59 @@ function ReviewPanel({
         </div>
       )}
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && (
+        <Callout tone="danger" icon={AlertCircle} role="alert">
+          <p>{error}</p>
+        </Callout>
+      )}
 
       {!sent ? (
-        <div className="flex flex-wrap items-center gap-2">
-          <Button onClick={sendAll} disabled={sending || items.length === 0 || missingList || missingTitle}>
-            {sending ? 'Enviando a ClickUp…' : `Enviar todo (${items.length})`}
+        <div className="sticky bottom-3 z-10 flex flex-wrap items-center justify-between gap-2 rounded-xl border bg-card/95 px-4 py-3 shadow-md backdrop-blur supports-[backdrop-filter]:bg-card/80">
+          <span className="text-xs text-muted-foreground">
+            {missingList ? (
+              <span className="text-destructive">Elige una lista para cada encargo.</span>
+            ) : (
+              `${items.length} encargo${items.length === 1 ? '' : 's'} listo${items.length === 1 ? '' : 's'} para ClickUp`
+            )}
+          </span>
+          <Button
+            onClick={sendAll}
+            disabled={sending || items.length === 0 || missingList || missingTitle}
+            className={brandButton}
+          >
+            {sending ? (
+              <>
+                <Loader2 className="animate-spin" aria-hidden />
+                Enviando a ClickUp…
+              </>
+            ) : (
+              <>
+                <Send aria-hidden />
+                {`Enviar todo (${items.length})`}
+              </>
+            )}
           </Button>
-          {missingList && <span className="text-xs text-destructive">Elige una lista para cada encargo.</span>}
         </div>
       ) : (
-        <div className="flex flex-wrap items-center gap-2">
-          <p className={`text-sm ${allOk ? 'text-success' : 'text-warning-strong'}`}>
-            {allOk
+        <Callout
+          tone={allOk ? 'success' : 'warning'}
+          icon={allOk ? CheckCircle2 : AlertTriangle}
+          role="status"
+          title={
+            allOk
               ? 'Todos los encargos están creados en ClickUp.'
-              : 'Algunos no se pudieron crear: pulsa Reintentar en cada uno (también desde Encargos).'}
-          </p>
-          <Button variant="outline" onClick={onSent}>
-            Cerrar revisión
-          </Button>
-          <Link href="/dashboard/operaciones/encargos">
-            <Button variant="ghost">Ver encargos</Button>
-          </Link>
-        </div>
+              : 'Algunos no se pudieron crear: pulsa Reintentar en cada uno (también desde Encargos).'
+          }
+        >
+          <div className="flex flex-wrap gap-2 pt-1">
+            <Button variant="outline" size="sm" onClick={onSent}>
+              Cerrar revisión
+            </Button>
+            <Button asChild variant="ghost" size="sm">
+              <Link href="/dashboard/operaciones/encargos">Ver encargos</Link>
+            </Button>
+          </div>
+        </Callout>
       )}
     </div>
   );
@@ -1250,12 +1631,14 @@ export type ClientFields = Record<string, { name: string; options: { id: string;
 
 // Desplegable de cliente (campo personalizado de ClickUp). Vacío + aviso si no hay uno claro.
 function ClientPicker({
+  id,
   field,
   hasList,
   value,
   disabled,
   onChange
 }: {
+  id: string;
   field: ClientFields[string] | null;
   hasList: boolean;
   value: string;
@@ -1265,18 +1648,23 @@ function ClientPicker({
   if (!hasList) return null;
   if (!field) {
     return (
-      <p className="text-xs text-muted-foreground">
+      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <AlertCircle className="size-3.5 shrink-0" aria-hidden />
         Esta lista no tiene campo «Cliente»: la tarea se creará sin él.
       </p>
     );
   }
   return (
-    <div className="space-y-1">
-      <Label>Cliente</Label>
+    <div className="space-y-1.5">
+      <Label htmlFor={id} className={fieldLabel}>
+        Cliente
+      </Label>
       <select
-        className={`${selectClass} ${!value ? 'border-warning/70' : ''}`}
+        id={id}
+        className={cn(selectClass, !value && 'border-warning/70')}
         value={value}
         disabled={disabled}
+        aria-describedby={!value ? `${id}-hint` : undefined}
         onChange={(e) => onChange(field.options.find((o) => o.id === e.target.value) ?? null)}
       >
         <option value="">Sin cliente</option>
@@ -1287,7 +1675,7 @@ function ClientPicker({
         ))}
       </select>
       {!value && (
-        <p className="text-xs text-warning-strong">
+        <p id={`${id}-hint`} className="text-xs text-warning-strong">
           La IA no ha encontrado un cliente claro en la nota. Elígelo o déjalo vacío.
         </p>
       )}

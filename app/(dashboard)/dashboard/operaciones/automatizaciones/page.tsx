@@ -58,7 +58,7 @@ export default async function AutomatizacionesPage() {
   const titles = Object.fromEntries(AUTOMATIONS.map((d) => [d.key, DEF.get(d.key)!.title]));
 
   return (
-    <div className="max-w-4xl">
+    <div className="max-w-5xl">
       <AutomatizacionesView
         cards={cards}
         upcoming={upcoming}

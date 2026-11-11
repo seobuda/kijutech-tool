@@ -1,10 +1,13 @@
 'use client';
 
-import { useEffect, useRef, useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
+import { Clock, Mic, Pencil, Plus, Sparkles, Square, Star, Trash2, UserPlus, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Badge, EmptyState } from '@/components/ui/page';
+import { cn } from '@/lib/utils';
 import { CleanupPanel, type CleanupPersonView } from '../cleanup-panel';
 import {
   aiFillProfile,
@@ -53,7 +56,7 @@ const TIMEZONES = [
 const MAX_RECORDING_SECONDS = 300;
 
 const areaClass =
-  'w-full rounded-md border border-input bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand';
+  'w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs placeholder:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-brand';
 
 const emptyProfile = (): ProfileView => ({
   id: '',
@@ -79,6 +82,27 @@ function daysLabel(days: number[]): string {
   const key = days.join(',');
   if (key === '1,2,3,4,5') return 'L–V';
   return days.map((d) => DAY_LABELS[d - 1]).join(' ');
+}
+
+// Bloque de campos del formulario con su título (solo presentación).
+function FormGroup({
+  title,
+  hint,
+  testId,
+  children
+}: {
+  title: string;
+  hint?: string;
+  testId?: string;
+  children: ReactNode;
+}) {
+  return (
+    <fieldset className="space-y-3" data-testid={testId}>
+      <legend className="mb-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">{title}</legend>
+      {hint && <p className="-mt-1 text-xs text-muted-foreground text-pretty">{hint}</p>}
+      {children}
+    </fieldset>
+  );
 }
 
 export function EquipoView({
@@ -117,27 +141,46 @@ export function EquipoView({
   };
 
   return (
-    <div className="space-y-4 max-w-4xl">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <h2 className="text-lg font-medium">Equipo</h2>
-          <p className="text-sm text-muted-foreground">
+    <div className="max-w-5xl space-y-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h2 className="text-[15px] font-semibold">Equipo</h2>
+          <p className="mt-0.5 max-w-3xl text-sm text-muted-foreground text-pretty">
             Una ficha por persona: qué hace, en qué destaca y cuándo trabaja. El agente la usa para proponer quién
             hace cada encargo, y los resúmenes diarios usan su zona horaria y su hora de entrada.
           </p>
         </div>
-        <Button size="sm" disabled={editing !== null} onClick={() => setEditing('new')}>
+        <Button
+          size="sm"
+          className="shrink-0 self-start bg-brand text-white hover:bg-brand/90"
+          disabled={editing !== null}
+          onClick={() => setEditing('new')}
+        >
+          <Plus aria-hidden />
           Nueva ficha
         </Button>
       </div>
 
-      {msg && <p className={`text-sm ${msg.type === 'ok' ? 'text-success' : 'text-destructive'}`}>{msg.text}</p>}
+      {msg && (
+        <p
+          role="status"
+          className={cn(
+            'rounded-lg px-3 py-2 text-sm',
+            msg.type === 'ok' ? 'bg-success-soft text-success' : 'bg-destructive-soft text-destructive'
+          )}
+        >
+          {msg.text}
+        </p>
+      )}
 
       <CleanupPanel people={cleanupPeople} testMode={testMode} />
 
       {withoutProfile.length > 0 && (
-        <div className="rounded-md border border-warning/30 bg-warning-soft p-3 text-sm space-y-2">
-          <p>Miembros de ClickUp sin ficha:</p>
+        <div className="space-y-2.5 rounded-xl border border-warning/30 bg-warning-soft p-4 text-sm">
+          <p className="flex items-center gap-2 font-medium text-warning-strong">
+            <UserPlus className="size-4" aria-hidden />
+            Miembros de ClickUp sin ficha:
+          </p>
           <div className="flex flex-wrap gap-2">
             {withoutProfile.map((m) => (
               <Button
@@ -147,6 +190,7 @@ export function EquipoView({
                 disabled={pending}
                 onClick={() => act(() => createProfileForMember(m.id), `Ficha de ${m.username} creada.`)}
               >
+                <Plus aria-hidden />
                 Crear ficha de {m.username}
               </Button>
             ))}
@@ -166,93 +210,111 @@ export function EquipoView({
       )}
 
       {profiles.length === 0 && editing !== 'new' ? (
-        <div className="rounded-lg border border-dashed border-input p-8 text-center space-y-2">
-          <p className="font-medium">Todavía no hay fichas</p>
-          <p className="text-sm text-muted-foreground">Crea la primera para que el agente sepa quién hace qué.</p>
-          <Button size="sm" onClick={() => setEditing('new')}>
-            Nueva ficha
-          </Button>
-        </div>
+        <EmptyState
+          icon={Users}
+          title="Todavía no hay fichas"
+          description="Crea la primera para que el agente sepa quién hace qué."
+          action={
+            <Button size="sm" className="bg-brand text-white hover:bg-brand/90" onClick={() => setEditing('new')}>
+              <Plus aria-hidden />
+              Nueva ficha
+            </Button>
+          }
+        />
       ) : (
-        <div className="space-y-3">
+        <div className="grid gap-4 md:grid-cols-2">
           {profiles.map((p) =>
             editing === p.id ? (
-              <ProfileForm
-                key={p.id}
-                initial={p}
-                members={members}
-                workTypes={workTypes}
-                onCancel={() => setEditing(null)}
-                onSaved={onSaved}
-              />
+              <div key={p.id} className="md:col-span-2">
+                <ProfileForm
+                  initial={p}
+                  members={members}
+                  workTypes={workTypes}
+                  onCancel={() => setEditing(null)}
+                  onSaved={onSaved}
+                />
+              </div>
             ) : (
-              <div
+              <article
                 key={p.id}
                 data-testid={`perfil-${p.name}`}
-                className={`rounded-lg border p-4 space-y-2 ${p.active ? 'border-border bg-card' : 'border-border bg-muted/50 opacity-75'}`}
+                className={cn(
+                  'flex flex-col rounded-xl border shadow-xs',
+                  p.active ? 'bg-card' : 'bg-muted/50 opacity-75'
+                )}
               >
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <p className="font-medium">
-                      {p.name}
-                      {!p.active && (
-                        <span className="ml-2 rounded bg-secondary px-1.5 py-0.5 text-xs text-muted-foreground">Desactivada</span>
-                      )}
+                <header className="flex items-start gap-3 p-4 pb-3">
+                  <span
+                    className={cn(
+                      'grid size-10 shrink-0 place-items-center rounded-full text-sm font-semibold',
+                      p.active ? 'bg-brand-soft text-brand' : 'bg-muted text-muted-foreground'
+                    )}
+                    aria-hidden
+                  >
+                    {initials(p.name)}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="flex flex-wrap items-center gap-2 font-medium">
+                      <span className="truncate">{p.name}</span>
+                      {!p.active && <Badge tone="neutral">Desactivada</Badge>}
                     </p>
-                    <p className="text-sm text-muted-foreground">
-                      {p.jobTitle || 'Sin puesto'} ·{' '}
+                    <p className="truncate text-sm text-muted-foreground">{p.jobTitle || 'Sin puesto'}</p>
+                    <p className="mt-0.5 truncate text-xs text-muted-foreground">
                       {p.clickupUserId
                         ? `ClickUp: ${members.find((m) => m.id === p.clickupUserId)?.username ?? p.clickupUserId}`
                         : 'sin miembro de ClickUp'}
                     </p>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button size="sm" variant="outline" disabled={editing !== null || pending} onClick={() => setEditing(p.id)}>
-                      Editar
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={pending}
-                      onClick={() =>
-                        act(() => setProfileActive(p.id, !p.active), p.active ? 'Ficha desactivada.' : 'Ficha reactivada.')
-                      }
-                    >
-                      {p.active ? 'Desactivar' : 'Reactivar'}
-                    </Button>
-                    <DeleteButton
-                      name={p.name}
-                      disabled={pending}
-                      onConfirm={() => act(() => deleteProfile(p.id), 'Ficha eliminada.')}
-                    />
-                  </div>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {daysLabel(p.workDays)} · entrada {p.workStart} · {p.hoursPerDay} h/día · {p.timezone}
-                </p>
-                {p.workTypes.length > 0 ? (
-                  <div className="flex flex-wrap gap-1.5">
-                    {p.workTypes.map((t) => (
-                      <span
-                        key={t.key}
-                        className={`rounded px-2 py-0.5 text-xs ${t.role === 'primary' ? 'bg-brand-soft text-brand' : 'bg-muted text-foreground/80'}`}
-                      >
-                        {t.role === 'primary' ? '★ ' : ''}
-                        {typeLabel.get(t.key) ?? t.key}
-                        {t.role === 'support' ? ' (apoyo)' : ''}
-                      </span>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground">Sin tipos de trabajo asignados.</p>
-                )}
-                {p.description && <p className="text-sm whitespace-pre-line">{p.description}</p>}
-                {p.notes && (
-                  <p className="text-xs text-muted-foreground whitespace-pre-line">
-                    <span className="font-medium">Notas:</span> {p.notes}
+                </header>
+
+                <div className="flex-1 space-y-3 px-4 pb-4">
+                  <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Clock className="size-3.5 shrink-0" aria-hidden />
+                    {daysLabel(p.workDays)} · entrada {p.workStart} · {p.hoursPerDay} h/día · {p.timezone}
                   </p>
-                )}
-              </div>
+                  {p.workTypes.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {p.workTypes.map((t) => (
+                        <Badge key={t.key} tone={t.role === 'primary' ? 'brand' : 'neutral'}>
+                          {t.role === 'primary' && <Star aria-hidden />}
+                          {typeLabel.get(t.key) ?? t.key}
+                          {t.role === 'support' ? ' (apoyo)' : ''}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Sin tipos de trabajo asignados.</p>
+                  )}
+                  {p.description && <p className="line-clamp-4 text-sm whitespace-pre-line">{p.description}</p>}
+                  {p.notes && (
+                    <p className="rounded-lg bg-muted/60 px-3 py-2 text-xs text-muted-foreground whitespace-pre-line">
+                      <span className="font-medium">Notas:</span> {p.notes}
+                    </p>
+                  )}
+                </div>
+
+                <footer className="flex flex-wrap items-center gap-2 border-t px-4 py-3">
+                  <Button size="sm" variant="outline" disabled={editing !== null || pending} onClick={() => setEditing(p.id)}>
+                    <Pencil aria-hidden />
+                    Editar
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={pending}
+                    onClick={() =>
+                      act(() => setProfileActive(p.id, !p.active), p.active ? 'Ficha desactivada.' : 'Ficha reactivada.')
+                    }
+                  >
+                    {p.active ? 'Desactivar' : 'Reactivar'}
+                  </Button>
+                  <DeleteButton
+                    name={p.name}
+                    disabled={pending}
+                    onConfirm={() => act(() => deleteProfile(p.id), 'Ficha eliminada.')}
+                  />
+                </footer>
+              </article>
             )
           )}
         </div>
@@ -261,17 +323,31 @@ export function EquipoView({
   );
 }
 
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
 function DeleteButton({ name, disabled, onConfirm }: { name: string; disabled: boolean; onConfirm: () => void }) {
   const [asking, setAsking] = useState(false);
   if (!asking) {
     return (
-      <Button size="sm" variant="ghost" disabled={disabled} onClick={() => setAsking(true)}>
+      <Button
+        size="sm"
+        variant="ghost"
+        className="ml-auto text-muted-foreground hover:text-destructive"
+        disabled={disabled}
+        onClick={() => setAsking(true)}
+      >
+        <Trash2 aria-hidden />
         Eliminar
       </Button>
     );
   }
   return (
-    <span className="flex items-center gap-1 text-sm">
+    <span role="alert" className="flex w-full flex-wrap items-center gap-2 rounded-lg bg-destructive-soft px-3 py-2 text-sm text-destructive">
       ¿Eliminar la ficha de {name}?
       <Button
         size="sm"
@@ -376,11 +452,14 @@ function ProfileForm({
     });
 
   return (
-    <div className="rounded-lg border-2 border-brand/45 bg-card p-4 space-y-4" data-testid="perfil-form">
-      <p className="font-medium">{isNew ? 'Nueva ficha' : `Editar la ficha de ${initial.name}`}</p>
+    <div className="overflow-hidden rounded-xl border border-brand/45 bg-card shadow-md ring-1 ring-brand/20" data-testid="perfil-form">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-muted/30 px-5 py-3.5">
+        <p className="text-[15px] font-semibold">{isNew ? 'Nueva ficha' : `Editar la ficha de ${initial.name}`}</p>
+      </div>
 
+      <div className="space-y-6 p-5">
       <AiFill onDraft={applyDraft} />
-
+      <FormGroup title="Datos básicos" hint="Los campos con * son obligatorios.">
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1">
           <Label htmlFor="p-name">Nombre *</Label>
@@ -419,16 +498,22 @@ function ProfileForm({
           onChange={(e) => set({ description: e.target.value })}
         />
       </div>
+      </FormGroup>
 
-      <div className="space-y-2">
-        <Label>Tipos de trabajo que hace</Label>
+      <FormGroup title="Tipos de trabajo que hace">
         <div className="grid gap-2 sm:grid-cols-2">
           {workTypes.map((t) => (
-            <div key={t.key} className="flex items-center justify-between gap-2 rounded border border-border px-2 py-1">
-              <span className="text-sm">{t.label}</span>
+            <div
+              key={t.key}
+              className={cn(
+                'flex items-center justify-between gap-2 rounded-lg border px-3 py-2',
+                roleOf(t.key) === 'primary' && 'border-brand/40 bg-brand-soft/50'
+              )}
+            >
+              <span className="min-w-0 truncate text-sm">{t.label}</span>
               <select
                 aria-label={`Función en ${t.label}`}
-                className="rounded border border-input bg-card px-1 py-0.5 text-sm"
+                className="shrink-0 rounded-md border border-input bg-background px-2 py-1 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                 value={roleOf(t.key)}
                 onChange={(e) => setRole(t.key, e.target.value)}
               >
@@ -439,11 +524,10 @@ function ProfileForm({
             </div>
           ))}
         </div>
-      </div>
+      </FormGroup>
 
-      <div className="space-y-2">
-        <Label>Horario</Label>
-        <div className="flex flex-wrap gap-1.5">
+      <FormGroup title="Horario">
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Días de trabajo">
           {DAY_LABELS.map((lbl, idx) => {
             const day = idx + 1;
             const on = f.workDays.includes(day);
@@ -453,7 +537,10 @@ function ProfileForm({
                 type="button"
                 aria-pressed={on}
                 onClick={() => set({ workDays: on ? f.workDays.filter((d) => d !== day) : [...f.workDays, day].sort() })}
-                className={`h-8 w-8 rounded-full border text-sm ${on ? 'border-brand/70 bg-brand text-white' : 'border-input bg-card text-muted-foreground'}`}
+                className={cn(
+                  'size-9 rounded-full border text-sm font-medium transition-colors',
+                  on ? 'border-brand/70 bg-brand text-white' : 'border-input bg-background text-muted-foreground hover:bg-muted'
+                )}
               >
                 {lbl}
               </button>
@@ -480,7 +567,7 @@ function ProfileForm({
           </div>
           <div className="space-y-1">
             <Label htmlFor="p-tz" className="text-xs">Zona horaria</Label>
-            <Input id="p-tz" list="tz-equipo" className="w-60" value={f.timezone} onChange={(e) => set({ timezone: e.target.value })} />
+            <Input id="p-tz" list="tz-equipo" className="w-full sm:w-60" value={f.timezone} onChange={(e) => set({ timezone: e.target.value })} />
             <datalist id="tz-equipo">
               {TIMEZONES.map((z) => (
                 <option key={z} value={z} />
@@ -488,13 +575,13 @@ function ProfileForm({
             </datalist>
           </div>
         </div>
-      </div>
+      </FormGroup>
 
-      <div className="space-y-2" data-testid="perfil-silencio">
-        <Label>Comida y horas de silencio</Label>
-        <p className="text-xs text-muted-foreground">
-          En estos huecos (hora de su zona) no se le envía nada: lo que caiga dentro se retrasa hasta que termine (y los resúmenes programados salen en el momento permitido más cercano). Deja vacío para no aplicar.
-        </p>
+      <FormGroup
+        title="Comida y horas de silencio"
+        hint="En estos huecos (hora de su zona) no se le envía nada: lo que caiga dentro se retrasa hasta que termine (y los resúmenes programados salen en el momento permitido más cercano). Deja vacío para no aplicar."
+        testId="perfil-silencio"
+      >
         <div className="flex flex-wrap items-end gap-3">
           <div className="space-y-1">
             <Label htmlFor="p-lunch-a" className="text-xs">Comida: de</Label>
@@ -514,11 +601,17 @@ function ProfileForm({
           </div>
         </div>
         <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={f.urgentBypassQuiet} onChange={(e) => set({ urgentBypassQuiet: e.target.checked })} />
+          <input
+            type="checkbox"
+            className="size-4 accent-[var(--brand)]"
+            checked={f.urgentBypassQuiet}
+            onChange={(e) => set({ urgentBypassQuiet: e.target.checked })}
+          />
           Los urgentes pueden saltarse el silencio
         </label>
-      </div>
+      </FormGroup>
 
+      <FormGroup title="Notas y estado">
       <div className="space-y-1">
         <Label htmlFor="p-notes">Notas</Label>
         <textarea id="p-notes" rows={2} className={areaClass} value={f.notes} onChange={(e) => set({ notes: e.target.value })} />
@@ -527,15 +620,22 @@ function ProfileForm({
       <label className="flex items-center gap-2 text-sm">
         <input
           type="checkbox"
-          className="h-4 w-4 accent-[var(--brand)]"
+          className="size-4 accent-[var(--brand)]"
           checked={f.active}
           onChange={(e) => set({ active: e.target.checked })}
         />
         Ficha activa (si se desactiva, el agente no le propone encargos)
       </label>
+      </FormGroup>
+      </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" disabled={pending || !f.name.trim()} onClick={save}>
+      <div className="flex flex-wrap items-center gap-2 border-t bg-muted/30 px-5 py-3">
+        <Button
+          size="sm"
+          className="bg-brand text-white hover:bg-brand/90"
+          disabled={pending || !f.name.trim()}
+          onClick={save}
+        >
           {pending ? 'Guardando…' : 'Guardar ficha'}
         </Button>
         <Button
@@ -549,7 +649,11 @@ function ProfileForm({
           Cancelar
         </Button>
         {dirty && <span className="text-xs text-warning-strong">Cambios sin guardar</span>}
-        {msg && <span className={`text-sm ${msg.type === 'ok' ? 'text-success' : 'text-destructive'}`}>{msg.text}</span>}
+        {msg && (
+          <span role="status" className={`text-sm ${msg.type === 'ok' ? 'text-success' : 'text-destructive'}`}>
+            {msg.text}
+          </span>
+        )}
       </div>
     </div>
   );
@@ -648,35 +752,47 @@ function AiFill({ onDraft }: { onDraft: (d: ProfileDraft) => void }) {
   if (!open) {
     return (
       <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
-        ✨ Rellenar con IA
+        <Sparkles className="text-brand" aria-hidden />
+        Rellenar con IA
       </Button>
     );
   }
   return (
-    <div className="space-y-2 rounded-md border border-brand/30 bg-brand-soft p-3">
-      <p className="text-sm font-medium">Rellenar con IA</p>
+    <div className="space-y-2 rounded-xl border border-brand/30 bg-brand-soft p-4">
+      <p className="flex items-center gap-2 text-sm font-medium">
+        <Sparkles className="size-4 text-brand" aria-hidden />
+        Rellenar con IA
+      </p>
       <p className="text-xs text-muted-foreground">
         Pega un texto o graba un audio describiendo a la persona. La IA propone los campos y tú los revisas antes de
         guardar; solo cambia los campos que consiga deducir.
       </p>
       <textarea
         rows={4}
+        aria-label="Texto que describe a la persona"
         className={areaClass}
         placeholder="Ej.: Jesús lleva los cambios en webs WordPress, es muy meticuloso, trabaja 7 horas…"
         value={text}
         onChange={(e) => setText(e.target.value)}
       />
       <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" disabled={pending || recording || transcribing || text.trim().length < 10} onClick={run}>
+        <Button
+          size="sm"
+          className="bg-brand text-white hover:bg-brand/90"
+          disabled={pending || recording || transcribing || text.trim().length < 10}
+          onClick={run}
+        >
           {pending ? 'Pensando…' : 'Proponer campos'}
         </Button>
         {recording ? (
           <Button size="sm" variant="destructive" onClick={stop}>
-            ⏹ Parar ({seconds}s)
+            <Square aria-hidden />
+            Parar ({seconds}s)
           </Button>
         ) : (
           <Button size="sm" variant="outline" disabled={pending || transcribing} onClick={start}>
-            🎙 {transcribing ? 'Transcribiendo…' : 'Grabar audio'}
+            <Mic aria-hidden />
+            {transcribing ? 'Transcribiendo…' : 'Grabar audio'}
           </Button>
         )}
         <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>

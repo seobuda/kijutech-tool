@@ -3,9 +3,27 @@
 // Pestaña «Correos»: los correos de clientes que han llegado, de qué cliente son y qué se ha hecho con
 // cada uno. Todo lo que se pinta del correo va como TEXTO (React lo escapa): nunca como HTML.
 import { useCallback, useEffect, useState, useTransition } from 'react';
+import {
+  AlertTriangle,
+  ArrowLeft,
+  Building2,
+  Check,
+  ClipboardPaste,
+  EyeOff,
+  Inbox,
+  Paperclip,
+  RotateCcw,
+  ShieldAlert,
+  ShieldCheck,
+  ShieldQuestion,
+  Trash2,
+  X
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Badge, EmptyState, Skeleton } from '@/components/ui/page';
+import { cn } from '@/lib/utils';
 import {
   assignInboundEmailClient,
   deleteInboundEmail,
@@ -19,22 +37,38 @@ import {
 } from '@/lib/operaciones/inbound-email-actions';
 import { INBOUND_STATUS_LABELS, type InboundStatus } from '@/lib/operaciones/inbound-email-rules';
 
-const fieldClass =
-  'w-full rounded-md border border-input bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand';
-const selectClass = 'rounded-md border border-input bg-card px-2 py-2 text-sm';
+const focusRing = 'focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-brand/40 focus-visible:border-brand';
+const fieldClass = cn(
+  'w-full rounded-md border border-input bg-card px-3 py-2 text-sm shadow-xs placeholder:text-muted-foreground',
+  focusRing
+);
+const selectClass = cn('h-9 rounded-md border border-input bg-card px-2.5 text-sm shadow-xs', focusRing);
+const brandBtn = 'bg-brand text-white hover:bg-brand/90';
+const dangerGhost = 'text-muted-foreground hover:bg-destructive-soft hover:text-destructive';
 
 type Msg = { type: 'ok' | 'error'; text: string } | null;
 type Result = { ok: boolean; error?: string };
+type Tone = 'neutral' | 'brand' | 'success' | 'warning' | 'danger' | 'info';
 
 const statusLabel = (s: string) => INBOUND_STATUS_LABELS[s as InboundStatus] ?? s;
-const statusClass = (s: string) =>
+const statusTone = (s: string): Tone =>
   s === 'nuevo'
-    ? 'bg-success-soft text-success'
+    ? 'success'
     : s === 'sin_cliente'
-      ? 'bg-warning-soft text-warning-strong'
+      ? 'warning'
       : s === 'error'
-        ? 'bg-destructive-soft text-destructive'
-        : 'bg-muted text-foreground/80';
+        ? 'danger'
+        : s === 'propuesto' || s === 'interpretando'
+          ? 'info'
+          : 'neutral';
+
+function StatusBadge({ status }: { status: string }) {
+  return (
+    <Badge tone={statusTone(status)} dot>
+      {statusLabel(status)}
+    </Badge>
+  );
+}
 
 const MATCH_LABELS: Record<string, string> = {
   email: 'por su correo exacto',
@@ -47,12 +81,61 @@ const MATCH_LABELS: Record<string, string> = {
 const fmt = (iso: string) =>
   new Date(iso).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
+// Fecha compacta para la bandeja: hora si es de hoy, día y mes si no.
+const fmtShort = (iso: string) => {
+  const d = new Date(iso);
+  const now = new Date();
+  const sameDay = d.toDateString() === now.toDateString();
+  if (sameDay) return d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleDateString('es-ES', {
+    day: 'numeric',
+    month: 'short',
+    ...(d.getFullYear() !== now.getFullYear() ? { year: 'numeric' as const } : {})
+  });
+};
+
+const initialOf = (m: { fromName: string; fromAddress: string }) =>
+  (m.fromName.trim() || m.fromAddress.trim() || '?').charAt(0).toUpperCase();
+
+function MsgLine({ msg }: { msg: Msg }) {
+  if (!msg) return null;
+  return (
+    <p
+      role={msg.type === 'error' ? 'alert' : 'status'}
+      className={cn(
+        'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-sm',
+        msg.type === 'ok' ? 'bg-success-soft text-success' : 'bg-destructive-soft text-destructive'
+      )}
+    >
+      {msg.type === 'ok' ? <Check className="size-3.5" aria-hidden /> : <AlertTriangle className="size-3.5" aria-hidden />}
+      {msg.text}
+    </p>
+  );
+}
+
 function AuthBadge({ auth }: { auth: string }) {
-  if (auth === 'pass') return <span className="rounded bg-success-soft px-1.5 py-0.5 text-xs text-success">Remitente verificado</span>;
-  if (auth === 'fail') {
-    return <span className="rounded bg-destructive-soft px-1.5 py-0.5 text-xs text-destructive">⚠ Autenticación fallida: podría estar suplantado</span>;
+  if (auth === 'pass') {
+    return (
+      <Badge tone="success">
+        <ShieldCheck aria-hidden />
+        Remitente verificado
+      </Badge>
+    );
   }
-  return <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">Remitente sin verificar</span>;
+  if (auth === 'fail') {
+    return (
+      <Badge tone="danger">
+        <ShieldAlert aria-hidden />
+        Autenticación fallida: podría estar suplantado
+      </Badge>
+    );
+  }
+  return (
+    <Badge tone="neutral">
+      <ShieldQuestion aria-hidden />
+      Remitente sin verificar
+    </Badge>
+  );
 }
 
 export function CorreosView({ clients }: { clients: { id: string; name: string }[] }) {
@@ -123,8 +206,32 @@ export function CorreosView({ clients }: { clients: { id: string; name: string }
   const [saveSender, setSaveSender] = useState(true);
   const [askDelete, setAskDelete] = useState(false);
 
-  if (loadError) return <p className="text-sm text-destructive">No se pudieron cargar los correos: {loadError}</p>;
-  if (emails === null) return <p className="text-sm text-muted-foreground">Cargando correos…</p>;
+  if (loadError) {
+    return (
+      <p role="alert" className="flex items-center gap-2 rounded-xl border border-destructive/30 bg-destructive-soft px-4 py-3 text-sm text-destructive">
+        <AlertTriangle className="size-4 shrink-0" aria-hidden />
+        No se pudieron cargar los correos: {loadError}
+      </p>
+    );
+  }
+  if (emails === null) {
+    return (
+      <div className="space-y-3" aria-busy="true">
+        <p className="text-sm text-muted-foreground">Cargando correos…</p>
+        <div className="divide-y rounded-xl border bg-card">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="flex items-center gap-3 px-4 py-3.5">
+              <Skeleton className="size-9 rounded-full" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-3.5 w-1/3" />
+                <Skeleton className="h-3 w-2/3" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   // ----- Detalle -----
   if (detail) {
@@ -132,140 +239,207 @@ export function CorreosView({ clients }: { clients: { id: string; name: string }
     const canIgnore = ['nuevo', 'sin_cliente', 'informativo', 'error'].includes(detail.status);
     const canReopen = ['ignorado', 'sin_cliente', 'descartado'].includes(detail.status);
     return (
-      <div className="space-y-4">
+      <div className="space-y-4 animate-fade-up">
         <Button
           variant="ghost"
           size="sm"
+          className="-ml-2 text-muted-foreground hover:text-foreground"
           onClick={() => {
             setDetail(null);
             setAskDelete(false);
             setAssignTo('');
           }}
         >
-          ← Volver a la lista
+          <ArrowLeft aria-hidden />
+          Volver a la lista
         </Button>
 
-        <div className="space-y-2 rounded-lg border border-border bg-card p-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-lg font-semibold break-words">{detail.subject || '(sin asunto)'}</h2>
-            <span className={`rounded px-2 py-0.5 text-xs ${statusClass(detail.status)}`}>{statusLabel(detail.status)}</span>
-          </div>
-          <p className="text-sm break-words">
-            <strong>De:</strong> {detail.fromName ? `${detail.fromName} ` : ''}
-            <span className="text-muted-foreground">&lt;{detail.fromAddress}&gt;</span>
-          </p>
-          {detail.toAddress && (
-            <p className="text-sm break-words">
-              <strong>Para:</strong> {detail.toAddress}
-            </p>
-          )}
-          <p className="text-xs text-muted-foreground">
-            Recibido el {fmt(detail.createdAt)}
-            {detail.sentAt ? ` · enviado el ${fmt(detail.sentAt)}` : ''} · {detail.source === 'pegado' ? 'pegado a mano' : 'llegó por correo'}
-          </p>
-          <div className="flex flex-wrap items-center gap-2">
-            <AuthBadge auth={detail.authStatus} />
-            {detail.clientName ? (
-              <span className="text-sm">
-                Cliente: <strong>{detail.clientName}</strong> <span className="text-xs text-muted-foreground">({MATCH_LABELS[detail.matchedBy] ?? detail.matchedBy})</span>
-              </span>
-            ) : (
-              <span className="text-sm text-warning-strong">Cliente sin reconocer</span>
-            )}
-          </div>
-          {detail.statusNote && <p className="text-sm text-muted-foreground">{detail.statusNote}</p>}
-          {detail.attachments.length > 0 && (
-            <p className="text-xs text-muted-foreground">Adjuntos (no se descargan): {detail.attachments.join(', ')}</p>
-          )}
-          {detail.status === 'nuevo' && (
-            <p className="rounded-md bg-muted/50 p-2 text-xs text-muted-foreground">
-              El correo está reconocido. Interpretarlo y proponer encargos llegará en el siguiente paso; por ahora queda guardado aquí.
-            </p>
-          )}
-        </div>
-
-        <div className="rounded-lg border border-border bg-card p-4">
-          <Label className="mb-2 block">Texto del correo</Label>
-          <pre className="max-h-[28rem] overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted/50 p-3 text-sm">
-            {detail.bodyText || '(sin texto)'}
-          </pre>
-        </div>
-
-        <div className="space-y-3 rounded-lg border border-border bg-card p-4">
-          {canAssign && (
-            <div className="flex flex-wrap items-end gap-2">
-              <div className="space-y-1">
-                <Label className="text-xs" htmlFor="assign-client">
-                  {detail.clientName ? 'Cambiar de cliente' : 'Asignar a un cliente'}
-                </Label>
-                <select id="assign-client" className={selectClass} value={assignTo} onChange={(e) => setAssignTo(e.target.value)}>
-                  <option value="">Elige una ficha…</option>
-                  {clients.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px] lg:items-start">
+          {/* Correo */}
+          <article className="min-w-0 rounded-xl border bg-card shadow-xs" aria-labelledby="correo-asunto">
+            <header className="space-y-3 border-b px-4 py-4 sm:px-5">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <h2 id="correo-asunto" className="min-w-0 text-lg font-semibold tracking-tight break-words text-balance">
+                  {detail.subject || '(sin asunto)'}
+                </h2>
+                <StatusBadge status={detail.status} />
               </div>
-              <label className="flex items-center gap-1 pb-2 text-sm">
-                <input type="checkbox" checked={saveSender} onChange={(e) => setSaveSender(e.target.checked)} />
-                Recordar a {detail.fromAddress} como contacto
-              </label>
-              <Button
-                size="sm"
-                disabled={pending || !assignTo}
-                onClick={() =>
-                  run(
-                    () => assignInboundEmailClient({ id: detail.id, clientId: assignTo, saveSender }),
-                    'Cliente asignado',
-                    () => setAssignTo(''),
-                    detail.id
-                  )
-                }
-              >
-                Asignar
-              </Button>
-            </div>
-          )}
-          <div className="flex flex-wrap items-center gap-2">
-            {canIgnore && (
-              <Button size="sm" variant="outline" disabled={pending} onClick={() => run(() => ignoreInboundEmail(detail.id), 'Correo ignorado', undefined, detail.id)}>
-                Ignorar
-              </Button>
-            )}
-            {canReopen && (
-              <Button size="sm" variant="outline" disabled={pending} onClick={() => run(() => reopenInboundEmail(detail.id), 'Correo reabierto', undefined, detail.id)}>
-                Volver a considerarlo
-              </Button>
-            )}
-            {canDelete &&
-              (askDelete ? (
-                <span className="flex items-center gap-1 text-sm">
-                  ¿Eliminar este correo? No se puede deshacer.
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    disabled={pending}
-                    onClick={() =>
-                      run(() => deleteInboundEmail(detail.id), 'Correo eliminado', () => {
-                        setDetail(null);
-                        setAskDelete(false);
-                      })
-                    }
-                  >
-                    Sí, eliminar
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => setAskDelete(false)}>
-                    No
-                  </Button>
+              <div className="flex items-start gap-3">
+                <span
+                  className="grid size-10 shrink-0 place-items-center rounded-full bg-brand-soft text-sm font-semibold text-brand"
+                  aria-hidden
+                >
+                  {initialOf(detail)}
                 </span>
-              ) : (
-                <Button size="sm" variant="ghost" disabled={pending} onClick={() => setAskDelete(true)}>
-                  Eliminar
-                </Button>
-              ))}
-          </div>
-          {msg && <p className={`text-sm ${msg.type === 'ok' ? 'text-success' : 'text-destructive'}`}>{msg.text}</p>}
+                <div className="min-w-0 flex-1 space-y-0.5 text-sm">
+                  <p className="break-words">
+                    <span className="sr-only">De: </span>
+                    {detail.fromName ? <span className="font-medium">{detail.fromName} </span> : null}
+                    <span className="text-muted-foreground">&lt;{detail.fromAddress}&gt;</span>
+                  </p>
+                  {detail.toAddress && (
+                    <p className="break-words text-xs text-muted-foreground">
+                      Para: <span className="text-foreground/80">{detail.toAddress}</span>
+                    </p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Recibido el {fmt(detail.createdAt)}
+                    {detail.sentAt ? ` · enviado el ${fmt(detail.sentAt)}` : ''} · {detail.source === 'pegado' ? 'pegado a mano' : 'llegó por correo'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <AuthBadge auth={detail.authStatus} />
+              </div>
+            </header>
+
+            <div className="px-4 py-4 sm:px-5">
+              <h3 className="sr-only">Texto del correo</h3>
+              <pre className="max-h-[32rem] overflow-auto whitespace-pre-wrap break-words font-sans text-sm leading-relaxed text-foreground">
+                {detail.bodyText || '(sin texto)'}
+              </pre>
+              {detail.attachments.length > 0 && (
+                <div className="mt-4 flex flex-wrap items-center gap-1.5 border-t pt-3 text-xs text-muted-foreground">
+                  <Paperclip className="size-3.5 shrink-0" aria-hidden />
+                  <span>Adjuntos (no se descargan):</span>
+                  {detail.attachments.map((a, i) => (
+                    <Badge key={`${a}-${i}`} tone="outline" className="max-w-full truncate">
+                      {a}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+          </article>
+
+          {/* Panel lateral: cliente y acciones */}
+          <aside className="space-y-4">
+            <section className="rounded-xl border bg-card shadow-xs" aria-labelledby="correo-cliente">
+              <h3 id="correo-cliente" className="border-b px-4 py-3 text-sm font-semibold">
+                Cliente
+              </h3>
+              <div className="space-y-3 p-4">
+                {detail.clientName ? (
+                  <div className="flex items-start gap-2.5">
+                    <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
+                      <Building2 className="size-4" aria-hidden />
+                    </span>
+                    <div className="min-w-0 text-sm">
+                      <p className="font-medium break-words">{detail.clientName}</p>
+                      <p className="text-xs text-muted-foreground">{MATCH_LABELS[detail.matchedBy] ?? detail.matchedBy}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <Badge tone="warning" dot>
+                    Cliente sin reconocer
+                  </Badge>
+                )}
+                {detail.statusNote && <p className="text-sm text-muted-foreground">{detail.statusNote}</p>}
+                {detail.status === 'nuevo' && (
+                  <p className="rounded-lg bg-muted/60 p-2.5 text-xs text-muted-foreground">
+                    El correo está reconocido. Interpretarlo y proponer encargos llegará en el siguiente paso; por ahora queda guardado aquí.
+                  </p>
+                )}
+
+                {canAssign && (
+                  <div className="space-y-2.5 border-t pt-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs" htmlFor="assign-client">
+                        {detail.clientName ? 'Cambiar de cliente' : 'Asignar a un cliente'}
+                      </Label>
+                      <select id="assign-client" className={cn(selectClass, 'w-full')} value={assignTo} onChange={(e) => setAssignTo(e.target.value)}>
+                        <option value="">Elige una ficha…</option>
+                        {clients.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <label className="flex items-start gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5 size-4 shrink-0 accent-[var(--brand)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+                        checked={saveSender}
+                        onChange={(e) => setSaveSender(e.target.checked)}
+                      />
+                      <span className="min-w-0 break-words">Recordar a {detail.fromAddress} como contacto</span>
+                    </label>
+                    <Button
+                      size="sm"
+                      className={cn(brandBtn, 'w-full')}
+                      disabled={pending || !assignTo}
+                      onClick={() =>
+                        run(
+                          () => assignInboundEmailClient({ id: detail.id, clientId: assignTo, saveSender }),
+                          'Cliente asignado',
+                          () => setAssignTo(''),
+                          detail.id
+                        )
+                      }
+                    >
+                      Asignar
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </section>
+
+            {(canIgnore || canReopen || canDelete) && (
+              <section className="rounded-xl border bg-card shadow-xs" aria-labelledby="correo-acciones">
+                <h3 id="correo-acciones" className="border-b px-4 py-3 text-sm font-semibold">
+                  Acciones
+                </h3>
+                <div className="flex flex-wrap items-center gap-2 p-4">
+                  {canIgnore && (
+                    <Button size="sm" variant="outline" disabled={pending} onClick={() => run(() => ignoreInboundEmail(detail.id), 'Correo ignorado', undefined, detail.id)}>
+                      <EyeOff aria-hidden />
+                      Ignorar
+                    </Button>
+                  )}
+                  {canReopen && (
+                    <Button size="sm" variant="outline" disabled={pending} onClick={() => run(() => reopenInboundEmail(detail.id), 'Correo reabierto', undefined, detail.id)}>
+                      <RotateCcw aria-hidden />
+                      Volver a considerarlo
+                    </Button>
+                  )}
+                  {canDelete &&
+                    (askDelete ? (
+                      <span
+                        role="group"
+                        aria-label="Confirmar eliminación"
+                        className="flex w-full flex-wrap items-center gap-1.5 rounded-md border border-destructive/30 bg-destructive-soft px-2.5 py-2 text-sm text-destructive"
+                      >
+                        ¿Eliminar este correo? No se puede deshacer.
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          disabled={pending}
+                          onClick={() =>
+                            run(() => deleteInboundEmail(detail.id), 'Correo eliminado', () => {
+                              setDetail(null);
+                              setAskDelete(false);
+                            })
+                          }
+                        >
+                          Sí, eliminar
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => setAskDelete(false)}>
+                          No
+                        </Button>
+                      </span>
+                    ) : (
+                      <Button size="sm" variant="ghost" className={dangerGhost} disabled={pending} onClick={() => setAskDelete(true)}>
+                        <Trash2 aria-hidden />
+                        Eliminar
+                      </Button>
+                    ))}
+                </div>
+              </section>
+            )}
+
+            <MsgLine msg={msg} />
+          </aside>
         </div>
       </div>
     );
@@ -281,109 +455,188 @@ export function CorreosView({ clients }: { clients: { id: string; name: string }
   ];
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h2 className="text-lg font-semibold">Correos de clientes</h2>
-        <p className="text-sm text-muted-foreground">
-          Aquí llegan los correos de tus clientes y se reconoce de quién es cada uno. Un correo nunca crea nada por sí solo: es un dato que
-          una persona revisa.
-        </p>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        {chips.map((c) => (
-          <button
-            key={c.key || 'todos'}
-            type="button"
-            onClick={() => setFilter(c.key)}
-            className={`rounded-full border px-3 py-1 text-xs ${
-              filter === c.key ? 'border-brand/70 bg-brand-soft text-foreground' : 'border-border text-muted-foreground hover:bg-muted'
-            }`}
-          >
-            {c.label} ({c.n})
-          </button>
-        ))}
-        <Button size="sm" variant="outline" className="ml-auto" onClick={() => setPasting((v) => !v)}>
+    <div className="space-y-4 animate-fade-up">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h2 className="text-base font-semibold tracking-tight">Correos de clientes</h2>
+          <p className="mt-0.5 max-w-3xl text-sm text-muted-foreground text-pretty">
+            Aquí llegan los correos de tus clientes y se reconoce de quién es cada uno. Un correo nunca crea nada por sí solo: es un dato que
+            una persona revisa.
+          </p>
+        </div>
+        <Button size="sm" variant="outline" className="shrink-0 self-start" aria-expanded={pasting} onClick={() => setPasting((v) => !v)}>
+          {pasting ? <X aria-hidden /> : <ClipboardPaste aria-hidden />}
           {pasting ? 'Cerrar' : 'Pegar un correo'}
         </Button>
       </div>
 
+      {/* Filtros por estado */}
+      <div className="-mx-1 overflow-x-auto px-1 pb-1">
+        <div className="inline-flex min-w-max items-center gap-1 rounded-lg border bg-muted/50 p-1" role="group" aria-label="Filtrar por estado">
+          {chips.map((c) => {
+            const active = filter === c.key;
+            return (
+              <button
+                key={c.key || 'todos'}
+                type="button"
+                aria-pressed={active}
+                onClick={() => setFilter(c.key)}
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
+                  focusRing,
+                  active ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:bg-card/60 hover:text-foreground'
+                )}
+              >
+                {c.label}
+                <span
+                  className={cn(
+                    'rounded-full px-1.5 text-[11px] tabular-nums',
+                    active ? 'bg-brand-soft text-brand' : 'bg-muted text-muted-foreground'
+                  )}
+                >
+                  {c.n}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {pasting && (
-        <div className="space-y-2 rounded-lg border border-brand/30 bg-brand-soft/40 p-3">
-          <p className="text-xs text-muted-foreground">
-            Para probar el sistema o meter a mano un correo que no llegó solo. Se trata igual que uno recibido (pero sin verificar al remitente).
-          </p>
-          <div className="grid gap-2 sm:grid-cols-2">
-            <div className="space-y-1">
-              <Label className="text-xs" htmlFor="p-from">De *</Label>
-              <Input id="p-from" placeholder="Nombre <persona@empresa.com>" value={pFrom} onChange={(e) => setPFrom(e.target.value)} />
+        <section className="space-y-3 rounded-xl border border-brand/30 bg-card p-4 shadow-sm animate-fade-up sm:p-5" aria-labelledby="pegar-titulo">
+          <div>
+            <h3 id="pegar-titulo" className="text-sm font-semibold">
+              Pegar un correo
+            </h3>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Para probar el sistema o meter a mano un correo que no llegó solo. Se trata igual que uno recibido (pero sin verificar al remitente).
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label className="gap-1 text-xs" htmlFor="p-from">
+                De <span className="text-destructive">*</span>
+              </Label>
+              <Input id="p-from" aria-required placeholder="Nombre <persona@empresa.com>" value={pFrom} onChange={(e) => setPFrom(e.target.value)} />
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <Label className="text-xs" htmlFor="p-subject">Asunto</Label>
               <Input id="p-subject" value={pSubject} onChange={(e) => setPSubject(e.target.value)} />
             </div>
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs" htmlFor="p-body">Texto del correo *</Label>
-            <textarea id="p-body" rows={6} className={fieldClass} value={pBody} onChange={(e) => setPBody(e.target.value)} />
+          <div className="space-y-1.5">
+            <Label className="gap-1 text-xs" htmlFor="p-body">
+              Texto del correo <span className="text-destructive">*</span>
+            </Label>
+            <textarea id="p-body" aria-required rows={6} className={fieldClass} value={pBody} onChange={(e) => setPBody(e.target.value)} />
           </div>
-          <Button
-            size="sm"
-            disabled={pending || !pFrom.trim() || !pBody.trim()}
-            onClick={() =>
-              run(() => pasteInboundEmail({ from: pFrom, subject: pSubject, body: pBody }), 'Correo guardado', () => {
-                setPFrom('');
-                setPSubject('');
-                setPBody('');
-                setPasting(false);
-              })
-            }
-          >
-            Guardar correo
-          </Button>
-        </div>
+          <div className="flex justify-end">
+            <Button
+              size="sm"
+              className={brandBtn}
+              disabled={pending || !pFrom.trim() || !pBody.trim()}
+              onClick={() =>
+                run(() => pasteInboundEmail({ from: pFrom, subject: pSubject, body: pBody }), 'Correo guardado', () => {
+                  setPFrom('');
+                  setPSubject('');
+                  setPBody('');
+                  setPasting(false);
+                })
+              }
+            >
+              Guardar correo
+            </Button>
+          </div>
+        </section>
       )}
 
-      {msg && <p className={`text-sm ${msg.type === 'ok' ? 'text-success' : 'text-destructive'}`}>{msg.text}</p>}
+      <MsgLine msg={msg} />
 
       {emails.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-input p-6 text-center text-sm text-muted-foreground">
-          {total === 0 ? (
-            <>
-              <p className="font-medium text-foreground/80">Aún no ha llegado ningún correo.</p>
-              <p className="mt-1">
+        total === 0 ? (
+          <EmptyState
+            icon={Inbox}
+            title="Aún no ha llegado ningún correo."
+            description={
+              <>
                 Cuando un cliente escriba y la regla de Gmail reenvíe una copia, aparecerá aquí. Mientras tanto puedes probarlo con «Pegar un correo».
                 Recuerda dar de alta los contactos de cada cliente (Clientes → Editar → Contactos y memoria) para que se reconozcan.
-              </p>
-            </>
-          ) : (
-            <p>No hay correos con este estado.</p>
-          )}
-        </div>
+              </>
+            }
+            action={
+              !pasting ? (
+                <Button size="sm" variant="outline" onClick={() => setPasting(true)}>
+                  <ClipboardPaste aria-hidden />
+                  Pegar un correo
+                </Button>
+              ) : undefined
+            }
+          />
+        ) : (
+          <EmptyState icon={Inbox} title="No hay correos con este estado." className="py-10" />
+        )
       ) : (
-        <ul className="divide-y divide-border rounded-lg border border-border bg-card">
-          {emails.map((m) => (
-            <li key={m.id}>
-              <button
-                type="button"
-                onClick={() => open(m.id)}
-                className="flex w-full flex-wrap items-center justify-between gap-2 px-3 py-2 text-left hover:bg-muted"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{m.subject || '(sin asunto)'}</p>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {m.fromName ? `${m.fromName} · ` : ''}
-                    {m.fromAddress}
-                    {m.clientName ? ` · ${m.clientName}` : ''}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className={`rounded px-2 py-0.5 text-xs ${statusClass(m.status)}`}>{statusLabel(m.status)}</span>
-                  <span className="text-xs text-muted-foreground">{fmt(m.createdAt)}</span>
-                </div>
-              </button>
-            </li>
-          ))}
+        <ul className="divide-y overflow-hidden rounded-xl border bg-card shadow-xs" aria-label="Bandeja de correos" aria-busy={pending}>
+          {emails.map((m) => {
+            const unread = m.status === 'nuevo' || m.status === 'sin_cliente';
+            return (
+              <li key={m.id}>
+                <button
+                  type="button"
+                  onClick={() => open(m.id)}
+                  className={cn(
+                    'group flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/50 sm:px-5',
+                    unread && 'bg-brand-soft/20'
+                  )}
+                >
+                  <span
+                    className={cn(
+                      'mt-0.5 grid size-9 shrink-0 place-items-center rounded-full text-sm font-semibold',
+                      unread ? 'bg-brand-soft text-brand' : 'bg-muted text-muted-foreground'
+                    )}
+                    aria-hidden
+                  >
+                    {initialOf(m)}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-baseline justify-between gap-3">
+                      <span className={cn('truncate text-sm', unread ? 'font-semibold' : 'font-medium')}>
+                        {m.fromName || m.fromAddress}
+                      </span>
+                      <time dateTime={m.createdAt} title={fmt(m.createdAt)} className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                        {fmtShort(m.createdAt)}
+                      </time>
+                    </span>
+                    <span className={cn('mt-0.5 block truncate text-sm', unread ? 'text-foreground' : 'text-foreground/80')}>
+                      {m.subject || '(sin asunto)'}
+                    </span>
+                    {(m.fromName || m.statusNote) && (
+                      <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                        {m.fromName ? m.fromAddress : ''}
+                        {m.fromName && m.statusNote ? ' · ' : ''}
+                        {m.statusNote}
+                      </span>
+                    )}
+                    <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                      <StatusBadge status={m.status} />
+                      {m.clientName && (
+                        <Badge tone="outline">
+                          <Building2 aria-hidden />
+                          {m.clientName}
+                        </Badge>
+                      )}
+                      {m.authStatus === 'fail' && (
+                        <Badge tone="danger">
+                          <ShieldAlert aria-hidden />
+                          Autenticación fallida
+                        </Badge>
+                      )}
+                    </span>
+                  </span>
+                </button>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>

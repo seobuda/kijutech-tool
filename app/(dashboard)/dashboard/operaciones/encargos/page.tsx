@@ -4,38 +4,43 @@ import { redirect } from 'next/navigation';
 import { db } from '@/lib/db/drizzle';
 import { opsRequestEvents, opsRequests } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
+import { ClipboardList, ExternalLink, Plus } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Badge, EmptyState } from '@/components/ui/page';
 import { RetryButton } from './retry-button';
 
 export const dynamic = 'force-dynamic';
 
-const STATUS: Record<string, { label: string; className: string }> = {
-  creado: { label: 'Creado', className: 'bg-success-soft text-success' },
-  pendiente_clickup: { label: 'Pendiente de ClickUp', className: 'bg-warning-soft text-warning-strong' },
-  error_sync: { label: 'Error de sincronización', className: 'bg-destructive-soft text-destructive' }
+type Tone = 'neutral' | 'brand' | 'success' | 'warning' | 'danger' | 'info';
+
+const STATUS: Record<string, { label: string; tone: Tone }> = {
+  creado: { label: 'Creado', tone: 'success' },
+  pendiente_clickup: { label: 'Pendiente de ClickUp', tone: 'warning' },
+  error_sync: { label: 'Error de sincronización', tone: 'danger' }
 };
 
-const WORK: Record<string, string> = {
-  asignado: 'Asignado',
-  en_curso: '▶️ En curso',
-  bloqueado: '🚫 Bloqueado',
-  en_revision: '👀 En revisión',
-  devuelto: '↩️ Devuelto',
-  completado: '✅ Completado'
+const WORK: Record<string, { label: string; tone: Tone }> = {
+  asignado: { label: 'Asignado', tone: 'neutral' },
+  en_curso: { label: 'En curso', tone: 'info' },
+  bloqueado: { label: 'Bloqueado', tone: 'danger' },
+  en_revision: { label: 'En revisión', tone: 'warning' },
+  devuelto: { label: 'Devuelto', tone: 'warning' },
+  completado: { label: 'Completado', tone: 'success' }
 };
 
 // Última acción de la persona en Telegram (cualquier botón cuenta como visto).
 const ACTION_LABEL: Record<string, string> = {
-  start: '▶️ Empezar',
-  later: '🕐 Más tarde',
-  blocked: '🚫 Bloqueado',
-  done: '✅ Hecho',
-  done_review: '👀 Hecho, ¿lo revisas?',
-  seen: '✅ Visto'
+  start: 'Empezar',
+  later: 'Más tarde',
+  blocked: 'Bloqueado',
+  done: 'Hecho',
+  done_review: 'Hecho, ¿lo revisas?',
+  seen: 'Visto'
 };
 const BUTTON_LABEL: Record<string, string> = {
-  bl: '🚫 Bloqueado',
-  dn: '✅ Hecho',
-  dr: '👀 Hecho, ¿lo revisas?'
+  bl: 'Bloqueado',
+  dn: 'Hecho',
+  dr: 'Hecho, ¿lo revisas?'
 };
 
 const PRIORITY: Record<number, string> = { 1: 'Urgente', 2: 'Alta', 3: 'Normal', 4: 'Baja' };
@@ -81,118 +86,135 @@ export default async function EncargosPage() {
     }
   }
 
+  const newButton = (
+    <Button asChild size="sm" className="bg-brand text-white hover:bg-brand/90">
+      <Link href="/dashboard/operaciones/nuevo">
+        <Plus aria-hidden />
+        Nuevo encargo
+      </Link>
+    </Button>
+  );
+
   if (rows.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-input p-8 text-center space-y-3">
-        <p className="font-medium">Todavía no hay encargos</p>
-        <p className="text-sm text-muted-foreground">
-          Crea el primero y aparecerá aquí con su estado y el enlace a ClickUp.
-        </p>
-        <Link
-          href="/dashboard/operaciones/nuevo"
-          className="inline-block rounded-full bg-brand px-4 py-2 text-sm text-white hover:bg-brand/90"
-        >
-          Nuevo encargo
-        </Link>
-      </div>
+      <EmptyState
+        icon={ClipboardList}
+        title="Todavía no hay encargos"
+        description="Crea el primero y aparecerá aquí con su estado y el enlace a ClickUp."
+        action={newButton}
+      />
     );
   }
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
-        <Link
-          href="/dashboard/operaciones/nuevo"
-          className="rounded-full bg-brand px-4 py-2 text-sm text-white hover:bg-brand/90"
-        >
-          Nuevo encargo
-        </Link>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-[15px] font-semibold">Encargos</h2>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            {rows.length === 200 ? 'Los 200 más recientes' : `${rows.length} encargo${rows.length === 1 ? '' : 's'}`}, del más
+            nuevo al más antiguo.
+          </p>
+        </div>
+        {newButton}
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-border bg-card">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/50 text-left text-xs uppercase text-muted-foreground">
-            <tr>
-              <th className="px-3 py-2">Creado</th>
-              <th className="px-3 py-2">Encargo</th>
-              <th className="px-3 py-2">Lista</th>
-              <th className="px-3 py-2">Responsable</th>
-              <th className="px-3 py-2">Entrega</th>
-              <th className="px-3 py-2">Estado</th>
-              <th className="px-3 py-2">Flujo</th>
-              <th className="px-3 py-2">ClickUp</th>
-              <th className="px-3 py-2">Última acción</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {rows.map((r) => {
-              const st = STATUS[r.status] ?? { label: r.status, className: 'bg-muted text-muted-foreground' };
-              return (
-                <tr key={r.id} className="align-top">
-                  <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{fmt.format(r.createdAt)}</td>
-                  <td className="px-3 py-2 min-w-[16rem]">
-                    <p className="font-medium">{r.title}</p>
-                    {r.priority && (
-                      <p className="text-xs text-muted-foreground">Prioridad {PRIORITY[r.priority]}</p>
-                    )}
-                    {r.errorMessage && r.status !== 'creado' && (
-                      <p className="mt-1 text-xs text-destructive">{r.errorMessage}</p>
-                    )}
-                  </td>
-                  <td className="px-3 py-2">{r.clickupListName ?? r.clickupListId}</td>
-                  <td className="px-3 py-2">{r.assigneeName ?? <span className="text-muted-foreground/70">Sin asignar</span>}</td>
-                  <td className="px-3 py-2 whitespace-nowrap">
-                    {r.dueDate ? new Date(r.dueDate + 'T00:00:00').toLocaleDateString('es-ES') : '—'}
-                  </td>
-                  <td className="px-3 py-2">
-                    <span className={`rounded px-2 py-0.5 text-xs ${st.className}`}>{st.label}</span>
-                  </td>
-                  <td className="px-3 py-2 whitespace-nowrap text-xs">
-                    {r.status === 'creado' ? (WORK[r.workStatus] ?? r.workStatus) : '—'}
-                    {r.reviewerKey && <span className="block text-muted-foreground">Con revisión</span>}
-                  </td>
-                  <td className="px-3 py-2 whitespace-nowrap">
-                    {r.clickupTaskUrl ? (
-                      <a
-                        href={r.clickupTaskUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-brand hover:underline"
-                      >
-                        Abrir tarea
-                      </a>
-                    ) : (
-                      <RetryButton requestId={r.id} />
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-xs">
-                    {(() => {
-                      const act = lastAction.get(r.id);
-                      if (act) {
-                        return (
-                          <span title={act.by ?? ''}>
-                            <span className="rounded bg-success-soft px-2 py-0.5 text-success">{act.label}</span>{' '}
-                            <span className="text-muted-foreground">{fmt.format(act.at)}</span>
-                          </span>
-                        );
-                      }
-                      // Encargos anteriores a los eventos: solo consta que se vio.
-                      return r.seenAt ? (
-                        <span title={r.seenBy ?? ''}>
-                          <span className="rounded bg-success-soft px-2 py-0.5 text-success">✅ Visto</span>{' '}
-                          <span className="text-muted-foreground">{fmt.format(r.seenAt)}</span>
+      <div className="overflow-hidden rounded-xl border bg-card shadow-xs">
+        <div className="overflow-x-auto">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th scope="col">Creado</th>
+                <th scope="col">Encargo</th>
+                <th scope="col">Lista</th>
+                <th scope="col">Responsable</th>
+                <th scope="col">Entrega</th>
+                <th scope="col">Estado</th>
+                <th scope="col">Flujo</th>
+                <th scope="col">ClickUp</th>
+                <th scope="col">Última acción</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => {
+                const st = STATUS[r.status] ?? { label: r.status, tone: 'neutral' as const };
+                const work = WORK[r.workStatus] ?? { label: r.workStatus, tone: 'neutral' as const };
+                const act = lastAction.get(r.id);
+                return (
+                  <tr key={r.id} className="align-top">
+                    <td className="whitespace-nowrap text-muted-foreground">{fmt.format(r.createdAt)}</td>
+                    <td className="min-w-[16rem]">
+                      <p className="font-medium text-pretty">{r.title}</p>
+                      {r.priority && (
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          {r.priority === 1 ? (
+                            <Badge tone="danger" dot>
+                              Prioridad {PRIORITY[r.priority]}
+                            </Badge>
+                          ) : (
+                            <>Prioridad {PRIORITY[r.priority]}</>
+                          )}
+                        </p>
+                      )}
+                      {r.errorMessage && r.status !== 'creado' && (
+                        <p className="mt-1 text-xs text-destructive">{r.errorMessage}</p>
+                      )}
+                    </td>
+                    <td className="text-muted-foreground">{r.clickupListName ?? r.clickupListId}</td>
+                    <td className="whitespace-nowrap">
+                      {r.assigneeName ?? <span className="text-muted-foreground/70">Sin asignar</span>}
+                    </td>
+                    <td className="whitespace-nowrap">
+                      {r.dueDate ? new Date(r.dueDate + 'T00:00:00').toLocaleDateString('es-ES') : '—'}
+                    </td>
+                    <td>
+                      <Badge tone={st.tone} dot>
+                        {st.label}
+                      </Badge>
+                    </td>
+                    <td className="whitespace-nowrap text-xs">
+                      {r.status === 'creado' ? <Badge tone={work.tone}>{work.label}</Badge> : <span className="text-muted-foreground/70">—</span>}
+                      {r.reviewerKey && <span className="mt-1 block text-muted-foreground">Con revisión</span>}
+                    </td>
+                    <td className="whitespace-nowrap">
+                      {r.clickupTaskUrl ? (
+                        <a
+                          href={r.clickupTaskUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 rounded-sm text-brand hover:underline"
+                        >
+                          Abrir tarea
+                          <ExternalLink className="size-3" aria-hidden />
+                        </a>
+                      ) : (
+                        <RetryButton requestId={r.id} />
+                      )}
+                    </td>
+                    <td className="text-xs">
+                      {act ? (
+                        <span title={act.by ?? ''} className="flex flex-col items-start gap-1">
+                          <Badge tone="success">{act.label}</Badge>
+                          <span className="whitespace-nowrap text-muted-foreground">{fmt.format(act.at)}</span>
+                        </span>
+                      ) : r.seenAt ? (
+                        // Encargos anteriores a los eventos: solo consta que se vio.
+                        <span title={r.seenBy ?? ''} className="flex flex-col items-start gap-1">
+                          <Badge tone="success">Visto</Badge>
+                          <span className="whitespace-nowrap text-muted-foreground">{fmt.format(r.seenAt)}</span>
                         </span>
                       ) : (
                         <span className="text-muted-foreground/70">—</span>
-                      );
-                    })()}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
 }
+

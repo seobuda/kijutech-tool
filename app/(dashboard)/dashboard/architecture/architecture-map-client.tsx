@@ -121,7 +121,7 @@ function MapNode({ data }: NodeProps) {
       ].join(' ')}
       data-testid={`map-node-${d.label}`}
     >
-      <Handle type="target" position={Position.Left} className="!bg-gray-400" />
+      <Handle type="target" position={Position.Left} className="!bg-muted-foreground/50" />
       <div className="mb-1.5 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           {Icon && <Icon className={`h-5 w-5 shrink-0 ${styles.text}`} />}
@@ -169,7 +169,7 @@ function MapNode({ data }: NodeProps) {
         </span>
         {d.clickable && <span className="text-[11px] font-medium text-info">Ver detalle →</span>}
       </div>
-      <Handle type="source" position={Position.Right} className="!bg-gray-400" />
+      <Handle type="source" position={Position.Right} className="!bg-muted-foreground/50" />
     </div>
   );
 }
