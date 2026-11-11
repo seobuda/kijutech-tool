@@ -14,7 +14,12 @@ import { saveStatusGroup } from '@/lib/operaciones/status-map';
 import { slugKey } from '@/lib/operaciones/work-types';
 import { sendDigestNow } from '@/lib/operaciones/digest';
 import { acceptWork, getRequest, returnWork } from '@/lib/operaciones/workflow';
-import { getBlocker, ownerAnswerBlocker } from '@/lib/operaciones/blockers';
+import {
+  approveBlockerProposal,
+  getBlocker,
+  ownerAnswerBlocker,
+  rejectBlockerProposal
+} from '@/lib/operaciones/blockers';
 import type { Actor } from '@/lib/operaciones/events';
 import { publicError } from '@/lib/errors';
 
@@ -151,10 +156,35 @@ export async function inboxAnswer(blockerId: string, answer: string): Promise<Ok
     const user = await requireInboxOwner();
     const blocker = await getBlocker(user.tenantId, blockerId);
     if (!blocker) return { ok: false, error: 'Bloqueo no encontrado' };
-    const res = await ownerAnswerBlocker(blocker, await ownerActor(user.tenantId), answer);
+    const res = await ownerAnswerBlocker(blocker, await ownerActor(user.tenantId), answer, { via: 'panel' });
     refreshAll();
     return res.ok ? { ok: true } : { ok: false, error: res.reason };
   } catch (e) {
     return fail(e, 'No se pudo responder');
+  }
+}
+
+// Motor de acciones: enviar tal cual la respuesta que propuso el agente, o descartarla.
+export async function inboxApproveProposal(actionId: string): Promise<Ok> {
+  try {
+    const user = await requireInboxOwner();
+    const res = await approveBlockerProposal(user.tenantId, actionId, await ownerActor(user.tenantId), 'panel');
+    refreshAll();
+    revalidatePath('/dashboard/operaciones/agente');
+    return res.ok ? { ok: true } : { ok: false, error: res.reason };
+  } catch (e) {
+    return fail(e, 'No se pudo enviar la propuesta');
+  }
+}
+
+export async function inboxRejectProposal(actionId: string): Promise<Ok> {
+  try {
+    const user = await requireInboxOwner();
+    const res = await rejectBlockerProposal(user.tenantId, actionId, await ownerActor(user.tenantId), 'panel');
+    refreshAll();
+    revalidatePath('/dashboard/operaciones/agente');
+    return res.ok ? { ok: true } : { ok: false, error: res.reason };
+  } catch (e) {
+    return fail(e, 'No se pudo descartar la propuesta');
   }
 }

@@ -19,6 +19,13 @@ import { enqueueNotification, refreshNotice } from '@/lib/operaciones/notificati
 import { getOwnerMember } from '@/lib/operaciones/telegram-config';
 import { escapeHtml } from '@/lib/operaciones/telegram';
 import { commentOnTask, notifyPerson, pushToClickUp, transition } from '@/lib/operaciones/workflow';
+import {
+  decideAction,
+  getAction,
+  getAutonomy,
+  getOpenActionForBlocker,
+  recordAction
+} from '@/lib/operaciones/agent-actions';
 
 const TRIAGE_PROMPT_KEY = 'ops_blocker_triage';
 const TRIAGE_MAX_TOKENS = 1500;
@@ -179,21 +186,90 @@ export async function triageBlocker(blockerId: string): Promise<void> {
     });
   }
 
-  // Solo se responde sola si la respuesta existe Y cita de dónde sale, y esa fuente no son los
-  // comentarios (los puede escribir cualquiera): en cualquier otro caso se escala.
+  // Solo se responde sola si la respuesta existe Y cita de dónde sale, esa fuente no son los
+  // comentarios (los puede escribir cualquiera) y la autonomía de «Responder bloqueos» es
+  // «autónomo». En cualquier otro caso se escala y, si la IA tiene respuesta, va como PROPUESTA
+  // que Enric envía con un botón (motor de acciones del agente).
   const fuente = parsed.fuente.trim();
-  if (parsed.puede_responder && parsed.respuesta.trim() && fuente && !sourceIsUntrusted(fuente)) {
-    return answerByAgent(req, b, parsed.respuesta.trim(), fuente);
+  const respuesta = parsed.respuesta.trim();
+  const autonomy = await getAutonomy(req.tenantId, 'blocker_answer');
+  const trusted = Boolean(fuente) && !sourceIsUntrusted(fuente);
+  if (parsed.puede_responder && respuesta && trusted && autonomy === 'autonomo') {
+    await recordAction({
+      tenantId: req.tenantId,
+      kind: 'blocker_answer',
+      status: 'auto',
+      autonomy,
+      summary: `${req.title}: ${b.question}`,
+      proposal: { answer: respuesta, source: fuente },
+      final: { answer: respuesta, source: fuente },
+      requestId: req.id,
+      blockerId: b.id,
+      decidedByName: 'Agente',
+      decidedVia: 'agente',
+      dedupeKey: `blocker:${b.id}`
+    });
+    return answerByAgent(req, b, respuesta, fuente);
   }
-  return escalate(req, b, {
-    resumen:
-      (parsed.resumen.trim() || b.question) +
-      (parsed.puede_responder && sourceIsUntrusted(fuente)
-        ? `\n(La IA propone: «${clamp(parsed.respuesta.trim(), 500)}», pero se apoya en comentarios de ClickUp: confírmalo tú.)`
-        : ''),
-    opciones: parsed.opciones,
-    recomendacion: parsed.recomendacion.trim()
-  });
+
+  let proposal: { actionId: string; answer: string; source: string } | null = null;
+  if (parsed.puede_responder && respuesta) {
+    const action = await recordAction({
+      tenantId: req.tenantId,
+      kind: 'blocker_answer',
+      status: autonomy === 'sombra' ? 'sombra' : 'propuesto',
+      autonomy,
+      summary: `${req.title}: ${b.question}`,
+      proposal: { answer: respuesta, source: fuente || '(sin fuente)' },
+      requestId: req.id,
+      blockerId: b.id,
+      dedupeKey: `blocker:${b.id}`
+    });
+    // En sombra no se enseña la propuesta: solo se guarda para comparar con lo que hagas tú.
+    if (action && autonomy !== 'sombra') proposal = { actionId: action.id, answer: respuesta, source: fuente || '(sin fuente)' };
+  }
+  return escalate(
+    req,
+    b,
+    {
+      resumen:
+        (parsed.resumen.trim() || b.question) +
+        (proposal && !trusted ? '\n(La propuesta se apoya en comentarios de ClickUp o no cita fuente: revísala.)' : ''),
+      opciones: parsed.opciones,
+      recomendacion: parsed.recomendacion.trim()
+    },
+    proposal
+  );
+}
+
+// Enric aprueba la propuesta del agente (botón de Telegram o «Mi bandeja»): se envía tal cual.
+export async function approveBlockerProposal(
+  tenantId: string,
+  actionId: string,
+  owner: Actor,
+  via: 'telegram' | 'panel'
+): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const action = await getAction(tenantId, actionId);
+  if (!action || action.kind !== 'blocker_answer' || !action.blockerId) return { ok: false, reason: 'Propuesta no encontrada.' };
+  if (action.status !== 'propuesto') return { ok: false, reason: 'Esta propuesta ya está decidida.' };
+  const blocker = await getBlocker(tenantId, action.blockerId);
+  if (!blocker) return { ok: false, reason: 'Bloqueo no encontrado.' };
+  const answer = String((action.proposal as { answer?: string }).answer ?? '').trim();
+  if (!answer) return { ok: false, reason: 'La propuesta está vacía.' };
+  return ownerAnswerBlocker(blocker, owner, answer, { approvedActionId: action.id, via });
+}
+
+// Enric descarta la propuesta (el bloqueo sigue esperando su respuesta).
+export async function rejectBlockerProposal(
+  tenantId: string,
+  actionId: string,
+  owner: Actor,
+  via: 'telegram' | 'panel'
+): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const action = await getAction(tenantId, actionId);
+  if (!action || action.kind !== 'blocker_answer') return { ok: false, reason: 'Propuesta no encontrada.' };
+  const done = await decideAction(tenantId, action.id, { status: 'rechazado', via, byName: owner.name });
+  return done ? { ok: true } : { ok: false, reason: 'Esta propuesta ya está decidida.' };
 }
 
 // Bloqueos que se quedaron «abierto» (p. ej. el proceso se reinició mientras la IA los
@@ -238,13 +314,20 @@ async function answerByAgent(req: OpsRequest, b: OpsBlocker, answer: string, sou
   await refreshNotice(req.tenantId, req.id);
 }
 
-export function blockerOwnerText(req: OpsRequest, b: OpsBlocker): string {
+export function blockerOwnerText(
+  req: OpsRequest,
+  b: OpsBlocker,
+  proposal?: { answer: string; source: string } | null
+): string {
   const options = Array.isArray(b.aiOptions) ? (b.aiOptions as string[]) : [];
   return [
     '🚫 <b>Bloqueo que necesita tu decisión</b>',
     `<b>${escapeHtml(req.title)}</b>`,
     `Persona: ${escapeHtml(b.askedByName ?? '—')}`,
     `Pregunta: ${escapeHtml(b.question)}`,
+    proposal
+      ? `\n🤖 <b>Propuesta del agente:</b> ${escapeHtml(proposal.answer)}\n<i>Fuente: ${escapeHtml(proposal.source)}</i>`
+      : '',
     b.aiSummary ? `\n<b>Resumen:</b> ${escapeHtml(b.aiSummary)}` : '',
     options.length ? `\n<b>Opciones:</b>\n${options.map((o) => `• ${escapeHtml(o)}`).join('\n')}` : '',
     b.aiRecommendation ? `\n<b>Recomendación:</b> ${escapeHtml(b.aiRecommendation)}` : '',
@@ -257,7 +340,8 @@ export function blockerOwnerText(req: OpsRequest, b: OpsBlocker): string {
 async function escalate(
   req: OpsRequest,
   b: OpsBlocker,
-  r: { resumen: string; opciones: string[]; recomendacion: string }
+  r: { resumen: string; opciones: string[]; recomendacion: string },
+  proposal: { actionId: string; answer: string; source: string } | null = null
 ) {
   const [upd] = await db
     .update(opsBlockers)
@@ -289,10 +373,20 @@ async function escalate(
         forName: owner.username,
         requestId: req.id,
         payload: {
-          text: renderTemplate(DEF.get('urgent_block')!, urgentAuto.template, { detalle: blockerOwnerText(req, upd) }),
+          text: renderTemplate(DEF.get('urgent_block')!, urgentAuto.template, {
+            detalle: blockerOwnerText(req, upd, proposal)
+          }),
           toOwner: true,
           photoFileId: b.attachmentFileId ?? undefined,
-          buttons: [[{ text: '💬 Responder', data: `rp:${b.id}` }]]
+          buttons: proposal
+            ? [
+                [{ text: '✅ Enviar la propuesta', data: `ag:${proposal.actionId}:ok` }],
+                [
+                  { text: '💬 Escribir otra', data: `rp:${b.id}` },
+                  { text: '✖️ Descartar propuesta', data: `ag:${proposal.actionId}:no` }
+                ]
+              ]
+            : [[{ text: '💬 Responder', data: `rp:${b.id}` }]]
         }
       });
     }
@@ -303,7 +397,8 @@ async function escalate(
 export async function ownerAnswerBlocker(
   blocker: OpsBlocker,
   owner: Actor,
-  answer: string
+  answer: string,
+  opts: { approvedActionId?: string; via?: 'telegram' | 'panel' } = {}
 ): Promise<{ ok: true } | { ok: false; reason: string }> {
   const text = answer.trim();
   if (!text) return { ok: false, reason: 'La respuesta está vacía.' };
@@ -313,6 +408,19 @@ export async function ownerAnswerBlocker(
     .where(and(eq(opsBlockers.id, blocker.id), inArray(opsBlockers.status, ['escalado', 'abierto'])))
     .returning();
   if (!upd || !upd.requestId) return { ok: false, reason: 'Este bloqueo ya está respondido.' };
+
+  // Motor de acciones: si el agente había propuesto respuesta, se anota si se envió tal cual
+  // (aprobada a la primera) o si Enric escribió otra (corregida).
+  const open = await getOpenActionForBlocker(blocker.tenantId, blocker.id);
+  if (open) {
+    const proposed = String((open.proposal as { answer?: string }).answer ?? '').trim();
+    await decideAction(blocker.tenantId, open.id, {
+      status: opts.approvedActionId === open.id || proposed === text ? 'aprobado' : 'corregido',
+      via: opts.via ?? 'telegram',
+      byName: owner.name,
+      final: { answer: text }
+    });
+  }
   const [req] = await db.select().from(opsRequests).where(eq(opsRequests.id, upd.requestId)).limit(1);
   if (!req) return { ok: true };
 

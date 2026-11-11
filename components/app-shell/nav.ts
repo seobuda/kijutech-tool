@@ -50,6 +50,7 @@ export const OPERACIONES_TABS: NavItem[] = [
   { href: '/dashboard/operaciones/clientes', label: 'Clientes', icon: Building2, keywords: 'fichas semáforo alertas' },
   { href: '/dashboard/operaciones/correos', label: 'Correos', icon: Mail, keywords: 'email entrada' },
   { href: '/dashboard/operaciones/equipo', label: 'Equipo', icon: UsersRound, keywords: 'fichas personas horario' },
+  { href: '/dashboard/operaciones/agente', label: 'Agente', icon: Bot, keywords: 'propuestas aprobación autonomía acierto' },
   { href: '/dashboard/operaciones/piloto', label: 'Piloto', icon: Gauge, keywords: 'métricas rendimiento' },
   { href: '/dashboard/operaciones/automatizaciones', label: 'Automatizaciones', icon: Workflow, keywords: 'avisos recordatorios resúmenes' },
   { href: '/dashboard/operaciones/telegram', label: 'Telegram', icon: MessageCircle, keywords: 'bot avisos' },

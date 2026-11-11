@@ -2,11 +2,17 @@
 
 import { useId, useState, useTransition, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import { Check, Clock, CornerDownLeft, ExternalLink, Eye, Inbox, MessageSquare, ShieldAlert, Sparkles } from 'lucide-react';
+import { Bot, Check, Clock, CornerDownLeft, ExternalLink, Eye, Inbox, MessageSquare, ShieldAlert, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge, EmptyState } from '@/components/ui/page';
 import { cn } from '@/lib/utils';
-import { inboxAccept, inboxAnswer, inboxReturn } from '@/lib/operaciones/flow-actions';
+import {
+  inboxAccept,
+  inboxAnswer,
+  inboxApproveProposal,
+  inboxRejectProposal,
+  inboxReturn
+} from '@/lib/operaciones/flow-actions';
 
 export type BandejaItem =
   | {
@@ -28,6 +34,8 @@ export type BandejaItem =
       summary: string | null;
       options: string[];
       recommendation: string | null;
+      // Respuesta que propone el agente (motor de acciones): se envía tal cual con un botón.
+      proposal: { actionId: string; answer: string; source: string } | null;
       taskUrl: string | null;
       urgent: boolean;
       wait: string;
@@ -197,6 +205,17 @@ function ItemCard({ item }: { item: BandejaItem }) {
           </dl>
         )}
 
+        {item.kind === 'blocker' && item.proposal && (
+          <div className="rounded-lg border border-brand/30 bg-brand-soft/60 p-3">
+            <p className="flex items-center gap-1.5 text-xs font-medium text-brand">
+              <Bot className="size-3.5" aria-hidden />
+              Propuesta del agente
+            </p>
+            <p className="mt-1.5 whitespace-pre-wrap text-sm">{item.proposal.answer}</p>
+            <p className="mt-1 text-xs text-muted-foreground">Fuente: {item.proposal.source}</p>
+          </div>
+        )}
+
         {mode === 'idle' ? (
           <div className="flex flex-wrap gap-2">
             {item.kind === 'review' ? (
@@ -213,6 +232,31 @@ function ItemCard({ item }: { item: BandejaItem }) {
                 <Button size="sm" variant="outline" disabled={pending} onClick={() => setMode('return')}>
                   <CornerDownLeft aria-hidden />
                   Devolver
+                </Button>
+              </>
+            ) : item.proposal ? (
+              <>
+                <Button
+                  size="sm"
+                  className="bg-brand text-white hover:bg-brand/90"
+                  disabled={pending}
+                  onClick={() => run(() => inboxApproveProposal(item.proposal!.actionId))}
+                >
+                  <Check aria-hidden />
+                  Enviar la propuesta
+                </Button>
+                <Button size="sm" variant="outline" disabled={pending} onClick={() => setMode('answer')}>
+                  <MessageSquare aria-hidden />
+                  Escribir otra
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-muted-foreground"
+                  disabled={pending}
+                  onClick={() => run(() => inboxRejectProposal(item.proposal!.actionId))}
+                >
+                  Descartar propuesta
                 </Button>
               </>
             ) : (

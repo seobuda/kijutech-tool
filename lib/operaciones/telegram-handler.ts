@@ -32,7 +32,16 @@ import {
 import { logEvent, type Actor } from '@/lib/operaciones/events';
 import { refreshNotice } from '@/lib/operaciones/notifications';
 import { acceptWork, finishWork, getRequest, laterWork, returnWork, startWork } from '@/lib/operaciones/workflow';
-import { getBlocker, ownerAnswerBlocker, reportBlock } from '@/lib/operaciones/blockers';
+import {
+  approveBlockerProposal,
+  getBlocker,
+  ownerAnswerBlocker,
+  rejectBlockerProposal,
+  reportBlock
+} from '@/lib/operaciones/blockers';
+
+// Botones del motor de acciones del agente: ag:<id de la acción>:ok|no.
+export const AGENT_CALLBACK_RE = /^ag:([0-9a-f-]{36}):(ok|no)$/;
 
 // Botones del flujo: código, id del encargo (o del bloqueo) y, con varios responsables, el id
 // de ClickUp de la persona a la que iba el botón. Exportado para probarlo contra los teclados
@@ -451,6 +460,21 @@ async function handleCallback(tenantId: string, token: string, cb: TgCallbackQue
 
   // Limpieza de vencidas (cl:…).
   if (cb.data?.startsWith('cl:')) return handleCleanupCallback(tenantId, token, cb, presser, chatId, messageId, answer);
+
+  // Motor de acciones del agente: «✅ Enviar la propuesta» / «✖️ Descartar propuesta» (solo el dueño).
+  const ag = cb.data?.match(AGENT_CALLBACK_RE);
+  if (ag) {
+    const owner = await getOwnerMember(tenantId);
+    if (!owner || owner.id !== presser.id) {
+      return void (await answer('Solo quien lleva las operaciones puede decidir las propuestas.', true));
+    }
+    const res =
+      ag[2] === 'ok'
+        ? await approveBlockerProposal(tenantId, ag[1], actorOf(presser), 'telegram')
+        : await rejectBlockerProposal(tenantId, ag[1], actorOf(presser), 'telegram');
+    if (res.ok) await closeButtons(token, chatId, messageId);
+    return void (await answer(res.ok ? (ag[2] === 'ok' ? '✅ Enviada' : 'Propuesta descartada') : res.reason, !res.ok));
+  }
 
   // Botones del flujo de trabajo (Empezar, Bloqueado, Hecho, Aceptar, Devolver, Responder…).
   if (!m) return handleWorkflowCallback(tenantId, token, cb, presser, chatId, messageId, answer);

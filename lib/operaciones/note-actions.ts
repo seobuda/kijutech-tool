@@ -34,6 +34,7 @@ import {
   type ProposalItem
 } from '@/lib/operaciones/note-types';
 import { publicError } from '@/lib/errors';
+import { compareNoteProposal, recordAction } from '@/lib/operaciones/agent-actions';
 
 const NOTE_PROMPT_KEY = 'ops_note_to_requests';
 // Cada encargo ocupa ~400-600 tokens de salida: 8000 da para unos 12-15.
@@ -565,6 +566,35 @@ export async function sendNoteRequests(
   // La nota ya estaba convertida (otra petición la reclamó antes): no se repite nada.
   // Desde aquí no se puede reenviar; los fallos se reintentan desde Encargos.
   if (!rows) return { ok: false, error: 'Esta nota ya está convertida' };
+
+  // Motor de acciones: ¿se envió lo que propuso la IA tal cual (aprobada a la primera) o se tocó?
+  // Nunca debe estropear el envío: cualquier fallo aquí solo se anota en el log.
+  try {
+    const conv = normalizeConversionState(note.proposal);
+    if (conv?.state === 'done' && conv.items.length) {
+      const cmp = compareNoteProposal(conv.items, items);
+      await recordAction({
+        tenantId: user.tenantId,
+        kind: 'note_conversion',
+        status: cmp.status,
+        autonomy: 'aprobacion',
+        summary: `${items.length} encargo(s) desde una nota: ${items.map((i) => i.title).join(' · ')}`,
+        proposal: { items: conv.items.map((i) => ({ title: i.title, listId: i.listId, assigneeName: i.assigneeName, dueDate: i.dueDate, priority: i.priority })) },
+        final: {
+          items: items.map((i) => ({ title: i.title, listId: i.listId, assigneeName: i.assigneeName, dueDate: i.dueDate, priority: i.priority })),
+          changed: cmp.changed,
+          removed: cmp.removed,
+          added: cmp.added
+        },
+        noteId: note.id,
+        decidedByName: user.name || user.email,
+        decidedVia: 'panel',
+        dedupeKey: `note:${note.id}`
+      });
+    }
+  } catch (e) {
+    console.error('[agente] no se pudo registrar la conversión:', e instanceof Error ? e.message : e);
+  }
 
   // 2) Cada encargo usa el mismo envío fiable del paso 3 (uno tras otro, por el límite de ClickUp).
   const results: { key: string; title: string; result: SyncResult }[] = [];
