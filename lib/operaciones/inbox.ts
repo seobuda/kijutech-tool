@@ -1,13 +1,16 @@
 // «Mi bandeja»: lo que está pendiente de quien lleva las operaciones, ordenado por tiempo de
 // espera (lo más antiguo primero). Se calcula a partir del estado actual (encargos en revisión y
 // bloqueos escalados), no tiene tabla propia. Lo usan la pestaña web y los resúmenes.
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, inArray } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { opsBlockers, opsRequests, type OpsBlocker, type OpsRequest } from '@/lib/db/schema';
+import { opsAgentActions, opsBlockers, opsRequests, type OpsBlocker, type OpsRequest } from '@/lib/db/schema';
+
+// Propuesta del agente pendiente de decisión (motor de acciones): se enseña con «Enviar la propuesta».
+export type InboxProposal = { actionId: string; answer: string; source: string };
 
 export type InboxItem =
   | { kind: 'review'; since: Date; req: OpsRequest }
-  | { kind: 'blocker'; since: Date; req: OpsRequest; blocker: OpsBlocker };
+  | { kind: 'blocker'; since: Date; req: OpsRequest; blocker: OpsBlocker; proposal: InboxProposal | null };
 
 export async function getInbox(tenantId: string): Promise<InboxItem[]> {
   const reviews = await db
@@ -29,9 +32,35 @@ export async function getInbox(tenantId: string): Promise<InboxItem[]> {
     .where(and(eq(opsBlockers.tenantId, tenantId), eq(opsBlockers.status, 'escalado')))
     .orderBy(asc(opsBlockers.createdAt));
 
+  const blockerIds = blockers.map((x) => x.blocker.id);
+  const proposals = blockerIds.length
+    ? await db
+        .select({ id: opsAgentActions.id, blockerId: opsAgentActions.blockerId, proposal: opsAgentActions.proposal })
+        .from(opsAgentActions)
+        .where(
+          and(
+            eq(opsAgentActions.tenantId, tenantId),
+            eq(opsAgentActions.status, 'propuesto'),
+            inArray(opsAgentActions.blockerId, blockerIds)
+          )
+        )
+    : [];
+  const proposalOf = (blockerId: string): InboxProposal | null => {
+    const p = proposals.find((x) => x.blockerId === blockerId);
+    if (!p) return null;
+    const v = p.proposal as { answer?: string; source?: string };
+    return v.answer ? { actionId: p.id, answer: v.answer, source: v.source ?? '' } : null;
+  };
+
   const items: InboxItem[] = [
     ...reviews.map((r) => ({ kind: 'review' as const, since: r.workStatusAt, req: r })),
-    ...blockers.map((x) => ({ kind: 'blocker' as const, since: x.blocker.createdAt, req: x.req, blocker: x.blocker }))
+    ...blockers.map((x) => ({
+      kind: 'blocker' as const,
+      since: x.blocker.createdAt,
+      req: x.req,
+      blocker: x.blocker,
+      proposal: proposalOf(x.blocker.id)
+    }))
   ];
   return items.sort((a, b) => a.since.getTime() - b.since.getTime());
 }

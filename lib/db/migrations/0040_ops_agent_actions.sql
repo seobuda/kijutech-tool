@@ -1,0 +1,26 @@
+CREATE TABLE IF NOT EXISTS "ops_agent_actions" (
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+  "tenant_id" uuid NOT NULL REFERENCES "tenants"("id") ON DELETE CASCADE,
+  "kind" varchar(30) NOT NULL,
+  "status" varchar(12) DEFAULT 'propuesto' NOT NULL,
+  "autonomy" varchar(10) NOT NULL,
+  "summary" varchar(500) DEFAULT '' NOT NULL,
+  "proposal" jsonb NOT NULL,
+  "final" jsonb,
+  "request_id" uuid REFERENCES "ops_requests"("id") ON DELETE SET NULL,
+  "blocker_id" uuid REFERENCES "ops_blockers"("id") ON DELETE SET NULL,
+  "note_id" uuid REFERENCES "ops_notes"("id") ON DELETE SET NULL,
+  "decided_by_name" varchar(255),
+  "decided_via" varchar(10),
+  "decided_at" timestamp,
+  "executed_at" timestamp,
+  "error" varchar(500),
+  "dedupe_key" varchar(200) NOT NULL,
+  "created_at" timestamp DEFAULT now() NOT NULL,
+  CONSTRAINT "ops_agent_actions_dedupe_unique" UNIQUE("tenant_id", "dedupe_key"),
+  CONSTRAINT "ops_agent_actions_kind_check" CHECK ("kind" IN ('blocker_answer', 'note_conversion')),
+  CONSTRAINT "ops_agent_actions_status_check" CHECK ("status" IN ('propuesto', 'aprobado', 'corregido', 'rechazado', 'auto', 'sombra')),
+  CONSTRAINT "ops_agent_actions_autonomy_check" CHECK ("autonomy" IN ('sombra', 'aprobacion', 'autonomo')),
+  CONSTRAINT "ops_agent_actions_via_check" CHECK ("decided_via" IS NULL OR "decided_via" IN ('telegram', 'panel', 'agente'))
+);
+CREATE INDEX IF NOT EXISTS "ops_agent_actions_kind_idx" ON "ops_agent_actions" USING btree ("tenant_id", "kind", "created_at");

@@ -144,6 +144,20 @@ const OPS_OVERVIEW: ProcessStep[] = [
     live: 'suggestions',
   },
   {
+    id: 'ops_agent_actions',
+    lane: 'Preparar y medir el piloto',
+    to: ['ops_pilot'],
+    name: 'Motor de acciones del agente',
+    description:
+      'Toda propuesta del agente queda registrada con tu decisión (aprobada a la primera, corregida, descartada o autónoma). Pestaña «Agente»: acierto, tiempos y autonomía por tipo.',
+    status: 'built',
+    file: 'lib/operaciones/agent-actions.ts',
+    when: 'Cada vez que la IA propone algo: al revisar un bloqueo y al enviar los encargos de una nota.',
+    ai: 'Propone (la respuesta a un bloqueo, los encargos de una nota); no decide si se ejecuta.',
+    code: 'Según la autonomía de cada tipo (en sombra, con tu aprobación, autónomo) ejecuta, te pide aprobación con botones de Telegram o en Mi bandeja (✅ Enviar la propuesta / Escribir otra / Descartar) o solo mide. Las decisiones son atómicas y con clave única. Compara la propuesta con lo enviado para saber si se corrigió. Recomienda subir o bajar la autonomía con ≥ 30 decisiones.',
+    tables: ['ops_agent_actions', 'ops_settings'],
+  },
+  {
     id: 'ops_memory',
     lane: 'Memoria, fiabilidad y pruebas',
     to: ['ops_entry'],
@@ -317,8 +331,8 @@ const OPS_EXEC: ProcessStep[] = [
     file: 'lib/operaciones/blockers.ts',
     when: 'Tras el triaje; tu respuesta llega cuando contestas.',
     ai: 'Redacta el resumen, las opciones y la recomendación para ti cuando escala.',
-    code: 'Decide quién lo ve: lo urgente (prioridad 1) te llega al instante, lo demás va a Mi bandeja y a los resúmenes. Tu respuesta le llega a la persona y queda como comentario en ClickUp (por la bandeja de salida).',
-    tables: ['ops_blockers', 'ops_clickup_outbox'],
+    code: 'Decide quién lo ve: lo urgente (prioridad 1) te llega al instante, lo demás va a Mi bandeja y a los resúmenes. Si la IA tiene una respuesta que no puede enviar sola, llega como propuesta del motor de acciones con «✅ Enviar la propuesta». Tu respuesta le llega a la persona y queda como comentario en ClickUp (por la bandeja de salida).',
+    tables: ['ops_blockers', 'ops_clickup_outbox', 'ops_agent_actions'],
     settings: [{ automation: 'urgent_block' }],
   },
   {

@@ -47,6 +47,7 @@ export default async function BandejaPage() {
           summary: i.blocker.aiSummary,
           options: Array.isArray(i.blocker.aiOptions) ? (i.blocker.aiOptions as string[]) : [],
           recommendation: i.blocker.aiRecommendation,
+          proposal: i.proposal,
           taskUrl: i.req.clickupTaskUrl,
           urgent: i.req.priority === 1,
           wait: waitLabel(i.since, now)

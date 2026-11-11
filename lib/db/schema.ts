@@ -1671,6 +1671,49 @@ export const opsInboundEmails = pgTable(
 );
 
 export type OpsInboundEmail = typeof opsInboundEmails.$inferSelect;
+
+// Motor de acciones del agente (paso 2, 11 nov 2026): toda propuesta del agente queda aquí con
+// la decisión humana (aprobada a la primera, corregida, rechazada) o «auto» si actuó solo. Es la
+// base del panel «Agente» y de subir la autonomía por tipo con datos. Diseño en
+// docs/DISENO-MOTOR-ACCIONES.md.
+export const opsAgentActions = pgTable(
+  'ops_agent_actions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    kind: varchar('kind', { length: 30 }).notNull(),
+    status: varchar('status', { length: 12 }).notNull().default('propuesto'),
+    autonomy: varchar('autonomy', { length: 10 }).notNull(),
+    summary: varchar('summary', { length: 500 }).notNull().default(''),
+    proposal: jsonb('proposal').notNull(),
+    final: jsonb('final'),
+    requestId: uuid('request_id').references(() => opsRequests.id, { onDelete: 'set null' }),
+    blockerId: uuid('blocker_id').references(() => opsBlockers.id, { onDelete: 'set null' }),
+    noteId: uuid('note_id').references(() => opsNotes.id, { onDelete: 'set null' }),
+    decidedByName: varchar('decided_by_name', { length: 255 }),
+    decidedVia: varchar('decided_via', { length: 10 }),
+    decidedAt: timestamp('decided_at'),
+    executedAt: timestamp('executed_at'),
+    error: varchar('error', { length: 500 }),
+    dedupeKey: varchar('dedupe_key', { length: 200 }).notNull(),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    unique('ops_agent_actions_dedupe_unique').on(table.tenantId, table.dedupeKey),
+    index('ops_agent_actions_kind_idx').on(table.tenantId, table.kind, table.createdAt),
+    check('ops_agent_actions_kind_check', sql`${table.kind} IN ('blocker_answer', 'note_conversion')`),
+    check(
+      'ops_agent_actions_status_check',
+      sql`${table.status} IN ('propuesto', 'aprobado', 'corregido', 'rechazado', 'auto', 'sombra')`
+    ),
+    check('ops_agent_actions_autonomy_check', sql`${table.autonomy} IN ('sombra', 'aprobacion', 'autonomo')`),
+    check('ops_agent_actions_via_check', sql`${table.decidedVia} IS NULL OR ${table.decidedVia} IN ('telegram', 'panel', 'agente')`),
+  ]
+);
+
+export type OpsAgentAction = typeof opsAgentActions.$inferSelect;
 export type OpsClientSender = typeof opsClientSenders.$inferSelect;
 export type OpsClientMemory = typeof opsClientMemory.$inferSelect;
 export type OpsClientActivity = typeof opsClientActivity.$inferSelect;
