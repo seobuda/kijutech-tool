@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { Bot, CheckCircle2, Clock, Lightbulb, PencilLine, Sparkles, XCircle } from 'lucide-react';
 import { Badge, EmptyState, Section, StatCard } from '@/components/ui/page';
+import { AutoRefresh } from '@/components/ui/auto-refresh';
 import { cn } from '@/lib/utils';
 import { setAgentAutonomyAction } from '@/lib/operaciones/agent-panel-actions';
 import type { Autonomy, KindStats } from '@/lib/operaciones/agent-actions';
@@ -129,9 +130,12 @@ export function AgenteView({ stats, recent }: { stats: KindStats[]; recent: Rece
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="flex items-center gap-2 text-lg font-semibold">
-          <Bot className="size-5 text-brand" />
-          Agente
+        <h2 className="flex flex-wrap items-center gap-x-3 gap-y-1 text-lg font-semibold">
+          <span className="flex items-center gap-2">
+            <Bot className="size-5 text-brand" />
+            Agente
+          </span>
+          <AutoRefresh everyMs={30_000} className="text-xs font-normal" />
         </h2>
         <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
           Lo que el agente propone y lo que decides tú, de los últimos 30 días. Con estos datos se decide cuándo puede

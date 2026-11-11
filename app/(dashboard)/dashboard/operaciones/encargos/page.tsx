@@ -1,3 +1,4 @@
+import { AutoRefresh } from '@/components/ui/auto-refresh';
 import Link from 'next/link';
 import { desc, eq, inArray, and } from 'drizzle-orm';
 import { redirect } from 'next/navigation';
@@ -110,7 +111,10 @@ export default async function EncargosPage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-[15px] font-semibold">Encargos</h2>
+          <h2 className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[15px] font-semibold">
+            Encargos
+            <AutoRefresh className="font-normal" />
+          </h2>
           <p className="mt-0.5 text-sm text-muted-foreground">
             {rows.length === 200 ? 'Los 200 más recientes' : `${rows.length} encargo${rows.length === 1 ? '' : 's'}`}, del más
             nuevo al más antiguo.
