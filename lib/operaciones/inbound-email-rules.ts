@@ -210,9 +210,15 @@ export function validateInboundPayload(
 
   // Texto plano si lo hay; si solo viene HTML, se convierte. Siempre limpio.
   const plain = p.text && p.text.trim() ? p.text : p.html ? htmlToText(p.html) : '';
+  // Las cabeceras no distinguen mayúsculas (RFC 5322): Gmail las devuelve como
+  // «List-Unsubscribe» o «Auto-Submitted». Se normalizan a minúsculas antes de buscar.
+  const lower: Record<string, string> = {};
+  for (const [k, v] of Object.entries(p.headers ?? {})) {
+    if (typeof v === 'string' && !(k.toLowerCase() in lower)) lower[k.toLowerCase()] = v;
+  }
   const headers: Record<string, string> = {};
   for (const k of HEADER_KEYS) {
-    const v = p.headers?.[k] ?? p.headers?.[k.toUpperCase()];
+    const v = lower[k.toLowerCase()];
     if (v) headers[k] = v.slice(0, 200);
   }
   const sent = p.date ? new Date(p.date) : null;

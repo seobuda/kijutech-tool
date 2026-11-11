@@ -121,11 +121,14 @@ describe('validación de lo recibido', () => {
     expect(r.ok && r.value.bodyText).not.toContain('<');
   });
 
-  it('solo conserva las cabeceras que se usan y descarta el resto', () => {
-    const r = validateInboundPayload({ ...ok, headers: { 'Auto-Submitted': 'x', precedence: 'bulk', 'x-evil': 'y' } });
+  it('solo conserva las cabeceras que se usan, sin distinguir mayúsculas (como las da Gmail)', () => {
+    const r = validateInboundPayload({
+      ...ok,
+      headers: { 'Auto-Submitted': 'auto-generated', precedence: 'bulk', 'List-Unsubscribe': '<mailto:x@y.z>', 'x-evil': 'y' }
+    });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(Object.keys(r.value.headers).sort()).toEqual(['precedence']);
+    expect(Object.keys(r.value.headers).sort()).toEqual(['auto-submitted', 'list-unsubscribe', 'precedence']);
   });
 
   it('rechaza formato inválido, sin remitente o sin id', () => {
