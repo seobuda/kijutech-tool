@@ -1,10 +1,34 @@
 'use client';
 
-import { useEffect, useRef, useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
+import {
+  AlertTriangle,
+  Building2,
+  CalendarClock,
+  Check,
+  ClipboardList,
+  Clock,
+  Copy,
+  Link2Off,
+  Mic,
+  Pencil,
+  Plus,
+  Power,
+  RefreshCw,
+  Search,
+  Settings2,
+  Sparkles,
+  Square,
+  Trash2,
+  Users,
+  X
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Badge, EmptyState, StatCard } from '@/components/ui/page';
+import { cn } from '@/lib/utils';
 import { ClientMemoria } from './client-memoria';
 import {
   aiFillClient,
@@ -71,8 +95,16 @@ type Msg = { type: 'ok' | 'error'; text: string } | null;
 const DAY_LABELS = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
 const MAX_RECORDING_SECONDS = 300;
 
-const areaClass =
-  'w-full rounded-md border border-input bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand';
+const focusRing = 'focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-brand/40 focus-visible:border-brand';
+
+const areaClass = cn(
+  'w-full rounded-md border border-input bg-card px-3 py-2 text-sm shadow-xs placeholder:text-muted-foreground',
+  focusRing
+);
+const selectClass = cn('h-9 rounded-md border border-input bg-card px-2.5 text-sm shadow-xs', focusRing);
+const checkClass = 'size-4 shrink-0 rounded accent-[var(--brand)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand';
+const brandBtn = 'bg-brand text-white hover:bg-brand/90';
+const dangerGhost = 'text-muted-foreground hover:bg-destructive-soft hover:text-destructive';
 
 const emptyClient = (level: string): ClientView => ({
   id: '',
@@ -103,6 +135,23 @@ const emptyClient = (level: string): ClientView => ({
 });
 
 const daysWord = (n: number) => `${n} día${n === 1 ? '' : 's'}`;
+
+function MsgLine({ msg, className }: { msg: Msg; className?: string }) {
+  if (!msg) return null;
+  return (
+    <p
+      role={msg.type === 'error' ? 'alert' : 'status'}
+      className={cn(
+        'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-sm',
+        msg.type === 'ok' ? 'bg-success-soft text-success' : 'bg-destructive-soft text-destructive',
+        className
+      )}
+    >
+      {msg.type === 'ok' ? <Check className="size-3.5" aria-hidden /> : <AlertTriangle className="size-3.5" aria-hidden />}
+      {msg.text}
+    </p>
+  );
+}
 
 export function ClientesView({
   clients,
@@ -158,17 +207,24 @@ export function ClientesView({
       (!needle || [c.name, ...c.aliases].some((t) => t.toLowerCase().includes(needle)))
   );
 
+  // Cifras de la cabecera: solo con los datos que ya tiene la pantalla (sin consultas nuevas).
+  const activeClients = clients.filter((c) => c.active);
+  const redCount = activeClients.filter((c) => c.alert.state === 'red').length;
+  const unplannedCount = activeClients.filter((c) => c.alert.hasData && c.alert.horizonDays > 0 && c.alert.upcoming === 0).length;
+  const incompleteCount = activeClients.filter((c) => !c.clickupOptionId || c.services.length === 0 || !c.business.trim()).length;
+
   return (
-    <div className="space-y-4 max-w-4xl">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <h2 className="text-lg font-medium">Clientes</h2>
-          <p className="text-sm text-muted-foreground">
+    <div className="space-y-5 animate-fade-up">
+      {/* Encabezado compacto de la sección */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h2 className="text-base font-semibold tracking-tight">Clientes</h2>
+          <p className="mt-0.5 max-w-3xl text-sm text-muted-foreground text-pretty">
             Una ficha por cliente: cómo se le llama, su nivel y plazo, qué servicios tiene y quién los lleva. El agente la
             usa al convertir notas (reconoce al cliente, propone fecha y responsable).
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
           <Button
             size="sm"
             variant="outline"
@@ -182,30 +238,65 @@ export function ClientesView({
               })
             }
           >
+            <RefreshCw className={cn(pending && 'animate-spin')} aria-hidden />
             {pending ? 'Calculando…' : 'Recalcular actividad'}
           </Button>
-          <Button size="sm" variant="outline" onClick={() => setShowConfig((v) => !v)}>
+          <Button size="sm" variant="outline" aria-expanded={showConfig} onClick={() => setShowConfig((v) => !v)}>
+            <Settings2 aria-hidden />
             Niveles y servicios
           </Button>
-          <Button size="sm" disabled={editing !== null} onClick={() => setEditing('new')}>
+          <Button size="sm" className={brandBtn} disabled={editing !== null} onClick={() => setEditing('new')}>
+            <Plus aria-hidden />
             Nuevo cliente
           </Button>
         </div>
       </div>
 
-      {msg && <p className={`text-sm ${msg.type === 'ok' ? 'text-success' : 'text-destructive'}`}>{msg.text}</p>}
-      <p className="text-xs text-muted-foreground">
-        Actividad calculada{' '}
-        {runInfo.lastRun
-          ? `el ${new Date(runInfo.lastRun).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Madrid' })}`
-          : '— todavía no (pulsa «Recalcular actividad»)'}
-        ; se actualiza sola cada madrugada.
-        {runInfo.lastError && <span className="text-destructive"> Último error: {runInfo.lastError}</span>}
-      </p>
+      {/* Cifras */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatCard
+          label="Total de clientes"
+          value={clients.length}
+          hint={`${activeClients.length} activo${activeClients.length === 1 ? '' : 's'}`}
+          icon={Users}
+          tone="brand"
+        />
+        <StatCard label="En alerta roja" value={redCount} hint="Clientes activos" icon={AlertTriangle} tone={redCount > 0 ? 'danger' : 'neutral'} />
+        <StatCard
+          label="Sin trabajo planificado"
+          value={unplannedCount}
+          hint="Sin tareas con fecha en el horizonte"
+          icon={CalendarClock}
+          tone={unplannedCount > 0 ? 'warning' : 'neutral'}
+        />
+        <StatCard
+          label="Fichas sin completar"
+          value={incompleteCount}
+          hint="Sin vincular, sin servicios o sin negocio"
+          icon={ClipboardList}
+          tone={incompleteCount > 0 ? 'info' : 'neutral'}
+        />
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <MsgLine msg={msg} className="self-start" />
+        <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+          <Clock className="size-3.5 shrink-0" aria-hidden />
+          <span>
+            Actividad calculada{' '}
+            {runInfo.lastRun
+              ? `el ${new Date(runInfo.lastRun).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Madrid' })}`
+              : '— todavía no (pulsa «Recalcular actividad»)'}
+            ; se actualiza sola cada madrugada.
+            {runInfo.lastError && <span className="text-destructive"> Último error: {runInfo.lastError}</span>}
+          </span>
+        </p>
+      </div>
 
       {missingOptions > 0 && (
-        <div className="rounded-md border border-warning/30 bg-warning-soft p-3 text-sm flex flex-wrap items-center gap-2">
-          <span>
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-warning/30 bg-warning-soft px-4 py-3 text-sm">
+          <AlertTriangle className="size-4 shrink-0 text-warning-strong" aria-hidden />
+          <span className="min-w-0 flex-1">
             Hay {missingOptions} opci{missingOptions === 1 ? 'ón' : 'ones'} del campo «Cliente» de ClickUp sin ficha.
           </span>
           <Button
@@ -225,11 +316,12 @@ export function ClientesView({
       )}
 
       {duplicates.length > 0 && (
-        <details className="rounded-md border border-warning/30 bg-warning-soft p-3 text-sm">
-          <summary className="cursor-pointer">
+        <details className="group rounded-xl border border-warning/30 bg-warning-soft px-4 py-3 text-sm">
+          <summary className="flex cursor-pointer list-none items-center gap-2 rounded-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">
+            <AlertTriangle className="size-4 shrink-0 text-warning-strong" aria-hidden />
             Posibles clientes duplicados ({duplicates.length}): revísalos y desactiva o añade nombres alternativos
           </summary>
-          <ul className="mt-2 list-disc ml-5">
+          <ul className="mt-2 ml-6 list-disc space-y-0.5">
             {duplicates.map(([a, b]) => (
               <li key={`${a}|${b}`}>
                 {a} ↔ {b}
@@ -255,138 +347,168 @@ export function ClientesView({
         />
       )}
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Input
-          aria-label="Buscar cliente"
-          placeholder="Buscar por nombre o alias…"
-          className="w-64"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-        />
-        <select
-          aria-label="Filtrar por nivel"
-          className="rounded-md border border-input bg-card px-2 py-2 text-sm"
-          value={levelFilter}
-          onChange={(e) => setLevelFilter(e.target.value)}
-        >
-          <option value="">Todos los niveles</option>
-          {levels.map((l) => (
-            <option key={l.key} value={l.key}>
-              {l.label}
-            </option>
-          ))}
-        </select>
-        <select
-          aria-label="Filtrar por estado"
-          className="rounded-md border border-input bg-card px-2 py-2 text-sm"
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as 'active' | 'inactive' | 'all')}
-        >
-          <option value="active">Activos</option>
-          <option value="inactive">Desactivados</option>
-          <option value="all">Todos</option>
-        </select>
-        <span className="text-xs text-muted-foreground">
-          {shown.length} de {clients.length}
-        </span>
+      {/* Barra de filtros */}
+      <div className="flex flex-col gap-2 rounded-xl border bg-card p-2 shadow-xs sm:flex-row sm:items-center">
+        <div className="relative min-w-0 flex-1">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+          <Input
+            aria-label="Buscar cliente"
+            placeholder="Buscar por nombre o alias…"
+            className="h-9 pl-8"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            aria-label="Filtrar por nivel"
+            className={cn(selectClass, 'min-w-0 flex-1 sm:flex-none')}
+            value={levelFilter}
+            onChange={(e) => setLevelFilter(e.target.value)}
+          >
+            <option value="">Todos los niveles</option>
+            {levels.map((l) => (
+              <option key={l.key} value={l.key}>
+                {l.label}
+              </option>
+            ))}
+          </select>
+          <select
+            aria-label="Filtrar por estado"
+            className={cn(selectClass, 'min-w-0 flex-1 sm:flex-none')}
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as 'active' | 'inactive' | 'all')}
+          >
+            <option value="active">Activos</option>
+            <option value="inactive">Desactivados</option>
+            <option value="all">Todos</option>
+          </select>
+          <span className="px-1 text-xs tabular-nums text-muted-foreground" aria-live="polite">
+            {shown.length} de {clients.length}
+          </span>
+        </div>
       </div>
 
       {clients.length === 0 && editing !== 'new' ? (
-        <div className="rounded-lg border border-dashed border-input p-8 text-center space-y-2">
-          <p className="font-medium">Todavía no hay clientes</p>
-          <p className="text-sm text-muted-foreground">Crea la primera ficha para que el agente reconozca a tus clientes.</p>
-          <Button size="sm" onClick={() => setEditing('new')}>
-            Nuevo cliente
-          </Button>
-        </div>
+        <EmptyState
+          icon={Building2}
+          title="Todavía no hay clientes"
+          description="Crea la primera ficha para que el agente reconozca a tus clientes."
+          action={
+            <Button size="sm" className={brandBtn} onClick={() => setEditing('new')}>
+              <Plus aria-hidden />
+              Nuevo cliente
+            </Button>
+          }
+        />
       ) : shown.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Ningún cliente coincide con el filtro.</p>
+        <EmptyState icon={Search} title="Ningún cliente coincide con el filtro." className="py-10" />
       ) : (
-        <div className="space-y-3">
+        <ul className="divide-y overflow-hidden rounded-xl border bg-card shadow-xs" aria-label="Lista de clientes">
           {shown.map((c) =>
             editing === c.id ? (
-              <ClientForm
-                key={c.id}
-                initial={c}
-                levels={levels}
-                services={services}
-                members={members}
-                spaces={spaces}
-                options={options}
-                onCancel={() => setEditing(null)}
-                onSaved={onSaved}
-              />
+              <li key={c.id} className="bg-muted/40 p-2 sm:p-3">
+                <ClientForm
+                  initial={c}
+                  levels={levels}
+                  services={services}
+                  members={members}
+                  spaces={spaces}
+                  options={options}
+                  onCancel={() => setEditing(null)}
+                  onSaved={onSaved}
+                />
+              </li>
             ) : (
-              <div
+              <li
                 key={c.id}
                 data-testid={`cliente-${c.name}`}
-                className={`rounded-lg border p-4 space-y-2 ${c.active ? 'border-border bg-card' : 'border-border bg-muted/50 opacity-75'}`}
+                className={cn('px-4 py-3.5 transition-colors hover:bg-muted/30 sm:px-5', !c.active && 'bg-muted/40')}
               >
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <p className="font-medium">
-                      {c.name}
-                      {!c.active && (
-                        <span className="ml-2 rounded bg-secondary px-1.5 py-0.5 text-xs text-muted-foreground">Desactivado</span>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className={cn('min-w-0 flex-1 space-y-1.5', !c.active && 'opacity-75')}>
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <p className="truncate font-medium">{c.name}</p>
+                      {!c.active && <Badge tone="neutral">Desactivado</Badge>}
+                      {!c.clickupOptionId && (
+                        <Badge tone="outline" className="text-muted-foreground">
+                          <Link2Off aria-hidden />
+                          sin vincular a ClickUp
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted-foreground">
+                      <span className="font-medium text-foreground/80">{levelOf.get(c.level)?.label ?? c.level}</span>
+                      <span aria-hidden>·</span>
+                      <span>
+                        plazo{' '}
+                        {c.deliveryDays != null
+                          ? `${daysWord(c.deliveryDays)} (propio)`
+                          : `${daysWord(levelOf.get(c.level)?.defaultDays ?? 0)} (del nivel)`}
+                      </span>
+                      {c.requestCount > 0 && (
+                        <>
+                          <span aria-hidden>·</span>
+                          <span>{`${c.requestCount} encargo${c.requestCount === 1 ? '' : 's'}`}</span>
+                        </>
                       )}
                     </p>
-                    <p className="text-sm text-muted-foreground">
-                      {levelOf.get(c.level)?.label ?? c.level} · plazo{' '}
-                      {c.deliveryDays != null
-                        ? `${daysWord(c.deliveryDays)} (propio)`
-                        : `${daysWord(levelOf.get(c.level)?.defaultDays ?? 0)} (del nivel)`}
-                      {c.clickupOptionId ? '' : ' · sin vincular a ClickUp'}
-                      {c.requestCount > 0 ? ` · ${c.requestCount} encargo${c.requestCount === 1 ? '' : 's'}` : ''}
-                    </p>
+                    <AlertLine c={c} />
                   </div>
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex shrink-0 flex-wrap items-center gap-1 sm:justify-end">
                     <Button size="sm" variant="outline" disabled={editing !== null || pending} onClick={() => setEditing(c.id)}>
+                      <Pencil aria-hidden />
                       Editar
                     </Button>
                     <Button
                       size="sm"
-                      variant="outline"
+                      variant="ghost"
                       disabled={pending}
                       onClick={() =>
                         act(() => setClientActive(c.id, !c.active), c.active ? 'Cliente desactivado.' : 'Cliente reactivado.')
                       }
                     >
+                      <Power aria-hidden />
                       {c.active ? 'Desactivar' : 'Reactivar'}
                     </Button>
                     {c.requestCount > 0 ? (
-                      <span className="text-xs text-muted-foreground">Con encargos: solo se puede desactivar</span>
+                      <span className="px-1 text-xs text-muted-foreground">Con encargos: solo se puede desactivar</span>
                     ) : (
                       <DeleteButton name={c.name} disabled={pending} onConfirm={() => act(() => deleteClient(c.id), 'Ficha eliminada.')} />
                     )}
                   </div>
                 </div>
-                <AlertLine c={c} />
-                {c.aliases.length > 0 && (
-                  <p className="text-xs text-muted-foreground">También se le llama: {c.aliases.join(', ')}</p>
-                )}
-                {c.services.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {c.services.map((s) => (
-                      <span key={s.key} className="rounded bg-brand-soft px-2 py-0.5 text-xs text-brand">
-                        {serviceLabel.get(s.key) ?? s.key}
-                        {s.responsibleClickupId
-                          ? ` · ${members.find((m) => m.id === s.responsibleClickupId)?.username ?? '—'}`
-                          : ''}
-                      </span>
-                    ))}
+
+                {(c.aliases.length > 0 || c.services.length > 0 || c.business || c.notes || c.clickupOptionId) && (
+                  <div className={cn('mt-3 space-y-2', !c.active && 'opacity-75')}>
+                    {c.aliases.length > 0 && (
+                      <p className="text-xs text-muted-foreground">También se le llama: {c.aliases.join(', ')}</p>
+                    )}
+                    {c.services.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5" aria-label="Servicios contratados">
+                        {c.services.map((s) => (
+                          <Badge key={s.key} tone="brand">
+                            {serviceLabel.get(s.key) ?? s.key}
+                            {s.responsibleClickupId
+                              ? ` · ${members.find((m) => m.id === s.responsibleClickupId)?.username ?? '—'}`
+                              : ''}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                    {c.business && <p className="line-clamp-3 text-sm whitespace-pre-line text-foreground/90">{c.business}</p>}
+                    {c.notes && (
+                      <p className="text-xs text-muted-foreground whitespace-pre-line">
+                        <span className="font-medium">Notas:</span> {c.notes}
+                      </p>
+                    )}
+                    {c.clickupOptionId && <MonthWorkButton clientId={c.id} name={c.name} />}
                   </div>
                 )}
-                {c.clickupOptionId && <MonthWorkButton clientId={c.id} name={c.name} />}
-                {c.business && <p className="text-sm whitespace-pre-line">{c.business}</p>}
-                {c.notes && (
-                  <p className="text-xs text-muted-foreground whitespace-pre-line">
-                    <span className="font-medium">Notas:</span> {c.notes}
-                  </p>
-                )}
-              </div>
+              </li>
             )
           )}
-        </div>
+        </ul>
       )}
     </div>
   );
@@ -396,13 +518,18 @@ function DeleteButton({ name, disabled, onConfirm }: { name: string; disabled: b
   const [asking, setAsking] = useState(false);
   if (!asking) {
     return (
-      <Button size="sm" variant="ghost" disabled={disabled} onClick={() => setAsking(true)}>
+      <Button size="sm" variant="ghost" className={dangerGhost} disabled={disabled} onClick={() => setAsking(true)}>
+        <Trash2 aria-hidden />
         Eliminar
       </Button>
     );
   }
   return (
-    <span className="flex items-center gap-1 text-sm">
+    <span
+      role="group"
+      aria-label="Confirmar eliminación"
+      className="flex flex-wrap items-center gap-1.5 rounded-md border border-destructive/30 bg-destructive-soft px-2 py-1 text-sm text-destructive"
+    >
       ¿Eliminar la ficha de {name}?
       <Button
         size="sm"
@@ -437,31 +564,45 @@ function ConfigPanel({ levels, services, onClose }: { levels: Level[]; services:
     });
 
   return (
-    <div className="rounded-lg border-2 border-brand/45 bg-card p-4 space-y-4" data-testid="config-panel">
-      <div className="flex items-center justify-between">
-        <p className="font-medium">Niveles y servicios</p>
+    <section className="rounded-xl border bg-card shadow-sm animate-fade-up" data-testid="config-panel" aria-labelledby="config-title">
+      <div className="flex items-center justify-between gap-3 border-b px-4 py-3 sm:px-5">
+        <div className="flex items-center gap-2">
+          <Settings2 className="size-4 text-brand" aria-hidden />
+          <h3 id="config-title" className="text-[15px] font-semibold">
+            Niveles y servicios
+          </h3>
+        </div>
         <Button size="sm" variant="ghost" onClick={onClose}>
+          <X aria-hidden />
           Cerrar
         </Button>
       </div>
-      {msg && <p className={`text-sm ${msg.type === 'ok' ? 'text-success' : 'text-destructive'}`}>{msg.text}</p>}
+      <div className="space-y-6 p-4 sm:p-5">
+        <MsgLine msg={msg} />
 
-      <div className="space-y-2">
-        <Label>Niveles: plazo de entrega (días laborables), días sin actividad para alertar y horizonte de trabajo planificado</Label>
-        {levels.map((l) => (
-          <LevelRow key={`${l.key}-${l.label}-${l.defaultDays}-${l.inactivityDays}-${l.planningDays}`} level={l} disabled={pending} run={run} />
-        ))}
-        <LevelRow level={null} disabled={pending} run={run} />
-      </div>
+        <div className="space-y-2">
+          <Label className="leading-snug">
+            Niveles: plazo de entrega (días laborables), días sin actividad para alertar y horizonte de trabajo planificado
+          </Label>
+          <div className="divide-y rounded-lg border">
+            {levels.map((l) => (
+              <LevelRow key={`${l.key}-${l.label}-${l.defaultDays}-${l.inactivityDays}-${l.planningDays}`} level={l} disabled={pending} run={run} />
+            ))}
+            <LevelRow level={null} disabled={pending} run={run} />
+          </div>
+        </div>
 
-      <div className="space-y-2">
-        <Label>Servicios (el agente los reconoce en cada encargo)</Label>
-        {services.map((s) => (
-          <ServiceRow key={`${s.key}-${s.label}-${s.active}`} service={s} disabled={pending} run={run} />
-        ))}
-        <ServiceRow service={null} disabled={pending} run={run} />
+        <div className="space-y-2">
+          <Label className="leading-snug">Servicios (el agente los reconoce en cada encargo)</Label>
+          <div className="divide-y rounded-lg border">
+            {services.map((s) => (
+              <ServiceRow key={`${s.key}-${s.label}-${s.active}`} service={s} disabled={pending} run={run} />
+            ))}
+            <ServiceRow service={null} disabled={pending} run={run} />
+          </div>
+        </div>
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -473,35 +614,48 @@ function LevelRow({ level, disabled, run }: { level: Level | null; disabled: boo
   const [inact, setInact] = useState(level?.inactivityDays ?? 14);
   const [plan, setPlan] = useState(level?.planningDays ?? 14);
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <Input aria-label="Nombre del nivel" className="w-48" placeholder="Nuevo nivel…" value={label} onChange={(e) => setLabel(e.target.value)} />
-      <Input
-        aria-label="Días por defecto"
-        type="number"
-        min={0}
-        max={60}
-        className="w-20"
-        value={days}
-        onChange={(e) => setDays(Number(e.target.value))}
-      />
-      <span className="text-xs text-muted-foreground">días de entrega ·</span>
-      <Input aria-label="Días sin actividad" type="number" min={1} max={90} className="w-20" value={inact} onChange={(e) => setInact(Number(e.target.value))} />
-      <span className="text-xs text-muted-foreground">sin actividad ·</span>
-      <Input aria-label="Horizonte de trabajo planificado" type="number" min={0} max={60} className="w-20" value={plan} onChange={(e) => setPlan(Number(e.target.value))} />
-      <span className="text-xs text-muted-foreground">planificado (0 = sin alerta)</span>
-      <Button
-        size="sm"
-        variant="outline"
-        disabled={disabled || !label.trim()}
-        onClick={() => run(() => saveLevel({ key: level?.key ?? null, label, defaultDays: days, inactivityDays: inact, planningDays: plan }), level ? 'Nivel guardado.' : 'Nivel creado.')}
-      >
-        {level ? 'Guardar' : 'Añadir'}
-      </Button>
-      {level && (
-        <Button size="sm" variant="ghost" disabled={disabled} onClick={() => run(() => deleteLevel(level.key), 'Nivel eliminado.')}>
-          Eliminar
+    <div className={cn('flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5', !level && 'bg-muted/30')}>
+      <Input aria-label="Nombre del nivel" className="h-8 w-full sm:w-44" placeholder="Nuevo nivel…" value={label} onChange={(e) => setLabel(e.target.value)} />
+      <span className="flex items-center gap-1.5">
+        <Input
+          aria-label="Días por defecto"
+          type="number"
+          min={0}
+          max={60}
+          className="h-8 w-16"
+          value={days}
+          onChange={(e) => setDays(Number(e.target.value))}
+        />
+        <span className="text-xs text-muted-foreground">días de entrega</span>
+      </span>
+      <span className="flex items-center gap-1.5">
+        <Input aria-label="Días sin actividad" type="number" min={1} max={90} className="h-8 w-16" value={inact} onChange={(e) => setInact(Number(e.target.value))} />
+        <span className="text-xs text-muted-foreground">sin actividad</span>
+      </span>
+      <span className="flex items-center gap-1.5">
+        <Input aria-label="Horizonte de trabajo planificado" type="number" min={0} max={60} className="h-8 w-16" value={plan} onChange={(e) => setPlan(Number(e.target.value))} />
+        <span className="text-xs text-muted-foreground">planificado (0 = sin alerta)</span>
+      </span>
+      <span className="ml-auto flex items-center gap-1">
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={disabled || !label.trim()}
+          onClick={() => run(() => saveLevel({ key: level?.key ?? null, label, defaultDays: days, inactivityDays: inact, planningDays: plan }), level ? 'Nivel guardado.' : 'Nivel creado.')}
+        >
+          {level ? 'Guardar' : (
+            <>
+              <Plus aria-hidden />
+              Añadir
+            </>
+          )}
         </Button>
-      )}
+        {level && (
+          <Button size="sm" variant="ghost" className={dangerGhost} disabled={disabled} onClick={() => run(() => deleteLevel(level.key), 'Nivel eliminado.')}>
+            Eliminar
+          </Button>
+        )}
+      </span>
     </div>
   );
 }
@@ -510,30 +664,59 @@ function ServiceRow({ service, disabled, run }: { service: Service | null; disab
   const [label, setLabel] = useState(service?.label ?? '');
   const [active, setActive] = useState(service?.active ?? true);
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <Input aria-label="Nombre del servicio" className="w-48" placeholder="Nuevo servicio…" value={label} onChange={(e) => setLabel(e.target.value)} />
-      <label className="flex items-center gap-1 text-sm">
-        <input type="checkbox" className="h-4 w-4 accent-[var(--brand)]" checked={active} onChange={(e) => setActive(e.target.checked)} />
+    <div className={cn('flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5', !service && 'bg-muted/30')}>
+      <Input aria-label="Nombre del servicio" className="h-8 w-full sm:w-56" placeholder="Nuevo servicio…" value={label} onChange={(e) => setLabel(e.target.value)} />
+      <label className="flex items-center gap-1.5 text-sm">
+        <input type="checkbox" className={checkClass} checked={active} onChange={(e) => setActive(e.target.checked)} />
         Activo
       </label>
-      <Button
-        size="sm"
-        variant="outline"
-        disabled={disabled || !label.trim()}
-        onClick={() => run(() => saveService({ key: service?.key ?? null, label, active }), service ? 'Servicio guardado.' : 'Servicio creado.')}
-      >
-        {service ? 'Guardar' : 'Añadir'}
-      </Button>
-      {service && (
-        <Button size="sm" variant="ghost" disabled={disabled} onClick={() => run(() => deleteService(service.key), 'Servicio eliminado.')}>
-          Eliminar
+      <span className="ml-auto flex items-center gap-1">
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={disabled || !label.trim()}
+          onClick={() => run(() => saveService({ key: service?.key ?? null, label, active }), service ? 'Servicio guardado.' : 'Servicio creado.')}
+        >
+          {service ? 'Guardar' : (
+            <>
+              <Plus aria-hidden />
+              Añadir
+            </>
+          )}
         </Button>
-      )}
+        {service && (
+          <Button size="sm" variant="ghost" className={dangerGhost} disabled={disabled} onClick={() => run(() => deleteService(service.key), 'Servicio eliminado.')}>
+            Eliminar
+          </Button>
+        )}
+      </span>
     </div>
   );
 }
 
 // --- Formulario de la ficha -------------------------------------------------------------------
+
+// Bloque del formulario: título y descripción a la izquierda (en pantallas anchas) y campos a la derecha.
+function FormSection({
+  title,
+  description,
+  children
+}: {
+  title: string;
+  description?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <fieldset className="m-0 grid min-w-0 gap-4 border-0 border-t px-4 py-5 sm:px-5 lg:grid-cols-[220px_minmax(0,1fr)] lg:gap-8">
+      <legend className="sr-only">{title}</legend>
+      <div aria-hidden>
+        <p className="text-sm font-semibold">{title}</p>
+        {description && <p className="mt-1 text-xs text-muted-foreground text-pretty">{description}</p>}
+      </div>
+      <div className="min-w-0 space-y-4">{children}</div>
+    </fieldset>
+  );
+}
 
 function ClientForm({
   initial,
@@ -643,7 +826,7 @@ function ClientForm({
     });
 
   const text = (id: string, label: string, key: keyof ClientView, rows = 2, placeholder?: string) => (
-    <div className="space-y-1">
+    <div className="space-y-1.5">
       <Label htmlFor={id}>{label}</Label>
       <textarea
         id={id}
@@ -656,191 +839,168 @@ function ClientForm({
     </div>
   );
 
+  const fieldHint = 'text-xs text-muted-foreground';
+
   return (
-    <div className="rounded-lg border-2 border-brand/45 bg-card p-4 space-y-4" data-testid="cliente-form">
-      <p className="font-medium">{isNew ? 'Nuevo cliente' : `Editar la ficha de ${initial.name}`}</p>
-
-      <AiFill name={f.name} onDraft={applyDraft} />
-
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="space-y-1">
-          <Label htmlFor="c-name">Nombre *</Label>
-          <Input id="c-name" value={f.name} onChange={(e) => set({ name: e.target.value })} />
+    <div className="rounded-xl border border-brand/40 bg-card shadow-md ring-1 ring-brand/10 animate-fade-up" data-testid="cliente-form">
+      {/* Cabecera del formulario */}
+      <div className="flex flex-col gap-3 rounded-t-xl bg-muted/30 px-4 py-3.5 sm:flex-row sm:items-start sm:justify-between sm:px-5">
+        <div className="min-w-0">
+          <p className="text-[15px] font-semibold">{isNew ? 'Nuevo cliente' : `Editar la ficha de ${initial.name}`}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Los campos con <span className="text-destructive">*</span> son obligatorios.
+          </p>
         </div>
-        <div className="space-y-1">
-          <Label htmlFor="c-option">Opción del campo «Cliente» de ClickUp</Label>
-          <select id="c-option" className={areaClass} value={f.clickupOptionId} onChange={(e) => set({ clickupOptionId: e.target.value })}>
-            <option value="">— Sin vincular —</option>
-            {options.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="space-y-1 sm:col-span-2">
-          <Label htmlFor="c-aliases">Nombres alternativos (separados por comas)</Label>
-          <Input
-            id="c-aliases"
-            placeholder="Ej.: plupilates, club pilates, cp"
-            value={aliasText}
-            onChange={(e) => {
-              setAliasText(e.target.value);
-              setDirty(true);
-            }}
-          />
-          <p className="text-xs text-muted-foreground">Variantes y errores de dictado: así el agente reconoce al cliente.</p>
+        <div className="sm:max-w-[60%]">
+          <AiFill name={f.name} onDraft={applyDraft} />
         </div>
       </div>
 
-      <div className="space-y-2">
-        <Label>Espacio y listas habituales</Label>
-        <select
-          aria-label="Espacio habitual"
-          className={areaClass}
-          value={f.usualSpaceId}
-          onChange={(e) => set({ usualSpaceId: e.target.value, usualListIds: [] })}
-        >
-          <option value="">— Sin espacio habitual —</option>
-          {spaces.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-        </select>
-        {space && (
-          <div className="grid gap-1 sm:grid-cols-2 max-h-48 overflow-y-auto rounded border border-border p-2">
-            {space.lists.map((l) => (
-              <label key={l.id} className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 accent-[var(--brand)]"
-                  checked={f.usualListIds.includes(l.id)}
-                  onChange={(e) =>
-                    set({ usualListIds: e.target.checked ? [...f.usualListIds, l.id] : f.usualListIds.filter((id) => id !== l.id) })
-                  }
-                />
-                {l.name}
-              </label>
-            ))}
+      <FormSection title="Datos" description="Cómo se llama el cliente, cómo se le reconoce en ClickUp y dónde se le trabaja.">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="c-name" className="gap-1">
+              Nombre <span className="text-destructive">*</span>
+            </Label>
+            <Input id="c-name" aria-required value={f.name} onChange={(e) => set({ name: e.target.value })} />
           </div>
-        )}
-      </div>
-
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="space-y-1">
-          <Label htmlFor="c-level">Nivel</Label>
-          <select id="c-level" className={areaClass} value={f.level} onChange={(e) => set({ level: e.target.value })}>
-            {levels.map((l) => (
-              <option key={l.key} value={l.key}>
-                {l.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="space-y-1">
-          <Label htmlFor="c-days">Plazo de entrega (días laborables)</Label>
-          <Input
-            id="c-days"
-            type="number"
-            min={0}
-            max={60}
-            className="w-28"
-            placeholder={String(levelDefault)}
-            value={f.deliveryDays ?? ''}
-            onChange={(e) => set({ deliveryDays: e.target.value === '' ? null : Number(e.target.value) })}
-          />
-        </div>
-        <p className="text-xs text-muted-foreground pb-2">
-          Vacío = {daysWord(levelDefault)} (el del nivel).
-        </p>
-      </div>
-
-      <div className="space-y-2">
-        <Label>Alertas</Label>
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            className="h-4 w-4 accent-[var(--brand)]"
-            checked={f.alertsEnabled}
-            onChange={(e) => set({ alertsEnabled: e.target.checked })}
-          />
-          Genera alertas (solo si tiene algún servicio contratado u horas al mes)
-        </label>
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="space-y-1">
-            <Label htmlFor="c-inact" className="text-xs">Días sin actividad para alertar</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="c-option">Opción del campo «Cliente» de ClickUp</Label>
+            <select id="c-option" className={cn(selectClass, 'w-full')} value={f.clickupOptionId} onChange={(e) => set({ clickupOptionId: e.target.value })}>
+              <option value="">— Sin vincular —</option>
+              {options.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label htmlFor="c-aliases">Nombres alternativos (separados por comas)</Label>
             <Input
-              id="c-inact"
-              type="number"
-              min={1}
-              max={90}
-              className="w-28"
-              placeholder={String(levels.find((l) => l.key === f.level)?.inactivityDays ?? '')}
-              value={f.inactivityDays ?? ''}
-              onChange={(e) => set({ inactivityDays: e.target.value === '' ? null : Number(e.target.value) })}
+              id="c-aliases"
+              aria-describedby="c-aliases-hint"
+              placeholder="Ej.: plupilates, club pilates, cp"
+              value={aliasText}
+              onChange={(e) => {
+                setAliasText(e.target.value);
+                setDirty(true);
+              }}
             />
+            <p id="c-aliases-hint" className={fieldHint}>
+              Variantes y errores de dictado: así el agente reconoce al cliente.
+            </p>
           </div>
-          <div className="space-y-1">
-            <Label htmlFor="c-plan" className="text-xs">Horizonte de trabajo planificado (días, 0 = sin alerta)</Label>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="c-space">Espacio y listas habituales</Label>
+          <select
+            id="c-space"
+            aria-label="Espacio habitual"
+            className={cn(selectClass, 'w-full')}
+            value={f.usualSpaceId}
+            onChange={(e) => set({ usualSpaceId: e.target.value, usualListIds: [] })}
+          >
+            <option value="">— Sin espacio habitual —</option>
+            {spaces.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+          {space && (
+            <div className="grid max-h-48 gap-1 overflow-y-auto rounded-lg border bg-muted/20 p-2 sm:grid-cols-2" role="group" aria-label="Listas habituales">
+              {space.lists.map((l) => (
+                <label key={l.id} className="flex items-center gap-2 rounded-md px-1.5 py-1 text-sm hover:bg-muted">
+                  <input
+                    type="checkbox"
+                    className={checkClass}
+                    checked={f.usualListIds.includes(l.id)}
+                    onChange={(e) =>
+                      set({ usualListIds: e.target.checked ? [...f.usualListIds, l.id] : f.usualListIds.filter((id) => id !== l.id) })
+                    }
+                  />
+                  <span className="min-w-0 truncate">{l.name}</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="c-level">Nivel</Label>
+            <select id="c-level" className={cn(selectClass, 'w-full')} value={f.level} onChange={(e) => set({ level: e.target.value })}>
+              {levels.map((l) => (
+                <option key={l.key} value={l.key}>
+                  {l.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="c-days">Plazo de entrega (días laborables)</Label>
             <Input
-              id="c-plan"
+              id="c-days"
               type="number"
               min={0}
               max={60}
-              className="w-28"
-              placeholder={String(levels.find((l) => l.key === f.level)?.planningDays ?? '')}
-              value={f.planningDays ?? ''}
-              onChange={(e) => set({ planningDays: e.target.value === '' ? null : Number(e.target.value) })}
+              aria-describedby="c-days-hint"
+              placeholder={String(levelDefault)}
+              value={f.deliveryDays ?? ''}
+              onChange={(e) => set({ deliveryDays: e.target.value === '' ? null : Number(e.target.value) })}
             />
+            <p id="c-days-hint" className={fieldHint}>
+              Vacío = {daysWord(levelDefault)} (el del nivel).
+            </p>
           </div>
-          <p className="text-xs text-muted-foreground pb-2">Vacío = el del nivel.</p>
         </div>
-      </div>
+      </FormSection>
 
-      <div className="space-y-2">
-        <Label>Servicios contratados y responsable habitual</Label>
-        <div className="grid gap-2 sm:grid-cols-2">
-          {services.map((s) => {
-            const on = svc(s.key);
-            return (
-              <div key={s.key} className="flex items-center justify-between gap-2 rounded border border-border px-2 py-1">
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 accent-[var(--brand)]"
-                    checked={Boolean(on)}
-                    onChange={(e) => toggleService(s.key, e.target.checked)}
-                  />
-                  {s.label}
-                  {!s.active && <span className="text-xs text-muted-foreground">(inactivo)</span>}
-                </label>
-                {on && (
-                  <select
-                    aria-label={`Responsable de ${s.label}`}
-                    className="rounded border border-input bg-card px-1 py-0.5 text-sm"
-                    value={on.responsibleClickupId}
-                    onChange={(e) => setResponsible(s.key, e.target.value)}
-                  >
-                    <option value="">Sin responsable</option>
-                    {members.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.username}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </div>
-            );
-          })}
+      <FormSection title="Servicios" description="Qué tiene contratado, quién lo lleva y cuánta dedicación necesita.">
+        <div className="space-y-1.5">
+          <Label>Servicios contratados y responsable habitual</Label>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {services.map((s) => {
+              const on = svc(s.key);
+              return (
+                <div
+                  key={s.key}
+                  className={cn(
+                    'flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 transition-colors',
+                    on ? 'border-brand/40 bg-brand-soft/50' : 'bg-card'
+                  )}
+                >
+                  <label className="flex min-w-0 items-center gap-2 text-sm">
+                    <input type="checkbox" className={checkClass} checked={Boolean(on)} onChange={(e) => toggleService(s.key, e.target.checked)} />
+                    <span className="truncate">{s.label}</span>
+                    {!s.active && <span className="text-xs text-muted-foreground">(inactivo)</span>}
+                  </label>
+                  {on && (
+                    <select
+                      aria-label={`Responsable de ${s.label}`}
+                      className={cn(selectClass, 'h-8 max-w-full text-xs')}
+                      value={on.responsibleClickupId}
+                      onChange={(e) => setResponsible(s.key, e.target.value)}
+                    >
+                      <option value="">Sin responsable</option>
+                      {members.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.username}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
-      </div>
 
-      <div className="space-y-2">
-        <Label>Dedicación</Label>
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="space-y-1">
-            <Label htmlFor="c-hours" className="text-xs">Horas al mes</Label>
+        <div className="flex flex-wrap items-start gap-x-6 gap-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="c-hours">Horas al mes</Label>
             <Input
               id="c-hours"
               type="number"
@@ -851,9 +1011,9 @@ function ClientForm({
               onChange={(e) => set({ monthlyHours: e.target.value === '' ? null : Number(e.target.value) })}
             />
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Días de la semana en que se le trabaja (ninguno = L–V)</Label>
-            <div className="flex gap-1.5">
+          <div className="space-y-1.5">
+            <Label id="c-workdays-label">Días de la semana en que se le trabaja (ninguno = L–V)</Label>
+            <div className="flex flex-wrap gap-1.5" role="group" aria-labelledby="c-workdays-label">
               {DAY_LABELS.map((lbl, idx) => {
                 const day = idx + 1;
                 const on = f.workDays.includes(day);
@@ -863,7 +1023,11 @@ function ClientForm({
                     type="button"
                     aria-pressed={on}
                     onClick={() => set({ workDays: on ? f.workDays.filter((d) => d !== day) : [...f.workDays, day].sort() })}
-                    className={`h-8 w-8 rounded-full border text-sm ${on ? 'border-brand/70 bg-brand text-white' : 'border-input bg-card text-muted-foreground'}`}
+                    className={cn(
+                      'size-9 rounded-full border text-sm font-medium transition-colors',
+                      focusRing,
+                      on ? 'border-brand bg-brand text-white' : 'border-input bg-card text-muted-foreground hover:bg-muted'
+                    )}
                   >
                     {lbl}
                   </button>
@@ -872,55 +1036,109 @@ function ClientForm({
             </div>
           </div>
         </div>
-      </div>
 
-      <div className="space-y-2">
-        <Label>Webs y herramientas</Label>
-        <p className="text-xs text-warning-strong">Aquí no se guardan contraseñas ni accesos: solo dónde está cada cosa.</p>
-        {f.tools.map((t, i) => (
-          <div key={i} className="flex flex-wrap items-center gap-2">
-            <Input aria-label="Herramienta" placeholder="GA4, Search Console, web…" className="w-44" value={t.name} onChange={(e) => set({ tools: f.tools.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)) })} />
-            <Input aria-label="Dirección" placeholder="https://…" className="w-56" value={t.url} onChange={(e) => set({ tools: f.tools.map((x, j) => (j === i ? { ...x, url: e.target.value } : x)) })} />
-            <Input aria-label="Nota" placeholder="Nota" className="w-56" value={t.note} onChange={(e) => set({ tools: f.tools.map((x, j) => (j === i ? { ...x, note: e.target.value } : x)) })} />
-            <Button size="sm" variant="ghost" onClick={() => set({ tools: f.tools.filter((_, j) => j !== i) })}>
-              Quitar
-            </Button>
-          </div>
-        ))}
-        <Button size="sm" variant="outline" onClick={() => set({ tools: [...f.tools, { name: '', url: '', note: '' }] })}>
-          Añadir web o herramienta
-        </Button>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-2">
-        {text('c-business', 'Negocio: a qué se dedica', 'business', 3)}
-        {text('c-offerings', 'Productos o servicios que ofrece', 'offerings', 3)}
-        <div className="space-y-1">
-          <Label htmlFor="c-area">Zona</Label>
-          <Input id="c-area" value={f.area} onChange={(e) => set({ area: e.target.value })} />
+        <div className="space-y-2">
+          <Label>Webs y herramientas</Label>
+          <p className="flex items-center gap-1.5 text-xs text-warning-strong">
+            <AlertTriangle className="size-3.5 shrink-0" aria-hidden />
+            Aquí no se guardan contraseñas ni accesos: solo dónde está cada cosa.
+          </p>
+          {f.tools.length > 0 && (
+            <div className="space-y-2">
+              {f.tools.map((t, i) => (
+                <div key={i} className="grid gap-2 rounded-lg border bg-muted/20 p-2 sm:grid-cols-[minmax(0,10rem)_minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-center">
+                  <Input aria-label="Herramienta" placeholder="GA4, Search Console, web…" className="h-8" value={t.name} onChange={(e) => set({ tools: f.tools.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)) })} />
+                  <Input aria-label="Dirección" placeholder="https://…" className="h-8" value={t.url} onChange={(e) => set({ tools: f.tools.map((x, j) => (j === i ? { ...x, url: e.target.value } : x)) })} />
+                  <Input aria-label="Nota" placeholder="Nota" className="h-8" value={t.note} onChange={(e) => set({ tools: f.tools.map((x, j) => (j === i ? { ...x, note: e.target.value } : x)) })} />
+                  <Button size="sm" variant="ghost" className={cn(dangerGhost, 'justify-self-start')} onClick={() => set({ tools: f.tools.filter((_, j) => j !== i) })}>
+                    <X aria-hidden />
+                    Quitar
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+          <Button size="sm" variant="outline" onClick={() => set({ tools: [...f.tools, { name: '', url: '', note: '' }] })}>
+            <Plus aria-hidden />
+            Añadir web o herramienta
+          </Button>
         </div>
-        {text('c-audience', 'Público objetivo', 'audience', 2)}
-      </div>
+      </FormSection>
 
-      {text('c-goals', 'Objetivos', 'goals', 2, 'Ej.: 30 leads al mes')}
-      {text('c-strategy', 'Estrategia actual', 'strategy', 3)}
-      {text('c-notes', 'Peculiaridades y notas', 'notes', 3)}
+      <FormSection title="Estrategia" description="Contexto del negocio que el agente usa para entender los encargos.">
+        <div className="grid gap-4 sm:grid-cols-2">
+          {text('c-business', 'Negocio: a qué se dedica', 'business', 3)}
+          {text('c-offerings', 'Productos o servicios que ofrece', 'offerings', 3)}
+          <div className="space-y-1.5">
+            <Label htmlFor="c-area">Zona</Label>
+            <Input id="c-area" value={f.area} onChange={(e) => set({ area: e.target.value })} />
+          </div>
+          {text('c-audience', 'Público objetivo', 'audience', 2)}
+        </div>
+        {text('c-goals', 'Objetivos', 'goals', 2, 'Ej.: 30 leads al mes')}
+        {text('c-strategy', 'Estrategia actual', 'strategy', 3)}
+        {text('c-notes', 'Peculiaridades y notas', 'notes', 3)}
+      </FormSection>
 
-      {isNew ? (
-        <p className="rounded-md border border-dashed border-input p-3 text-sm text-muted-foreground">
-          Guarda la ficha para poder añadir contactos y memoria del cliente.
-        </p>
-      ) : (
-        <ClientMemoria clientId={initial.id} />
-      )}
+      <FormSection title="Alertas" description="Cuándo avisar de que un cliente lleva tiempo sin actividad o sin trabajo planificado.">
+        <label className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            className={cn(checkClass, 'mt-0.5')}
+            checked={f.alertsEnabled}
+            onChange={(e) => set({ alertsEnabled: e.target.checked })}
+          />
+          Genera alertas (solo si tiene algún servicio contratado u horas al mes)
+        </label>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="c-inact">Días sin actividad para alertar</Label>
+            <Input
+              id="c-inact"
+              type="number"
+              min={1}
+              max={90}
+              placeholder={String(levels.find((l) => l.key === f.level)?.inactivityDays ?? '')}
+              value={f.inactivityDays ?? ''}
+              onChange={(e) => set({ inactivityDays: e.target.value === '' ? null : Number(e.target.value) })}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="c-plan">Horizonte de trabajo planificado (días, 0 = sin alerta)</Label>
+            <Input
+              id="c-plan"
+              type="number"
+              min={0}
+              max={60}
+              placeholder={String(levels.find((l) => l.key === f.level)?.planningDays ?? '')}
+              value={f.planningDays ?? ''}
+              onChange={(e) => set({ planningDays: e.target.value === '' ? null : Number(e.target.value) })}
+            />
+          </div>
+        </div>
+        <p className={fieldHint}>Vacío = el del nivel.</p>
+      </FormSection>
 
-      <label className="flex items-center gap-2 text-sm">
-        <input type="checkbox" className="h-4 w-4 accent-[var(--brand)]" checked={f.active} onChange={(e) => set({ active: e.target.checked })} />
-        Cliente activo (si se desactiva, el agente lo sigue reconociendo pero avisa en la revisión)
-      </label>
+      <FormSection title="Contactos y memoria" description="De quién son los correos y qué hay que recordar del cliente.">
+        {isNew ? (
+          <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+            Guarda la ficha para poder añadir contactos y memoria del cliente.
+          </p>
+        ) : (
+          <ClientMemoria clientId={initial.id} />
+        )}
+      </FormSection>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" disabled={pending || !f.name.trim()} onClick={save}>
+      <FormSection title="Estado">
+        <label className="flex items-start gap-2 text-sm">
+          <input type="checkbox" className={cn(checkClass, 'mt-0.5')} checked={f.active} onChange={(e) => set({ active: e.target.checked })} />
+          Cliente activo (si se desactiva, el agente lo sigue reconociendo pero avisa en la revisión)
+        </label>
+      </FormSection>
+
+      {/* Pie fijo con las acciones */}
+      <div className="sticky bottom-0 z-10 flex flex-wrap items-center gap-2 rounded-b-xl border-t bg-card/95 px-4 py-3 backdrop-blur sm:px-5">
+        <Button size="sm" className={brandBtn} disabled={pending || !f.name.trim()} onClick={save}>
           {pending ? 'Guardando…' : 'Guardar ficha'}
         </Button>
         <Button
@@ -933,8 +1151,12 @@ function ClientForm({
         >
           Cancelar
         </Button>
-        {dirty && <span className="text-xs text-warning-strong">Cambios sin guardar</span>}
-        {msg && <span className={`text-sm ${msg.type === 'ok' ? 'text-success' : 'text-destructive'}`}>{msg.text}</span>}
+        {dirty && (
+          <Badge tone="warning" dot>
+            Cambios sin guardar
+          </Badge>
+        )}
+        <MsgLine msg={msg} />
       </div>
     </div>
   );
@@ -1033,54 +1255,65 @@ function AiFill({ name, onDraft }: { name: string; onDraft: (d: ClientDraft) => 
 
   if (!open) {
     return (
-      <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
-        ✨ Rellenar con IA
+      <Button size="sm" variant="outline" className="border-brand/40 text-brand hover:bg-brand-soft hover:text-brand" onClick={() => setOpen(true)}>
+        <Sparkles aria-hidden />
+        Rellenar con IA
       </Button>
     );
   }
   return (
-    <div className="space-y-2 rounded-md border border-brand/30 bg-brand-soft p-3">
-      <p className="text-sm font-medium">Rellenar con IA</p>
+    <div className="w-full space-y-2.5 rounded-lg border border-brand/30 bg-brand-soft p-3 sm:min-w-[22rem]">
+      <div className="flex items-center gap-2">
+        <Sparkles className="size-4 text-brand" aria-hidden />
+        <p className="text-sm font-medium">Rellenar con IA</p>
+      </div>
       <p className="text-xs text-muted-foreground">
         Pega un texto o graba un audio describiendo al cliente. La IA propone los campos y tú los revisas antes de
         guardar; solo cambia los que consiga deducir. No dictes contraseñas.
       </p>
       <textarea
         rows={5}
+        aria-label="Descripción del cliente para la IA"
         className={areaClass}
         placeholder="Ej.: RF Serveis es una empresa de servicios de Barcelona. Llevamos su SEO y el mantenimiento de la web…"
         value={text}
         onChange={(e) => setText(e.target.value)}
       />
       <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" disabled={pending || recording || transcribing || text.trim().length < 10} onClick={run}>
+        <Button size="sm" className={brandBtn} disabled={pending || recording || transcribing || text.trim().length < 10} onClick={run}>
           {pending ? 'Pensando…' : 'Proponer campos'}
         </Button>
         {recording ? (
           <Button size="sm" variant="destructive" onClick={stop}>
-            ⏹ Parar ({seconds}s)
+            <Square className="fill-current" aria-hidden />
+            Parar ({seconds}s)
           </Button>
         ) : (
           <Button size="sm" variant="outline" disabled={pending || transcribing} onClick={start}>
-            🎙 {transcribing ? 'Transcribiendo…' : 'Grabar audio'}
+            <Mic aria-hidden />
+            {transcribing ? 'Transcribiendo…' : 'Grabar audio'}
           </Button>
         )}
         <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>
           Cerrar
         </Button>
-        {msg && <span className={`text-xs ${msg.type === 'ok' ? 'text-success' : 'text-destructive'}`}>{msg.text}</span>}
       </div>
+      {msg && (
+        <p role={msg.type === 'error' ? 'alert' : 'status'} className={`text-xs ${msg.type === 'ok' ? 'text-success' : 'text-destructive'}`}>
+          {msg.text}
+        </p>
+      )}
     </div>
   );
 }
 
 // --- Semáforo y trabajo del mes ---------------------------------------------------------------
 
-const DOT: Record<string, string> = {
-  red: 'bg-destructive',
-  amber: 'bg-warning',
-  green: 'bg-success',
-  gray: 'bg-muted-foreground/30'
+const DOT_TONE: Record<ClientView['alert']['state'], 'danger' | 'warning' | 'success' | 'neutral'> = {
+  red: 'danger',
+  amber: 'warning',
+  green: 'success',
+  gray: 'neutral'
 };
 const DOT_LABEL: Record<string, string> = { red: 'Rojo', amber: 'Ámbar', green: 'Verde', gray: 'Gris' };
 
@@ -1096,21 +1329,23 @@ function AlertLine({ c }: { c: ClientView }) {
       : a.lastActivityDays === 0
         ? 'última actividad hoy'
         : `última actividad hace ${a.lastActivityDays} día${a.lastActivityDays === 1 ? '' : 's'}`;
+  const facts: string[] = [];
+  if (last) facts.push(last);
+  if (hours) facts.push(hours);
+  if (a.hasData) facts.push(`${a.completedMonth} completadas este mes`);
+  if (a.hasData && a.horizonDays > 0) facts.push(`${a.upcoming} con fecha en ${a.horizonDays} días`);
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs" data-testid="semaforo">
-      <span className="flex items-center gap-1.5">
-        <span className={`inline-block h-3 w-3 rounded-full ${DOT[a.state]}`} aria-label={DOT_LABEL[a.state]} />
-        <span className="font-medium">{a.state === 'gray' ? a.note : DOT_LABEL[a.state]}</span>
-      </span>
-      {last && <span className="text-muted-foreground">{last}</span>}
-      {hours && <span className="text-muted-foreground">{hours}</span>}
-      {a.hasData && <span className="text-muted-foreground">{a.completedMonth} completadas este mes</span>}
-      {a.hasData && a.horizonDays > 0 && (
-        <span className="text-muted-foreground">
-          {a.upcoming} con fecha en {a.horizonDays} días
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs" data-testid="semaforo">
+      <Badge tone={DOT_TONE[a.state]} dot aria-label={`Semáforo: ${DOT_LABEL[a.state]}`}>
+        {a.state === 'gray' ? a.note || DOT_LABEL[a.state] : DOT_LABEL[a.state]}
+      </Badge>
+      {facts.map((t, i) => (
+        <span key={i} className="flex items-center gap-2 text-muted-foreground">
+          {i > 0 && <span aria-hidden>·</span>}
+          {t}
         </span>
-      )}
-      {(a.state === 'red' || a.state === 'amber') && <span className="text-warning-strong">{a.note}</span>}
+      ))}
+      {(a.state === 'red' || a.state === 'amber') && <span className="font-medium text-warning-strong">{a.note}</span>}
     </div>
   );
 }
@@ -1145,24 +1380,26 @@ function MonthWorkButton({ clientId, name }: { clientId: string; name: string })
     return (
       <Button
         size="sm"
-        variant="outline"
+        variant="ghost"
+        className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
         data-testid="trabajo-mes"
         onClick={() => {
           setOpen(true);
           load(month);
         }}
       >
+        <ClipboardList aria-hidden />
         Trabajo de este mes
       </Button>
     );
   }
   return (
-    <div className="space-y-2 rounded-md border border-border bg-muted/50 p-3" data-testid="trabajo-mes-panel">
+    <div className="space-y-2.5 rounded-lg border bg-muted/40 p-3" data-testid="trabajo-mes-panel">
       <div className="flex flex-wrap items-center gap-2">
         <p className="text-sm font-medium">Trabajo completado</p>
         <select
           aria-label="Mes"
-          className="rounded-md border border-input bg-card px-2 py-1 text-sm"
+          className={cn(selectClass, 'h-8')}
           value={month}
           onChange={(e) => {
             const m = e.target.value as 'current' | 'previous';
@@ -1174,39 +1411,44 @@ function MonthWorkButton({ clientId, name }: { clientId: string; name: string })
           <option value="previous">Mes anterior</option>
         </select>
         {work && <span className="text-xs text-muted-foreground first-letter:uppercase">{work.label}</span>}
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={!work || work.items.length === 0}
-          onClick={async () => {
-            try {
-              await navigator.clipboard.writeText(text);
-              setCopied(true);
-            } catch {
-              setError('No se pudo copiar: selecciona el texto a mano.');
-            }
-          }}
-        >
-          {copied ? '✓ Copiado' : 'Copiar'}
-        </Button>
-        <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>
-          Cerrar
-        </Button>
+        <span className="ml-auto flex items-center gap-1">
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={!work || work.items.length === 0}
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(text);
+                setCopied(true);
+              } catch {
+                setError('No se pudo copiar: selecciona el texto a mano.');
+              }
+            }}
+          >
+            {copied ? <Check aria-hidden /> : <Copy aria-hidden />}
+            {copied ? 'Copiado' : 'Copiar'}
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>
+            Cerrar
+          </Button>
+        </span>
       </div>
       {pending && <p className="text-sm text-muted-foreground">Cargando de ClickUp…</p>}
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
       {work && !pending && (
         <>
           {work.truncated && <p className="text-xs text-warning-strong">Hay demasiadas tareas y la lista puede estar incompleta.</p>}
           {work.items.length === 0 ? (
             <p className="text-sm text-muted-foreground">No hay tareas completadas de este cliente en ese mes.</p>
           ) : (
-            <ul className="space-y-1 text-sm" data-testid="trabajo-mes-lista">
+            <ul className="divide-y rounded-md border bg-card text-sm" data-testid="trabajo-mes-lista">
               {work.items.map((i, idx) => (
-                <li key={idx}>
-                  • <a href={i.url} target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">{i.title}</a>{' '}
-                  <span className="text-muted-foreground">
-                    — {fmtDay(i.doneMs)}
+                <li key={idx} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 px-3 py-1.5">
+                  <a href={i.url} target="_blank" rel="noopener noreferrer" className="min-w-0 text-brand hover:underline">
+                    {i.title}
+                  </a>
+                  <span className="text-xs text-muted-foreground">
+                    {fmtDay(i.doneMs)}
                     {i.people.length ? ` — ${i.people.join(', ')}` : ''}
                   </span>
                 </li>
@@ -1214,7 +1456,7 @@ function MonthWorkButton({ clientId, name }: { clientId: string; name: string })
             </ul>
           )}
           {work.cleaned.length > 0 && (
-            <div className="space-y-1 border-t border-border pt-2" data-testid="trabajo-mes-limpieza">
+            <div className="space-y-1 border-t pt-2" data-testid="trabajo-mes-limpieza">
               <p className="text-xs font-medium text-muted-foreground">
                 Cerradas en limpieza ({work.cleaned.length}): trabajo antiguo o que no se hizo; no cuentan en el total.
               </p>

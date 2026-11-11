@@ -49,7 +49,8 @@ describe('visitante anónimo', () => {
   it('la página de inicio de sesión está en español y no habla de Stripe ni de ACME', async () => {
     const html = await (await get('/sign-in')).text();
     expect(html).toMatch(/Iniciar sesión/);
-    expect(html).toMatch(/Kijutech Tool/);
+    expect(html).toMatch(/Kijutech/);
+    expect(html).toMatch(/Correo electrónico/);
     expect(html).not.toMatch(/ACME|Stripe|Next\.js SaaS Starter/i);
     expect(html).not.toMatch(/passwordHash|password_hash/);
   });

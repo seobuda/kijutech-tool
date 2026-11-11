@@ -1,5 +1,8 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { PlugZap } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/page';
 import { and, asc, desc, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { opsNoteAudios, opsNotes, opsRequests } from '@/lib/db/schema';
@@ -24,18 +27,16 @@ export default async function BlocNotasPage({
   const conn = await getClickUpConnection(user.tenantId);
   if (!conn) {
     return (
-      <div className="rounded-lg border border-dashed border-input p-8 text-center space-y-3">
-        <p className="font-medium">Todavía no has conectado ClickUp</p>
-        <p className="text-sm text-muted-foreground">
-          El Bloc de notas necesita el token para elegir el espacio y crear las tareas.
-        </p>
-        <Link
-          href="/dashboard/operaciones/ajustes"
-          className="inline-block rounded-full bg-brand px-4 py-2 text-sm text-white hover:bg-brand/90"
-        >
-          Ir a Ajustes ClickUp
-        </Link>
-      </div>
+      <EmptyState
+        icon={PlugZap}
+        title="Todavía no has conectado ClickUp"
+        description="El Bloc de notas necesita el token para elegir el espacio y crear las tareas."
+        action={
+          <Button asChild className="bg-brand text-white hover:bg-brand/90">
+            <Link href="/dashboard/operaciones/ajustes">Ir a Ajustes ClickUp</Link>
+          </Button>
+        }
+      />
     );
   }
 

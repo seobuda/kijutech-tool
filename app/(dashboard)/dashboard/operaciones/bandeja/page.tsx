@@ -1,4 +1,6 @@
 import { redirect } from 'next/navigation';
+import { Lock } from 'lucide-react';
+import { EmptyState } from '@/components/ui/page';
 import { getUser } from '@/lib/db/queries';
 import { getInbox, waitLabel } from '@/lib/operaciones/inbox';
 import { isInboxOwner } from '@/lib/operaciones/inbox-owner';
@@ -13,9 +15,12 @@ export default async function BandejaPage() {
   // «Mi bandeja» es solo del dueño: a los demás ni se les consulta ni se les muestra.
   if (!(await isInboxOwner(user))) {
     return (
-      <p className="text-sm text-muted-foreground max-w-3xl">
-        Mi bandeja es personal: solo la ve quien lleva las operaciones.
-      </p>
+      <EmptyState
+        icon={Lock}
+        title="Bandeja personal"
+        description="Mi bandeja es personal: solo la ve quien lleva las operaciones."
+        className="max-w-3xl"
+      />
     );
   }
 
@@ -49,10 +54,10 @@ export default async function BandejaPage() {
   );
 
   return (
-    <div className="space-y-4 max-w-3xl">
+    <div className="max-w-3xl space-y-4">
       <div>
-        <h2 className="text-lg font-medium">Mi bandeja</h2>
-        <p className="text-sm text-muted-foreground">
+        <h2 className="text-[15px] font-semibold">Mi bandeja</h2>
+        <p className="mt-0.5 text-sm text-muted-foreground text-pretty">
           Lo que está pendiente de ti, del que más espera al que menos. Desde aquí puedes aceptar, devolver o responder.
         </p>
       </div>

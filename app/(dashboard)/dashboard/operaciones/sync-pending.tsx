@@ -3,7 +3,10 @@
 import { useEffect, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { FolderKanban, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/page';
+import { cn } from '@/lib/utils';
 import { syncClickUpNow } from '@/lib/operaciones/actions';
 
 // La estructura de ClickUp (espacios, listas, miembros) vive en la base de datos.
@@ -35,32 +38,37 @@ export function SyncPending({ reason }: { reason: 'never' | 'no-spaces' }) {
 
   if (reason === 'no-spaces') {
     return (
-      <div className="rounded-lg border border-dashed border-input p-8 text-center space-y-3">
-        <p className="font-medium">No hay espacios seleccionados</p>
-        <p className="text-sm text-muted-foreground">
-          Elige en Ajustes qué espacios de ClickUp se sincronizan para que aparezcan aquí.
-        </p>
-        <Link
-          href="/dashboard/operaciones/ajustes"
-          className="inline-block rounded-full bg-brand px-4 py-2 text-sm text-white hover:bg-brand/90"
-        >
-          Ir a Ajustes ClickUp
-        </Link>
-      </div>
+      <EmptyState
+        icon={FolderKanban}
+        title="No hay espacios seleccionados"
+        description="Elige en Ajustes qué espacios de ClickUp se sincronizan para que aparezcan aquí."
+        action={
+          <Button asChild className="bg-brand text-white hover:bg-brand/90">
+            <Link href="/dashboard/operaciones/ajustes">Ir a Ajustes ClickUp</Link>
+          </Button>
+        }
+      />
     );
   }
 
   return (
-    <div className="rounded-lg border border-dashed border-input p-8 text-center space-y-3">
-      <p className="font-medium">Sincronizando la estructura de ClickUp por primera vez…</p>
-      <p className="text-sm text-muted-foreground">
-        Se guardan espacios, listas y miembros para que las pantallas abran al instante. Tarda unos
-        segundos; esta página se actualiza sola.
-      </p>
-      <Button onClick={sync} disabled={pending}>
-        {pending ? 'Sincronizando…' : 'Sincronizar ahora'}
-      </Button>
-      {error && <p className="text-sm text-destructive">{error}</p>}
-    </div>
+    <EmptyState
+      icon={RefreshCw}
+      title="Sincronizando la estructura de ClickUp por primera vez…"
+      description="Se guardan espacios, listas y miembros para que las pantallas abran al instante. Tarda unos segundos; esta página se actualiza sola."
+      action={
+        <div className="flex flex-col items-center gap-2">
+          <Button onClick={sync} disabled={pending} className="bg-brand text-white hover:bg-brand/90">
+            <RefreshCw className={cn(pending && 'animate-spin')} aria-hidden />
+            {pending ? 'Sincronizando…' : 'Sincronizar ahora'}
+          </Button>
+          {error && (
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+          )}
+        </div>
+      }
+    />
   );
 }

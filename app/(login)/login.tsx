@@ -4,37 +4,82 @@ import { useActionState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { CircleIcon, Loader2 } from 'lucide-react';
+import { AlertCircle, ArrowRight, Bot, CalendarCheck, Loader2, Workflow } from 'lucide-react';
 import { signIn } from './actions';
 import { ActionState } from '@/lib/auth/middleware';
 
+// Solo cambia la presentación: el formulario, sus campos y la acción signIn son los de siempre.
+const HIGHLIGHTS = [
+  { icon: Bot, title: 'Un agente que coordina', text: 'Convierte notas en encargos, avisa al equipo y resuelve bloqueos.' },
+  { icon: CalendarCheck, title: 'El equipo al día', text: 'Qué tiene cada persona hoy, qué vence y qué espera tu decisión.' },
+  { icon: Workflow, title: 'Todo conectado', text: 'ClickUp, Telegram y la IA trabajando sobre los mismos datos.' }
+];
+
 export function Login() {
-  const [state, formAction, pending] = useActionState<ActionState, FormData>(
-    signIn,
-    { error: '' }
-  );
+  const [state, formAction, pending] = useActionState<ActionState, FormData>(signIn, { error: '' });
 
   return (
-    <div className="min-h-[100dvh] flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 bg-gray-50">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="flex justify-center">
-          <CircleIcon className="h-12 w-12 text-orange-500" />
+    <div className="grid min-h-[100dvh] bg-background lg:grid-cols-[1.1fr_1fr]">
+      {/* Panel de marca (escritorio) */}
+      <aside className="relative hidden overflow-hidden bg-[oklch(0.2_0.02_265)] p-12 text-white lg:flex lg:flex-col">
+        <div
+          className="pointer-events-none absolute -left-32 -top-32 size-[520px] rounded-full bg-brand/40 blur-[120px]"
+          aria-hidden
+        />
+        <div
+          className="pointer-events-none absolute -bottom-40 right-0 size-[420px] rounded-full bg-[oklch(0.55_0.2_300)]/30 blur-[120px]"
+          aria-hidden
+        />
+        <div
+          className="pointer-events-none absolute inset-0 opacity-[0.07] [background-image:linear-gradient(white_1px,transparent_1px),linear-gradient(90deg,white_1px,transparent_1px)] [background-size:44px_44px]"
+          aria-hidden
+        />
+        <div className="relative flex items-center gap-3">
+          <span className="grid size-10 place-items-center rounded-xl bg-gradient-to-br from-brand to-[oklch(0.6_0.2_25)] text-lg font-bold shadow-lg">
+            K
+          </span>
+          <span className="text-lg font-semibold tracking-tight">Kijutech</span>
         </div>
-        <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-          Kijutech Tool
-        </h2>
-        <p className="mt-2 text-center text-sm text-gray-600">
-          Inicia sesión para continuar
-        </p>
-      </div>
+        <div className="relative mt-auto max-w-lg">
+          <h1 className="text-4xl font-semibold leading-tight tracking-tight text-balance">
+            El centro de operaciones de la agencia.
+          </h1>
+          <p className="mt-4 text-base text-white/70 text-pretty">
+            Proyectos, equipo y clientes en un único lugar, con un agente que hace el seguimiento por ti.
+          </p>
+          <ul className="mt-10 space-y-5">
+            {HIGHLIGHTS.map((h) => (
+              <li key={h.title} className="flex gap-4">
+                <span className="grid size-10 shrink-0 place-items-center rounded-xl border border-white/10 bg-white/5 backdrop-blur">
+                  <h.icon className="size-5 text-[oklch(0.82_0.12_55)]" />
+                </span>
+                <span>
+                  <span className="block text-sm font-semibold">{h.title}</span>
+                  <span className="block text-sm text-white/60">{h.text}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <p className="relative mt-12 text-xs text-white/40">Herramienta interna de Kijutech</p>
+      </aside>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <form className="space-y-6" action={formAction}>
-          <div>
-            <Label htmlFor="email" className="block text-sm font-medium text-gray-700">
-              Correo electrónico
-            </Label>
-            <div className="mt-1">
+      {/* Formulario */}
+      <main className="flex items-center justify-center px-4 py-12 sm:px-8">
+        <div className="w-full max-w-sm animate-fade-up">
+          <div className="mb-8 flex items-center gap-3 lg:hidden">
+            <span className="grid size-10 place-items-center rounded-xl bg-gradient-to-br from-brand to-[oklch(0.6_0.2_25)] text-lg font-bold text-white shadow-md">
+              K
+            </span>
+            <span className="text-lg font-semibold tracking-tight">Kijutech</span>
+          </div>
+
+          <h2 className="text-2xl font-semibold tracking-tight">Inicia sesión</h2>
+          <p className="mt-1.5 text-sm text-muted-foreground">Entra con tu correo de la agencia para continuar.</p>
+
+          <form className="mt-8 space-y-5" action={formAction}>
+            <div className="space-y-2">
+              <Label htmlFor="email">Correo electrónico</Label>
               <Input
                 id="email"
                 name="email"
@@ -43,17 +88,13 @@ export function Login() {
                 defaultValue={state.email}
                 required
                 maxLength={255}
-                className="appearance-none rounded-full relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-orange-500 focus:border-orange-500 focus:z-10 sm:text-sm"
+                className="h-11 rounded-lg bg-card"
                 placeholder="tu@correo.com"
               />
             </div>
-          </div>
 
-          <div>
-            <Label htmlFor="password" className="block text-sm font-medium text-gray-700">
-              Contraseña
-            </Label>
-            <div className="mt-1">
+            <div className="space-y-2">
+              <Label htmlFor="password">Contraseña</Label>
               <Input
                 id="password"
                 name="password"
@@ -61,38 +102,45 @@ export function Login() {
                 autoComplete="current-password"
                 required
                 maxLength={100}
-                className="appearance-none rounded-full relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-orange-500 focus:border-orange-500 focus:z-10 sm:text-sm"
+                className="h-11 rounded-lg bg-card"
                 placeholder="Tu contraseña"
               />
             </div>
-          </div>
 
-          {state?.error && (
-            <div className="text-red-500 text-sm" role="alert">
-              {state.error}
-            </div>
-          )}
-
-          <Button
-            type="submit"
-            className="w-full flex justify-center items-center py-2 px-4 border border-transparent rounded-full shadow-sm text-sm font-medium text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500"
-            disabled={pending}
-          >
-            {pending ? (
-              <>
-                <Loader2 className="animate-spin mr-2 h-4 w-4" />
-                Entrando…
-              </>
-            ) : (
-              'Iniciar sesión'
+            {state?.error && (
+              <div
+                className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive-soft px-3 py-2.5 text-sm text-destructive"
+                role="alert"
+              >
+                <AlertCircle className="mt-0.5 size-4 shrink-0" />
+                {state.error}
+              </div>
             )}
-          </Button>
-        </form>
 
-        <p className="mt-6 text-center text-xs text-gray-500">
-          ¿No tienes cuenta? Las cuentas las crea el administrador.
-        </p>
-      </div>
+            <Button
+              type="submit"
+              className="h-11 w-full rounded-lg bg-brand text-white shadow-sm hover:bg-brand/90"
+              disabled={pending}
+            >
+              {pending ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  Entrando…
+                </>
+              ) : (
+                <>
+                  Iniciar sesión
+                  <ArrowRight className="size-4" />
+                </>
+              )}
+            </Button>
+          </form>
+
+          <p className="mt-8 text-center text-xs text-muted-foreground">
+            ¿No tienes cuenta? Las cuentas las crea el administrador.
+          </p>
+        </div>
+      </main>
     </div>
   );
 }
