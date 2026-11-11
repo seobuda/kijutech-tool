@@ -166,7 +166,7 @@ export async function getMapLive(tenantId: string): Promise<LiveData> {
   const promptRows = await db
     .select({ key: aiPrompts.key, name: aiPrompts.name, active: aiPrompts.isActive })
     .from(aiPrompts)
-    .where(inArray(aiPrompts.key, ['ops_transcribe_audio', 'ops_note_to_requests', 'ops_prepare_request', 'ops_blocker_triage', 'ops_client_fill', 'ops_profile_fill']));
+    .where(inArray(aiPrompts.key, ['ops_transcribe_audio', 'ops_note_to_requests', 'ops_prepare_request', 'ops_blocker_triage', 'ops_client_fill', 'ops_profile_fill', 'ops_email_reply']));
 
   return {
     generatedAt: Date.now(),

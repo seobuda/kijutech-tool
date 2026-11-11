@@ -12,6 +12,7 @@ import { publicError } from '@/lib/errors';
 import { addClientSender } from '@/lib/operaciones/client-memory-actions';
 import { ingestInboundEmail, recognizeSender } from '@/lib/operaciones/inbound-email';
 import { INBOUND_STATUSES, validateInboundPayload } from '@/lib/operaciones/inbound-email-rules';
+import { pendingEmailProposal } from '@/lib/operaciones/email-agent';
 
 type Ok<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 
@@ -42,6 +43,9 @@ export type InboundEmailDetail = InboundEmailRow & {
   bodyText: string;
   attachments: string[];
   sentAt: string | null;
+  // Lo que entendió el agente y, si hay, su respuesta propuesta pendiente de aprobar (paso 3).
+  aiSummary: string;
+  pendingReply: { actionId: string; answer: string } | null;
 };
 
 const rowSelect = {
@@ -130,7 +134,8 @@ export async function getInboundEmail(id: string): Promise<Ok<{ email: InboundEm
         toAddress: opsInboundEmails.toAddress,
         bodyText: opsInboundEmails.bodyText,
         attachments: opsInboundEmails.attachments,
-        sentAt: opsInboundEmails.sentAt
+        sentAt: opsInboundEmails.sentAt,
+        proposal: opsInboundEmails.proposal
       })
       .from(opsInboundEmails)
       .leftJoin(opsClients, eq(opsClients.id, opsInboundEmails.clientId))
@@ -147,7 +152,9 @@ export async function getInboundEmail(id: string): Promise<Ok<{ email: InboundEm
         toAddress: r.toAddress ?? '',
         bodyText: r.bodyText,
         attachments: names,
-        sentAt: r.sentAt ? r.sentAt.toISOString() : null
+        sentAt: r.sentAt ? r.sentAt.toISOString() : null,
+        aiSummary: String((r.proposal as { resumen?: unknown } | null)?.resumen ?? ''),
+        pendingReply: await pendingEmailProposal(user.tenantId, r.id)
       }
     };
   } catch (e) {

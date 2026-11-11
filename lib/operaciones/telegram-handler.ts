@@ -40,8 +40,11 @@ import {
   reportBlock
 } from '@/lib/operaciones/blockers';
 
-// Botones del motor de acciones del agente: ag:<id de la acción>:ok|no.
-export const AGENT_CALLBACK_RE = /^ag:([0-9a-f-]{36}):(ok|no)$/;
+import { getAction } from '@/lib/operaciones/agent-actions';
+import { approveEmailReply, rejectEmailReply } from '@/lib/operaciones/email-agent';
+
+// Botones del motor de acciones del agente: ag:<id de la acción>:ok (aprobar) | no (descartar) | ed (corregir).
+export const AGENT_CALLBACK_RE = /^ag:([0-9a-f-]{36}):(ok|no|ed)$/;
 
 // Botones del flujo: código, id del encargo (o del bloqueo) y, con varios responsables, el id
 // de ClickUp de la persona a la que iba el botón. Exportado para probarlo contra los teclados
@@ -131,14 +134,15 @@ async function handleMessage(tenantId: string, token: string, msg: TgMessage): P
 async function setPending(
   tenantId: string,
   chatId: number,
-  kind: 'done_note' | 'done_review' | 'block_question' | 'return_reason' | 'owner_reply' | 'suggestion',
-  ids: { requestId?: string; blockerId?: string }
+  kind: 'done_note' | 'done_review' | 'block_question' | 'return_reason' | 'owner_reply' | 'suggestion' | 'agent_correct',
+  ids: { requestId?: string; blockerId?: string; agentActionId?: string }
 ) {
   const row = {
     tenantId,
     kind,
     requestId: ids.requestId ?? null,
     blockerId: ids.blockerId ?? null,
+    agentActionId: ids.agentActionId ?? null,
     expiresAt: new Date(Date.now() + num(await getAuto(tenantId, 'delivery'), 'pendingMinutes') * 60_000),
     createdAt: new Date()
   };
@@ -268,6 +272,14 @@ async function handlePending(
     if (!blocker || !text) return void (await reply(token, chatId, 'Escribe tu respuesta.'));
     const res = await ownerAnswerBlocker(blocker, actorOf(member), text);
     await reply(token, chatId, res.ok ? '💬 Enviado. La persona recibe tu respuesta y queda como comentario en ClickUp.' : res.reason);
+  }
+
+  // Motor de acciones: Enric corrige la respuesta de correo propuesta por el agente.
+  if (p.kind === 'agent_correct' && p.agentActionId) {
+    if (!isOwner) return;
+    if (!text) return void (await reply(token, chatId, 'Escribe la respuesta corregida.'));
+    const res = await approveEmailReply(tenantId, p.agentActionId, actorOf(member), 'telegram', text);
+    await reply(token, chatId, res.ok ? '📧 Enviada con tu corrección.' : res.reason);
   }
 }
 
@@ -468,10 +480,28 @@ async function handleCallback(tenantId: string, token: string, cb: TgCallbackQue
     if (!owner || owner.id !== presser.id) {
       return void (await answer('Solo quien lleva las operaciones puede decidir las propuestas.', true));
     }
+    const action = await getAction(tenantId, ag[1]);
+    if (!action) return void (await answer('Propuesta no encontrada.', true));
+    if (action.status !== 'propuesto') return void (await answer('Esta propuesta ya está decidida.', true));
+
+    // «✏️ Corregir»: el bot espera el texto corregido y lo envía en lugar de la propuesta.
+    if (ag[2] === 'ed') {
+      if (action.kind !== 'email_reply') return void (await answer('Esta propuesta no se corrige así.', true));
+      await setPending(tenantId, chatId, 'agent_correct', { agentActionId: action.id });
+      await answer();
+      await reply(token, chatId, '✏️ Escribe la respuesta tal como quieres que se envíe (o /cancelar).');
+      return;
+    }
+
+    const actor = actorOf(presser);
     const res =
-      ag[2] === 'ok'
-        ? await approveBlockerProposal(tenantId, ag[1], actorOf(presser), 'telegram')
-        : await rejectBlockerProposal(tenantId, ag[1], actorOf(presser), 'telegram');
+      action.kind === 'email_reply'
+        ? ag[2] === 'ok'
+          ? await approveEmailReply(tenantId, action.id, actor, 'telegram')
+          : await rejectEmailReply(tenantId, action.id, actor, 'telegram')
+        : ag[2] === 'ok'
+          ? await approveBlockerProposal(tenantId, action.id, actor, 'telegram')
+          : await rejectBlockerProposal(tenantId, action.id, actor, 'telegram');
     if (res.ok) await closeButtons(token, chatId, messageId);
     return void (await answer(res.ok ? (ag[2] === 'ok' ? '✅ Enviada' : 'Propuesta descartada') : res.reason, !res.ok));
   }

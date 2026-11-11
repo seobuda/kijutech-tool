@@ -5,7 +5,10 @@ import 'server-only';
 // función exportada de uno de esos archivos sería un endpoint público.
 import { and, count, eq, gte } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { opsClientSenders, opsInboundEmails } from '@/lib/db/schema';
+import { opsClientSenders, opsInboundEmails, users } from '@/lib/db/schema';
+
+// Nota que marca un correo del equipo (no de un cliente): el agente también le propone respuesta.
+export const TEAM_NOTE = 'Del equipo';
 import { matchSender } from '@/lib/operaciones/client-memory-rules';
 import { detectIgnorable, INBOUND_MAX_PER_HOUR, type InboundPayload } from '@/lib/operaciones/inbound-email-rules';
 
@@ -36,10 +39,25 @@ export type IngestResult =
   | { ok: true; id: string; duplicate: boolean; status: string }
   | { ok: false; code: 'rate' | 'error'; error: string };
 
+// ¿Es alguien del equipo? Un usuario de la herramienta o una dirección del dominio de la agencia.
+export const TEAM_DOMAINS = ['kijutech.com'];
+export async function isTeamSender(tenantId: string, fromAddress: string): Promise<boolean> {
+  const addr = fromAddress.toLowerCase();
+  const domain = addr.split('@')[1] ?? '';
+  if (TEAM_DOMAINS.includes(domain)) return true;
+  const [u] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(and(eq(users.tenantId, tenantId), eq(users.email, addr)))
+    .limit(1);
+  return Boolean(u);
+}
+
 export async function ingestInboundEmail(
   tenantId: string,
   email: InboundPayload,
-  source: 'cloudflare' | 'pegado'
+  source: 'cloudflare' | 'pegado' | 'resend',
+  extra: { providerEmailId?: string | null; referencesHeader?: string | null } = {}
 ): Promise<IngestResult> {
   // Mismo correo otra vez (Cloudflare reintenta, Gmail duplica): no se guarda de nuevo.
   const [existing] = await db
@@ -66,12 +84,21 @@ export async function ingestInboundEmail(
   if (ignorable) {
     status = 'ignorado';
     statusNote = ignorable.note;
+  } else if (email.authStatus === 'fail') {
+    // Remitente que no pasa la autenticación (SPF/DKIM/DMARC): puede estar falsificado. No se
+    // reconoce como cliente ni se interpreta; queda a la vista para que lo revise una persona.
+    status = 'sin_cliente';
+    statusNote = 'Remitente no autenticado: puede estar falsificado';
   } else {
     const rec = await recognizeSender(tenantId, email.fromAddress);
     status = rec.status;
     clientId = rec.clientId;
     matchedBy = rec.matchedBy;
     if (rec.matchedBy === 'ambiguo') statusNote = 'Dos fichas reclaman este remitente: asígnalo a mano';
+    else if (rec.status === 'sin_cliente' && (await isTeamSender(tenantId, email.fromAddress))) {
+      status = 'nuevo';
+      statusNote = TEAM_NOTE;
+    }
   }
 
   const [row] = await db
@@ -92,7 +119,9 @@ export async function ingestInboundEmail(
       clientId,
       matchedBy,
       status,
-      statusNote
+      statusNote,
+      providerEmailId: extra.providerEmailId ?? null,
+      referencesHeader: extra.referencesHeader ?? null
     })
     .onConflictDoNothing({ target: [opsInboundEmails.tenantId, opsInboundEmails.messageId] })
     .returning({ id: opsInboundEmails.id, status: opsInboundEmails.status });
