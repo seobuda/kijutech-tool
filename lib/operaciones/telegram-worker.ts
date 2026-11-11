@@ -21,6 +21,7 @@ import { runReminders } from '@/lib/operaciones/reminders';
 import { runWatch } from '@/lib/operaciones/watch';
 import { runActivityDaily } from '@/lib/operaciones/client-activity';
 import { sendStartupNotice, writeHeartbeat } from '@/lib/operaciones/startup';
+import { retriageStaleBlockers } from '@/lib/operaciones/blockers';
 
 const LOCK_KEY = 74200126; // identifica "oyente de Telegram de Kijutech"
 const POLL_TIMEOUT_S = 50;
@@ -81,7 +82,11 @@ async function ensureLeader(state: WorkerState): Promise<boolean> {
     return Boolean(got.ok);
   } catch (e) {
     console.error('[telegram] candado de líder:', e instanceof Error ? e.message : e);
+    // Cerrar la sesión vieja: si siguiera viva, retendría el candado y este proceso quedaría
+    // en espera para siempre.
+    const old = state.lockConn;
     state.lockConn = undefined;
+    if (old) void old.end({ timeout: 0 }).catch(() => undefined);
     setRole(state, 'standby');
     return false;
   }
@@ -196,25 +201,37 @@ async function pollLoop(state: WorkerState) {
 
 // --- Planificador -----------------------------------------------------------
 
+async function step(name: string, fn: () => Promise<unknown>): Promise<void> {
+  try {
+    await fn();
+  } catch (e) {
+    console.error(`[telegram] planificador (${name}):`, e instanceof Error ? e.message : e);
+  }
+}
+
 async function schedulerLoop(state: WorkerState) {
   for (;;) {
     await sleep(SCHEDULER_EVERY_MS);
     if (state.role !== 'leader') continue;
     try {
       const configs = await db.select().from(opsTelegramConfig);
-      for (const cfg of configs) {
-        // Una vez por arranque: «Sistema en marcha»; en cada vuelta, el latido que mide las paradas.
-        if (!state.startupSent) await sendStartupNotice(cfg.tenantId);
-        else await writeHeartbeat(cfg.tenantId);
-        await processNotifications(cfg.tenantId);
-        await runDailySummaries(cfg.tenantId);
-        await runDigests(cfg.tenantId);
-        await processOutbox(cfg.tenantId);
-        await runWatch(cfg.tenantId); // tareas creadas o asignadas en ClickUp (cada ~2,5 min)
-        await runReminders(cfg.tenantId);
-        await runActivityDaily(cfg.tenantId); // actividad por cliente (una vez al día, de madrugada)
-      }
+      const sendStartup = !state.startupSent;
+      // Se marca ANTES de enviar: si el envío falla, no se repite «Sistema en marcha» cada 30 s.
       state.startupSent = true;
+      for (const cfg of configs) {
+        const t = cfg.tenantId;
+        // Cada paso va aislado: si uno falla (p. ej. ClickUp caído), los demás siguen funcionando.
+        // Una vez por arranque: «Sistema en marcha»; en cada vuelta, el latido que mide las paradas.
+        await step('arranque/latido', () => (sendStartup ? sendStartupNotice(t) : writeHeartbeat(t)));
+        await step('avisos', () => processNotifications(t));
+        await step('resúmenes diarios', () => runDailySummaries(t));
+        await step('resúmenes de bandeja', () => runDigests(t));
+        await step('bandeja de salida', () => processOutbox(t));
+        await step('vigilancia', () => runWatch(t)); // tareas creadas o asignadas en ClickUp (cada ~2,5 min)
+        await step('recordatorios', () => runReminders(t));
+        await step('bloqueos pendientes', () => retriageStaleBlockers(t)); // tras un reinicio a mitad del triaje
+        await step('actividad de clientes', () => runActivityDaily(t)); // una vez al día, de madrugada
+      }
     } catch (e) {
       console.error('[telegram] planificador:', e instanceof Error ? e.message : e);
     }

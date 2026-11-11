@@ -74,8 +74,41 @@ export const escapeHtml = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 // Mensaje de Telegram: máximo 4096 caracteres.
+// El recorte respeta el HTML: no deja una etiqueta (`<a href=…`) ni una entidad (`&amp;`) a
+// medias y cierra las etiquetas que queden abiertas. Antes, un corte a mitad de etiqueta hacía
+// que Telegram respondiera 400 «can't parse entities» y el aviso no llegaba nunca.
 export function clampMessage(html: string, max = 4000): string {
-  return html.length <= max ? html : `${html.slice(0, max - 20)}…\n(mensaje recortado)`;
+  if (html.length <= max) return html;
+  let cut = html.slice(0, Math.max(0, max - 60));
+  cut = cut.replace(/<[^>]*$/, '').replace(/&[#a-zA-Z0-9]*$/, '');
+  const open: string[] = [];
+  for (const m of cut.matchAll(/<(\/?)([a-zA-Z]+)[^>]*>/g)) {
+    const name = m[2].toLowerCase();
+    if (m[1]) {
+      const i = open.lastIndexOf(name);
+      if (i >= 0) open.splice(i, 1);
+    } else {
+      open.push(name);
+    }
+  }
+  const close = open.reverse().map((n) => `</${n}>`).join('');
+  return `${cut}…${close}\n(mensaje recortado)`;
+}
+
+// ¿Telegram rechazó el mensaje por el formato HTML? Entonces se reenvía como texto plano.
+export function isParseError(e: unknown): boolean {
+  return e instanceof TelegramError && e.code === 400 && /parse entities|can't find end/i.test(e.message);
+}
+
+// Quita las etiquetas y deshace las entidades para enviar como texto plano.
+export function htmlToPlain(html: string): string {
+  return html
+    .replace(/<a\s+href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi, '$2 ($1)')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, '&');
 }
 
 // Descarga un archivo (p. ej. una captura) que alguien mandó al bot. El token va en la URL: nunca en errores.

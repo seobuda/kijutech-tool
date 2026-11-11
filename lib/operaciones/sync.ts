@@ -1,5 +1,5 @@
 import fs from 'fs';
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/lib/db/drizzle';
 import { opsNoteAudios, opsRequests } from '@/lib/db/schema';
@@ -45,7 +45,32 @@ function audioExtension(mime: string): string {
 //  2. se guardan id y URL de la tarea en cuanto existen;
 //  3. si el encargo viene de una nota con audio, se adjunta a la tarea;
 //  4. solo entonces pasa a "creado". Cualquier fallo → "error_sync" con motivo.
+//
+// Un único envío a la vez por encargo: un candado de PostgreSQL ligado a una transacción
+// (se suelta solo al terminar, aunque el proceso caiga). Si otro envío del mismo encargo está
+// en marcha (p. ej. «Enviar todo» y «Reintentar» a la vez), este no hace nada: antes se podía
+// crear la tarea dos veces en ClickUp.
 export async function syncToClickUp(
+  requestId: string,
+  tenantId: string,
+  isRetry: boolean
+): Promise<SyncResult> {
+  return db.transaction(async (tx) => {
+    const res = await tx.execute(
+      sql`select pg_try_advisory_xact_lock(${SYNC_LOCK_NS}, hashtext(${requestId})) as ok`
+    );
+    const got = (res as unknown as { ok: boolean }[])[0]?.ok;
+    if (!got) {
+      return { ok: false as const, requestId, error: 'Este encargo ya se está enviando; espera unos segundos.' };
+    }
+    // El trabajo usa conexiones normales (no `tx`): la transacción solo sostiene el candado.
+    return syncUnlocked(requestId, tenantId, isRetry);
+  });
+}
+
+const SYNC_LOCK_NS = 74200127;
+
+async function syncUnlocked(
   requestId: string,
   tenantId: string,
   isRetry: boolean

@@ -700,6 +700,10 @@ export async function fetchWatchTasks(
     if (opts.updatedAfterMs !== null) {
       q.set('date_updated_gt', String(opts.updatedAfterMs));
       q.set('order_by', 'updated');
+      // De la más antigua a la más reciente: si hay más páginas de las que se leen, lo que queda
+      // fuera son los cambios más nuevos, que entran en la pasada siguiente (el cursor avanza
+      // solo hasta lo leído). En orden descendente se perdían los más antiguos.
+      q.set('reverse', 'true');
     }
     const res = await cu<{ tasks: RawWatchTask[] }>(token, `/team/${workspaceId}/task?${q.toString()}`);
     requests++;

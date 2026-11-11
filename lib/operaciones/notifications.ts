@@ -13,7 +13,7 @@ import {
   opsTelegramMembers,
   type OpsTelegramMember
 } from '@/lib/db/schema';
-import { clampMessage, escapeHtml, tg, TelegramError } from '@/lib/operaciones/telegram';
+import { clampMessage, escapeHtml, htmlToPlain, isParseError, tg, TelegramError } from '@/lib/operaciones/telegram';
 import {
   decodeBotToken,
   getMemberByUser,
@@ -387,21 +387,32 @@ async function sendOne(c: Claimed): Promise<void> {
       keyboard = c.payload.buttons.map((row) => row.map((b) => ({ text: b.text, callback_data: b.data })));
     }
     const markup = keyboard && keyboard.length ? { reply_markup: { inline_keyboard: keyboard } } : {};
-    const msg = c.payload.photoFileId
-      ? await tg<{ message_id: number }>(decodeBotToken(cfg), 'sendPhoto', {
-          chat_id: dest.chatId,
-          photo: c.payload.photoFileId,
-          caption: clampMessage(text, 1000),
-          parse_mode: 'HTML',
-          ...markup
-        })
-      : await tg<{ message_id: number }>(decodeBotToken(cfg), 'sendMessage', {
-          chat_id: dest.chatId,
-          text,
-          parse_mode: 'HTML',
-          disable_web_page_preview: true,
-          ...markup
-        });
+    // Si Telegram rechaza el HTML (texto con formato roto), se reenvía como texto plano: un
+    // aviso urgente nunca debe perderse por un problema de formato.
+    const send = (html: boolean) =>
+      c.payload.photoFileId
+        ? tg<{ message_id: number }>(decodeBotToken(cfg), 'sendPhoto', {
+            chat_id: dest.chatId,
+            photo: c.payload.photoFileId,
+            caption: html ? clampMessage(text, 1000) : htmlToPlain(clampMessage(text, 1000)),
+            ...(html ? { parse_mode: 'HTML' } : {}),
+            ...markup
+          })
+        : tg<{ message_id: number }>(decodeBotToken(cfg), 'sendMessage', {
+            chat_id: dest.chatId,
+            text: html ? text : htmlToPlain(text),
+            ...(html ? { parse_mode: 'HTML' } : {}),
+            disable_web_page_preview: true,
+            ...markup
+          });
+    let msg: { message_id: number };
+    try {
+      msg = await send(true);
+    } catch (e) {
+      if (!isParseError(e)) throw e;
+      console.error('[telegram] HTML rechazado, se envía como texto plano:', (e as Error).message);
+      msg = await send(false);
+    }
     await db
       .update(opsNotifications)
       .set({
