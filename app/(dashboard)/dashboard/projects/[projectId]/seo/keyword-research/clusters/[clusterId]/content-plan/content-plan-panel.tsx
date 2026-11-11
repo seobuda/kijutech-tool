@@ -9,9 +9,9 @@ import type { ArticleIdea, ContentPlanAnalysis } from '@/lib/seo/content-plan-ac
 import type { SeoClusterContentPlan } from '@/lib/db/schema';
 
 const PRIORITY_META: Record<string, { emoji: string; cardClass: string; badgeClass: string; label: string }> = {
-  alta: { emoji: '🔴', cardClass: 'border-2 border-red-300 bg-red-50/40', badgeClass: 'bg-red-100 text-red-700', label: 'Alta' },
-  media: { emoji: '🟡', cardClass: 'border border-amber-300 bg-amber-50/40', badgeClass: 'bg-amber-100 text-amber-700', label: 'Media' },
-  baja: { emoji: '🟢', cardClass: 'border border-green-300 bg-green-50/40', badgeClass: 'bg-green-100 text-green-700', label: 'Baja' },
+  alta: { emoji: '🔴', cardClass: 'border-2 border-destructive/45 bg-destructive-soft/40', badgeClass: 'bg-destructive-soft text-destructive', label: 'Alta' },
+  media: { emoji: '🟡', cardClass: 'border border-warning/45 bg-warning-soft/40', badgeClass: 'bg-warning-soft text-warning-strong', label: 'Media' },
+  baja: { emoji: '🟢', cardClass: 'border border-success/45 bg-success-soft/40', badgeClass: 'bg-success-soft text-success', label: 'Baja' },
 };
 
 const SOURCE_LABEL: Record<string, string> = {
@@ -53,7 +53,7 @@ function ArticleIdeaCard({ idea }: { idea: ArticleIdea }) {
         </div>
         <p className="text-xs text-muted-foreground">
           Responde: <span className="italic">{idea.target_question}</span>
-          <span className="ml-2 px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[11px] font-medium">
+          <span className="ml-2 px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground text-[11px] font-medium">
             {SOURCE_LABEL[idea.source] ?? idea.source}
           </span>
         </p>
@@ -82,10 +82,10 @@ function GenerationLoading() {
           Generando ideas de contenido... esto puede tardar unos segundos.
         </p>
         <div className="space-y-2 animate-pulse">
-          <div className="h-4 bg-gray-200 rounded w-3/4" />
-          <div className="h-4 bg-gray-200 rounded w-full" />
-          <div className="h-4 bg-gray-200 rounded w-5/6" />
-          <div className="h-20 bg-gray-200 rounded" />
+          <div className="h-4 bg-secondary rounded w-3/4" />
+          <div className="h-4 bg-secondary rounded w-full" />
+          <div className="h-4 bg-secondary rounded w-5/6" />
+          <div className="h-20 bg-secondary rounded" />
         </div>
       </CardContent>
     </Card>
@@ -169,7 +169,7 @@ export function ContentPlanPanel({ clusterId, initialPlan }: Props) {
         <Button
           type="button"
           onClick={handleGenerate}
-          className="bg-orange-500 hover:bg-orange-600 text-white"
+          className="bg-brand hover:bg-brand/90 text-white"
         >
           <Sparkles className="mr-2 h-4 w-4" />
           Generar ideas de contenido con IA
@@ -202,9 +202,9 @@ export function ContentPlanPanel({ clusterId, initialPlan }: Props) {
           </div>
         </div>
       ) : generationError || isAnalysisError(analysis) ? (
-        <Card className="border-red-300 bg-red-50/40">
+        <Card className="border-destructive/45 bg-destructive-soft/40">
           <CardContent className="pt-6 space-y-3">
-            <p className="text-sm text-red-700">
+            <p className="text-sm text-destructive">
               {generationError ?? (isAnalysisError(analysis) ? analysis.error : '')}
             </p>
             <Button type="button" size="sm" variant="outline" onClick={handleGenerate} disabled={isGenerating}>

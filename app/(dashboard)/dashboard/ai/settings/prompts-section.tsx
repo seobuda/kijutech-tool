@@ -97,7 +97,7 @@ function PromptRow({ prompt }: { prompt: PromptRow }) {
             {updaterLabel}
           </p>
         </div>
-        {error && <p className="text-red-500 text-xs">{error}</p>}
+        {error && <p className="text-destructive text-xs">{error}</p>}
       </CardContent>
     </Card>
   );

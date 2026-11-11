@@ -420,3 +420,21 @@ La seguridad es parte de "terminado", igual que el Mapa Visual y ESTADO.md. Deta
 - **Shell del asistente:** los heredocs y `node -e` con comillas, apóstrofos, `${}` o backticks se rompen
   (los backticks se ejecutan como comandos). Los archivos y scripts se escriben con la herramienta de
   archivos, no con la shell.
+
+## Decisiones de diseño: cuestionarse tres veces y comparar alternativas — regla permanente
+
+Ante cualquier decisión no trivial (servicio externo, arquitectura, proveedor, modelo de datos, flujo
+nuevo), Claude Code no da por buena la primera conclusión. Antes de recomendar:
+
+1. **Razona una primera conclusión** y escríbela como hipótesis, no como hecho.
+2. **Cuestiónala tres veces**, cada una desde un ángulo distinto (p. ej.: ¿cumple el objetivo final o solo
+   el de hoy?; ¿qué coste o riesgo oculto tiene a semanas vista?; ¿hay una opción que ya tenemos y no
+   estamos usando?). Si alguna pasada cambia la conclusión, repite.
+3. **Compara en paralelo al menos 3 alternativas reales** (incluida «no hacer nada» o «usar lo que ya
+   hay») con coste, riesgo, esfuerzo y qué se pierde con cada una.
+4. **Presenta la recomendación con las alternativas descartadas y el motivo**, y marca lo que no está
+   verificado (precios, límites, documentación) en vez de afirmarlo.
+5. Parte siempre del **objetivo final** (visión: Operaciones sustituye a un humano, con supervisión), no
+   solo de la tarea inmediata; una solución que sirve para probar pero no para el objetivo se presenta como
+   provisional, no como la solución.
+6. No descartes una opción sin un motivo comprobable; si no hay motivo, dilo.

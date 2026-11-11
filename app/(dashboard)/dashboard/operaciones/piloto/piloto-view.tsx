@@ -70,10 +70,10 @@ export function PilotoView({ data, suggestions }: { data: PilotData; suggestions
           </Button>
         </div>
       </div>
-      {msg && <p className={`text-sm ${msg.type === 'ok' ? 'text-green-700' : 'text-red-600'}`}>{msg.text}</p>}
+      {msg && <p className={`text-sm ${msg.type === 'ok' ? 'text-success' : 'text-destructive'}`}>{msg.text}</p>}
 
       {!data.hasData && (
-        <div className="rounded-lg border border-dashed border-gray-300 p-6 text-center space-y-1">
+        <div className="rounded-lg border border-dashed border-input p-6 text-center space-y-1">
           <p className="font-medium">Todavía no hay datos desde el {fmtWeek(data.start)}</p>
           <p className="text-sm text-muted-foreground">
             Las métricas aparecerán solas cuando haya encargos y pulsaciones de botón. Puedes cambiar la fecha de inicio arriba.
@@ -86,9 +86,9 @@ export function PilotoView({ data, suggestions }: { data: PilotData; suggestions
         return (
           <section key={w.weekStart} className="space-y-2" data-testid={`semana-${w.weekStart}`}>
             <h3 className="text-sm font-medium">Semana del {fmtWeek(w.weekStart)}</h3>
-            <div className="overflow-x-auto rounded-lg border border-gray-200">
+            <div className="overflow-x-auto rounded-lg border border-border">
               <table className="w-full text-sm">
-                <thead className="bg-gray-50 text-left text-xs text-muted-foreground">
+                <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
                   <tr>
                     <th className="px-3 py-2 font-medium">Métrica</th>
                     {ids.map((id) => (
@@ -97,7 +97,7 @@ export function PilotoView({ data, suggestions }: { data: PilotData; suggestions
                     <th className="px-3 py-2 font-medium">Total</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-border">
                   {ROWS.map((r) => (
                     <tr key={r.label}>
                       <td className="px-3 py-1.5" title={r.hint}>{r.label}</td>
@@ -125,15 +125,15 @@ export function PilotoView({ data, suggestions }: { data: PilotData; suggestions
         ) : (
           <ul className="space-y-2">
             {suggestions.map((s) => (
-              <li key={s.id} className="rounded-md border border-gray-200 bg-white p-3 text-sm">
+              <li key={s.id} className="rounded-md border border-border bg-card p-3 text-sm">
                 <p className="text-xs text-muted-foreground">
-                  <span className="font-medium text-gray-700">{s.person}</span> · {fmtAt(s.at)}
-                  {!s.shown && <span className="ml-2 rounded bg-orange-100 px-1.5 py-0.5 text-orange-800">Nueva</span>}
+                  <span className="font-medium text-foreground/80">{s.person}</span> · {fmtAt(s.at)}
+                  {!s.shown && <span className="ml-2 rounded bg-brand-soft px-1.5 py-0.5 text-brand">Nueva</span>}
                 </p>
                 <p className="mt-1 whitespace-pre-line">{s.text}</p>
                 {s.hasPhoto && (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={`/api/operaciones/suggestion-photo/${s.id}`} alt="Captura de la sugerencia" className="mt-2 max-h-72 rounded border border-gray-200" loading="lazy" />
+                  <img src={`/api/operaciones/suggestion-photo/${s.id}`} alt="Captura de la sugerencia" className="mt-2 max-h-72 rounded border border-border" loading="lazy" />
                 )}
               </li>
             ))}

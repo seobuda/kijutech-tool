@@ -35,14 +35,14 @@ export function SyncPending({ reason }: { reason: 'never' | 'no-spaces' }) {
 
   if (reason === 'no-spaces') {
     return (
-      <div className="rounded-lg border border-dashed border-gray-300 p-8 text-center space-y-3">
+      <div className="rounded-lg border border-dashed border-input p-8 text-center space-y-3">
         <p className="font-medium">No hay espacios seleccionados</p>
         <p className="text-sm text-muted-foreground">
           Elige en Ajustes qué espacios de ClickUp se sincronizan para que aparezcan aquí.
         </p>
         <Link
           href="/dashboard/operaciones/ajustes"
-          className="inline-block rounded-full bg-orange-500 px-4 py-2 text-sm text-white hover:bg-orange-600"
+          className="inline-block rounded-full bg-brand px-4 py-2 text-sm text-white hover:bg-brand/90"
         >
           Ir a Ajustes ClickUp
         </Link>
@@ -51,7 +51,7 @@ export function SyncPending({ reason }: { reason: 'never' | 'no-spaces' }) {
   }
 
   return (
-    <div className="rounded-lg border border-dashed border-gray-300 p-8 text-center space-y-3">
+    <div className="rounded-lg border border-dashed border-input p-8 text-center space-y-3">
       <p className="font-medium">Sincronizando la estructura de ClickUp por primera vez…</p>
       <p className="text-sm text-muted-foreground">
         Se guardan espacios, listas y miembros para que las pantallas abran al instante. Tarda unos
@@ -60,7 +60,7 @@ export function SyncPending({ reason }: { reason: 'never' | 'no-spaces' }) {
       <Button onClick={sync} disabled={pending}>
         {pending ? 'Sincronizando…' : 'Sincronizar ahora'}
       </Button>
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-destructive">{error}</p>}
     </div>
   );
 }

@@ -19,7 +19,7 @@ export default async function NewKnowledgeCardPage() {
   const manifest = getSeoManifest();
 
   return (
-    <section className="flex-1 p-4 lg:p-8">
+    <section className="mx-auto w-full max-w-[1400px] px-4 py-6 lg:px-8 lg:py-8">
       <h1 className="text-lg lg:text-2xl font-medium mb-6">Nueva tarjeta</h1>
       <KnowledgeCardForm stages={manifest.stages} />
     </section>

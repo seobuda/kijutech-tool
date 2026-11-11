@@ -53,7 +53,7 @@ const TIMEZONES = [
 const MAX_RECORDING_SECONDS = 300;
 
 const areaClass =
-  'w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500';
+  'w-full rounded-md border border-input bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand';
 
 const emptyProfile = (): ProfileView => ({
   id: '',
@@ -131,12 +131,12 @@ export function EquipoView({
         </Button>
       </div>
 
-      {msg && <p className={`text-sm ${msg.type === 'ok' ? 'text-green-700' : 'text-red-600'}`}>{msg.text}</p>}
+      {msg && <p className={`text-sm ${msg.type === 'ok' ? 'text-success' : 'text-destructive'}`}>{msg.text}</p>}
 
       <CleanupPanel people={cleanupPeople} testMode={testMode} />
 
       {withoutProfile.length > 0 && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm space-y-2">
+        <div className="rounded-md border border-warning/30 bg-warning-soft p-3 text-sm space-y-2">
           <p>Miembros de ClickUp sin ficha:</p>
           <div className="flex flex-wrap gap-2">
             {withoutProfile.map((m) => (
@@ -166,7 +166,7 @@ export function EquipoView({
       )}
 
       {profiles.length === 0 && editing !== 'new' ? (
-        <div className="rounded-lg border border-dashed border-gray-300 p-8 text-center space-y-2">
+        <div className="rounded-lg border border-dashed border-input p-8 text-center space-y-2">
           <p className="font-medium">Todavía no hay fichas</p>
           <p className="text-sm text-muted-foreground">Crea la primera para que el agente sepa quién hace qué.</p>
           <Button size="sm" onClick={() => setEditing('new')}>
@@ -189,14 +189,14 @@ export function EquipoView({
               <div
                 key={p.id}
                 data-testid={`perfil-${p.name}`}
-                className={`rounded-lg border p-4 space-y-2 ${p.active ? 'border-gray-200 bg-white' : 'border-gray-200 bg-gray-50 opacity-75'}`}
+                className={`rounded-lg border p-4 space-y-2 ${p.active ? 'border-border bg-card' : 'border-border bg-muted/50 opacity-75'}`}
               >
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <p className="font-medium">
                       {p.name}
                       {!p.active && (
-                        <span className="ml-2 rounded bg-gray-200 px-1.5 py-0.5 text-xs text-gray-600">Desactivada</span>
+                        <span className="ml-2 rounded bg-secondary px-1.5 py-0.5 text-xs text-muted-foreground">Desactivada</span>
                       )}
                     </p>
                     <p className="text-sm text-muted-foreground">
@@ -235,7 +235,7 @@ export function EquipoView({
                     {p.workTypes.map((t) => (
                       <span
                         key={t.key}
-                        className={`rounded px-2 py-0.5 text-xs ${t.role === 'primary' ? 'bg-orange-100 text-orange-800' : 'bg-gray-100 text-gray-700'}`}
+                        className={`rounded px-2 py-0.5 text-xs ${t.role === 'primary' ? 'bg-brand-soft text-brand' : 'bg-muted text-foreground/80'}`}
                       >
                         {t.role === 'primary' ? '★ ' : ''}
                         {typeLabel.get(t.key) ?? t.key}
@@ -376,7 +376,7 @@ function ProfileForm({
     });
 
   return (
-    <div className="rounded-lg border-2 border-orange-300 bg-white p-4 space-y-4" data-testid="perfil-form">
+    <div className="rounded-lg border-2 border-brand/45 bg-card p-4 space-y-4" data-testid="perfil-form">
       <p className="font-medium">{isNew ? 'Nueva ficha' : `Editar la ficha de ${initial.name}`}</p>
 
       <AiFill onDraft={applyDraft} />
@@ -424,11 +424,11 @@ function ProfileForm({
         <Label>Tipos de trabajo que hace</Label>
         <div className="grid gap-2 sm:grid-cols-2">
           {workTypes.map((t) => (
-            <div key={t.key} className="flex items-center justify-between gap-2 rounded border border-gray-200 px-2 py-1">
+            <div key={t.key} className="flex items-center justify-between gap-2 rounded border border-border px-2 py-1">
               <span className="text-sm">{t.label}</span>
               <select
                 aria-label={`Función en ${t.label}`}
-                className="rounded border border-gray-300 bg-white px-1 py-0.5 text-sm"
+                className="rounded border border-input bg-card px-1 py-0.5 text-sm"
                 value={roleOf(t.key)}
                 onChange={(e) => setRole(t.key, e.target.value)}
               >
@@ -453,7 +453,7 @@ function ProfileForm({
                 type="button"
                 aria-pressed={on}
                 onClick={() => set({ workDays: on ? f.workDays.filter((d) => d !== day) : [...f.workDays, day].sort() })}
-                className={`h-8 w-8 rounded-full border text-sm ${on ? 'border-orange-500 bg-orange-500 text-white' : 'border-gray-300 bg-white text-gray-600'}`}
+                className={`h-8 w-8 rounded-full border text-sm ${on ? 'border-brand/70 bg-brand text-white' : 'border-input bg-card text-muted-foreground'}`}
               >
                 {lbl}
               </button>
@@ -527,7 +527,7 @@ function ProfileForm({
       <label className="flex items-center gap-2 text-sm">
         <input
           type="checkbox"
-          className="h-4 w-4 accent-orange-500"
+          className="h-4 w-4 accent-[var(--brand)]"
           checked={f.active}
           onChange={(e) => set({ active: e.target.checked })}
         />
@@ -548,8 +548,8 @@ function ProfileForm({
         >
           Cancelar
         </Button>
-        {dirty && <span className="text-xs text-amber-700">Cambios sin guardar</span>}
-        {msg && <span className={`text-sm ${msg.type === 'ok' ? 'text-green-700' : 'text-red-600'}`}>{msg.text}</span>}
+        {dirty && <span className="text-xs text-warning-strong">Cambios sin guardar</span>}
+        {msg && <span className={`text-sm ${msg.type === 'ok' ? 'text-success' : 'text-destructive'}`}>{msg.text}</span>}
       </div>
     </div>
   );
@@ -653,7 +653,7 @@ function AiFill({ onDraft }: { onDraft: (d: ProfileDraft) => void }) {
     );
   }
   return (
-    <div className="space-y-2 rounded-md border border-orange-200 bg-orange-50 p-3">
+    <div className="space-y-2 rounded-md border border-brand/30 bg-brand-soft p-3">
       <p className="text-sm font-medium">Rellenar con IA</p>
       <p className="text-xs text-muted-foreground">
         Pega un texto o graba un audio describiendo a la persona. La IA propone los campos y tú los revisas antes de
@@ -682,7 +682,7 @@ function AiFill({ onDraft }: { onDraft: (d: ProfileDraft) => void }) {
         <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>
           Cerrar
         </Button>
-        {msg && <span className={`text-xs ${msg.type === 'ok' ? 'text-green-700' : 'text-red-600'}`}>{msg.text}</span>}
+        {msg && <span className={`text-xs ${msg.type === 'ok' ? 'text-success' : 'text-destructive'}`}>{msg.text}</span>}
       </div>
     </div>
   );

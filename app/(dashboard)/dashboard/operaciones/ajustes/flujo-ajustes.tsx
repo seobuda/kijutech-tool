@@ -12,7 +12,7 @@ type Group = { key: string; statuses: string[]; listIds: string[]; listNames: st
 type WorkType = { key: string; label: string; active: boolean };
 
 const selectClass =
-  'w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500';
+  'w-full rounded-md border border-input bg-card px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand';
 
 export function FlujoAjustes({ groups, workTypes }: { groups: Group[]; workTypes: WorkType[] }) {
   return (
@@ -72,16 +72,16 @@ function GroupRow({ group }: { group: Group }) {
   );
 
   return (
-    <div className="rounded-md border border-gray-200 p-3 space-y-2">
+    <div className="rounded-md border border-border p-3 space-y-2">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="text-sm">
           <p className="font-medium">
             {group.listIds.length} lista{group.listIds.length === 1 ? '' : 's'}
-            {group.edited && <span className="ml-2 rounded bg-blue-100 px-1.5 py-0.5 text-xs text-blue-700">editado</span>}
+            {group.edited && <span className="ml-2 rounded bg-info-soft px-1.5 py-0.5 text-xs text-info">editado</span>}
           </p>
           <p className="text-xs text-muted-foreground">Estados: {group.statuses.join(' · ')}</p>
         </div>
-        <button type="button" className="text-xs text-orange-600 hover:underline" onClick={() => setOpen(!open)}>
+        <button type="button" className="text-xs text-brand hover:underline" onClick={() => setOpen(!open)}>
           {open ? 'Ocultar listas' : 'Ver listas'}
         </button>
       </div>
@@ -105,7 +105,7 @@ function GroupRow({ group }: { group: Group }) {
         >
           Guardar
         </Button>
-        {msg && <span className={`text-xs ${msg.ok ? 'text-green-700' : 'text-red-600'}`}>{msg.text}</span>}
+        {msg && <span className={`text-xs ${msg.ok ? 'text-success' : 'text-destructive'}`}>{msg.text}</span>}
       </div>
     </div>
   );
@@ -159,7 +159,7 @@ function WorkTypes({ types }: { types: WorkType[] }) {
             Añadir
           </Button>
         </div>
-        {msg && <p className="text-xs text-red-600">{msg}</p>}
+        {msg && <p className="text-xs text-destructive">{msg}</p>}
       </CardContent>
     </Card>
   );

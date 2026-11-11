@@ -24,14 +24,14 @@ export default async function BlocNotasPage({
   const conn = await getClickUpConnection(user.tenantId);
   if (!conn) {
     return (
-      <div className="rounded-lg border border-dashed border-gray-300 p-8 text-center space-y-3">
+      <div className="rounded-lg border border-dashed border-input p-8 text-center space-y-3">
         <p className="font-medium">Todavía no has conectado ClickUp</p>
         <p className="text-sm text-muted-foreground">
           El Bloc de notas necesita el token para elegir el espacio y crear las tareas.
         </p>
         <Link
           href="/dashboard/operaciones/ajustes"
-          className="inline-block rounded-full bg-orange-500 px-4 py-2 text-sm text-white hover:bg-orange-600"
+          className="inline-block rounded-full bg-brand px-4 py-2 text-sm text-white hover:bg-brand/90"
         >
           Ir a Ajustes ClickUp
         </Link>

@@ -62,10 +62,10 @@ function statusIcon(status: string) {
     status === 'completed' ? CheckCircle2 : status === 'in_progress' ? CircleDot : Circle;
   const color =
     status === 'completed'
-      ? 'text-green-600'
+      ? 'text-success'
       : status === 'in_progress'
-        ? 'text-blue-600'
-        : 'text-gray-400';
+        ? 'text-info'
+        : 'text-muted-foreground/70';
   return { Icon, color };
 }
 
@@ -104,12 +104,12 @@ export function SeoWizardNav({
 
           const iconEl = (
             <Icon
-              className={`h-4 w-4 ${isFunctional ? color : 'text-gray-300'}`}
+              className={`h-4 w-4 ${isFunctional ? color : 'text-muted-foreground/70'}`}
             />
           );
 
           const wrapperClass = `flex items-center justify-center h-8 w-8 rounded-md ${
-            isActive ? 'bg-gray-100' : isFunctional ? 'hover:bg-gray-50' : 'opacity-60'
+            isActive ? 'bg-muted' : isFunctional ? 'hover:bg-muted' : 'opacity-60'
           }`;
 
           return (
@@ -160,10 +160,10 @@ export function SeoWizardNav({
               className="flex items-center justify-between px-3 py-2 rounded-md text-sm text-muted-foreground opacity-60 cursor-not-allowed"
             >
               <span className="flex items-center space-x-2">
-                <Circle className="h-4 w-4 text-gray-300" />
+                <Circle className="h-4 w-4 text-muted-foreground/70" />
                 <span>{stage.name}</span>
               </span>
-              <span className="text-xs border border-gray-300 rounded px-1.5 py-0.5">
+              <span className="text-xs border border-input rounded px-1.5 py-0.5">
                 Próximamente
               </span>
             </div>
@@ -174,7 +174,7 @@ export function SeoWizardNav({
           <div key={stage.key}>
             <div
               className={`flex items-center rounded-md text-sm ${
-                isActive ? 'bg-gray-100 font-medium' : 'hover:bg-gray-50'
+                isActive ? 'bg-muted font-medium' : 'hover:bg-muted'
               }`}
             >
               <Link href={href} prefetch={false} className="flex-1 min-w-0">
@@ -269,7 +269,7 @@ function KwSubSteps({ projectId, data }: { projectId: string; data: KwSubStepsDa
               title={lockMessage(step.key)}
             >
               <div className="flex items-center space-x-2">
-                <Lock className="h-3.5 w-3.5 text-gray-300 shrink-0" />
+                <Lock className="h-3.5 w-3.5 text-muted-foreground/70 shrink-0" />
                 <span className="text-sm">
                   {index + 1}. {step.name}
                 </span>
@@ -282,7 +282,7 @@ function KwSubSteps({ projectId, data }: { projectId: string; data: KwSubStepsDa
           <Link key={step.key} href={href} prefetch={false}>
             <div
               className={`flex items-center space-x-2 px-2 py-1.5 rounded-md text-sm ${
-                isActive ? 'bg-gray-100 font-medium' : 'hover:bg-gray-50'
+                isActive ? 'bg-muted font-medium' : 'hover:bg-muted'
               }`}
             >
               <Icon className={`h-3.5 w-3.5 shrink-0 ${color}`} />

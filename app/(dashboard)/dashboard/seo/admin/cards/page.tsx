@@ -30,13 +30,13 @@ export default async function SeoAdminCardsPage() {
   const cardsByStage = await getKnowledgeCardsByStage();
 
   return (
-    <section className="flex-1 p-4 lg:p-8">
+    <section className="mx-auto w-full max-w-[1400px] px-4 py-6 lg:px-8 lg:py-8">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-lg lg:text-2xl font-medium">
           Admin SEO — Tarjetas
         </h1>
         <Link href="/dashboard/seo/admin/cards/new">
-          <Button className="bg-orange-500 hover:bg-orange-600 text-white">
+          <Button className="bg-brand hover:bg-brand/90 text-white">
             <PlusCircle className="mr-2 h-4 w-4" />
             Nueva tarjeta
           </Button>

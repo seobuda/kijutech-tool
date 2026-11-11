@@ -403,7 +403,7 @@ export function ClusterReview({ projectId, analysis, existingClustersCount, onDi
             Copiar keywords sugeridas para SE Ranking
           </Button>
           {copyConfirmation && (
-            <p className="text-xs text-green-600 mt-1.5">{copyConfirmation}</p>
+            <p className="text-xs text-success mt-1.5">{copyConfirmation}</p>
           )}
         </div>
       )}
@@ -430,13 +430,13 @@ export function ClusterReview({ projectId, analysis, existingClustersCount, onDi
                 key={cluster.uid}
                 className={
                   cluster.isAiSuggested
-                    ? 'bg-yellow-50 border-yellow-300'
-                    : 'bg-blue-50/60 border-blue-200'
+                    ? 'bg-warning-soft border-warning/45'
+                    : 'bg-info-soft/60 border-info/30'
                 }
               >
                 <CardContent className="p-4 space-y-3">
                   {cluster.isAiSuggested && (
-                    <span className="inline-flex items-center gap-1 text-xs font-medium bg-yellow-200/70 text-yellow-900 px-2 py-1 rounded-full">
+                    <span className="inline-flex items-center gap-1 text-xs font-medium bg-warning-soft/70 text-warning-strong px-2 py-1 rounded-full">
                       ✨ Sugerido por IA · Verificar volumen
                     </span>
                   )}
@@ -450,7 +450,7 @@ export function ClusterReview({ projectId, analysis, existingClustersCount, onDi
                     <button
                       type="button"
                       onClick={() => removeCluster(cluster.uid)}
-                      className="text-muted-foreground hover:text-red-600 shrink-0 mt-1.5"
+                      className="text-muted-foreground hover:text-destructive shrink-0 mt-1.5"
                       aria-label="Eliminar cluster"
                     >
                       <X className="h-4 w-4" />
@@ -467,7 +467,7 @@ export function ClusterReview({ projectId, analysis, existingClustersCount, onDi
                         </span>
                       )}
                       {cluster.lowVolume && (
-                        <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-yellow-100 text-yellow-800">
+                        <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-warning-soft text-warning-strong">
                           Volumen bajo
                         </span>
                       )}
@@ -530,7 +530,7 @@ export function ClusterReview({ projectId, analysis, existingClustersCount, onDi
                               onChange={() => toggleKeywordExcluded(cluster.uid, i)}
                               title="Desmarca para excluir esta keyword"
                             />
-                            {k.isPrimary && <span className="text-orange-500">★</span>}
+                            {k.isPrimary && <span className="text-brand">★</span>}
                             {k.keyword}
                           </label>
                           <span className="flex items-center gap-1.5 shrink-0">
@@ -627,7 +627,7 @@ export function ClusterReview({ projectId, analysis, existingClustersCount, onDi
                       0
                     );
                     return (
-                      <Card key={cluster.uid} className="bg-gray-50">
+                      <Card key={cluster.uid} className="bg-muted/50">
                         <CardContent className="p-4 space-y-2">
                           <p className="font-medium text-sm">
                             {cluster.title.replace(/^Marca competidora: /, '')}
@@ -721,13 +721,13 @@ export function ClusterReview({ projectId, analysis, existingClustersCount, onDi
         </Card>
       )}
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-destructive">{error}</p>}
 
       {showModeChoice ? (
-        <Card className="border-amber-300 bg-amber-50/60">
+        <Card className="border-warning/45 bg-warning-soft/60">
           <CardContent className="pt-6 space-y-3">
             <p className="text-sm flex items-center gap-1.5">
-              <AlertTriangle className="h-4 w-4 text-amber-600" />
+              <AlertTriangle className="h-4 w-4 text-warning-strong" />
               Ya tienes {existingClustersCount} clusters en este proyecto. ¿Qué quieres hacer?
             </p>
             <div className="flex flex-wrap items-center gap-2">
@@ -774,7 +774,7 @@ export function ClusterReview({ projectId, analysis, existingClustersCount, onDi
             type="button"
             onClick={handleConfirmClick}
             disabled={isPending}
-            className="bg-orange-500 hover:bg-orange-600 text-white"
+            className="bg-brand hover:bg-brand/90 text-white"
           >
             {isPending ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />

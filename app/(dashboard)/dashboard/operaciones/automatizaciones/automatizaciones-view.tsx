@@ -150,7 +150,7 @@ function Card1({ card, hasBot, extra }: { card: CardView; hasBot: boolean; extra
           <div>
             <CardTitle className="text-base">
               {card.title}
-              {card.customized && <span className="ml-2 rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-normal text-orange-700">personalizada</span>}
+              {card.customized && <span className="ml-2 rounded bg-brand-soft px-1.5 py-0.5 text-[10px] font-normal text-brand">personalizada</span>}
             </CardTitle>
             <CardDescription className="mt-1">{card.what}</CardDescription>
           </div>
@@ -165,7 +165,7 @@ function Card1({ card, hasBot, extra }: { card: CardView; hasBot: boolean; extra
       <CardContent className="space-y-3">
         {card.link && (
           <p className="text-xs text-muted-foreground">
-            <Link href={card.link.href} className="text-orange-600 hover:underline">
+            <Link href={card.link.href} className="text-brand hover:underline">
               {card.link.label}
             </Link>
           </p>
@@ -213,14 +213,14 @@ function Card1({ card, hasBot, extra }: { card: CardView; hasBot: boolean; extra
               id={`${card.key}-text`}
               ref={area}
               rows={Math.min(10, Math.max(3, text.split('\n').length + 1))}
-              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-orange-500"
+              className="w-full rounded-md border border-input bg-card px-3 py-2 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-brand"
               value={text}
               onChange={(e) => setText(e.target.value)}
             />
             <div className="flex flex-wrap items-center gap-1 text-[11px] text-muted-foreground">
               <span>Huecos (clic para insertar):</span>
               {card.template.placeholders.map((p) => (
-                <button key={p.name} type="button" title={p.label} onClick={() => insert(p.name)} className="rounded border border-gray-300 px-1.5 py-0.5 font-mono hover:bg-gray-50">
+                <button key={p.name} type="button" title={p.label} onClick={() => insert(p.name)} className="rounded border border-input px-1.5 py-0.5 font-mono hover:bg-muted">
                   {`{${p.name}}`}
                 </button>
               ))}
@@ -231,17 +231,17 @@ function Card1({ card, hasBot, extra }: { card: CardView; hasBot: boolean; extra
             <div>
               <p className="mb-1 text-xs font-medium">Vista previa (datos de ejemplo)</p>
               {'error' in preview ? (
-                <p className="rounded border border-red-200 bg-red-50 p-2 text-xs text-red-700">{preview.error}</p>
+                <p className="rounded border border-destructive/30 bg-destructive-soft p-2 text-xs text-destructive">{preview.error}</p>
               ) : (
                 <div
-                  className="whitespace-pre-wrap rounded-md border border-sky-200 bg-sky-50 p-3 text-sm [&_a]:text-sky-700 [&_a]:underline"
+                  className="whitespace-pre-wrap rounded-md border border-info/30 bg-info-soft p-3 text-sm [&_a]:text-sky-700 [&_a]:underline"
                   data-testid={`auto-${card.key}-preview`}
                   dangerouslySetInnerHTML={{ __html: preview.html }}
                 />
               )}
             </div>
             {text.trim() !== card.template.defaultText.trim() && (
-              <button type="button" className="text-xs text-orange-600 hover:underline" onClick={() => setText(card.template!.defaultText)}>
+              <button type="button" className="text-xs text-brand hover:underline" onClick={() => setText(card.template!.defaultText)}>
                 Volver al texto por defecto
               </button>
             )}
@@ -278,7 +278,7 @@ function Card1({ card, hasBot, extra }: { card: CardView; hasBot: boolean; extra
             </Button>
           )}
         </div>
-        {msg && <p className={`text-xs ${msg.type === 'ok' ? 'text-green-700' : 'text-red-600'}`}>{msg.text}</p>}
+        {msg && <p className={`text-xs ${msg.type === 'ok' ? 'text-success' : 'text-destructive'}`}>{msg.text}</p>}
       </CardContent>
     </Card>
   );
@@ -315,14 +315,14 @@ export function AutomatizacionesView({
         <p className="text-sm text-muted-foreground">
           Todos los tiempos, interruptores y textos de lo que el sistema hace solo. Los cambios se aplican en el siguiente ciclo (unos segundos), sin tocar código.
           Las horas de entrada, comida y silencio de cada persona se editan en{' '}
-          <Link href="/dashboard/operaciones/equipo" className="text-orange-600 hover:underline">Equipo</Link>.
+          <Link href="/dashboard/operaciones/equipo" className="text-brand hover:underline">Equipo</Link>.
         </p>
         {testMode && (
-          <p className="mt-2 rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800">
+          <p className="mt-2 rounded border border-warning/45 bg-warning-soft p-2 text-xs text-warning-strong">
             Modo pruebas activo: todos los avisos llegan solo a tu Telegram y no se aplica el silencio de las fichas.
           </p>
         )}
-        {!hasBot && <p className="mt-2 text-xs text-red-600">Configura primero el bot en la pestaña Telegram para poder enviar pruebas.</p>}
+        {!hasBot && <p className="mt-2 text-xs text-destructive">Configura primero el bot en la pestaña Telegram para poder enviar pruebas.</p>}
       </div>
 
       <section className="space-y-3" data-testid="proximos-envios">
@@ -331,13 +331,13 @@ export function AutomatizacionesView({
           <Button size="sm" variant="outline" onClick={() => router.refresh()}>Actualizar</Button>
         </div>
         {upcoming.length === 0 ? (
-          <p className="rounded-md border border-dashed border-gray-300 p-4 text-sm text-muted-foreground">
+          <p className="rounded-md border border-dashed border-input p-4 text-sm text-muted-foreground">
             No hay nada programado para las próximas 24 horas (fines de semana, personas sin vincular, automatizaciones apagadas o sin encargos pendientes).
           </p>
         ) : (
-          <div className="overflow-x-auto rounded-md border border-gray-200">
+          <div className="overflow-x-auto rounded-md border border-border">
             <table className="w-full text-sm">
-              <thead className="bg-gray-50 text-left text-xs text-muted-foreground">
+              <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
                 <tr>
                   <th className="px-3 py-2">Cuándo (hora de Madrid)</th>
                   <th className="px-3 py-2">Destinatario</th>
@@ -347,7 +347,7 @@ export function AutomatizacionesView({
               </thead>
               <tbody>
                 {upcoming.map((u, i) => (
-                  <tr key={i} className="border-t border-gray-100">
+                  <tr key={i} className="border-t border-border">
                     <td className="whitespace-nowrap px-3 py-2">{u.now ? 'En cuanto toque el ciclo' : whenLabel(u.at)}</td>
                     <td className="px-3 py-2">{u.who}</td>
                     <td className="px-3 py-2">{u.kind}</td>
@@ -375,11 +375,11 @@ export function AutomatizacionesView({
       <section className="space-y-3" data-testid="registro-cambios">
         <h2 className="font-medium">Registro de cambios</h2>
         {changes.length === 0 ? (
-          <p className="rounded-md border border-dashed border-gray-300 p-4 text-sm text-muted-foreground">Todavía no se ha cambiado ningún ajuste.</p>
+          <p className="rounded-md border border-dashed border-input p-4 text-sm text-muted-foreground">Todavía no se ha cambiado ningún ajuste.</p>
         ) : (
-          <div className="overflow-x-auto rounded-md border border-gray-200">
+          <div className="overflow-x-auto rounded-md border border-border">
             <table className="w-full text-sm">
-              <thead className="bg-gray-50 text-left text-xs text-muted-foreground">
+              <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
                 <tr>
                   <th className="px-3 py-2">Cuándo</th>
                   <th className="px-3 py-2">Quién</th>
@@ -389,7 +389,7 @@ export function AutomatizacionesView({
               </thead>
               <tbody>
                 {changes.map((c) => (
-                  <tr key={c.id} className="border-t border-gray-100">
+                  <tr key={c.id} className="border-t border-border">
                     <td className="whitespace-nowrap px-3 py-2">{new Intl.DateTimeFormat('es-ES', { timeZone: TZ, dateStyle: 'short', timeStyle: 'short' }).format(new Date(c.at))}</td>
                     <td className="px-3 py-2">{c.who}</td>
                     <td className="px-3 py-2">{titles[c.key] ?? c.key}</td>

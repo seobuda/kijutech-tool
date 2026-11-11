@@ -6,13 +6,13 @@ import { ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react';
 import type { SeoKnowledgeCard } from '@/lib/db/schema';
 
 const CARD_STYLE_BY_TYPE: Record<string, { border: string; bg: string }> = {
-  concept: { border: 'border-blue-400', bg: 'bg-blue-50' },
-  tip: { border: 'border-green-400', bg: 'bg-green-50' },
-  warning: { border: 'border-yellow-400', bg: 'bg-yellow-50' },
+  concept: { border: 'border-info/70', bg: 'bg-info-soft' },
+  tip: { border: 'border-success/70', bg: 'bg-success-soft' },
+  warning: { border: 'border-warning/70', bg: 'bg-warning-soft' },
   tutor_reminder: { border: 'border-purple-400', bg: 'bg-purple-50' }
 };
 
-const DEFAULT_STYLE = { border: 'border-gray-300', bg: 'bg-gray-50' };
+const DEFAULT_STYLE = { border: 'border-input', bg: 'bg-muted/50' };
 
 type Props = {
   cards: SeoKnowledgeCard[];

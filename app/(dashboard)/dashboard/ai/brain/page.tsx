@@ -35,9 +35,9 @@ function formatDateTime(date: Date | string): string {
 }
 
 const STATUS_BADGE: Record<string, string> = {
-  processing: 'bg-gray-100 text-gray-600',
-  completed: 'bg-green-100 text-green-700',
-  failed: 'bg-red-100 text-red-700',
+  processing: 'bg-muted text-muted-foreground',
+  completed: 'bg-success-soft text-success',
+  failed: 'bg-destructive-soft text-destructive',
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -58,9 +58,9 @@ function ProgressBar({
   const pct = Math.min(100, Math.round((value / threshold) * 100));
   return (
     <div className="space-y-1">
-      <div className="h-2 w-full rounded-full bg-gray-200">
+      <div className="h-2 w-full rounded-full bg-secondary">
         <div
-          className={`h-2 rounded-full ${ready ? 'bg-green-500' : 'bg-blue-500'}`}
+          className={`h-2 rounded-full ${ready ? 'bg-success' : 'bg-info'}`}
           style={{ width: `${pct}%` }}
         />
       </div>
@@ -81,7 +81,7 @@ function EmptyState() {
 
 function Pill({ children }: { children: React.ReactNode }) {
   return (
-    <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-medium">
+    <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-medium">
       {children}
     </span>
   );
@@ -112,7 +112,7 @@ export default async function BrainPage() {
   const examplesReady = examples.total >= BRAIN_THRESHOLDS.clusteringExamples;
 
   return (
-    <section className="flex-1 p-4 lg:p-8 space-y-6">
+    <section className="mx-auto w-full max-w-[1400px] px-4 py-6 lg:px-8 lg:py-8 space-y-6">
       <div>
         <h1 className="text-lg lg:text-2xl font-medium">Cerebro de IA</h1>
         <p className="text-sm text-muted-foreground">

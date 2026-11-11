@@ -24,7 +24,7 @@ function TaskRow({ task, overdue }: { task: OpsTask; overdue?: boolean }) {
     <li className="flex items-start gap-2 text-sm">
       <span
         className={`shrink-0 mt-0.5 rounded px-1.5 py-0.5 text-xs ${
-          overdue ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
+          overdue ? 'bg-destructive-soft text-destructive' : 'bg-info-soft text-info'
         }`}
       >
         {task.dueDate ? dateFmt.format(task.dueDate) : '—'}
@@ -34,7 +34,7 @@ function TaskRow({ task, overdue }: { task: OpsTask; overdue?: boolean }) {
           href={task.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-gray-900 hover:text-orange-600 hover:underline"
+          className="text-foreground hover:text-brand hover:underline"
         >
           {task.name}
         </a>
@@ -120,28 +120,28 @@ export function TeamGrid({ data }: { data: TeamTodayData }) {
         </Button>
       </div>
 
-      {refreshError && <p className="text-sm text-red-600">{refreshError}</p>}
+      {refreshError && <p className="text-sm text-destructive">{refreshError}</p>}
       {data.truncated && (
-        <p className="text-sm text-amber-700">
+        <p className="text-sm text-warning-strong">
           Hay muchísimas tareas vencidas: se han leído las primeras 3.000, así que algunas pueden faltar.
         </p>
       )}
       {data.spacesCount === 0 && (
-        <p className="text-sm text-amber-700">
+        <p className="text-sm text-warning-strong">
           No hay espacios seleccionados. Elige cuáles sincronizar en Ajustes ClickUp.
         </p>
       )}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {ordered.map(({ member, overdue, today }) => (
-          <div key={member.id} className="rounded-lg border border-gray-200 bg-white p-4 space-y-3">
+          <div key={member.id} className="rounded-lg border border-border bg-card p-4 space-y-3">
             <div className="flex items-start justify-between gap-2">
               <p className="font-medium truncate min-w-0">{member.username}</p>
               <div className="flex gap-1 text-xs shrink-0">
-                <span className="rounded bg-red-100 px-2 py-0.5 text-red-700">{overdue.length} vencidas</span>
-                <span className="rounded bg-blue-100 px-2 py-0.5 text-blue-700">{today.length} hoy</span>
+                <span className="rounded bg-destructive-soft px-2 py-0.5 text-destructive">{overdue.length} vencidas</span>
+                <span className="rounded bg-info-soft px-2 py-0.5 text-info">{today.length} hoy</span>
                 <span
-                  className="rounded bg-gray-100 px-2 py-0.5 text-gray-600"
+                  className="rounded bg-muted px-2 py-0.5 text-muted-foreground"
                   title={
                     noDate.status === 'ready'
                       ? `Calculado a las ${timeFmt.format(noDate.computedAt)} (se recalcula cada 30 min)`

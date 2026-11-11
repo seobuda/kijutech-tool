@@ -57,9 +57,9 @@ export function SettingRow({ settingKey, initialValue }: Props) {
           )}
         </Button>
       </div>
-      {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
+      {error && <p className="text-destructive text-sm mt-1">{error}</p>}
       {saved && !error && (
-        <p className="text-green-500 text-sm mt-1">Guardado.</p>
+        <p className="text-success text-sm mt-1">Guardado.</p>
       )}
     </div>
   );

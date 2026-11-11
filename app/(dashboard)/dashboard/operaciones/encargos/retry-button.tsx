@@ -23,7 +23,7 @@ export function RetryButton({ requestId }: { requestId: string }) {
       <Button size="sm" variant="outline" onClick={retry} disabled={pending}>
         {pending ? 'Reintentando…' : 'Reintentar'}
       </Button>
-      {error && <p className="text-xs text-red-600 max-w-[14rem] whitespace-normal">{error}</p>}
+      {error && <p className="text-xs text-destructive max-w-[14rem] whitespace-normal">{error}</p>}
     </div>
   );
 }

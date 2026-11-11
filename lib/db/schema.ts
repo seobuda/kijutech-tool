@@ -1557,6 +1557,122 @@ export const opsClientActivity = pgTable(
   (table) => [index('ops_client_activity_tenant_idx').on(table.tenantId)]
 );
 
+// Quién escribe en nombre de un cliente: un correo concreto o un dominio entero. Sirve para saber de qué
+// cliente es un email recibido. Los dominios públicos (gmail.com…) no se aceptan como dominio.
+export const opsClientSenders = pgTable(
+  'ops_client_senders',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => opsClients.id, { onDelete: 'cascade' }),
+    // 'email' = una dirección exacta; 'domain' = cualquier dirección de ese dominio.
+    kind: varchar('kind', { length: 10 }).notNull(),
+    // Siempre en minúsculas y sin espacios.
+    value: varchar('value', { length: 255 }).notNull(),
+    name: varchar('name', { length: 255 }),
+    role: varchar('role', { length: 120 }),
+    active: boolean('active').notNull().default(true),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    unique('ops_client_senders_unique').on(table.tenantId, table.kind, table.value),
+    index('ops_client_senders_client_idx').on(table.clientId),
+    check('ops_client_senders_kind_check', sql`${table.kind} IN ('email', 'domain')`),
+  ]
+);
+
+// Memoria de cada cliente: hechos con fecha y origen. La IA propone («propuesto») y una persona acepta;
+// solo lo aceptado se usa como contexto. Nunca contraseñas.
+export const opsClientMemory = pgTable(
+  'ops_client_memory',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => opsClients.id, { onDelete: 'cascade' }),
+    // preferencia | promesa | decision | contexto | restriccion
+    kind: varchar('kind', { length: 20 }).notNull(),
+    text: text('text').notNull(),
+    // propuesto | aceptado | descartado
+    status: varchar('status', { length: 12 }).notNull().default('aceptado'),
+    // De dónde sale: manual | email | nota | encargo (y el id de ese origen, si lo hay).
+    sourceType: varchar('source_type', { length: 12 }).notNull().default('manual'),
+    sourceId: varchar('source_id', { length: 100 }),
+    createdBy: integer('created_by').references(() => users.id, { onDelete: 'set null' }),
+    decidedBy: integer('decided_by').references(() => users.id, { onDelete: 'set null' }),
+    decidedAt: timestamp('decided_at'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    index('ops_client_memory_client_idx').on(table.clientId, table.status),
+    check('ops_client_memory_kind_check', sql`${table.kind} IN ('preferencia', 'promesa', 'decision', 'contexto', 'restriccion')`),
+    check('ops_client_memory_status_check', sql`${table.status} IN ('propuesto', 'aceptado', 'descartado')`),
+    check('ops_client_memory_source_check', sql`${table.sourceType} IN ('manual', 'email', 'nota', 'encargo')`),
+  ]
+);
+
+// Correos de clientes recibidos (paso B). Entran por el aviso firmado de Cloudflare o pegados a mano. Un correo
+// es un dato NO fiable: la IA solo propondrá y una persona aprueba. Único por (cuenta, Message-ID).
+export const opsInboundEmails = pgTable(
+  'ops_inbound_emails',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    messageId: varchar('message_id', { length: 500 }).notNull(),
+    // cloudflare | pegado
+    source: varchar('source', { length: 12 }).notNull().default('cloudflare'),
+    fromAddress: varchar('from_address', { length: 320 }).notNull(),
+    fromName: varchar('from_name', { length: 255 }),
+    toAddress: varchar('to_address', { length: 320 }),
+    subject: varchar('subject', { length: 500 }).notNull().default(''),
+    // Texto plano ya limpio (sin HTML ni caracteres invisibles), máx. 20 000 caracteres.
+    bodyText: text('body_text').notNull().default(''),
+    // Solo los nombres de los adjuntos: no se descargan.
+    attachments: jsonb('attachments').notNull().default([]),
+    inReplyTo: varchar('in_reply_to', { length: 500 }),
+    sentAt: timestamp('sent_at'),
+    // Resultado de la autenticación del remitente según Cloudflare: pass | fail | none (pegado o desconocido).
+    authStatus: varchar('auth_status', { length: 8 }).notNull().default('none'),
+    clientId: uuid('client_id').references(() => opsClients.id, { onDelete: 'set null' }),
+    // Cómo se reconoció al cliente: email | domain | manual | ninguno | ambiguo.
+    matchedBy: varchar('matched_by', { length: 10 }).notNull().default('ninguno'),
+    // nuevo | ignorado | sin_cliente | informativo | interpretando | propuesto | aprobado | descartado | error
+    status: varchar('status', { length: 14 }).notNull().default('nuevo'),
+    statusNote: varchar('status_note', { length: 255 }),
+    // Propuesta de encargos (paso B2).
+    proposal: jsonb('proposal'),
+    decidedBy: integer('decided_by').references(() => users.id, { onDelete: 'set null' }),
+    decidedAt: timestamp('decided_at'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    unique('ops_inbound_emails_message_unique').on(table.tenantId, table.messageId),
+    index('ops_inbound_emails_status_idx').on(table.tenantId, table.status, table.createdAt),
+    index('ops_inbound_emails_client_idx').on(table.clientId),
+    check('ops_inbound_emails_source_check', sql`${table.source} IN ('cloudflare', 'pegado')`),
+    check('ops_inbound_emails_auth_check', sql`${table.authStatus} IN ('pass', 'fail', 'none')`),
+    check('ops_inbound_emails_match_check', sql`${table.matchedBy} IN ('email', 'domain', 'manual', 'ninguno', 'ambiguo')`),
+    check(
+      'ops_inbound_emails_status_check',
+      sql`${table.status} IN ('nuevo', 'ignorado', 'sin_cliente', 'informativo', 'interpretando', 'propuesto', 'aprobado', 'descartado', 'error')`
+    ),
+  ]
+);
+
+export type OpsInboundEmail = typeof opsInboundEmails.$inferSelect;
+export type OpsClientSender = typeof opsClientSenders.$inferSelect;
+export type OpsClientMemory = typeof opsClientMemory.$inferSelect;
 export type OpsClientActivity = typeof opsClientActivity.$inferSelect;
 export type OpsClient = typeof opsClients.$inferSelect;
 export type OpsCleanupRun = typeof opsCleanupRuns.$inferSelect;

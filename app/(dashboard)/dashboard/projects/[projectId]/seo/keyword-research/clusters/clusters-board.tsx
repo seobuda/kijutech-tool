@@ -211,7 +211,7 @@ export function ClustersBoard({
           <Button
             type="button"
             size="sm"
-            className="bg-orange-500 hover:bg-orange-600 text-white"
+            className="bg-brand hover:bg-brand/90 text-white"
             onClick={() => setIsCreating((v) => !v)}
           >
             <Plus className="mr-2 h-4 w-4" />
@@ -288,7 +288,7 @@ export function ClustersBoard({
                       0
                     );
                     return (
-                      <Card key={cluster.id} className="bg-gray-50">
+                      <Card key={cluster.id} className="bg-muted/50">
                         <CardContent className="p-4 space-y-2">
                           <p className="font-medium text-sm">
                             {cluster.title.replace(/^Marca competidora: /, '')}
@@ -316,7 +316,7 @@ export function ClustersBoard({
         <Button
           onClick={handleComplete}
           disabled={isPending}
-          className="bg-orange-500 hover:bg-orange-600 text-white"
+          className="bg-brand hover:bg-brand/90 text-white"
         >
           {localStatus === 'completed' ? (
             <>

@@ -33,18 +33,18 @@ const STATUS_META: Record<string, { emoji: string; label: string }> = {
 const PRIORITY_META: Record<string, { emoji: string; cardClass: string; badgeClass: string }> = {
   critico: {
     emoji: '🔴',
-    cardClass: 'border-2 border-red-300 bg-red-50/40',
-    badgeClass: 'bg-red-100 text-red-700',
+    cardClass: 'border-2 border-destructive/45 bg-destructive-soft/40',
+    badgeClass: 'bg-destructive-soft text-destructive',
   },
   recomendado: {
     emoji: '🟡',
-    cardClass: 'border border-amber-300 bg-amber-50/40',
-    badgeClass: 'bg-amber-100 text-amber-700',
+    cardClass: 'border border-warning/45 bg-warning-soft/40',
+    badgeClass: 'bg-warning-soft text-warning-strong',
   },
   diferenciador: {
     emoji: '🟢',
-    cardClass: 'border border-green-300 bg-green-50/40',
-    badgeClass: 'bg-green-100 text-green-700',
+    cardClass: 'border border-success/45 bg-success-soft/40',
+    badgeClass: 'bg-success-soft text-success',
   },
 };
 
@@ -186,10 +186,10 @@ function AnalysisLoading({ competitorCount }: { competitorCount: number }) {
           Analizando {competitorCount} competidores... esto puede tardar unos segundos.
         </p>
         <div className="space-y-2 animate-pulse">
-          <div className="h-4 bg-gray-200 rounded w-3/4" />
-          <div className="h-4 bg-gray-200 rounded w-full" />
-          <div className="h-4 bg-gray-200 rounded w-5/6" />
-          <div className="h-20 bg-gray-200 rounded" />
+          <div className="h-4 bg-secondary rounded w-3/4" />
+          <div className="h-4 bg-secondary rounded w-full" />
+          <div className="h-4 bg-secondary rounded w-5/6" />
+          <div className="h-20 bg-secondary rounded" />
         </div>
       </CardContent>
     </Card>
@@ -206,9 +206,9 @@ function AnalysisError({
   isRetrying: boolean;
 }) {
   return (
-    <Card className="border-red-300 bg-red-50/40">
+    <Card className="border-destructive/45 bg-destructive-soft/40">
       <CardContent className="pt-6 space-y-3">
-        <p className="text-sm text-red-700">{message}</p>
+        <p className="text-sm text-destructive">{message}</p>
         <Button type="button" size="sm" variant="outline" onClick={onRetry} disabled={isRetrying}>
           {isRetrying ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Reintentar'}
         </Button>
@@ -349,7 +349,7 @@ export function CompetitorsPanel({ projectId, clusterId, initialCompetitors, ini
                   <button
                     type="button"
                     onClick={() => handleRemoveUrlField(i)}
-                    className="text-muted-foreground hover:text-red-600"
+                    className="text-muted-foreground hover:text-destructive"
                     aria-label={`Eliminar URL ${i + 1}`}
                   >
                     <X className="h-4 w-4" />
@@ -363,20 +363,20 @@ export function CompetitorsPanel({ projectId, clusterId, initialCompetitors, ini
             <button
               type="button"
               onClick={handleAddUrlField}
-              className="text-sm text-orange-600 hover:text-orange-700"
+              className="text-sm text-brand hover:text-brand"
             >
               + Añadir otra URL
             </button>
           )}
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p className="text-sm text-destructive">{error}</p>}
 
           <div className="flex items-center gap-2">
             <Button
               type="button"
               onClick={handleSave}
               disabled={isPending || formUrls.every((u) => !u.trim())}
-              className="bg-orange-500 hover:bg-orange-600 text-white"
+              className="bg-brand hover:bg-brand/90 text-white"
             >
               Guardar y analizar
             </Button>
@@ -408,7 +408,7 @@ export function CompetitorsPanel({ projectId, clusterId, initialCompetitors, ini
                   <button
                     type="button"
                     onClick={() => handleDelete(c.id)}
-                    className="text-muted-foreground hover:text-red-600"
+                    className="text-muted-foreground hover:text-destructive"
                     aria-label={`Eliminar ${c.url}`}
                   >
                     <X className="h-3.5 w-3.5" />
@@ -449,7 +449,7 @@ export function CompetitorsPanel({ projectId, clusterId, initialCompetitors, ini
           <Button
             type="button"
             onClick={handleGenerateAnalysis}
-            className="bg-orange-500 hover:bg-orange-600 text-white"
+            className="bg-brand hover:bg-brand/90 text-white"
           >
             <Sparkles className="mr-2 h-4 w-4" />
             Generar análisis IA →

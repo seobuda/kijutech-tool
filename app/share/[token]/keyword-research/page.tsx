@@ -47,10 +47,10 @@ export default async function PublicKeywordResearchPage({
   );
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="border-b border-gray-200 bg-white">
+    <div className="min-h-screen bg-muted/50">
+      <header className="border-b border-border bg-card">
         <div className="max-w-6xl mx-auto px-6 py-10">
-          <p className="text-sm font-semibold tracking-wide text-orange-600 uppercase">
+          <p className="text-sm font-semibold tracking-wide text-brand uppercase">
             Kijutech
           </p>
           <h1 className="text-2xl sm:text-3xl font-medium mt-2">
@@ -82,7 +82,7 @@ export default async function PublicKeywordResearchPage({
         </section>
       </main>
 
-      <footer className="border-t border-gray-200 bg-white py-8">
+      <footer className="border-t border-border bg-card py-8">
         <div className="max-w-6xl mx-auto px-6 text-center text-sm text-muted-foreground">
           Estrategia SEO desarrollada por Kijutech · {new Date().getFullYear()}
         </div>

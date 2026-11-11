@@ -1,18 +1,19 @@
+import { LayoutGrid } from 'lucide-react';
 import { requirePagePermission } from '@/lib/auth/permissions';
+import { PageContainer, PageHeader } from '@/components/ui/page';
 import { OperacionesTabs } from './operaciones-tabs';
 
 export default async function OperacionesLayout({ children }: { children: React.ReactNode }) {
   await requirePagePermission('view');
   return (
-    <section className="flex-1 p-4 lg:p-8 space-y-6">
-      <div>
-        <h1 className="text-lg lg:text-2xl font-medium">Operaciones</h1>
-        <p className="text-sm text-muted-foreground">
-          Seguimiento del trabajo del equipo con datos en directo de ClickUp.
-        </p>
-      </div>
+    <PageContainer className="space-y-6">
+      <PageHeader
+        icon={LayoutGrid}
+        title="Operaciones"
+        description="El centro de mando del agente: entrada de trabajo, equipo, clientes y seguimiento con datos en directo de ClickUp."
+      />
       <OperacionesTabs />
-      {children}
-    </section>
+      <div className="animate-fade-up">{children}</div>
+    </PageContainer>
   );
 }

@@ -81,7 +81,7 @@ export function ClusteringPanel({
         <CardContent>
           {tutorText ? (
             <>
-              <pre className="text-sm whitespace-pre-wrap font-sans bg-gray-50 rounded-md p-3 max-h-80 overflow-y-auto">
+              <pre className="text-sm whitespace-pre-wrap font-sans bg-muted/50 rounded-md p-3 max-h-80 overflow-y-auto">
                 {tutorText}
               </pre>
               <div className="flex items-center space-x-2 mt-3">
@@ -139,7 +139,7 @@ export function ClusteringPanel({
         <Button
           onClick={handleComplete}
           disabled={isPending}
-          className="bg-orange-500 hover:bg-orange-600 text-white"
+          className="bg-brand hover:bg-brand/90 text-white"
         >
           {localStatus === 'completed' ? (
             <>

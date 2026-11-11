@@ -37,7 +37,7 @@ export function CleanupPanel({ people, testMode }: { people: CleanupPersonView[]
     });
 
   return (
-    <div className="space-y-2 rounded-md border border-gray-200 bg-gray-50 p-3" data-testid="limpieza-panel">
+    <div className="space-y-2 rounded-md border border-border bg-muted/50 p-3" data-testid="limpieza-panel">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <p className="text-sm font-medium">Limpieza de vencidas</p>
@@ -61,7 +61,7 @@ export function CleanupPanel({ people, testMode }: { people: CleanupPersonView[]
       {people.length === 0 ? (
         <p className="text-sm text-muted-foreground">No hay fichas activas de equipo con miembro de ClickUp.</p>
       ) : (
-        <ul className="divide-y divide-gray-200 text-sm">
+        <ul className="divide-y divide-border text-sm">
           {people.map((p) => (
             <li key={p.id} className="flex flex-wrap items-center justify-between gap-2 py-1.5" data-testid={`limpieza-${p.name}`}>
               <div>
@@ -76,7 +76,7 @@ export function CleanupPanel({ people, testMode }: { people: CleanupPersonView[]
         </ul>
       )}
       {pending && <p className="text-xs text-muted-foreground">Consultando ClickUp y preparando los mensajes…</p>}
-      {msg && <p className={`text-xs ${msg.type === 'ok' ? 'text-green-700' : 'text-red-600'}`} data-testid="limpieza-msg">{msg.text}</p>}
+      {msg && <p className={`text-xs ${msg.type === 'ok' ? 'text-success' : 'text-destructive'}`} data-testid="limpieza-msg">{msg.text}</p>}
     </div>
   );
 }

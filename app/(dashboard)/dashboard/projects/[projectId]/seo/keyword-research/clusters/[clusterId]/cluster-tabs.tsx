@@ -21,7 +21,7 @@ export function ClusterTabs({ basePath }: { basePath: string }) {
             href={`${basePath}/${tab.segment}`}
             className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px ${
               isActive
-                ? 'border-orange-500 text-foreground'
+                ? 'border-brand/70 text-foreground'
                 : 'border-transparent text-muted-foreground hover:text-foreground'
             }`}
           >

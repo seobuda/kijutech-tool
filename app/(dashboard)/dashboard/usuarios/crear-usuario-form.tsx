@@ -22,13 +22,13 @@ export function CrearUsuarioForm() {
     <form action={formAction} className="space-y-4 max-w-md">
       <div className="space-y-1">
         <Label htmlFor="name">
-          Nombre <span className="text-red-500">*</span>
+          Nombre <span className="text-destructive">*</span>
         </Label>
         <Input id="name" name="name" required maxLength={100} defaultValue={state.name} />
       </div>
       <div className="space-y-1">
         <Label htmlFor="email">
-          Correo <span className="text-red-500">*</span>
+          Correo <span className="text-destructive">*</span>
         </Label>
         <Input
           id="email"
@@ -42,7 +42,7 @@ export function CrearUsuarioForm() {
       </div>
       <div className="space-y-1">
         <Label htmlFor="password">
-          Contraseña inicial <span className="text-red-500">*</span>
+          Contraseña inicial <span className="text-destructive">*</span>
         </Label>
         <Input
           id="password"
@@ -59,13 +59,13 @@ export function CrearUsuarioForm() {
       </div>
       <div className="space-y-1">
         <Label htmlFor="role">
-          Rol <span className="text-red-500">*</span>
+          Rol <span className="text-destructive">*</span>
         </Label>
         <select
           id="role"
           name="role"
           defaultValue="lector"
-          className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
+          className="w-full rounded-md border border-input bg-card px-3 py-2 text-sm"
         >
           {ROLES.map((r) => (
             <option key={r.value} value={r.value}>
@@ -75,12 +75,12 @@ export function CrearUsuarioForm() {
         </select>
       </div>
       {state.error && (
-        <p className="text-sm text-red-500" role="alert">
+        <p className="text-sm text-destructive" role="alert">
           {state.error}
         </p>
       )}
       {state.success && (
-        <p className="text-sm text-green-600" role="status">
+        <p className="text-sm text-success" role="status">
           {state.success}
         </p>
       )}

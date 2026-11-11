@@ -162,13 +162,13 @@ export function KnowledgeCardForm({ stages, card }: KnowledgeCardFormProps) {
                 : 'Elige "Ninguno" para mostrar la tarjeta siempre en esta etapa, o el campo concreto del formulario para el que debe aparecer al hacer foco en él.'}
             </p>
           </div>
-          {state.error && <p className="text-red-500 text-sm">{state.error}</p>}
+          {state.error && <p className="text-destructive text-sm">{state.error}</p>}
           {state.success && (
-            <p className="text-green-500 text-sm">{state.success}</p>
+            <p className="text-success text-sm">{state.success}</p>
           )}
           <Button
             type="submit"
-            className="bg-orange-500 hover:bg-orange-600 text-white"
+            className="bg-brand hover:bg-brand/90 text-white"
             disabled={isPending}
           >
             {isPending ? (
