@@ -1,3 +1,4 @@
+import { AutoRefresh } from '@/components/ui/auto-refresh';
 import { redirect } from 'next/navigation';
 import { Lock } from 'lucide-react';
 import { EmptyState } from '@/components/ui/page';
@@ -57,7 +58,10 @@ export default async function BandejaPage() {
   return (
     <div className="max-w-3xl space-y-4">
       <div>
-        <h2 className="text-[15px] font-semibold">Mi bandeja</h2>
+        <h2 className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[15px] font-semibold">
+          Mi bandeja
+          <AutoRefresh className="font-normal" />
+        </h2>
         <p className="mt-0.5 text-sm text-muted-foreground text-pretty">
           Lo que está pendiente de ti, del que más espera al que menos. Desde aquí puedes aceptar, devolver o responder.
         </p>

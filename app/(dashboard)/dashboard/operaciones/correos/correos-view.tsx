@@ -2,7 +2,8 @@
 
 // Pestaña «Correos»: los correos de clientes que han llegado, de qué cliente son y qué se ha hecho con
 // cada uno. Todo lo que se pinta del correo va como TEXTO (React lo escapa): nunca como HTML.
-import { useCallback, useEffect, useState, useTransition } from 'react';
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
+import { LiveIndicator, useAutoRefresh } from '@/components/ui/auto-refresh';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -315,6 +316,11 @@ export function CorreosView({ clients }: { clients: { id: string; name: string }
   const [msg, setMsg] = useState<Msg>(null);
   const [pending, startTransition] = useTransition();
 
+  const [updatedAt, setUpdatedAt] = useState<number | null>(null);
+  // Correos que han aparecido desde la última vez (se marcan como «Nuevo» un rato).
+  const [freshIds, setFreshIds] = useState<Set<string>>(new Set());
+  const seenIds = useRef<Set<string> | null>(null);
+
   const load = useCallback(async () => {
     const res = await listInboundEmails(filter || undefined);
     if (!res.ok) {
@@ -325,11 +331,28 @@ export function CorreosView({ clients }: { clients: { id: string; name: string }
     setEmails(res.emails);
     setCounts(res.counts);
     setCanDelete(res.canDelete);
+    setUpdatedAt(Date.now());
+    const ids = new Set(res.emails.map((e) => e.id));
+    if (seenIds.current) {
+      const fresh = res.emails.filter((e) => !seenIds.current!.has(e.id)).map((e) => e.id);
+      if (fresh.length) setFreshIds((prev) => new Set([...prev, ...fresh]));
+    }
+    seenIds.current = new Set([...(seenIds.current ?? []), ...ids]);
   }, [filter]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  // En directo: la lista cada 10 s (y al volver a la pestaña); el correo abierto, mientras el agente lo
+  // está interpretando, para que su propuesta aparezca sin recargar.
+  useAutoRefresh(async () => {
+    await load();
+    if (detail && ['nuevo', 'interpretando'].includes(detail.status)) {
+      const d = await getInboundEmail(detail.id);
+      if (d.ok) setDetail(d.email);
+    }
+  }, 10_000);
 
   const open = (id: string) => {
     setMsg(null);
@@ -652,7 +675,10 @@ export function CorreosView({ clients }: { clients: { id: string; name: string }
     <div className="space-y-4 animate-fade-up">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <h2 className="text-base font-semibold tracking-tight">Correos del agente</h2>
+          <h2 className="flex flex-wrap items-center gap-x-3 gap-y-1 text-base font-semibold tracking-tight">
+            Correos del agente
+            <LiveIndicator updatedAt={updatedAt} className="font-normal" />
+          </h2>
           <p className="mt-0.5 max-w-3xl text-sm text-muted-foreground text-pretty">
             Aquí llegan los correos de clientes y del equipo. El agente reconoce de quién es cada uno, lo resume y te propone una respuesta;
             nunca envía nada sin tu aprobación.
@@ -773,15 +799,24 @@ export function CorreosView({ clients }: { clients: { id: string; name: string }
       ) : (
         <ul className="divide-y overflow-hidden rounded-xl border bg-card shadow-xs" aria-label="Bandeja de correos" aria-busy={pending}>
           {emails.map((m) => {
-            const unread = m.status === 'nuevo' || m.status === 'sin_cliente';
+            const unread = m.status === 'nuevo' || m.status === 'sin_cliente' || m.status === 'propuesto';
+            const fresh = freshIds.has(m.id);
             return (
-              <li key={m.id}>
+              <li key={m.id} className={cn(fresh && 'animate-fade-up')}>
                 <button
                   type="button"
-                  onClick={() => open(m.id)}
+                  onClick={() => {
+                    setFreshIds((prev) => {
+                      const next = new Set(prev);
+                      next.delete(m.id);
+                      return next;
+                    });
+                    open(m.id);
+                  }}
                   className={cn(
                     'group flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/50 sm:px-5',
-                    unread && 'bg-brand-soft/20'
+                    unread && 'bg-brand-soft/20',
+                    fresh && 'bg-brand-soft/50'
                   )}
                 >
                   <span
@@ -795,8 +830,13 @@ export function CorreosView({ clients }: { clients: { id: string; name: string }
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="flex items-baseline justify-between gap-3">
-                      <span className={cn('truncate text-sm', unread ? 'font-semibold' : 'font-medium')}>
-                        {m.fromName || m.fromAddress}
+                      <span className={cn('flex min-w-0 items-center gap-2 truncate text-sm', unread ? 'font-semibold' : 'font-medium')}>
+                        <span className="truncate">{m.fromName || m.fromAddress}</span>
+                        {fresh && (
+                          <Badge tone="brand" className="shrink-0">
+                            Nuevo
+                          </Badge>
+                        )}
                       </span>
                       <time dateTime={m.createdAt} title={fmt(m.createdAt)} className="shrink-0 text-xs tabular-nums text-muted-foreground">
                         {fmtShort(m.createdAt)}
