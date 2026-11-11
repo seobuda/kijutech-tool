@@ -106,7 +106,7 @@ export function AjustesClickUp({
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="clickup-token">
-              {hasToken ? 'Sustituir token' : 'Token'} <span className="text-red-500">*</span>
+              {hasToken ? 'Sustituir token' : 'Token'} <span className="text-destructive">*</span>
             </Label>
             <Input
               id="clickup-token"
@@ -133,7 +133,7 @@ export function AjustesClickUp({
           {message && (
             <p
               data-testid="token-message"
-              className={`text-sm ${message.type === 'ok' ? 'text-green-700' : 'text-red-600'}`}
+              className={`text-sm ${message.type === 'ok' ? 'text-success' : 'text-destructive'}`}
             >
               {message.text}
             </p>
@@ -211,13 +211,13 @@ function EspaciosCard({ structure }: { structure: StructureView }) {
           <ul className="grid gap-1 sm:grid-cols-2">
             {structure.spaces.map((s) => (
               <li key={s.id}>
-                <label className="flex items-center gap-2 rounded-md border border-gray-200 px-3 py-2 text-sm cursor-pointer hover:bg-gray-50">
+                <label className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm cursor-pointer hover:bg-muted">
                   <input
                     type="checkbox"
                     checked={selected.includes(s.id)}
                     onChange={() => toggle(s.id)}
                     disabled={pending}
-                    className="h-4 w-4 accent-orange-500"
+                    className="h-4 w-4 accent-[var(--brand)]"
                   />
                   <span className="truncate">{s.name}</span>
                   <span className="ml-auto text-xs text-muted-foreground whitespace-nowrap">
@@ -241,7 +241,7 @@ function EspaciosCard({ structure }: { structure: StructureView }) {
           </span>
         </div>
         {msg && (
-          <p className={`text-sm ${msg.type === 'ok' ? 'text-green-700' : 'text-red-600'}`}>{msg.text}</p>
+          <p className={`text-sm ${msg.type === 'ok' ? 'text-success' : 'text-destructive'}`}>{msg.text}</p>
         )}
       </CardContent>
     </Card>
@@ -283,7 +283,7 @@ function ModeloTranscripcion({ initial }: { initial: string }) {
           {pending ? 'Guardando…' : 'Guardar modelo'}
         </Button>
         {msg && (
-          <p className={`text-sm ${msg.type === 'ok' ? 'text-green-700' : 'text-red-600'}`}>{msg.text}</p>
+          <p className={`text-sm ${msg.type === 'ok' ? 'text-success' : 'text-destructive'}`}>{msg.text}</p>
         )}
       </CardContent>
     </Card>
@@ -303,23 +303,23 @@ function PeticionesCard({ stats }: { stats: ClickUpRequestStats }) {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-4 text-sm" data-testid="request-stats">
-          <div className="rounded-md border border-gray-200 p-3">
+          <div className="rounded-md border border-border p-3">
             <p className="text-xs text-muted-foreground">Última hora</p>
             <p className="text-xl font-medium">{stats.lastHour}</p>
           </div>
-          <div className="rounded-md border border-gray-200 p-3">
+          <div className="rounded-md border border-border p-3">
             <p className="text-xs text-muted-foreground">Último minuto</p>
             <p className="text-xl font-medium">
               {stats.lastMinute} <span className="text-xs text-muted-foreground">/ 100</span>
             </p>
           </div>
-          <div className="rounded-md border border-gray-200 p-3">
+          <div className="rounded-md border border-border p-3">
             <p className="text-xs text-muted-foreground">Máximo en un minuto</p>
             <p className="text-xl font-medium">{stats.peakPerMinute}</p>
           </div>
-          <div className="rounded-md border border-gray-200 p-3">
+          <div className="rounded-md border border-border p-3">
             <p className="text-xs text-muted-foreground">Límite superado (429)</p>
-            <p className={`text-xl font-medium ${stats.throttled > 0 ? 'text-red-600' : ''}`}>
+            <p className={`text-xl font-medium ${stats.throttled > 0 ? 'text-destructive' : ''}`}>
               {stats.throttled}
             </p>
           </div>
@@ -328,9 +328,9 @@ function PeticionesCard({ stats }: { stats: ClickUpRequestStats }) {
         {stats.byEndpoint.length === 0 ? (
           <p className="text-sm text-muted-foreground">No hay peticiones registradas en la última hora.</p>
         ) : (
-          <div className="overflow-x-auto rounded-md border border-gray-200">
+          <div className="overflow-x-auto rounded-md border border-border">
             <table className="w-full text-sm">
-              <thead className="bg-gray-50 text-left text-xs uppercase text-gray-500">
+              <thead className="bg-muted/50 text-left text-xs uppercase text-muted-foreground">
                 <tr>
                   <th className="px-3 py-2">Consulta</th>
                   <th className="px-3 py-2 text-right">Peticiones</th>
@@ -338,7 +338,7 @@ function PeticionesCard({ stats }: { stats: ClickUpRequestStats }) {
                   <th className="px-3 py-2 text-right">429</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-border">
                 {stats.byEndpoint.map((r) => (
                   <tr key={`${r.method} ${r.endpoint}`}>
                     <td className="px-3 py-1.5 font-mono text-xs">

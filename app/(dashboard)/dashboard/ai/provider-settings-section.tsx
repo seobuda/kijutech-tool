@@ -317,8 +317,8 @@ function ProviderRow({
           )}
         </div>
 
-        {error && <p className="text-red-500 text-sm">{error}</p>}
-        {saved && !error && <p className="text-green-600 text-sm">Guardado.</p>}
+        {error && <p className="text-destructive text-sm">{error}</p>}
+        {saved && !error && <p className="text-success text-sm">Guardado.</p>}
       </CardContent>
     </Card>
   );

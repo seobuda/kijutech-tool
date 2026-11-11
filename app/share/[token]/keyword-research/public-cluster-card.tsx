@@ -3,8 +3,8 @@ import { keywordDifficultyLabel, urlTypeLabel } from '@/lib/seo/format';
 import type { SeoKwClusterWithKeywords } from '@/lib/seo/kw-queries';
 
 const STATUS_BADGE: Record<string, string> = {
-  active: 'bg-blue-100 text-blue-700',
-  completed: 'bg-green-100 text-green-700'
+  active: 'bg-info-soft text-info',
+  completed: 'bg-success-soft text-success'
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -13,9 +13,9 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 const DIFFICULTY_LABEL: Record<string, { label: string; color: string }> = {
-  easy: { label: 'Fácil', color: 'bg-green-500' },
-  medium: { label: 'Media', color: 'bg-yellow-500' },
-  hard: { label: 'Difícil', color: 'bg-red-500' }
+  easy: { label: 'Fácil', color: 'bg-success' },
+  medium: { label: 'Media', color: 'bg-warning' },
+  hard: { label: 'Difícil', color: 'bg-destructive' }
 };
 
 export function PublicClusterCard({
@@ -33,10 +33,10 @@ export function PublicClusterCard({
   const urlType = urlTypeLabel(cluster.urlType);
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-3">
+    <div className="bg-card rounded-xl border border-border shadow-sm p-6 space-y-3">
       <span
         className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium ${
-          STATUS_BADGE[cluster.status] ?? 'bg-gray-100 text-gray-600'
+          STATUS_BADGE[cluster.status] ?? 'bg-muted text-muted-foreground'
         }`}
       >
         {STATUS_LABEL[cluster.status] ?? cluster.status}
@@ -77,7 +77,7 @@ export function PublicClusterCard({
         <p>🎯 ~{estimatedTraffic} visitas est. (posición 1)</p>
       </div>
       {cluster.clientNote && (
-        <p className="text-sm italic text-gray-600 border-t pt-3">
+        <p className="text-sm italic text-muted-foreground border-t pt-3">
           💬 &ldquo;{cluster.clientNote}&rdquo;
         </p>
       )}

@@ -154,7 +154,7 @@ export function OnboardingChecklist({
                 <button
                   type="button"
                   onClick={() => handleRemove(item.itemKey)}
-                  className="text-muted-foreground hover:text-red-600"
+                  className="text-muted-foreground hover:text-destructive"
                   aria-label={`Eliminar ${labelForItem(item.itemKey)}`}
                 >
                   <X className="h-3.5 w-3.5" />
@@ -191,7 +191,7 @@ export function OnboardingChecklist({
           <Button
             onClick={handleComplete}
             disabled={isPending || !allChecked}
-            className="bg-orange-500 hover:bg-orange-600 text-white"
+            className="bg-brand hover:bg-brand/90 text-white"
           >
             {localStatus === 'completed' ? (
               <>

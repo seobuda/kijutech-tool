@@ -73,7 +73,7 @@ export function SeoWizardShell({
           />
         </div>
         <div className="flex-1 min-w-0">{children}</div>
-        <div className="hidden md:block w-[280px] shrink-0 border-l border-gray-200 pl-6 lg:sticky lg:top-6 lg:h-fit lg:max-h-[calc(100vh-48px)] lg:overflow-y-auto">
+        <div className="hidden md:block w-[280px] shrink-0 border-l border-border pl-6 lg:sticky lg:top-6 lg:h-fit lg:max-h-[calc(100vh-48px)] lg:overflow-y-auto">
           <SeoAssistantPanel cards={cards} focusedKey={focusedKey} tutorUrl={tutorUrl} />
         </div>
       </div>

@@ -32,7 +32,7 @@ export default async function ArchivedProjectsPage() {
   const projects = await getArchivedProjectsForUser();
 
   return (
-    <section className="flex-1 p-4 lg:p-8">
+    <section className="mx-auto w-full max-w-[1400px] px-4 py-6 lg:px-8 lg:py-8">
       <div className="mb-6">
         <Link href="/dashboard/projects">
           <Button variant="ghost" size="sm" className="mb-2 -ml-2">
@@ -63,7 +63,7 @@ export default async function ArchivedProjectsPage() {
               {projects.map((project) => (
                 <li
                   key={project.id}
-                  className="flex items-center justify-between border-b border-gray-100 pb-6 last:border-b-0 last:pb-0"
+                  className="flex items-center justify-between border-b border-border pb-6 last:border-b-0 last:pb-0"
                 >
                   <div>
                     <p className="font-medium">{project.name}</p>

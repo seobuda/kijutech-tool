@@ -179,7 +179,7 @@ function EditableRow({
             Cancelar
           </Button>
         </div>
-        {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
+        {error && <p className="text-destructive text-xs mt-1">{error}</p>}
       </td>
     </tr>
   );
@@ -259,7 +259,7 @@ function NewRow({ onCancel, onAdded }: { onCancel: () => void; onAdded: () => vo
             Cancelar
           </Button>
         </div>
-        {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
+        {error && <p className="text-destructive text-xs mt-1">{error}</p>}
       </td>
     </tr>
   );

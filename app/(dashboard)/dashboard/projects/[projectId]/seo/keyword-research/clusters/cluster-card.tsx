@@ -42,16 +42,16 @@ const STATUS_OPTIONS = [
 ];
 
 const STATUS_BADGE: Record<string, string> = {
-  pending: 'bg-gray-100 text-gray-600',
-  active: 'bg-blue-100 text-blue-700',
-  completed: 'bg-green-100 text-green-700',
-  archived: 'bg-orange-100 text-orange-800'
+  pending: 'bg-muted text-muted-foreground',
+  active: 'bg-info-soft text-info',
+  completed: 'bg-success-soft text-success',
+  archived: 'bg-brand-soft text-brand'
 };
 
 const DIFFICULTY_LABEL: Record<string, { label: string; color: string }> = {
-  easy: { label: 'Fácil', color: 'bg-green-500' },
-  medium: { label: 'Media', color: 'bg-yellow-500' },
-  hard: { label: 'Difícil', color: 'bg-red-500' }
+  easy: { label: 'Fácil', color: 'bg-success' },
+  medium: { label: 'Media', color: 'bg-warning' },
+  hard: { label: 'Difícil', color: 'bg-destructive' }
 };
 
 type Props = {
@@ -254,7 +254,7 @@ export function ClusterCard({ cluster, otherClusters, onUpdated, onDeleted, onKe
           <div className="flex items-center gap-1.5">
             {cluster.isAiSuggested && (
               <span
-                className="text-xs font-medium bg-yellow-200/80 text-yellow-900 px-2 py-0.5 rounded-full"
+                className="text-xs font-medium bg-warning-soft/80 text-warning-strong px-2 py-0.5 rounded-full"
                 title="Cluster sugerido por IA"
               >
                 ✨ IA
@@ -340,7 +340,7 @@ export function ClusterCard({ cluster, otherClusters, onUpdated, onDeleted, onKe
             strategyNote={cluster.strategyNote}
             onChange={handleStrategyChange}
           />
-          {strategyError && <p className="text-xs text-red-600 mt-1">{strategyError}</p>}
+          {strategyError && <p className="text-xs text-destructive mt-1">{strategyError}</p>}
         </div>
 
         {difficulty && (
@@ -360,7 +360,7 @@ export function ClusterCard({ cluster, otherClusters, onUpdated, onDeleted, onKe
               <div className="flex items-center justify-between">
                 <span className="flex items-center gap-1 truncate">
                   {k.isPrimary && (
-                    <Star className="h-3 w-3 text-orange-500 shrink-0" fill="currentColor" />
+                    <Star className="h-3 w-3 text-brand shrink-0" fill="currentColor" />
                   )}
                   {k.keyword}
                   {difficulty && (
@@ -398,7 +398,7 @@ export function ClusterCard({ cluster, otherClusters, onUpdated, onDeleted, onKe
                   <button
                     type="button"
                     onClick={() => handleDeleteKeyword(k.id, k.isPrimary)}
-                    className="text-muted-foreground hover:text-red-600"
+                    className="text-muted-foreground hover:text-destructive"
                     aria-label={`Eliminar ${k.keyword}`}
                   >
                     <X className="h-3 w-3" />
@@ -462,7 +462,7 @@ export function ClusterCard({ cluster, otherClusters, onUpdated, onDeleted, onKe
             <button
               type="button"
               onClick={() => setIsAddingKeyword(true)}
-              className="text-sm text-orange-600 hover:text-orange-700 flex items-center gap-1 pt-1"
+              className="text-sm text-brand hover:text-brand flex items-center gap-1 pt-1"
             >
               <Plus className="h-3 w-3" /> Añadir keyword
             </button>

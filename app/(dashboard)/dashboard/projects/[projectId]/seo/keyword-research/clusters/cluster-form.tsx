@@ -119,7 +119,7 @@ export function ClusterForm({
           type="button"
           onClick={() => onSubmit(values)}
           disabled={isPending || !values.title.trim()}
-          className="bg-orange-500 hover:bg-orange-600 text-white"
+          className="bg-brand hover:bg-brand/90 text-white"
         >
           {submitLabel}
         </Button>

@@ -176,7 +176,7 @@ export function PromptEditForm({ prompt, projects }: Props) {
             </Button>
           </div>
 
-          {testError && <p className="text-sm text-red-600">{testError}</p>}
+          {testError && <p className="text-sm text-destructive">{testError}</p>}
 
           {testResult && (
             <div className="space-y-2">
@@ -186,7 +186,7 @@ export function PromptEditForm({ prompt, projects }: Props) {
                 {testResult.estimatedCost != null &&
                   ` · ~${testResult.estimatedCost.toFixed(4)}€`}
               </p>
-              <pre className="text-xs whitespace-pre-wrap bg-gray-50 rounded-md p-3 max-h-96 overflow-y-auto">
+              <pre className="text-xs whitespace-pre-wrap bg-muted/50 rounded-md p-3 max-h-96 overflow-y-auto">
                 {testResult.rawResponse}
               </pre>
             </div>
@@ -204,7 +204,7 @@ export function PromptEditForm({ prompt, projects }: Props) {
           type="button"
           onClick={handleSave}
           disabled={isSaving}
-          className="bg-orange-500 hover:bg-orange-600 text-white"
+          className="bg-brand hover:bg-brand/90 text-white"
         >
           {isSaving ? (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -217,7 +217,7 @@ export function PromptEditForm({ prompt, projects }: Props) {
           Cancelar
         </Button>
       </div>
-      {saveError && <p className="text-sm text-red-600">{saveError}</p>}
+      {saveError && <p className="text-sm text-destructive">{saveError}</p>}
     </div>
   );
 }

@@ -26,7 +26,7 @@ export default async function ArchitecturePage() {
   const live = await getMapLive(user.tenantId);
 
   return (
-    <section className="flex-1 space-y-6 p-4 lg:p-8">
+    <section className="mx-auto w-full max-w-[1400px] space-y-6 px-4 py-6 lg:px-8 lg:py-8">
       <div>
         <h1 className="text-lg font-medium lg:text-2xl">Mapa Visual del Sistema</h1>
         <p className="text-sm text-muted-foreground">

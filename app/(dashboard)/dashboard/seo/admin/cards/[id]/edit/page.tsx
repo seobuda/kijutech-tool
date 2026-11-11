@@ -30,7 +30,7 @@ export default async function EditKnowledgeCardPage({
   }
 
   return (
-    <section className="flex-1 p-4 lg:p-8">
+    <section className="mx-auto w-full max-w-[1400px] px-4 py-6 lg:px-8 lg:py-8">
       <h1 className="text-lg lg:text-2xl font-medium mb-6">Editar tarjeta</h1>
       <KnowledgeCardForm stages={manifest.stages} card={card} />
     </section>

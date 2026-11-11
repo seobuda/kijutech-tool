@@ -161,7 +161,7 @@ export function AuditForm({ projectId, existingFindings, stageStatus }: Props) {
               return (
                 <div
                   key={key}
-                  className="border-t border-gray-200 pt-4 first:border-t-0 first:pt-0 space-y-3"
+                  className="border-t border-border pt-4 first:border-t-0 first:pt-0 space-y-3"
                 >
                   <p className="font-medium text-sm">
                     {formatCheckPointLabel(cp)}
@@ -247,7 +247,7 @@ export function AuditForm({ projectId, existingFindings, stageStatus }: Props) {
         <Button
           onClick={handleComplete}
           disabled={isPending}
-          className="bg-orange-500 hover:bg-orange-600 text-white"
+          className="bg-brand hover:bg-brand/90 text-white"
         >
           {localStatus === 'completed' ? (
             <>
@@ -270,7 +270,7 @@ export function AuditForm({ projectId, existingFindings, stageStatus }: Props) {
           </Button>
         )}
       </div>
-      {saved && <p className="text-green-500 text-sm">Radiografía guardada.</p>}
+      {saved && <p className="text-success text-sm">Radiografía guardada.</p>}
     </div>
   );
 }

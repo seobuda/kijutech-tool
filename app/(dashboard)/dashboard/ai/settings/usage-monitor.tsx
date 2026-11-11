@@ -9,9 +9,9 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 const STATUS_BADGE: Record<string, string> = {
-  processing: 'bg-gray-100 text-gray-600',
-  completed: 'bg-green-100 text-green-700',
-  failed: 'bg-red-100 text-red-700',
+  processing: 'bg-muted text-muted-foreground',
+  completed: 'bg-success-soft text-success',
+  failed: 'bg-destructive-soft text-destructive',
 };
 
 type Props = {

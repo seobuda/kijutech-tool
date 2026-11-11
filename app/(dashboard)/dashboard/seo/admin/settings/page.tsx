@@ -18,7 +18,7 @@ export default async function SeoAdminSettingsPage() {
   const settings = await getAllSeoSettings();
 
   return (
-    <section className="flex-1 p-4 lg:p-8">
+    <section className="mx-auto w-full max-w-[1400px] px-4 py-6 lg:px-8 lg:py-8">
       <div className="mb-6">
         <h1 className="text-lg lg:text-2xl font-medium">
           Configuración SEO

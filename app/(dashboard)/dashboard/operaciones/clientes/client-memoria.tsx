@@ -21,8 +21,8 @@ import {
 import { MEMORY_KINDS, MEMORY_KIND_LABELS, MEMORY_MAX_CHARS } from '@/lib/operaciones/client-memory-rules';
 
 const fieldClass =
-  'w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500';
-const selectClass = 'rounded-md border border-gray-300 bg-white px-2 py-2 text-sm';
+  'w-full rounded-md border border-input bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand';
+const selectClass = 'rounded-md border border-input bg-card px-2 py-2 text-sm';
 
 type Msg = { type: 'ok' | 'error'; text: string } | null;
 type Result = { ok: boolean; error?: string };
@@ -125,7 +125,7 @@ export function ClientMemoria({ clientId }: { clientId: string }) {
   const discarded = memory.filter((m) => m.status === 'descartado');
 
   if (loadError) {
-    return <p className="text-sm text-red-600">No se pudo cargar contactos y memoria: {loadError}</p>;
+    return <p className="text-sm text-destructive">No se pudo cargar contactos y memoria: {loadError}</p>;
   }
   if (senders === null) {
     return <p className="text-sm text-muted-foreground">Cargando contactos y memoria…</p>;
@@ -134,7 +134,7 @@ export function ClientMemoria({ clientId }: { clientId: string }) {
   const memoryRow = (m: ClientMemoryView) => {
     const isEditing = editing?.id === m.id;
     return (
-      <li key={m.id} className="rounded-md border border-gray-200 p-2 text-sm">
+      <li key={m.id} className="rounded-md border border-border p-2 text-sm">
         {isEditing ? (
           <div className="space-y-2">
             <select
@@ -177,7 +177,7 @@ export function ClientMemoria({ clientId }: { clientId: string }) {
         ) : (
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
-              <span className="mr-2 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-700">
+              <span className="mr-2 rounded bg-muted px-1.5 py-0.5 text-xs text-foreground/80">
                 {MEMORY_KIND_LABELS[m.kind] ?? m.kind}
               </span>
               <span className="whitespace-pre-wrap break-words">{m.text}</span>
@@ -220,7 +220,7 @@ export function ClientMemoria({ clientId }: { clientId: string }) {
   };
 
   return (
-    <div className="space-y-5 rounded-lg border border-orange-200 bg-orange-50/40 p-3">
+    <div className="space-y-5 rounded-lg border border-brand/30 bg-brand-soft/40 p-3">
       <div>
         <h4 className="text-sm font-semibold">Contactos y memoria</h4>
         <p className="text-xs text-muted-foreground">
@@ -238,9 +238,9 @@ export function ClientMemoria({ clientId }: { clientId: string }) {
         ) : (
           <ul className="space-y-1">
             {senders.map((s) => (
-              <li key={s.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-gray-200 bg-white p-2 text-sm">
+              <li key={s.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-card p-2 text-sm">
                 <div className={s.active ? '' : 'text-muted-foreground line-through'}>
-                  <span className="mr-2 rounded bg-gray-100 px-1.5 py-0.5 text-xs">{s.kind === 'email' ? 'Correo' : 'Dominio'}</span>
+                  <span className="mr-2 rounded bg-muted px-1.5 py-0.5 text-xs">{s.kind === 'email' ? 'Correo' : 'Dominio'}</span>
                   <span className="font-medium">{s.value}</span>
                   {(s.name || s.role) && <span className="ml-2 text-xs text-muted-foreground">{[s.name, s.role].filter(Boolean).join(' · ')}</span>}
                 </div>
@@ -285,8 +285,8 @@ export function ClientMemoria({ clientId }: { clientId: string }) {
         <Label>Memoria (lo que hay que recordar de este cliente)</Label>
 
         {proposed.length > 0 && (
-          <div className="space-y-1 rounded-md border border-amber-300 bg-amber-50 p-2">
-            <p className="text-xs font-medium text-amber-800">Propuestos por la IA, pendientes de revisar ({proposed.length})</p>
+          <div className="space-y-1 rounded-md border border-warning/45 bg-warning-soft p-2">
+            <p className="text-xs font-medium text-warning-strong">Propuestos por la IA, pendientes de revisar ({proposed.length})</p>
             <ul className="space-y-1">{proposed.map(memoryRow)}</ul>
           </div>
         )}
@@ -329,7 +329,7 @@ export function ClientMemoria({ clientId }: { clientId: string }) {
         )}
       </section>
 
-      {msg && <p className={`text-sm ${msg.type === 'ok' ? 'text-green-700' : 'text-red-600'}`}>{msg.text}</p>}
+      {msg && <p className={`text-sm ${msg.type === 'ok' ? 'text-success' : 'text-destructive'}`}>{msg.text}</p>}
     </div>
   );
 }

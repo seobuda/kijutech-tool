@@ -116,7 +116,7 @@ export function KickoffForm({ projectId, existingAnswers, stageStatus }: Props) 
           <Button
             onClick={handleComplete}
             disabled={isPending}
-            className="bg-orange-500 hover:bg-orange-600 text-white"
+            className="bg-brand hover:bg-brand/90 text-white"
           >
             {localStatus === 'completed' ? (
               <>
@@ -139,7 +139,7 @@ export function KickoffForm({ projectId, existingAnswers, stageStatus }: Props) 
             </Button>
           )}
         </div>
-        {saved && <p className="text-green-500 text-sm">Respuestas guardadas.</p>}
+        {saved && <p className="text-success text-sm">Respuestas guardadas.</p>}
       </CardContent>
     </Card>
   );

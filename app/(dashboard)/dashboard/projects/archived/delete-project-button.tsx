@@ -40,7 +40,7 @@ export function DeleteProjectButton({
         type="button"
         variant="outline"
         size="sm"
-        className="text-red-600 hover:text-red-700"
+        className="text-destructive hover:text-destructive"
         onClick={() => setIsConfirming(true)}
       >
         <Trash2 className="mr-2 h-4 w-4" />
@@ -79,7 +79,7 @@ export function DeleteProjectButton({
           type="button"
           variant="outline"
           size="sm"
-          className="text-red-600 hover:text-red-700"
+          className="text-destructive hover:text-destructive"
           disabled={confirmationText !== CONFIRMATION_WORD || isPending}
           onClick={handleDelete}
         >
@@ -90,7 +90,7 @@ export function DeleteProjectButton({
           )}
         </Button>
       </div>
-      {error && <p className="text-red-500 text-sm">{error}</p>}
+      {error && <p className="text-destructive text-sm">{error}</p>}
     </div>
   );
 }

@@ -149,7 +149,7 @@ export function TelegramAjustes({ view }: { view: TelegramView }) {
             </p>
           )}
           {msg && (
-            <p data-testid="tg-message" className={`text-sm ${msg.type === 'ok' ? 'text-green-700' : 'text-red-600'}`}>
+            <p data-testid="tg-message" className={`text-sm ${msg.type === 'ok' ? 'text-success' : 'text-destructive'}`}>
               {msg.text}
             </p>
           )}
@@ -158,7 +158,7 @@ export function TelegramAjustes({ view }: { view: TelegramView }) {
         {/* Token */}
         <div className="space-y-2">
           <Label htmlFor="tg-token">
-            {view.hasBot ? `Sustituir token del bot${view.maskedToken ? ` (actual: ${view.maskedToken})` : ''}` : 'Token del bot'} <span className="text-red-500">*</span>
+            {view.hasBot ? `Sustituir token del bot${view.maskedToken ? ` (actual: ${view.maskedToken})` : ''}` : 'Token del bot'} <span className="text-destructive">*</span>
           </Label>
           <Input
             id="tg-token"
@@ -220,7 +220,7 @@ export function TelegramAjustes({ view }: { view: TelegramView }) {
         {view.hasBot && (
           <>
             {/* Modo pruebas */}
-            <div className="flex items-start gap-3 rounded-md border border-gray-200 p-3">
+            <div className="flex items-start gap-3 rounded-md border border-border p-3">
               <Switch
                 checked={view.testMode}
                 disabled={pending}
@@ -262,7 +262,7 @@ export function TelegramAjustes({ view }: { view: TelegramView }) {
             <DigestBox view={view} />
 
             {/* Recepción */}
-            <div className="space-y-2 rounded-md border border-gray-200 p-3">
+            <div className="space-y-2 rounded-md border border-border p-3">
               <p className="font-medium text-sm">
                 Recepción de mensajes:{' '}
                 {view.receiveMode === 'webhook' ? 'webhook' : 'consulta periódica (long polling)'}
@@ -311,9 +311,9 @@ export function TelegramAjustes({ view }: { view: TelegramView }) {
               {view.notifications.length === 0 ? (
                 <p className="text-sm text-muted-foreground">Todavía no se ha enviado ningún aviso.</p>
               ) : (
-                <div className="overflow-x-auto rounded-md border border-gray-200">
+                <div className="overflow-x-auto rounded-md border border-border">
                   <table className="w-full text-sm" data-testid="tg-notifications">
-                    <thead className="bg-gray-50 text-left text-xs uppercase text-gray-500">
+                    <thead className="bg-muted/50 text-left text-xs uppercase text-muted-foreground">
                       <tr>
                         <th className="px-3 py-2">Cuándo</th>
                         <th className="px-3 py-2">Tipo</th>
@@ -321,10 +321,10 @@ export function TelegramAjustes({ view }: { view: TelegramView }) {
                         <th className="px-3 py-2">Estado</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100">
+                    <tbody className="divide-y divide-border">
                       {view.notifications.map((n) => (
                         <tr key={n.id} className="align-top">
-                          <td className="px-3 py-1.5 whitespace-nowrap text-gray-500">
+                          <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground">
                             {dateTimeFmt.format(new Date(n.createdAt))}
                           </td>
                           <td className="px-3 py-1.5">{KIND_LABEL[n.kind] ?? n.kind}</td>
@@ -333,19 +333,19 @@ export function TelegramAjustes({ view }: { view: TelegramView }) {
                             <span
                               className={`rounded px-2 py-0.5 text-xs ${
                                 n.skipped
-                                  ? 'bg-gray-100 text-gray-600'
+                                  ? 'bg-muted text-muted-foreground'
                                   : n.status === 'enviado'
-                                    ? 'bg-green-100 text-green-700'
+                                    ? 'bg-success-soft text-success'
                                     : n.status === 'fallido'
-                                      ? 'bg-red-100 text-red-700'
-                                      : 'bg-amber-100 text-amber-700'
+                                      ? 'bg-destructive-soft text-destructive'
+                                      : 'bg-warning-soft text-warning-strong'
                               }`}
                             >
                               {n.skipped ? `omitido (${n.skipped})` : n.status}
                               {n.attempts > 0 && !n.skipped ? ` · ${n.attempts} intento${n.attempts === 1 ? '' : 's'}` : ''}
                             </span>
                             {n.lastError && n.status !== 'enviado' && (
-                              <p className="mt-1 text-xs text-red-600 max-w-md">{n.lastError}</p>
+                              <p className="mt-1 text-xs text-destructive max-w-md">{n.lastError}</p>
                             )}
                             {n.status === 'fallido' && (
                               <Button
@@ -378,7 +378,7 @@ function ListenerStatus({ view }: { view: TelegramView }) {
 
   if (conflict) {
     return (
-      <div role="alert" className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700" data-testid="tg-conflict">
+      <div role="alert" className="rounded-md border border-destructive/45 bg-destructive-soft p-3 text-sm text-destructive" data-testid="tg-conflict">
         <p className="font-medium">⚠️ Conflicto: hay más de un proceso escuchando este bot</p>
         <p>{view.lastError}</p>
         <p className="text-xs mt-1">
@@ -390,14 +390,14 @@ function ListenerStatus({ view }: { view: TelegramView }) {
   }
   if (view.lastError) {
     return (
-      <p className="text-sm text-red-600" data-testid="tg-listener">
+      <p className="text-sm text-destructive" data-testid="tg-listener">
         Error de la escucha: {view.lastError}
       </p>
     );
   }
   const fresh = view.pollAgeSeconds !== null && view.pollAgeSeconds < 120;
   return (
-    <p className={`text-sm ${fresh ? 'text-green-700' : 'text-amber-700'}`} data-testid="tg-listener">
+    <p className={`text-sm ${fresh ? 'text-success' : 'text-warning-strong'}`} data-testid="tg-listener">
       {fresh
         ? `🟢 Escuchando a Telegram (última consulta hace ${view.pollAgeSeconds} s).`
         : view.pollAgeSeconds === null
@@ -434,14 +434,14 @@ function MemberRow({ m, botReady }: { m: TelegramMemberView; botReady: boolean }
     });
 
   return (
-    <div className="rounded-md border border-gray-200 p-3 space-y-2" data-testid={`tg-member-${m.clickupUserId}`}>
+    <div className="rounded-md border border-border p-3 space-y-2" data-testid={`tg-member-${m.clickupUserId}`}>
       <div className="flex flex-wrap items-center gap-2">
         <p className="font-medium text-sm">
           {m.username}
           {m.isOwner && <span className="ml-1 text-xs text-muted-foreground">(yo)</span>}
         </p>
         <span
-          className={`rounded px-2 py-0.5 text-xs ${m.linked ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}
+          className={`rounded px-2 py-0.5 text-xs ${m.linked ? 'bg-success-soft text-success' : 'bg-muted text-muted-foreground'}`}
         >
           {m.linked ? `vinculado${m.telegramUsername ? ` · @${m.telegramUsername}` : ''}` : 'sin vincular'}
         </span>
@@ -501,7 +501,7 @@ function MemberRow({ m, botReady }: { m: TelegramMemberView; botReady: boolean }
       <div className="flex flex-wrap items-end gap-3">
         <p className="text-xs text-muted-foreground pb-2">
           Entrada {m.workStart} · {m.timezone}. Se editan en{' '}
-          <Link href="/dashboard/operaciones/equipo" className="text-orange-600 hover:underline">
+          <Link href="/dashboard/operaciones/equipo" className="text-brand hover:underline">
             Equipo
           </Link>
           .
@@ -511,7 +511,7 @@ function MemberRow({ m, botReady }: { m: TelegramMemberView; botReady: boolean }
             type="checkbox"
             checked={daily}
             onChange={(e) => setDaily(e.target.checked)}
-            className="h-4 w-4 accent-orange-500"
+            className="h-4 w-4 accent-[var(--brand)]"
           />
           Resumen diario
         </label>
@@ -528,7 +528,7 @@ function MemberRow({ m, botReady }: { m: TelegramMemberView; botReady: boolean }
           Guardar
         </Button>
       </div>
-      {msg && <p className={`text-xs ${msg.type === 'ok' ? 'text-green-700' : 'text-red-600'}`}>{msg.text}</p>}
+      {msg && <p className={`text-xs ${msg.type === 'ok' ? 'text-success' : 'text-destructive'}`}>{msg.text}</p>}
     </div>
   );
 }
@@ -548,7 +548,7 @@ function DigestBox({ view }: { view: TelegramView }) {
     });
 
   return (
-    <div className="space-y-2 rounded-md border border-gray-200 p-3">
+    <div className="space-y-2 rounded-md border border-border p-3">
       <p className="font-medium text-sm">Resúmenes de «Mi bandeja» para ti</p>
       <p className="text-xs text-muted-foreground">
         Solo los bloqueos y las revisiones de encargos <strong>urgentes</strong> te llegan al instante. Todo lo demás
@@ -559,7 +559,7 @@ function DigestBox({ view }: { view: TelegramView }) {
         <p className="text-xs text-muted-foreground pb-2">
           Horas actuales: <strong>{view.digestTimes.split(',').join(', ')}</strong> (hora de {view.digestTimezone}). Se cambian, con el
           resto de tiempos y textos, en{' '}
-          <Link href="/dashboard/operaciones/automatizaciones" className="text-orange-600 hover:underline">
+          <Link href="/dashboard/operaciones/automatizaciones" className="text-brand hover:underline">
             Automatizaciones
           </Link>
           .
@@ -577,7 +577,7 @@ function DigestBox({ view }: { view: TelegramView }) {
           Enviar resumen de la bandeja ahora
         </Button>
       </div>
-      {msg && <p className={`text-xs ${msg.type === 'ok' ? 'text-green-700' : 'text-red-600'}`}>{msg.text}</p>}
+      {msg && <p className={`text-xs ${msg.type === 'ok' ? 'text-success' : 'text-destructive'}`}>{msg.text}</p>}
     </div>
   );
 }

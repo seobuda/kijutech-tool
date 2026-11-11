@@ -68,9 +68,9 @@ const ICONS: Record<string, LucideIcon> = {
 };
 
 const STATUS_STYLES: Record<string, { bg: string; border: string; text: string; dot: string }> = {
-  built: { bg: 'bg-green-50', border: 'border-green-300', text: 'text-green-800', dot: 'bg-green-500' },
-  in_progress: { bg: 'bg-amber-50', border: 'border-amber-300', text: 'text-amber-800', dot: 'bg-amber-500' },
-  planned: { bg: 'bg-gray-50', border: 'border-gray-300', text: 'text-gray-500', dot: 'bg-gray-400' },
+  built: { bg: 'bg-success-soft', border: 'border-success/45', text: 'text-success', dot: 'bg-success' },
+  in_progress: { bg: 'bg-warning-soft', border: 'border-warning/45', text: 'text-warning-strong', dot: 'bg-warning' },
+  planned: { bg: 'bg-muted/50', border: 'border-input', text: 'text-muted-foreground', dot: 'bg-muted-foreground/50' },
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -117,7 +117,7 @@ function MapNode({ data }: NodeProps) {
         // de infraestructura sin pisar el color de estado (verde/gris).
         isSupport ? 'border-l-[6px] !border-l-violet-400' : '',
         d.clickable ? 'cursor-pointer border-dashed hover:shadow-md' : 'border-solid',
-        d.highlighted ? 'ring-4 ring-blue-400 ring-offset-2 shadow-lg' : '',
+        d.highlighted ? 'ring-4 ring-info ring-offset-2 shadow-lg' : '',
       ].join(' ')}
       data-testid={`map-node-${d.label}`}
     >
@@ -143,22 +143,22 @@ function MapNode({ data }: NodeProps) {
                 e.stopPropagation();
                 d.onShowDetail?.();
               }}
-              className="rounded p-0.5 text-gray-400 hover:bg-gray-200/60 hover:text-gray-600"
+              className="rounded p-0.5 text-muted-foreground/70 hover:bg-secondary/60 hover:text-muted-foreground"
             >
               <Info className="h-3.5 w-3.5" />
             </button>
           )}
         </div>
       </div>
-      <p className="text-xs leading-snug text-gray-600">{d.description}</p>
-      {d.settingsLine && <p className="mt-1.5 rounded bg-white/70 px-1.5 py-1 text-[11px] leading-snug text-gray-700">⚙ {d.settingsLine}</p>}
+      <p className="text-xs leading-snug text-muted-foreground">{d.description}</p>
+      {d.settingsLine && <p className="mt-1.5 rounded bg-card/70 px-1.5 py-1 text-[11px] leading-snug text-foreground/80">⚙ {d.settingsLine}</p>}
       {d.badge && (
         <p
           className={`mt-1.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${
-            d.badge.kind === 'error' ? 'bg-red-100 text-red-700' : d.badge.kind === 'ok' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600'
+            d.badge.kind === 'error' ? 'bg-destructive-soft text-destructive' : d.badge.kind === 'ok' ? 'bg-success-soft text-success' : 'bg-muted text-muted-foreground'
           }`}
         >
-          <span className={`h-1.5 w-1.5 rounded-full ${d.badge.kind === 'error' ? 'bg-red-500' : d.badge.kind === 'ok' ? 'bg-emerald-500' : 'bg-gray-400'}`} />
+          <span className={`h-1.5 w-1.5 rounded-full ${d.badge.kind === 'error' ? 'bg-destructive' : d.badge.kind === 'ok' ? 'bg-success' : 'bg-muted-foreground/50'}`} />
           {d.badge.text}
         </p>
       )}
@@ -167,7 +167,7 @@ function MapNode({ data }: NodeProps) {
           <span className={`h-1.5 w-1.5 rounded-full ${styles.dot}`} />
           {STATUS_LABELS[d.status]}
         </span>
-        {d.clickable && <span className="text-[11px] font-medium text-blue-600">Ver detalle →</span>}
+        {d.clickable && <span className="text-[11px] font-medium text-info">Ver detalle →</span>}
       </div>
       <Handle type="source" position={Position.Right} className="!bg-gray-400" />
     </div>
@@ -180,7 +180,7 @@ function SectionLabel({ data }: NodeProps) {
     <div
       className={[
         'pointer-events-none text-xs font-semibold tracking-wide uppercase',
-        d.accent === 'support' ? 'text-violet-400' : 'text-gray-400',
+        d.accent === 'support' ? 'text-violet-400' : 'text-muted-foreground/70',
       ].join(' ')}
     >
       {d.label}
@@ -517,16 +517,16 @@ export function ArchitectureMapClient({ systemNodes, processMaps, live }: Props)
               Volver
             </Button>
           )}
-          <nav className="flex flex-wrap items-center gap-1 text-sm text-gray-600">
-            <button type="button" className={path.length ? 'text-blue-600 hover:underline' : 'font-medium text-gray-800'} onClick={() => goTo([])}>
+          <nav className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
+            <button type="button" className={path.length ? 'text-info hover:underline' : 'font-medium text-foreground'} onClick={() => goTo([])}>
               Mapa general
             </button>
             {path.map((id, i) => (
               <span key={`${id}-${i}`} className="flex items-center gap-1">
-                <span className="text-gray-400">›</span>
+                <span className="text-muted-foreground/70">›</span>
                 <button
                   type="button"
-                  className={i < path.length - 1 ? 'text-blue-600 hover:underline' : 'font-medium text-gray-800'}
+                  className={i < path.length - 1 ? 'text-info hover:underline' : 'font-medium text-foreground'}
                   onClick={() => goTo(path.slice(0, i + 1))}
                 >
                   {titleOf(id)}
@@ -550,7 +550,7 @@ export function ArchitectureMapClient({ systemNodes, processMaps, live }: Props)
         </Button>
       </div>
 
-      <div className="h-[70vh] w-full rounded-lg border bg-gray-50/50">
+      <div className="h-[70vh] w-full rounded-lg border bg-muted/50">
         <ReactFlow
           key={path.join('/') || 'root'}
           nodes={nodesToRender}
@@ -574,7 +574,7 @@ export function ArchitectureMapClient({ systemNodes, processMaps, live }: Props)
           </DialogHeader>
           {modal && (
             <div className="space-y-4 text-sm" data-testid="map-detail">
-              {(step?.description ?? modal.node?.description) && <p className="text-gray-600">{step?.description ?? modal.node?.description}</p>}
+              {(step?.description ?? modal.node?.description) && <p className="text-muted-foreground">{step?.description ?? modal.node?.description}</p>}
 
               {step?.when && <Section title="Cuándo se ejecuta">{step.when}</Section>}
               {step?.ai && <Section title="Qué decide la IA">{step.ai}</Section>}
@@ -585,8 +585,8 @@ export function ArchitectureMapClient({ systemNodes, processMaps, live }: Props)
                   <ul className="space-y-1">
                     {step.prompts.map((k) => (
                       <li key={k}>
-                        <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs">{k}</code>{' '}
-                        <span className="text-gray-500">
+                        <code className="rounded bg-muted px-1.5 py-0.5 text-xs">{k}</code>{' '}
+                        <span className="text-muted-foreground">
                           {live.prompts[k] ? `${live.prompts[k].name}${live.prompts[k].active ? '' : ' (inactivo)'}` : 'no encontrado en la base de datos'}
                         </span>
                       </li>
@@ -599,7 +599,7 @@ export function ArchitectureMapClient({ systemNodes, processMaps, live }: Props)
                 <Section title="Tablas que usa">
                   <div className="flex flex-wrap gap-1.5">
                     {step.tables.map((t) => (
-                      <span key={t} className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">
+                      <span key={t} className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-foreground/80">
                         {t}
                       </span>
                     ))}
@@ -615,15 +615,15 @@ export function ArchitectureMapClient({ systemNodes, processMaps, live }: Props)
                       if (!a) return null;
                       const fields = ref.fields ? a.fields.filter((f) => ref.fields!.includes(f.key)) : a.fields;
                       return (
-                        <li key={ref.automation} className="rounded-md border border-gray-200 p-2">
+                        <li key={ref.automation} className="rounded-md border border-border p-2">
                           <div className="flex items-center justify-between gap-2">
-                            <span className="font-medium text-gray-800">{a.title}</span>
-                            <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${a.enabled ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-600'}`}>
+                            <span className="font-medium text-foreground">{a.title}</span>
+                            <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${a.enabled ? 'bg-success-soft text-success' : 'bg-secondary text-muted-foreground'}`}>
                               {a.enabled ? 'Encendida' : 'Apagada'}
                             </span>
                           </div>
                           {fields.length > 0 && (
-                            <ul className="mt-1 space-y-0.5 text-gray-600">
+                            <ul className="mt-1 space-y-0.5 text-muted-foreground">
                               {fields.map((f) => (
                                 <li key={f.key}>
                                   {f.label}: <strong>{f.value}</strong>
@@ -632,8 +632,8 @@ export function ArchitectureMapClient({ systemNodes, processMaps, live }: Props)
                               ))}
                             </ul>
                           )}
-                          {a.customTemplate && <p className="mt-1 text-xs text-gray-500">Con texto personalizado.</p>}
-                          <Link href={`/dashboard/operaciones/automatizaciones#auto-${ref.automation}`} className="mt-1 inline-block text-xs font-medium text-blue-600 hover:underline">
+                          {a.customTemplate && <p className="mt-1 text-xs text-muted-foreground">Con texto personalizado.</p>}
+                          <Link href={`/dashboard/operaciones/automatizaciones#auto-${ref.automation}`} className="mt-1 inline-block text-xs font-medium text-info hover:underline">
                             Abrir este ajuste →
                           </Link>
                         </li>
@@ -646,7 +646,7 @@ export function ArchitectureMapClient({ systemNodes, processMaps, live }: Props)
               {step && (step.live || step.runs?.length) && (
                 <Section title="Última ejecución">
                   {step.runs && step.runs.length > 0 && (
-                    <p className="mb-1 text-xs text-gray-500">
+                    <p className="mb-1 text-xs text-muted-foreground">
                       Lo ejecuta el planificador: {step.runs.map((r) => `${r}()`).join(', ')}
                     </p>
                   )}
@@ -656,8 +656,8 @@ export function ArchitectureMapClient({ systemNodes, processMaps, live }: Props)
                         {run.label}:{' '}
                         <strong>{run.at ? `${ago(run.at, now)} (${new Date(run.at).toLocaleString('es-ES', { timeZone: 'Europe/Madrid' })})` : 'sin ejecuciones todavía'}</strong>
                       </p>
-                      {run.error ? <p className="text-red-600">Error: {run.error}</p> : <p className="text-emerald-700">Sin errores</p>}
-                      {run.note && <p className="text-gray-500">{run.note}</p>}
+                      {run.error ? <p className="text-destructive">Error: {run.error}</p> : <p className="text-success">Sin errores</p>}
+                      {run.note && <p className="text-muted-foreground">{run.note}</p>}
                     </div>
                   ))}
                 </Section>
@@ -667,13 +667,13 @@ export function ArchitectureMapClient({ systemNodes, processMaps, live }: Props)
 
               {detail && (
                 <div className="space-y-3 border-t pt-3">
-                  <p className="text-gray-600">{detail.summary}</p>
+                  <p className="text-muted-foreground">{detail.summary}</p>
                   {detail.stack && detail.stack.length > 0 && (
                     <div>
-                      <p className="mb-1.5 text-xs font-medium text-gray-500 uppercase">Stack</p>
+                      <p className="mb-1.5 text-xs font-medium text-muted-foreground uppercase">Stack</p>
                       <div className="flex flex-wrap gap-1.5">
                         {detail.stack.map((item) => (
-                          <span key={item} className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">
+                          <span key={item} className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-foreground/80">
                             {item}
                           </span>
                         ))}
@@ -682,8 +682,8 @@ export function ArchitectureMapClient({ systemNodes, processMaps, live }: Props)
                   )}
                   {detail.keyDecisions && detail.keyDecisions.length > 0 && (
                     <div>
-                      <p className="mb-1.5 text-xs font-medium text-gray-500 uppercase">Decisiones clave</p>
-                      <ul className="list-disc space-y-1 pl-4 text-gray-600">
+                      <p className="mb-1.5 text-xs font-medium text-muted-foreground uppercase">Decisiones clave</p>
+                      <ul className="list-disc space-y-1 pl-4 text-muted-foreground">
                         {detail.keyDecisions.map((item) => (
                           <li key={item}>{item}</li>
                         ))}
@@ -718,8 +718,8 @@ export function ArchitectureMapClient({ systemNodes, processMaps, live }: Props)
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <p className="mb-1 text-xs font-medium text-gray-500 uppercase">{title}</p>
-      <div className="text-gray-700">{children}</div>
+      <p className="mb-1 text-xs font-medium text-muted-foreground uppercase">{title}</p>
+      <div className="text-foreground/80">{children}</div>
     </div>
   );
 }

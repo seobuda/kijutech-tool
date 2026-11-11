@@ -104,10 +104,10 @@ export function ClusteringStepClient({
   return (
     <div className="space-y-6">
       {activeProvider ? (
-        <Card className="border-l-4 border-l-orange-400 bg-orange-50/50">
+        <Card className="border-l-4 border-l-orange-400 bg-brand-soft/50">
           <CardContent className="pt-6 space-y-3">
             <div className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-orange-500" />
+              <Sparkles className="h-5 w-5 text-brand" />
               <h3 className="font-semibold">Clustering automático disponible</h3>
             </div>
             <p className="text-sm text-muted-foreground">
@@ -121,16 +121,16 @@ export function ClusteringStepClient({
 
             {view === 'error' && errorMsg && (
               errorRawResponse ? (
-                <div className="rounded-md border border-red-300 bg-red-50 p-3 space-y-2">
-                  <p className="text-sm font-medium text-red-800">
+                <div className="rounded-md border border-destructive/45 bg-destructive-soft p-3 space-y-2">
+                  <p className="text-sm font-medium text-destructive">
                     Error al procesar la respuesta de la IA
                   </p>
-                  <p className="text-sm text-red-700">{errorMsg}</p>
+                  <p className="text-sm text-destructive">{errorMsg}</p>
                   <div>
                     <button
                       type="button"
                       onClick={() => setRawResponseExpanded((v) => !v)}
-                      className="flex items-center gap-1 text-xs font-medium text-red-800 hover:text-red-900"
+                      className="flex items-center gap-1 text-xs font-medium text-destructive hover:text-destructive"
                     >
                       {rawResponseExpanded ? (
                         <ChevronDown className="h-3.5 w-3.5" />
@@ -144,13 +144,13 @@ export function ClusteringStepClient({
                         readOnly
                         value={errorRawResponse}
                         rows={10}
-                        className="mt-2 w-full rounded-md border border-red-200 bg-white p-2 font-mono text-xs text-gray-700"
+                        className="mt-2 w-full rounded-md border border-destructive/30 bg-card p-2 font-mono text-xs text-foreground/80"
                       />
                     )}
                   </div>
                 </div>
               ) : (
-                <p className="text-sm text-red-600">{errorMsg}</p>
+                <p className="text-sm text-destructive">{errorMsg}</p>
               )
             )}
 
@@ -158,7 +158,7 @@ export function ClusteringStepClient({
               type="button"
               onClick={handleAnalyze}
               disabled={view === 'analyzing' || keywordCount < 3}
-              className="bg-orange-500 hover:bg-orange-600 text-white"
+              className="bg-brand hover:bg-brand/90 text-white"
             >
               {view === 'analyzing' ? (
                 <>

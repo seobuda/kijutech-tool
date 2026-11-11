@@ -111,7 +111,7 @@ const timeFmt = new Intl.DateTimeFormat('es-ES', {
 const MAX_RECORDING_SECONDS = 600;
 
 const selectClass =
-  'w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500';
+  'w-full rounded-md border border-input bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand';
 
 const PRIORITIES = [
   { value: 1, label: 'Urgente' },
@@ -577,7 +577,7 @@ export function BlocNotas({
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="space">
-                  Espacio de ClickUp <span className="text-red-500">*</span>
+                  Espacio de ClickUp <span className="text-destructive">*</span>
                 </Label>
                 <select
                   id="space"
@@ -621,9 +621,9 @@ export function BlocNotas({
                   data-testid="save-status"
                   className={`text-xs ${
                     saveState === 'error'
-                      ? 'text-red-600 font-medium'
+                      ? 'text-destructive font-medium'
                       : saveState === 'saved'
-                        ? 'text-green-700'
+                        ? 'text-success'
                         : 'text-muted-foreground'
                   }`}
                 >
@@ -633,7 +633,7 @@ export function BlocNotas({
               {saveState === 'error' && !readOnly && (
                 <div
                   role="alert"
-                  className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700 space-y-1"
+                  className="rounded-md border border-destructive/45 bg-destructive-soft p-3 text-sm text-destructive space-y-1"
                 >
                   <p className="font-medium">No se ha podido guardar. Copia local activada.</p>
                   <p>
@@ -648,7 +648,7 @@ export function BlocNotas({
               {recover && !readOnly && (
                 <div
                   role="alert"
-                  className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 space-y-1"
+                  className="rounded-md border border-warning/45 bg-warning-soft p-3 text-sm text-warning-strong space-y-1"
                 >
                   <p className="font-medium">Hay una copia local más reciente que la del servidor</p>
                   <p>
@@ -694,7 +694,7 @@ export function BlocNotas({
             {!readOnly && (
               <div className="flex flex-wrap items-center gap-2">
                 {recState === 'recording' ? (
-                  <Button variant="outline" onClick={stopRecording} className="border-red-300 text-red-700">
+                  <Button variant="outline" onClick={stopRecording} className="border-destructive/45 text-destructive">
                     ⏹ Parar y transcribir ({mmss(seconds)})
                   </Button>
                 ) : (
@@ -716,10 +716,10 @@ export function BlocNotas({
               <p className="text-xs text-muted-foreground">Elige el espacio para poder convertir la nota.</p>
             )}
             {convertError && (
-              <p className="text-sm text-red-600 rounded-md border border-red-200 bg-red-50 p-2">{convertError}</p>
+              <p className="text-sm text-destructive rounded-md border border-destructive/30 bg-destructive-soft p-2">{convertError}</p>
             )}
             {conversion?.state === 'processing' && (
-              <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+              <div className="rounded-md border border-info/30 bg-info-soft p-3 text-sm text-info">
                 <p className="font-medium">⏳ {conversion.step}</p>
                 <p className="text-xs">
                   {elapsed} s · Puedes cambiar de pestaña o recargar: el resultado se guarda y lo verás al volver.
@@ -727,7 +727,7 @@ export function BlocNotas({
               </div>
             )}
             {conversion?.state === 'error' && !readOnly && (
-              <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 space-y-2">
+              <div className="rounded-md border border-destructive/30 bg-destructive-soft p-3 text-sm text-destructive space-y-2">
                 <p className="font-medium">La conversión ha fallado</p>
                 <p>{conversion.error}</p>
                 <div className="flex gap-2">
@@ -748,25 +748,25 @@ export function BlocNotas({
               </div>
             )}
             {audioError && (
-              <p className="text-sm text-amber-700 rounded-md border border-amber-300 bg-amber-50 p-2">
+              <p className="text-sm text-warning-strong rounded-md border border-warning/45 bg-warning-soft p-2">
                 {audioError}
               </p>
             )}
 
             {audios.length > 0 && (
-              <div className="rounded-md border border-gray-200 bg-white p-3 text-sm space-y-1">
+              <div className="rounded-md border border-border bg-card p-3 text-sm space-y-1">
                 <p className="font-medium">Audios de esta nota ({audios.length})</p>
                 {audios.map((a, i) => (
-                  <div key={a.id} className="flex flex-wrap items-center gap-2 text-gray-700">
+                  <div key={a.id} className="flex flex-wrap items-center gap-2 text-foreground/80">
                     <span>
                       Audio {i + 1}
                       {a.sizeBytes ? ` · ${(a.sizeBytes / 1024).toFixed(0)} KB` : ''}
                     </span>
                     {a.hasTranscript ? (
-                      <span className="rounded bg-green-100 px-2 py-0.5 text-xs text-green-700">Transcrito</span>
+                      <span className="rounded bg-success-soft px-2 py-0.5 text-xs text-success">Transcrito</span>
                     ) : (
                       <>
-                        <span className="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-700">
+                        <span className="rounded bg-warning-soft px-2 py-0.5 text-xs text-warning-strong">
                           Sin transcribir
                         </span>
                         {!readOnly && (
@@ -790,7 +790,7 @@ export function BlocNotas({
             )}
 
             {readOnly && note && (
-              <div className="rounded-md border border-gray-200 bg-white p-3 space-y-2">
+              <div className="rounded-md border border-border bg-card p-3 space-y-2">
                 <p className="font-medium text-sm">Encargos creados desde esta nota</p>
                 {note.requests.length === 0 && (
                   <p className="text-sm text-muted-foreground">Ninguno (se eliminaron o no se llegaron a crear).</p>
@@ -800,14 +800,14 @@ export function BlocNotas({
                     <div className="min-w-0">
                       <p className="font-medium">{r.title}</p>
                       <p className="text-xs text-muted-foreground">{r.listName}</p>
-                      {r.error && r.status !== 'creado' && <p className="text-xs text-red-600">{r.error}</p>}
+                      {r.error && r.status !== 'creado' && <p className="text-xs text-destructive">{r.error}</p>}
                     </div>
                     {r.url ? (
                       <a
                         href={r.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-orange-600 hover:underline whitespace-nowrap"
+                        className="text-brand hover:underline whitespace-nowrap"
                       >
                         Abrir tarea
                       </a>
@@ -853,14 +853,14 @@ export function BlocNotas({
                 <a
                   href={`/dashboard/operaciones?nota=${h.id}`}
                   onClick={() => setOpeningId(h.id)}
-                  className={`block rounded-md border p-2 pr-8 text-sm hover:bg-gray-50 ${
-                    h.id === note?.id ? 'border-orange-400 bg-orange-50' : 'border-gray-200 bg-white'
+                  className={`block rounded-md border p-2 pr-8 text-sm hover:bg-muted ${
+                    h.id === note?.id ? 'border-brand/70 bg-brand-soft' : 'border-border bg-card'
                   } ${openingId === h.id ? 'opacity-60' : ''}`}
                 >
                   <span className="flex items-center justify-between gap-2">
                     <span
                       className={`rounded px-1.5 py-0.5 text-xs ${
-                        h.status === 'convertida' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
+                        h.status === 'convertida' ? 'bg-success-soft text-success' : 'bg-muted text-muted-foreground'
                       }`}
                     >
                       {h.status === 'convertida' ? 'Convertida' : 'Borrador'}
@@ -877,7 +877,7 @@ export function BlocNotas({
                   aria-label="Eliminar nota"
                   title="Eliminar nota"
                   onClick={() => void removeNoteById(h.id, h.status === 'convertida')}
-                  className="absolute right-1 bottom-1 rounded px-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                  className="absolute right-1 bottom-1 rounded px-1.5 text-muted-foreground/70 hover:bg-destructive-soft hover:text-destructive"
                 >
                   🗑
                 </button>
@@ -997,7 +997,7 @@ function ReviewPanel({
       </div>
 
       {items.length === 0 && (
-        <div className="rounded-md border border-dashed border-gray-300 p-6 text-center text-sm text-muted-foreground">
+        <div className="rounded-md border border-dashed border-input p-6 text-center text-sm text-muted-foreground">
           La IA no ha encontrado ningún encargo en la nota. Revisa «No convertido» más abajo o vuelve a la
           nota.
         </div>
@@ -1006,9 +1006,9 @@ function ReviewPanel({
       {items.map((item, idx) => {
         const result = results?.[item.key];
         return (
-          <div key={item.key} className="rounded-lg border border-gray-200 bg-white p-4 space-y-3">
+          <div key={item.key} className="rounded-lg border border-border bg-card p-4 space-y-3">
             <div className="flex items-start justify-between gap-2">
-              <p className="text-xs font-medium uppercase text-gray-500">Encargo {idx + 1}</p>
+              <p className="text-xs font-medium uppercase text-muted-foreground">Encargo {idx + 1}</p>
               {!sent && (
                 <Button
                   size="sm"
@@ -1024,7 +1024,7 @@ function ReviewPanel({
                   href={result.taskUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="rounded bg-green-100 px-2 py-0.5 text-xs text-green-700 hover:underline"
+                  className="rounded bg-success-soft px-2 py-0.5 text-xs text-success hover:underline"
                 >
                   ✅ Creado — abrir tarea
                 </a>
@@ -1032,7 +1032,7 @@ function ReviewPanel({
             </div>
 
             {result && !result.ok && (
-              <div className="rounded-md border border-red-200 bg-red-50 p-2 text-sm text-red-700 space-y-1">
+              <div className="rounded-md border border-destructive/30 bg-destructive-soft p-2 text-sm text-destructive space-y-1">
                 <p>No se pudo crear en ClickUp: {result.error}</p>
                 <RetryButton requestId={result.requestId} />
               </div>
@@ -1048,7 +1048,7 @@ function ReviewPanel({
             </div>
 
             {item.missingData.length > 0 && (
-              <div className="rounded-md border border-amber-300 bg-amber-50 p-2 text-sm text-amber-900">
+              <div className="rounded-md border border-warning/45 bg-warning-soft p-2 text-sm text-warning-strong">
                 <p className="font-medium">Faltan datos:</p>
                 <ul className="list-disc ml-5">
                   {item.missingData.map((q, i) => (
@@ -1081,7 +1081,7 @@ function ReviewPanel({
 
             {item.clientWarning && (
               <p
-                className="rounded-md border border-amber-300 bg-amber-50 p-2 text-sm text-amber-900"
+                className="rounded-md border border-warning/45 bg-warning-soft p-2 text-sm text-warning-strong"
                 data-testid="client-warning"
               >
                 ⚠️ {item.clientWarning}. Decide si quieres enviar este encargo igualmente.
@@ -1119,10 +1119,10 @@ function ReviewPanel({
             <div className="grid gap-3 sm:grid-cols-4">
               <div className="space-y-1">
                 <Label>
-                  Lista <span className="text-red-500">*</span>
+                  Lista <span className="text-destructive">*</span>
                 </Label>
                 <select
-                  className={`${selectClass} ${!item.listId ? 'border-red-400' : ''}`}
+                  className={`${selectClass} ${!item.listId ? 'border-destructive/70' : ''}`}
                   value={item.listId}
                   disabled={sent}
                   onChange={(e) => {
@@ -1205,7 +1205,7 @@ function ReviewPanel({
       })}
 
       {proposal.notConverted.length > 0 && (
-        <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+        <div className="rounded-lg border border-border bg-muted/50 p-4">
           <p className="font-medium text-sm">No convertido en encargos</p>
           <p className="text-xs text-muted-foreground mb-2">
             Partes de tu nota que la IA no considera encargos. Nada se pierde: sigue en la nota.
@@ -1218,18 +1218,18 @@ function ReviewPanel({
         </div>
       )}
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-destructive">{error}</p>}
 
       {!sent ? (
         <div className="flex flex-wrap items-center gap-2">
           <Button onClick={sendAll} disabled={sending || items.length === 0 || missingList || missingTitle}>
             {sending ? 'Enviando a ClickUp…' : `Enviar todo (${items.length})`}
           </Button>
-          {missingList && <span className="text-xs text-red-600">Elige una lista para cada encargo.</span>}
+          {missingList && <span className="text-xs text-destructive">Elige una lista para cada encargo.</span>}
         </div>
       ) : (
         <div className="flex flex-wrap items-center gap-2">
-          <p className={`text-sm ${allOk ? 'text-green-700' : 'text-amber-700'}`}>
+          <p className={`text-sm ${allOk ? 'text-success' : 'text-warning-strong'}`}>
             {allOk
               ? 'Todos los encargos están creados en ClickUp.'
               : 'Algunos no se pudieron crear: pulsa Reintentar en cada uno (también desde Encargos).'}
@@ -1274,7 +1274,7 @@ function ClientPicker({
     <div className="space-y-1">
       <Label>Cliente</Label>
       <select
-        className={`${selectClass} ${!value ? 'border-amber-400' : ''}`}
+        className={`${selectClass} ${!value ? 'border-warning/70' : ''}`}
         value={value}
         disabled={disabled}
         onChange={(e) => onChange(field.options.find((o) => o.id === e.target.value) ?? null)}
@@ -1287,7 +1287,7 @@ function ClientPicker({
         ))}
       </select>
       {!value && (
-        <p className="text-xs text-amber-700">
+        <p className="text-xs text-warning-strong">
           La IA no ha encontrado un cliente claro en la nota. Elígelo o déjalo vacío.
         </p>
       )}

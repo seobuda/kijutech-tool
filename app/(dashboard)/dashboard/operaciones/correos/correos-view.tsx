@@ -20,8 +20,8 @@ import {
 import { INBOUND_STATUS_LABELS, type InboundStatus } from '@/lib/operaciones/inbound-email-rules';
 
 const fieldClass =
-  'w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500';
-const selectClass = 'rounded-md border border-gray-300 bg-white px-2 py-2 text-sm';
+  'w-full rounded-md border border-input bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand';
+const selectClass = 'rounded-md border border-input bg-card px-2 py-2 text-sm';
 
 type Msg = { type: 'ok' | 'error'; text: string } | null;
 type Result = { ok: boolean; error?: string };
@@ -29,12 +29,12 @@ type Result = { ok: boolean; error?: string };
 const statusLabel = (s: string) => INBOUND_STATUS_LABELS[s as InboundStatus] ?? s;
 const statusClass = (s: string) =>
   s === 'nuevo'
-    ? 'bg-green-100 text-green-800'
+    ? 'bg-success-soft text-success'
     : s === 'sin_cliente'
-      ? 'bg-amber-100 text-amber-800'
+      ? 'bg-warning-soft text-warning-strong'
       : s === 'error'
-        ? 'bg-red-100 text-red-800'
-        : 'bg-gray-100 text-gray-700';
+        ? 'bg-destructive-soft text-destructive'
+        : 'bg-muted text-foreground/80';
 
 const MATCH_LABELS: Record<string, string> = {
   email: 'por su correo exacto',
@@ -48,11 +48,11 @@ const fmt = (iso: string) =>
   new Date(iso).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
 function AuthBadge({ auth }: { auth: string }) {
-  if (auth === 'pass') return <span className="rounded bg-green-50 px-1.5 py-0.5 text-xs text-green-700">Remitente verificado</span>;
+  if (auth === 'pass') return <span className="rounded bg-success-soft px-1.5 py-0.5 text-xs text-success">Remitente verificado</span>;
   if (auth === 'fail') {
-    return <span className="rounded bg-red-50 px-1.5 py-0.5 text-xs text-red-700">⚠ Autenticación fallida: podría estar suplantado</span>;
+    return <span className="rounded bg-destructive-soft px-1.5 py-0.5 text-xs text-destructive">⚠ Autenticación fallida: podría estar suplantado</span>;
   }
-  return <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600">Remitente sin verificar</span>;
+  return <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">Remitente sin verificar</span>;
 }
 
 export function CorreosView({ clients }: { clients: { id: string; name: string }[] }) {
@@ -123,7 +123,7 @@ export function CorreosView({ clients }: { clients: { id: string; name: string }
   const [saveSender, setSaveSender] = useState(true);
   const [askDelete, setAskDelete] = useState(false);
 
-  if (loadError) return <p className="text-sm text-red-600">No se pudieron cargar los correos: {loadError}</p>;
+  if (loadError) return <p className="text-sm text-destructive">No se pudieron cargar los correos: {loadError}</p>;
   if (emails === null) return <p className="text-sm text-muted-foreground">Cargando correos…</p>;
 
   // ----- Detalle -----
@@ -145,7 +145,7 @@ export function CorreosView({ clients }: { clients: { id: string; name: string }
           ← Volver a la lista
         </Button>
 
-        <div className="space-y-2 rounded-lg border border-gray-200 bg-white p-4">
+        <div className="space-y-2 rounded-lg border border-border bg-card p-4">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-lg font-semibold break-words">{detail.subject || '(sin asunto)'}</h2>
             <span className={`rounded px-2 py-0.5 text-xs ${statusClass(detail.status)}`}>{statusLabel(detail.status)}</span>
@@ -170,7 +170,7 @@ export function CorreosView({ clients }: { clients: { id: string; name: string }
                 Cliente: <strong>{detail.clientName}</strong> <span className="text-xs text-muted-foreground">({MATCH_LABELS[detail.matchedBy] ?? detail.matchedBy})</span>
               </span>
             ) : (
-              <span className="text-sm text-amber-700">Cliente sin reconocer</span>
+              <span className="text-sm text-warning-strong">Cliente sin reconocer</span>
             )}
           </div>
           {detail.statusNote && <p className="text-sm text-muted-foreground">{detail.statusNote}</p>}
@@ -178,20 +178,20 @@ export function CorreosView({ clients }: { clients: { id: string; name: string }
             <p className="text-xs text-muted-foreground">Adjuntos (no se descargan): {detail.attachments.join(', ')}</p>
           )}
           {detail.status === 'nuevo' && (
-            <p className="rounded-md bg-gray-50 p-2 text-xs text-muted-foreground">
+            <p className="rounded-md bg-muted/50 p-2 text-xs text-muted-foreground">
               El correo está reconocido. Interpretarlo y proponer encargos llegará en el siguiente paso; por ahora queda guardado aquí.
             </p>
           )}
         </div>
 
-        <div className="rounded-lg border border-gray-200 bg-white p-4">
+        <div className="rounded-lg border border-border bg-card p-4">
           <Label className="mb-2 block">Texto del correo</Label>
-          <pre className="max-h-[28rem] overflow-auto whitespace-pre-wrap break-words rounded-md bg-gray-50 p-3 text-sm">
+          <pre className="max-h-[28rem] overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted/50 p-3 text-sm">
             {detail.bodyText || '(sin texto)'}
           </pre>
         </div>
 
-        <div className="space-y-3 rounded-lg border border-gray-200 bg-white p-4">
+        <div className="space-y-3 rounded-lg border border-border bg-card p-4">
           {canAssign && (
             <div className="flex flex-wrap items-end gap-2">
               <div className="space-y-1">
@@ -265,7 +265,7 @@ export function CorreosView({ clients }: { clients: { id: string; name: string }
                 </Button>
               ))}
           </div>
-          {msg && <p className={`text-sm ${msg.type === 'ok' ? 'text-green-700' : 'text-red-600'}`}>{msg.text}</p>}
+          {msg && <p className={`text-sm ${msg.type === 'ok' ? 'text-success' : 'text-destructive'}`}>{msg.text}</p>}
         </div>
       </div>
     );
@@ -297,7 +297,7 @@ export function CorreosView({ clients }: { clients: { id: string; name: string }
             type="button"
             onClick={() => setFilter(c.key)}
             className={`rounded-full border px-3 py-1 text-xs ${
-              filter === c.key ? 'border-orange-500 bg-orange-50 text-gray-900' : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+              filter === c.key ? 'border-brand/70 bg-brand-soft text-foreground' : 'border-border text-muted-foreground hover:bg-muted'
             }`}
           >
             {c.label} ({c.n})
@@ -309,7 +309,7 @@ export function CorreosView({ clients }: { clients: { id: string; name: string }
       </div>
 
       {pasting && (
-        <div className="space-y-2 rounded-lg border border-orange-200 bg-orange-50/40 p-3">
+        <div className="space-y-2 rounded-lg border border-brand/30 bg-brand-soft/40 p-3">
           <p className="text-xs text-muted-foreground">
             Para probar el sistema o meter a mano un correo que no llegó solo. Se trata igual que uno recibido (pero sin verificar al remitente).
           </p>
@@ -344,13 +344,13 @@ export function CorreosView({ clients }: { clients: { id: string; name: string }
         </div>
       )}
 
-      {msg && <p className={`text-sm ${msg.type === 'ok' ? 'text-green-700' : 'text-red-600'}`}>{msg.text}</p>}
+      {msg && <p className={`text-sm ${msg.type === 'ok' ? 'text-success' : 'text-destructive'}`}>{msg.text}</p>}
 
       {emails.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-gray-300 p-6 text-center text-sm text-muted-foreground">
+        <div className="rounded-lg border border-dashed border-input p-6 text-center text-sm text-muted-foreground">
           {total === 0 ? (
             <>
-              <p className="font-medium text-gray-700">Aún no ha llegado ningún correo.</p>
+              <p className="font-medium text-foreground/80">Aún no ha llegado ningún correo.</p>
               <p className="mt-1">
                 Cuando un cliente escriba y la regla de Gmail reenvíe una copia, aparecerá aquí. Mientras tanto puedes probarlo con «Pegar un correo».
                 Recuerda dar de alta los contactos de cada cliente (Clientes → Editar → Contactos y memoria) para que se reconozcan.
@@ -361,13 +361,13 @@ export function CorreosView({ clients }: { clients: { id: string; name: string }
           )}
         </div>
       ) : (
-        <ul className="divide-y divide-gray-200 rounded-lg border border-gray-200 bg-white">
+        <ul className="divide-y divide-border rounded-lg border border-border bg-card">
           {emails.map((m) => (
             <li key={m.id}>
               <button
                 type="button"
                 onClick={() => open(m.id)}
-                className="flex w-full flex-wrap items-center justify-between gap-2 px-3 py-2 text-left hover:bg-gray-50"
+                className="flex w-full flex-wrap items-center justify-between gap-2 px-3 py-2 text-left hover:bg-muted"
               >
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{m.subject || '(sin asunto)'}</p>

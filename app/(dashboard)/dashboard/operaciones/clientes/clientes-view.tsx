@@ -72,7 +72,7 @@ const DAY_LABELS = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
 const MAX_RECORDING_SECONDS = 300;
 
 const areaClass =
-  'w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500';
+  'w-full rounded-md border border-input bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand';
 
 const emptyClient = (level: string): ClientView => ({
   id: '',
@@ -193,18 +193,18 @@ export function ClientesView({
         </div>
       </div>
 
-      {msg && <p className={`text-sm ${msg.type === 'ok' ? 'text-green-700' : 'text-red-600'}`}>{msg.text}</p>}
+      {msg && <p className={`text-sm ${msg.type === 'ok' ? 'text-success' : 'text-destructive'}`}>{msg.text}</p>}
       <p className="text-xs text-muted-foreground">
         Actividad calculada{' '}
         {runInfo.lastRun
           ? `el ${new Date(runInfo.lastRun).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Madrid' })}`
           : '— todavía no (pulsa «Recalcular actividad»)'}
         ; se actualiza sola cada madrugada.
-        {runInfo.lastError && <span className="text-red-600"> Último error: {runInfo.lastError}</span>}
+        {runInfo.lastError && <span className="text-destructive"> Último error: {runInfo.lastError}</span>}
       </p>
 
       {missingOptions > 0 && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm flex flex-wrap items-center gap-2">
+        <div className="rounded-md border border-warning/30 bg-warning-soft p-3 text-sm flex flex-wrap items-center gap-2">
           <span>
             Hay {missingOptions} opci{missingOptions === 1 ? 'ón' : 'ones'} del campo «Cliente» de ClickUp sin ficha.
           </span>
@@ -225,7 +225,7 @@ export function ClientesView({
       )}
 
       {duplicates.length > 0 && (
-        <details className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm">
+        <details className="rounded-md border border-warning/30 bg-warning-soft p-3 text-sm">
           <summary className="cursor-pointer">
             Posibles clientes duplicados ({duplicates.length}): revísalos y desactiva o añade nombres alternativos
           </summary>
@@ -265,7 +265,7 @@ export function ClientesView({
         />
         <select
           aria-label="Filtrar por nivel"
-          className="rounded-md border border-gray-300 bg-white px-2 py-2 text-sm"
+          className="rounded-md border border-input bg-card px-2 py-2 text-sm"
           value={levelFilter}
           onChange={(e) => setLevelFilter(e.target.value)}
         >
@@ -278,7 +278,7 @@ export function ClientesView({
         </select>
         <select
           aria-label="Filtrar por estado"
-          className="rounded-md border border-gray-300 bg-white px-2 py-2 text-sm"
+          className="rounded-md border border-input bg-card px-2 py-2 text-sm"
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as 'active' | 'inactive' | 'all')}
         >
@@ -292,7 +292,7 @@ export function ClientesView({
       </div>
 
       {clients.length === 0 && editing !== 'new' ? (
-        <div className="rounded-lg border border-dashed border-gray-300 p-8 text-center space-y-2">
+        <div className="rounded-lg border border-dashed border-input p-8 text-center space-y-2">
           <p className="font-medium">Todavía no hay clientes</p>
           <p className="text-sm text-muted-foreground">Crea la primera ficha para que el agente reconozca a tus clientes.</p>
           <Button size="sm" onClick={() => setEditing('new')}>
@@ -320,14 +320,14 @@ export function ClientesView({
               <div
                 key={c.id}
                 data-testid={`cliente-${c.name}`}
-                className={`rounded-lg border p-4 space-y-2 ${c.active ? 'border-gray-200 bg-white' : 'border-gray-200 bg-gray-50 opacity-75'}`}
+                className={`rounded-lg border p-4 space-y-2 ${c.active ? 'border-border bg-card' : 'border-border bg-muted/50 opacity-75'}`}
               >
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <p className="font-medium">
                       {c.name}
                       {!c.active && (
-                        <span className="ml-2 rounded bg-gray-200 px-1.5 py-0.5 text-xs text-gray-600">Desactivado</span>
+                        <span className="ml-2 rounded bg-secondary px-1.5 py-0.5 text-xs text-muted-foreground">Desactivado</span>
                       )}
                     </p>
                     <p className="text-sm text-muted-foreground">
@@ -367,7 +367,7 @@ export function ClientesView({
                 {c.services.length > 0 && (
                   <div className="flex flex-wrap gap-1.5">
                     {c.services.map((s) => (
-                      <span key={s.key} className="rounded bg-orange-100 px-2 py-0.5 text-xs text-orange-800">
+                      <span key={s.key} className="rounded bg-brand-soft px-2 py-0.5 text-xs text-brand">
                         {serviceLabel.get(s.key) ?? s.key}
                         {s.responsibleClickupId
                           ? ` · ${members.find((m) => m.id === s.responsibleClickupId)?.username ?? '—'}`
@@ -437,14 +437,14 @@ function ConfigPanel({ levels, services, onClose }: { levels: Level[]; services:
     });
 
   return (
-    <div className="rounded-lg border-2 border-orange-300 bg-white p-4 space-y-4" data-testid="config-panel">
+    <div className="rounded-lg border-2 border-brand/45 bg-card p-4 space-y-4" data-testid="config-panel">
       <div className="flex items-center justify-between">
         <p className="font-medium">Niveles y servicios</p>
         <Button size="sm" variant="ghost" onClick={onClose}>
           Cerrar
         </Button>
       </div>
-      {msg && <p className={`text-sm ${msg.type === 'ok' ? 'text-green-700' : 'text-red-600'}`}>{msg.text}</p>}
+      {msg && <p className={`text-sm ${msg.type === 'ok' ? 'text-success' : 'text-destructive'}`}>{msg.text}</p>}
 
       <div className="space-y-2">
         <Label>Niveles: plazo de entrega (días laborables), días sin actividad para alertar y horizonte de trabajo planificado</Label>
@@ -513,7 +513,7 @@ function ServiceRow({ service, disabled, run }: { service: Service | null; disab
     <div className="flex flex-wrap items-center gap-2">
       <Input aria-label="Nombre del servicio" className="w-48" placeholder="Nuevo servicio…" value={label} onChange={(e) => setLabel(e.target.value)} />
       <label className="flex items-center gap-1 text-sm">
-        <input type="checkbox" className="h-4 w-4 accent-orange-500" checked={active} onChange={(e) => setActive(e.target.checked)} />
+        <input type="checkbox" className="h-4 w-4 accent-[var(--brand)]" checked={active} onChange={(e) => setActive(e.target.checked)} />
         Activo
       </label>
       <Button
@@ -657,7 +657,7 @@ function ClientForm({
   );
 
   return (
-    <div className="rounded-lg border-2 border-orange-300 bg-white p-4 space-y-4" data-testid="cliente-form">
+    <div className="rounded-lg border-2 border-brand/45 bg-card p-4 space-y-4" data-testid="cliente-form">
       <p className="font-medium">{isNew ? 'Nuevo cliente' : `Editar la ficha de ${initial.name}`}</p>
 
       <AiFill name={f.name} onDraft={applyDraft} />
@@ -709,12 +709,12 @@ function ClientForm({
           ))}
         </select>
         {space && (
-          <div className="grid gap-1 sm:grid-cols-2 max-h-48 overflow-y-auto rounded border border-gray-200 p-2">
+          <div className="grid gap-1 sm:grid-cols-2 max-h-48 overflow-y-auto rounded border border-border p-2">
             {space.lists.map((l) => (
               <label key={l.id} className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"
-                  className="h-4 w-4 accent-orange-500"
+                  className="h-4 w-4 accent-[var(--brand)]"
                   checked={f.usualListIds.includes(l.id)}
                   onChange={(e) =>
                     set({ usualListIds: e.target.checked ? [...f.usualListIds, l.id] : f.usualListIds.filter((id) => id !== l.id) })
@@ -761,7 +761,7 @@ function ClientForm({
         <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"
-            className="h-4 w-4 accent-orange-500"
+            className="h-4 w-4 accent-[var(--brand)]"
             checked={f.alertsEnabled}
             onChange={(e) => set({ alertsEnabled: e.target.checked })}
           />
@@ -804,11 +804,11 @@ function ClientForm({
           {services.map((s) => {
             const on = svc(s.key);
             return (
-              <div key={s.key} className="flex items-center justify-between gap-2 rounded border border-gray-200 px-2 py-1">
+              <div key={s.key} className="flex items-center justify-between gap-2 rounded border border-border px-2 py-1">
                 <label className="flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
-                    className="h-4 w-4 accent-orange-500"
+                    className="h-4 w-4 accent-[var(--brand)]"
                     checked={Boolean(on)}
                     onChange={(e) => toggleService(s.key, e.target.checked)}
                   />
@@ -818,7 +818,7 @@ function ClientForm({
                 {on && (
                   <select
                     aria-label={`Responsable de ${s.label}`}
-                    className="rounded border border-gray-300 bg-white px-1 py-0.5 text-sm"
+                    className="rounded border border-input bg-card px-1 py-0.5 text-sm"
                     value={on.responsibleClickupId}
                     onChange={(e) => setResponsible(s.key, e.target.value)}
                   >
@@ -863,7 +863,7 @@ function ClientForm({
                     type="button"
                     aria-pressed={on}
                     onClick={() => set({ workDays: on ? f.workDays.filter((d) => d !== day) : [...f.workDays, day].sort() })}
-                    className={`h-8 w-8 rounded-full border text-sm ${on ? 'border-orange-500 bg-orange-500 text-white' : 'border-gray-300 bg-white text-gray-600'}`}
+                    className={`h-8 w-8 rounded-full border text-sm ${on ? 'border-brand/70 bg-brand text-white' : 'border-input bg-card text-muted-foreground'}`}
                   >
                     {lbl}
                   </button>
@@ -876,7 +876,7 @@ function ClientForm({
 
       <div className="space-y-2">
         <Label>Webs y herramientas</Label>
-        <p className="text-xs text-amber-700">Aquí no se guardan contraseñas ni accesos: solo dónde está cada cosa.</p>
+        <p className="text-xs text-warning-strong">Aquí no se guardan contraseñas ni accesos: solo dónde está cada cosa.</p>
         {f.tools.map((t, i) => (
           <div key={i} className="flex flex-wrap items-center gap-2">
             <Input aria-label="Herramienta" placeholder="GA4, Search Console, web…" className="w-44" value={t.name} onChange={(e) => set({ tools: f.tools.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)) })} />
@@ -907,7 +907,7 @@ function ClientForm({
       {text('c-notes', 'Peculiaridades y notas', 'notes', 3)}
 
       {isNew ? (
-        <p className="rounded-md border border-dashed border-gray-300 p-3 text-sm text-muted-foreground">
+        <p className="rounded-md border border-dashed border-input p-3 text-sm text-muted-foreground">
           Guarda la ficha para poder añadir contactos y memoria del cliente.
         </p>
       ) : (
@@ -915,7 +915,7 @@ function ClientForm({
       )}
 
       <label className="flex items-center gap-2 text-sm">
-        <input type="checkbox" className="h-4 w-4 accent-orange-500" checked={f.active} onChange={(e) => set({ active: e.target.checked })} />
+        <input type="checkbox" className="h-4 w-4 accent-[var(--brand)]" checked={f.active} onChange={(e) => set({ active: e.target.checked })} />
         Cliente activo (si se desactiva, el agente lo sigue reconociendo pero avisa en la revisión)
       </label>
 
@@ -933,8 +933,8 @@ function ClientForm({
         >
           Cancelar
         </Button>
-        {dirty && <span className="text-xs text-amber-700">Cambios sin guardar</span>}
-        {msg && <span className={`text-sm ${msg.type === 'ok' ? 'text-green-700' : 'text-red-600'}`}>{msg.text}</span>}
+        {dirty && <span className="text-xs text-warning-strong">Cambios sin guardar</span>}
+        {msg && <span className={`text-sm ${msg.type === 'ok' ? 'text-success' : 'text-destructive'}`}>{msg.text}</span>}
       </div>
     </div>
   );
@@ -1039,7 +1039,7 @@ function AiFill({ name, onDraft }: { name: string; onDraft: (d: ClientDraft) => 
     );
   }
   return (
-    <div className="space-y-2 rounded-md border border-orange-200 bg-orange-50 p-3">
+    <div className="space-y-2 rounded-md border border-brand/30 bg-brand-soft p-3">
       <p className="text-sm font-medium">Rellenar con IA</p>
       <p className="text-xs text-muted-foreground">
         Pega un texto o graba un audio describiendo al cliente. La IA propone los campos y tú los revisas antes de
@@ -1068,7 +1068,7 @@ function AiFill({ name, onDraft }: { name: string; onDraft: (d: ClientDraft) => 
         <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>
           Cerrar
         </Button>
-        {msg && <span className={`text-xs ${msg.type === 'ok' ? 'text-green-700' : 'text-red-600'}`}>{msg.text}</span>}
+        {msg && <span className={`text-xs ${msg.type === 'ok' ? 'text-success' : 'text-destructive'}`}>{msg.text}</span>}
       </div>
     </div>
   );
@@ -1077,10 +1077,10 @@ function AiFill({ name, onDraft }: { name: string; onDraft: (d: ClientDraft) => 
 // --- Semáforo y trabajo del mes ---------------------------------------------------------------
 
 const DOT: Record<string, string> = {
-  red: 'bg-red-500',
-  amber: 'bg-amber-400',
-  green: 'bg-green-500',
-  gray: 'bg-gray-300'
+  red: 'bg-destructive',
+  amber: 'bg-warning',
+  green: 'bg-success',
+  gray: 'bg-muted-foreground/30'
 };
 const DOT_LABEL: Record<string, string> = { red: 'Rojo', amber: 'Ámbar', green: 'Verde', gray: 'Gris' };
 
@@ -1110,7 +1110,7 @@ function AlertLine({ c }: { c: ClientView }) {
           {a.upcoming} con fecha en {a.horizonDays} días
         </span>
       )}
-      {(a.state === 'red' || a.state === 'amber') && <span className="text-amber-800">{a.note}</span>}
+      {(a.state === 'red' || a.state === 'amber') && <span className="text-warning-strong">{a.note}</span>}
     </div>
   );
 }
@@ -1157,12 +1157,12 @@ function MonthWorkButton({ clientId, name }: { clientId: string; name: string })
     );
   }
   return (
-    <div className="space-y-2 rounded-md border border-gray-200 bg-gray-50 p-3" data-testid="trabajo-mes-panel">
+    <div className="space-y-2 rounded-md border border-border bg-muted/50 p-3" data-testid="trabajo-mes-panel">
       <div className="flex flex-wrap items-center gap-2">
         <p className="text-sm font-medium">Trabajo completado</p>
         <select
           aria-label="Mes"
-          className="rounded-md border border-gray-300 bg-white px-2 py-1 text-sm"
+          className="rounded-md border border-input bg-card px-2 py-1 text-sm"
           value={month}
           onChange={(e) => {
             const m = e.target.value as 'current' | 'previous';
@@ -1194,17 +1194,17 @@ function MonthWorkButton({ clientId, name }: { clientId: string; name: string })
         </Button>
       </div>
       {pending && <p className="text-sm text-muted-foreground">Cargando de ClickUp…</p>}
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-destructive">{error}</p>}
       {work && !pending && (
         <>
-          {work.truncated && <p className="text-xs text-amber-700">Hay demasiadas tareas y la lista puede estar incompleta.</p>}
+          {work.truncated && <p className="text-xs text-warning-strong">Hay demasiadas tareas y la lista puede estar incompleta.</p>}
           {work.items.length === 0 ? (
             <p className="text-sm text-muted-foreground">No hay tareas completadas de este cliente en ese mes.</p>
           ) : (
             <ul className="space-y-1 text-sm" data-testid="trabajo-mes-lista">
               {work.items.map((i, idx) => (
                 <li key={idx}>
-                  • <a href={i.url} target="_blank" rel="noopener noreferrer" className="text-orange-600 hover:underline">{i.title}</a>{' '}
+                  • <a href={i.url} target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">{i.title}</a>{' '}
                   <span className="text-muted-foreground">
                     — {fmtDay(i.doneMs)}
                     {i.people.length ? ` — ${i.people.join(', ')}` : ''}
@@ -1214,7 +1214,7 @@ function MonthWorkButton({ clientId, name }: { clientId: string; name: string })
             </ul>
           )}
           {work.cleaned.length > 0 && (
-            <div className="space-y-1 border-t border-gray-200 pt-2" data-testid="trabajo-mes-limpieza">
+            <div className="space-y-1 border-t border-border pt-2" data-testid="trabajo-mes-limpieza">
               <p className="text-xs font-medium text-muted-foreground">
                 Cerradas en limpieza ({work.cleaned.length}): trabajo antiguo o que no se hizo; no cuentan en el total.
               </p>

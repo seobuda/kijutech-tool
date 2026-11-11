@@ -9,9 +9,9 @@ import { RetryButton } from './retry-button';
 export const dynamic = 'force-dynamic';
 
 const STATUS: Record<string, { label: string; className: string }> = {
-  creado: { label: 'Creado', className: 'bg-green-100 text-green-700' },
-  pendiente_clickup: { label: 'Pendiente de ClickUp', className: 'bg-amber-100 text-amber-700' },
-  error_sync: { label: 'Error de sincronización', className: 'bg-red-100 text-red-700' }
+  creado: { label: 'Creado', className: 'bg-success-soft text-success' },
+  pendiente_clickup: { label: 'Pendiente de ClickUp', className: 'bg-warning-soft text-warning-strong' },
+  error_sync: { label: 'Error de sincronización', className: 'bg-destructive-soft text-destructive' }
 };
 
 const WORK: Record<string, string> = {
@@ -83,14 +83,14 @@ export default async function EncargosPage() {
 
   if (rows.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-gray-300 p-8 text-center space-y-3">
+      <div className="rounded-lg border border-dashed border-input p-8 text-center space-y-3">
         <p className="font-medium">Todavía no hay encargos</p>
         <p className="text-sm text-muted-foreground">
           Crea el primero y aparecerá aquí con su estado y el enlace a ClickUp.
         </p>
         <Link
           href="/dashboard/operaciones/nuevo"
-          className="inline-block rounded-full bg-orange-500 px-4 py-2 text-sm text-white hover:bg-orange-600"
+          className="inline-block rounded-full bg-brand px-4 py-2 text-sm text-white hover:bg-brand/90"
         >
           Nuevo encargo
         </Link>
@@ -103,15 +103,15 @@ export default async function EncargosPage() {
       <div className="flex justify-end">
         <Link
           href="/dashboard/operaciones/nuevo"
-          className="rounded-full bg-orange-500 px-4 py-2 text-sm text-white hover:bg-orange-600"
+          className="rounded-full bg-brand px-4 py-2 text-sm text-white hover:bg-brand/90"
         >
           Nuevo encargo
         </Link>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+      <div className="overflow-x-auto rounded-lg border border-border bg-card">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 text-left text-xs uppercase text-gray-500">
+          <thead className="bg-muted/50 text-left text-xs uppercase text-muted-foreground">
             <tr>
               <th className="px-3 py-2">Creado</th>
               <th className="px-3 py-2">Encargo</th>
@@ -124,23 +124,23 @@ export default async function EncargosPage() {
               <th className="px-3 py-2">Última acción</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-border">
             {rows.map((r) => {
-              const st = STATUS[r.status] ?? { label: r.status, className: 'bg-gray-100 text-gray-600' };
+              const st = STATUS[r.status] ?? { label: r.status, className: 'bg-muted text-muted-foreground' };
               return (
                 <tr key={r.id} className="align-top">
-                  <td className="px-3 py-2 whitespace-nowrap text-gray-500">{fmt.format(r.createdAt)}</td>
+                  <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{fmt.format(r.createdAt)}</td>
                   <td className="px-3 py-2 min-w-[16rem]">
                     <p className="font-medium">{r.title}</p>
                     {r.priority && (
                       <p className="text-xs text-muted-foreground">Prioridad {PRIORITY[r.priority]}</p>
                     )}
                     {r.errorMessage && r.status !== 'creado' && (
-                      <p className="mt-1 text-xs text-red-600">{r.errorMessage}</p>
+                      <p className="mt-1 text-xs text-destructive">{r.errorMessage}</p>
                     )}
                   </td>
                   <td className="px-3 py-2">{r.clickupListName ?? r.clickupListId}</td>
-                  <td className="px-3 py-2">{r.assigneeName ?? <span className="text-gray-400">Sin asignar</span>}</td>
+                  <td className="px-3 py-2">{r.assigneeName ?? <span className="text-muted-foreground/70">Sin asignar</span>}</td>
                   <td className="px-3 py-2 whitespace-nowrap">
                     {r.dueDate ? new Date(r.dueDate + 'T00:00:00').toLocaleDateString('es-ES') : '—'}
                   </td>
@@ -157,7 +157,7 @@ export default async function EncargosPage() {
                         href={r.clickupTaskUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-orange-600 hover:underline"
+                        className="text-brand hover:underline"
                       >
                         Abrir tarea
                       </a>
@@ -171,7 +171,7 @@ export default async function EncargosPage() {
                       if (act) {
                         return (
                           <span title={act.by ?? ''}>
-                            <span className="rounded bg-green-100 px-2 py-0.5 text-green-700">{act.label}</span>{' '}
+                            <span className="rounded bg-success-soft px-2 py-0.5 text-success">{act.label}</span>{' '}
                             <span className="text-muted-foreground">{fmt.format(act.at)}</span>
                           </span>
                         );
@@ -179,11 +179,11 @@ export default async function EncargosPage() {
                       // Encargos anteriores a los eventos: solo consta que se vio.
                       return r.seenAt ? (
                         <span title={r.seenBy ?? ''}>
-                          <span className="rounded bg-green-100 px-2 py-0.5 text-green-700">✅ Visto</span>{' '}
+                          <span className="rounded bg-success-soft px-2 py-0.5 text-success">✅ Visto</span>{' '}
                           <span className="text-muted-foreground">{fmt.format(r.seenAt)}</span>
                         </span>
                       ) : (
-                        <span className="text-gray-400">—</span>
+                        <span className="text-muted-foreground/70">—</span>
                       );
                     })()}
                   </td>

@@ -18,7 +18,7 @@ export default async function UsuariosPage() {
     .orderBy(users.id);
 
   return (
-    <section className="flex-1 p-4 lg:p-8 space-y-8">
+    <section className="mx-auto w-full max-w-[1400px] px-4 py-6 lg:px-8 lg:py-8 space-y-8">
       <div>
         <h1 className="text-lg lg:text-2xl font-medium">Usuarios</h1>
         <p className="text-sm text-muted-foreground">
@@ -30,7 +30,7 @@ export default async function UsuariosPage() {
         <h2 className="text-base font-medium">Usuarios de la cuenta</h2>
         <div className="overflow-x-auto rounded-md border">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-left">
+            <thead className="bg-muted/50 text-left">
               <tr>
                 <th className="px-3 py-2">Nombre</th>
                 <th className="px-3 py-2">Correo</th>

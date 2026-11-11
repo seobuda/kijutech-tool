@@ -22,7 +22,7 @@ const PRIORITIES = [
 ];
 
 const selectClass =
-  'w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500';
+  'w-full rounded-md border border-input bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand';
 
 export function NuevoEncargoForm({
   spaces,
@@ -160,10 +160,10 @@ export function NuevoEncargoForm({
   return (
     <div className="max-w-3xl space-y-6">
       {result && !result.ok && (
-        <Card className="border-red-200 bg-red-50">
+        <Card className="border-destructive/30 bg-destructive-soft">
           <CardHeader>
-            <CardTitle className="text-red-700">El encargo se guardó, pero no se pudo crear en ClickUp</CardTitle>
-            <CardDescription className="text-red-700">{result.error}</CardDescription>
+            <CardTitle className="text-destructive">El encargo se guardó, pero no se pudo crear en ClickUp</CardTitle>
+            <CardDescription className="text-destructive">{result.error}</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2">
             <Button onClick={retry} disabled={sendPending}>
@@ -180,13 +180,13 @@ export function NuevoEncargoForm({
         <CardHeader>
           <CardTitle>Nuevo encargo</CardTitle>
           <CardDescription>
-            Los campos con <span className="text-red-500">*</span> son obligatorios.
+            Los campos con <span className="text-destructive">*</span> son obligatorios.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
           <div className="space-y-2">
             <Label htmlFor="list">
-              Lista de ClickUp <span className="text-red-500">*</span>
+              Lista de ClickUp <span className="text-destructive">*</span>
             </Label>
             <select
               id="list"
@@ -214,7 +214,7 @@ export function NuevoEncargoForm({
 
           <div className="space-y-2">
             <Label htmlFor="request">
-              Petición (texto libre) <span className="text-red-500">*</span>
+              Petición (texto libre) <span className="text-destructive">*</span>
             </Label>
             <textarea
               id="request"
@@ -237,12 +237,12 @@ export function NuevoEncargoForm({
                 Opcional. Rellena el título y la descripción para que los edites antes de enviar.
               </span>
             </div>
-            {aiError && <p className="text-sm text-red-600">{aiError}</p>}
+            {aiError && <p className="text-sm text-destructive">{aiError}</p>}
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="title">
-              Título <span className="text-red-500">*</span>
+              Título <span className="text-destructive">*</span>
             </Label>
             <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} />
           </div>
@@ -251,7 +251,7 @@ export function NuevoEncargoForm({
             <div className="space-y-2">
               <Label htmlFor="prepared">Descripción preparada (editable)</Label>
               {missing.length > 0 && (
-                <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                <div className="rounded-md border border-warning/45 bg-warning-soft p-3 text-sm text-warning-strong">
                   <p className="font-medium">Faltan datos para poder ejecutar el encargo:</p>
                   <ul className="list-disc ml-5">
                     {missing.map((q, i) => (
@@ -281,7 +281,7 @@ export function NuevoEncargoForm({
                 <>
                   <select
                     id="client"
-                    className={`${selectClass} ${clientHint && !clientOptionId ? 'border-amber-400' : ''}`}
+                    className={`${selectClass} ${clientHint && !clientOptionId ? 'border-warning/70' : ''}`}
                     value={clientOptionId}
                     onChange={(e) => setClientOptionId(e.target.value)}
                   >
@@ -293,7 +293,7 @@ export function NuevoEncargoForm({
                     ))}
                   </select>
                   {clientHint && !clientOptionId && (
-                    <p className="text-xs text-amber-700">
+                    <p className="text-xs text-warning-strong">
                       La IA no ha encontrado un cliente claro en la petición. Elígelo o déjalo vacío.
                     </p>
                   )}
@@ -371,7 +371,7 @@ export function NuevoEncargoForm({
             </div>
           </div>
 
-          {formError && <p className="text-sm text-red-600">{formError}</p>}
+          {formError && <p className="text-sm text-destructive">{formError}</p>}
 
           <div className="flex flex-wrap gap-2 pt-2">
             <Button onClick={send} disabled={!canSend || sendPending}>

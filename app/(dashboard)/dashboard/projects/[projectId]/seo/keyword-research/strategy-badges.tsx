@@ -43,7 +43,7 @@ function BadgeSelect({
     <span className="relative inline-flex">
       <span
         className={`text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${
-          current?.className ?? 'bg-gray-200 text-gray-500'
+          current?.className ?? 'bg-secondary text-muted-foreground'
         }`}
       >
         {current?.short ?? 'Sin definir'}

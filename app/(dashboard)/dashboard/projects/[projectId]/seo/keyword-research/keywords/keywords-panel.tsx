@@ -232,7 +232,7 @@ export function KeywordsPanel({
             <CardTitle>Instrucciones del paso 1 (referencia)</CardTitle>
           </CardHeader>
           <CardContent>
-            <pre className="text-sm whitespace-pre-wrap font-sans bg-gray-50 rounded-md p-3">
+            <pre className="text-sm whitespace-pre-wrap font-sans bg-muted/50 rounded-md p-3">
               {instructions}
             </pre>
           </CardContent>
@@ -285,7 +285,7 @@ export function KeywordsPanel({
               <Upload className="mr-2 h-4 w-4" />
               Importar CSV de SE Ranking
             </Button>
-            {csvError && <p className="text-red-500 text-sm mt-2">{csvError}</p>}
+            {csvError && <p className="text-destructive text-sm mt-2">{csvError}</p>}
           </div>
         </CardContent>
       </Card>
@@ -302,7 +302,7 @@ export function KeywordsPanel({
               {csvPreview.map((row, i) => (
                 <li
                   key={`${row.keyword}-${i}`}
-                  className="flex items-center justify-between border-b border-gray-100 pb-1 last:border-b-0"
+                  className="flex items-center justify-between border-b border-border pb-1 last:border-b-0"
                 >
                   <span>{row.keyword}</span>
                   <span className="text-muted-foreground">
@@ -317,7 +317,7 @@ export function KeywordsPanel({
                 type="button"
                 onClick={handleConfirmCsvImport}
                 disabled={isImportingCsv}
-                className="bg-orange-500 hover:bg-orange-600 text-white"
+                className="bg-brand hover:bg-brand/90 text-white"
               >
                 {isImportingCsv ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -364,18 +364,18 @@ export function KeywordsPanel({
                 return (
                 <li
                   key={k.id}
-                  className="flex items-center justify-between border-b border-gray-100 pb-2 last:border-b-0"
+                  className="flex items-center justify-between border-b border-border pb-2 last:border-b-0"
                 >
                   <div className="text-sm">
                     <div>
                       {k.keyword}
                       {fromCsv && (
-                        <span className="ml-2 text-xs px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">
+                        <span className="ml-2 text-xs px-1.5 py-0.5 rounded-full bg-info-soft text-info font-medium">
                           SE Ranking
                         </span>
                       )}
                       {k.assigned && (
-                        <span className="ml-2 text-xs text-green-600">
+                        <span className="ml-2 text-xs text-success">
                           asignada
                         </span>
                       )}
@@ -408,7 +408,7 @@ export function KeywordsPanel({
                     <Button
                       size="sm"
                       variant="outline"
-                      className="text-red-600 hover:text-red-700"
+                      className="text-destructive hover:text-destructive"
                       onClick={() => handleDelete(k.id)}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
@@ -453,7 +453,7 @@ export function KeywordsPanel({
             <CardTitle>Texto para el Tutor Kijutech</CardTitle>
           </CardHeader>
           <CardContent>
-            <pre className="text-sm whitespace-pre-wrap font-sans bg-gray-50 rounded-md p-3 max-h-80 overflow-y-auto">
+            <pre className="text-sm whitespace-pre-wrap font-sans bg-muted/50 rounded-md p-3 max-h-80 overflow-y-auto">
               {tutorText}
             </pre>
             <Button
@@ -474,7 +474,7 @@ export function KeywordsPanel({
         <Button
           onClick={handleComplete}
           disabled={isPending || !canComplete}
-          className="bg-orange-500 hover:bg-orange-600 text-white"
+          className="bg-brand hover:bg-brand/90 text-white"
         >
           {localStatus === 'completed' ? (
             <>
@@ -503,7 +503,7 @@ export function KeywordsPanel({
           </Button>
         )}
       </div>
-      {error && <p className="text-red-500 text-sm">{error}</p>}
+      {error && <p className="text-destructive text-sm">{error}</p>}
       {!canComplete && (
         <p className="text-sm text-muted-foreground">
           Necesitas al menos 10 keywords para completar este paso.

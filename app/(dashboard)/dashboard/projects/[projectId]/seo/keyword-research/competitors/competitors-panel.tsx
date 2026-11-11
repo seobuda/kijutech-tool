@@ -270,7 +270,7 @@ export function CompetitorsPanel({
                         <Button
                           size="sm"
                           variant="outline"
-                          className="text-red-600 hover:text-red-700"
+                          className="text-destructive hover:text-destructive"
                           onClick={() => handleDelete(c.id)}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
@@ -322,7 +322,7 @@ export function CompetitorsPanel({
               <Plus className="h-4 w-4" />
             </Button>
           </div>
-          {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
+          {error && <p className="text-destructive text-sm mt-2">{error}</p>}
         </CardContent>
       </Card>
 
@@ -332,7 +332,7 @@ export function CompetitorsPanel({
             <CardTitle>Instrucciones para SE Ranking</CardTitle>
           </CardHeader>
           <CardContent>
-            <pre className="text-sm whitespace-pre-wrap font-sans bg-gray-50 rounded-md p-3">
+            <pre className="text-sm whitespace-pre-wrap font-sans bg-muted/50 rounded-md p-3">
               {instructions}
             </pre>
             <Button
@@ -353,7 +353,7 @@ export function CompetitorsPanel({
         <Button
           onClick={handleComplete}
           disabled={isPending || !canComplete}
-          className="bg-orange-500 hover:bg-orange-600 text-white"
+          className="bg-brand hover:bg-brand/90 text-white"
         >
           {localStatus === 'completed' ? (
             <>

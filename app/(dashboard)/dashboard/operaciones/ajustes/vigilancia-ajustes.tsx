@@ -46,7 +46,7 @@ export function VigilanciaAjustes({ enabled, activatedAt, lastRunAt, lastError, 
           <Button size="sm" variant={enabled ? 'outline' : 'default'} disabled={pending} onClick={toggle}>
             {pending ? 'Un momento…' : enabled ? 'Desactivar vigilancia' : 'Activar vigilancia'}
           </Button>
-          <span className={`text-sm ${enabled ? 'text-green-700' : 'text-muted-foreground'}`} data-testid="watch-state">
+          <span className={`text-sm ${enabled ? 'text-success' : 'text-muted-foreground'}`} data-testid="watch-state">
             {enabled ? 'Activa' : 'Desactivada'}
           </span>
         </div>
@@ -55,10 +55,10 @@ export function VigilanciaAjustes({ enabled, activatedAt, lastRunAt, lastError, 
             Activada el {fmt(activatedAt)} · última consulta: {fmt(lastRunAt)}
           </p>
         )}
-        {lastError && <p className="text-sm text-red-600">Último error: {lastError}</p>}
-        {msg && <p className={`text-sm ${msg.ok ? 'text-green-700' : 'text-red-600'}`}>{msg.text}</p>}
+        {lastError && <p className="text-sm text-destructive">Último error: {lastError}</p>}
+        {msg && <p className={`text-sm ${msg.ok ? 'text-success' : 'text-destructive'}`}>{msg.text}</p>}
         {unlinked.length > 0 && (
-          <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900" data-testid="watch-unlinked">
+          <div className="rounded-md border border-warning/45 bg-warning-soft p-3 text-sm text-warning-strong" data-testid="watch-unlinked">
             <p className="font-medium">Miembros sin Telegram vinculado con tareas asignadas recientes (no recibirán avisos):</p>
             <ul className="list-disc ml-5">
               {unlinked.map((m) => (

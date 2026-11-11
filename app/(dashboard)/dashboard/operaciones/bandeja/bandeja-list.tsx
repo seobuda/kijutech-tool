@@ -31,12 +31,12 @@ export type BandejaItem =
     };
 
 const areaClass =
-  'w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500';
+  'w-full rounded-md border border-input bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand';
 
 export function BandejaList({ items }: { items: BandejaItem[] }) {
   if (items.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-gray-300 p-8 text-center space-y-1">
+      <div className="rounded-lg border border-dashed border-input p-8 text-center space-y-1">
         <p className="font-medium">No tienes nada pendiente 🎉</p>
         <p className="text-sm text-muted-foreground">
           Las revisiones y los bloqueos que necesiten tu decisión aparecerán aquí.
@@ -73,12 +73,12 @@ function ItemCard({ item }: { item: BandejaItem }) {
     });
 
   return (
-    <div className={`rounded-lg border bg-white p-4 space-y-3 ${item.urgent ? 'border-red-300' : 'border-gray-200'}`}>
+    <div className={`rounded-lg border bg-card p-4 space-y-3 ${item.urgent ? 'border-destructive/45' : 'border-border'}`}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <p className="text-xs text-muted-foreground">
             {item.kind === 'review' ? '👀 Revisión pendiente' : '🚫 Bloqueo que necesita tu decisión'}
-            {item.urgent && <span className="ml-2 rounded bg-red-100 px-1.5 py-0.5 text-red-700">Urgente</span>}
+            {item.urgent && <span className="ml-2 rounded bg-destructive-soft px-1.5 py-0.5 text-destructive">Urgente</span>}
           </p>
           <p className="font-medium">{item.title}</p>
           <p className="text-xs text-muted-foreground">
@@ -86,7 +86,7 @@ function ItemCard({ item }: { item: BandejaItem }) {
             {item.taskUrl && (
               <>
                 {' · '}
-                <a href={item.taskUrl} target="_blank" rel="noopener noreferrer" className="text-orange-600 hover:underline">
+                <a href={item.taskUrl} target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">
                   Abrir tarea
                 </a>
               </>
@@ -179,7 +179,7 @@ function ItemCard({ item }: { item: BandejaItem }) {
           </div>
         </div>
       )}
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-destructive">{error}</p>}
     </div>
   );
 }

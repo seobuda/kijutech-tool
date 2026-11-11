@@ -50,7 +50,7 @@ export default async function SeoWizardLayout({
     ]);
 
   return (
-    <section className="flex-1 p-4 lg:py-6 lg:px-0">
+    <section className="mx-auto w-full max-w-[1400px] px-4 py-6 lg:px-8 lg:py-8">
       <div className="mb-6">
         <p className="text-sm text-muted-foreground">Proyecto</p>
         <h1 className="text-lg lg:text-2xl font-medium">{project.name}</h1>
