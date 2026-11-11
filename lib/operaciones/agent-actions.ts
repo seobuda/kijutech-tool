@@ -10,7 +10,7 @@ import { and, desc, eq, gte, inArray, isNull, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { opsAgentActions, opsSettings, type OpsAgentAction } from '@/lib/db/schema';
 
-export type AgentKind = 'blocker_answer' | 'note_conversion';
+export type AgentKind = 'blocker_answer' | 'note_conversion' | 'email_reply';
 export type Autonomy = 'sombra' | 'aprobacion' | 'autonomo';
 export type ActionStatus = 'propuesto' | 'aprobado' | 'corregido' | 'rechazado' | 'auto' | 'sombra';
 
@@ -37,6 +37,14 @@ export const AGENT_KINDS: Record<
       'La IA propone los encargos de una nota y tú los revisas en pantalla antes de enviarlos. Se mide cuántas propuestas envías sin tocar.',
     defaultAutonomy: 'aprobacion',
     allowed: ['aprobacion']
+  },
+  email_reply: {
+    label: 'Responder correos',
+    description:
+      'Lee los correos de clientes y del equipo que llegan a agente@equipo.kijutech.com y te propone la respuesta. Nunca se envía sin tu aprobación (Telegram o pestaña Correos).',
+    defaultAutonomy: 'aprobacion',
+    // Responder a clientes solo, sin aprobación, queda fuera hasta validarlo mucho (decisión de Enric).
+    allowed: ['sombra', 'aprobacion']
   }
 };
 
@@ -75,6 +83,7 @@ export async function recordAction(input: {
   requestId?: string | null;
   blockerId?: string | null;
   noteId?: string | null;
+  inboundEmailId?: string | null;
   decidedByName?: string | null;
   decidedVia?: 'telegram' | 'panel' | 'agente' | null;
   dedupeKey: string;
@@ -93,6 +102,7 @@ export async function recordAction(input: {
       requestId: input.requestId ?? null,
       blockerId: input.blockerId ?? null,
       noteId: input.noteId ?? null,
+      inboundEmailId: input.inboundEmailId ?? null,
       decidedByName: input.decidedByName ?? null,
       decidedVia: input.decidedVia ?? null,
       decidedAt: decided ? new Date() : null,

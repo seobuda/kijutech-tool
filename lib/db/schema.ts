@@ -17,6 +17,7 @@ import {
   customType,
   bigint,
   vector,
+  type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
 
@@ -1249,7 +1250,7 @@ export const opsNotifications = pgTable(
     check('ops_notifications_status_check', sql`${table.status} IN ('pendiente', 'enviado', 'fallido')`),
     check(
       'ops_notifications_kind_check',
-      sql`${table.kind} IN ('new_request', 'daily_summary', 'test', 'review_request', 'block_alert', 'reply', 'returned', 'digest', 'reminder', 'cleanup', 'cleanup_summary', 'startup')`
+      sql`${table.kind} IN ('new_request', 'daily_summary', 'test', 'review_request', 'block_alert', 'reply', 'returned', 'digest', 'reminder', 'cleanup', 'cleanup_summary', 'startup', 'email_proposal')`
     ),
   ]
 );
@@ -1382,6 +1383,8 @@ export const opsTelegramPending = pgTable('ops_telegram_pending', {
   requestId: uuid('request_id').references(() => opsRequests.id, { onDelete: 'cascade' }),
   blockerId: uuid('blocker_id').references(() => opsBlockers.id, { onDelete: 'cascade' }),
   cleanupItemId: uuid('cleanup_item_id').references(() => opsCleanupItems.id, { onDelete: 'cascade' }),
+  // Motor de acciones: Enric está escribiendo la corrección de una propuesta (p. ej. una respuesta de correo).
+  agentActionId: uuid('agent_action_id').references((): AnyPgColumn => opsAgentActions.id, { onDelete: 'cascade' }),
   expiresAt: timestamp('expires_at').notNull(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
@@ -1651,6 +1654,8 @@ export const opsInboundEmails = pgTable(
     statusNote: varchar('status_note', { length: 255 }),
     // Propuesta de encargos (paso B2).
     proposal: jsonb('proposal'),
+    providerEmailId: varchar('provider_email_id', { length: 100 }),
+    referencesHeader: text('references_header'),
     decidedBy: integer('decided_by').references(() => users.id, { onDelete: 'set null' }),
     decidedAt: timestamp('decided_at'),
     createdAt: timestamp('created_at').notNull().defaultNow(),
@@ -1660,7 +1665,7 @@ export const opsInboundEmails = pgTable(
     unique('ops_inbound_emails_message_unique').on(table.tenantId, table.messageId),
     index('ops_inbound_emails_status_idx').on(table.tenantId, table.status, table.createdAt),
     index('ops_inbound_emails_client_idx').on(table.clientId),
-    check('ops_inbound_emails_source_check', sql`${table.source} IN ('cloudflare', 'pegado')`),
+    check('ops_inbound_emails_source_check', sql`${table.source} IN ('cloudflare', 'pegado', 'resend')`),
     check('ops_inbound_emails_auth_check', sql`${table.authStatus} IN ('pass', 'fail', 'none')`),
     check('ops_inbound_emails_match_check', sql`${table.matchedBy} IN ('email', 'domain', 'manual', 'ninguno', 'ambiguo')`),
     check(
@@ -1692,6 +1697,7 @@ export const opsAgentActions = pgTable(
     requestId: uuid('request_id').references(() => opsRequests.id, { onDelete: 'set null' }),
     blockerId: uuid('blocker_id').references(() => opsBlockers.id, { onDelete: 'set null' }),
     noteId: uuid('note_id').references(() => opsNotes.id, { onDelete: 'set null' }),
+    inboundEmailId: uuid('inbound_email_id').references(() => opsInboundEmails.id, { onDelete: 'set null' }),
     decidedByName: varchar('decided_by_name', { length: 255 }),
     decidedVia: varchar('decided_via', { length: 10 }),
     decidedAt: timestamp('decided_at'),
@@ -1703,7 +1709,7 @@ export const opsAgentActions = pgTable(
   (table) => [
     unique('ops_agent_actions_dedupe_unique').on(table.tenantId, table.dedupeKey),
     index('ops_agent_actions_kind_idx').on(table.tenantId, table.kind, table.createdAt),
-    check('ops_agent_actions_kind_check', sql`${table.kind} IN ('blocker_answer', 'note_conversion')`),
+    check('ops_agent_actions_kind_check', sql`${table.kind} IN ('blocker_answer', 'note_conversion', 'email_reply')`),
     check(
       'ops_agent_actions_status_check',
       sql`${table.status} IN ('propuesto', 'aprobado', 'corregido', 'rechazado', 'auto', 'sombra')`

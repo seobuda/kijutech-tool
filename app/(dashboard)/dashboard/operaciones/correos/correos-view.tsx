@@ -6,7 +6,11 @@ import { useCallback, useEffect, useState, useTransition } from 'react';
 import {
   AlertTriangle,
   ArrowLeft,
+  Bot,
   Building2,
+  Mail,
+  PencilLine,
+  Send,
   Check,
   ClipboardPaste,
   EyeOff,
@@ -36,6 +40,12 @@ import {
   type InboundEmailRow
 } from '@/lib/operaciones/inbound-email-actions';
 import { INBOUND_STATUS_LABELS, type InboundStatus } from '@/lib/operaciones/inbound-email-rules';
+import {
+  approveEmailReplyAction,
+  connectEmailAction,
+  getEmailConnectionStatus,
+  rejectEmailReplyAction
+} from '@/lib/operaciones/email-agent-actions';
 
 const focusRing = 'focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-brand/40 focus-visible:border-brand';
 const fieldClass = cn(
@@ -135,6 +145,163 @@ function AuthBadge({ auth }: { auth: string }) {
       <ShieldQuestion aria-hidden />
       Remitente sin verificar
     </Badge>
+  );
+}
+
+// Respuesta que propone el agente: se envía tal cual, se corrige antes de enviar o se descarta.
+// Nunca sale nada sin pulsar aquí o en Telegram.
+function ReplyProposal({
+  proposal,
+  disabled,
+  onApprove,
+  onReject
+}: {
+  proposal: { actionId: string; answer: string };
+  disabled: boolean;
+  onApprove: (corrected?: string) => void;
+  onReject: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(proposal.answer);
+  const areaId = `reply-${proposal.actionId}`;
+  return (
+    <section className="mt-5 rounded-xl border border-brand/30 bg-brand-soft/50 p-4" aria-labelledby={`${areaId}-t`}>
+      <h3 id={`${areaId}-t`} className="flex items-center gap-1.5 text-sm font-semibold text-brand">
+        <Bot className="size-4" aria-hidden />
+        Respuesta propuesta por el agente
+      </h3>
+      <p className="mt-0.5 text-xs text-muted-foreground">
+        Se enviará desde el buzón del agente al remitente, en el mismo hilo y con copia oculta para ti.
+      </p>
+      {editing ? (
+        <>
+          <label htmlFor={areaId} className="sr-only">
+            Respuesta corregida
+          </label>
+          <textarea
+            id={areaId}
+            rows={8}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            className="mt-3 w-full rounded-lg border border-input bg-card px-3 py-2 text-sm shadow-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+          />
+        </>
+      ) : (
+        <p className="mt-3 whitespace-pre-wrap rounded-lg bg-card px-3 py-2.5 text-sm">{proposal.answer}</p>
+      )}
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button
+          size="sm"
+          className="bg-brand text-white hover:bg-brand/90"
+          disabled={disabled || (editing && !text.trim())}
+          onClick={() => onApprove(editing && text.trim() !== proposal.answer.trim() ? text : undefined)}
+        >
+          <Send aria-hidden />
+          {editing ? 'Enviar mi versión' : 'Enviar respuesta'}
+        </Button>
+        {!editing ? (
+          <Button size="sm" variant="outline" disabled={disabled} onClick={() => setEditing(true)}>
+            <PencilLine aria-hidden />
+            Corregir
+          </Button>
+        ) : (
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={disabled}
+            onClick={() => {
+              setEditing(false);
+              setText(proposal.answer);
+            }}
+          >
+            Cancelar corrección
+          </Button>
+        )}
+        <Button size="sm" variant="ghost" className="text-muted-foreground" disabled={disabled} onClick={onReject}>
+          Descartar
+        </Button>
+      </div>
+    </section>
+  );
+}
+
+// Estado del buzón del agente (solo administración): conectar Resend con la clave de API.
+function MailboxCard() {
+  const [status, setStatus] = useState<{ connected: boolean; webhook: boolean; address: string; bcc: string | null } | null>(null);
+  const [key, setKey] = useState('');
+  const [note, setNote] = useState<Msg>(null);
+  const [busy, startBusy] = useTransition();
+
+  const refresh = useCallback(async () => {
+    const res = await getEmailConnectionStatus();
+    if (res.ok) setStatus({ connected: res.connected, webhook: res.webhook, address: res.address, bcc: res.bcc });
+  }, []);
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  if (!status) return null; // sin permiso de administración (o cargando): no se enseña
+  const ready = status.connected && status.webhook;
+  return (
+    <section className="rounded-xl border bg-card p-4 shadow-xs" aria-labelledby="buzon-t">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 id="buzon-t" className="flex items-center gap-2 text-sm font-semibold">
+            <Mail className="size-4 text-brand" aria-hidden />
+            Buzón del agente: <span className="font-mono text-xs">{status.address}</span>
+          </h3>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {ready
+              ? `Conectado. Los correos que lleguen se interpretan solos y la respuesta te llega a Telegram para aprobarla${status.bcc ? `; recibes copia oculta en ${status.bcc}` : ''}.`
+              : status.connected
+                ? 'Clave guardada, pero falta el webhook (solo se crea en el servidor con https).'
+                : 'Sin conectar. Pega la clave de API de Resend para empezar a recibir y responder.'}
+          </p>
+        </div>
+        <Badge tone={ready ? 'success' : status.connected ? 'warning' : 'neutral'} dot>
+          {ready ? 'Activo' : status.connected ? 'A medias' : 'Sin conectar'}
+        </Badge>
+      </div>
+      {!ready && (
+        <form
+          className="mt-3 flex flex-wrap gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            setNote(null);
+            startBusy(async () => {
+              const res = await connectEmailAction(key);
+              if (!res.ok) return setNote({ type: 'error', text: res.error });
+              setKey('');
+              setNote({
+                type: 'ok',
+                text:
+                  res.webhook === 'sin_url_publica'
+                    ? 'Clave guardada. El webhook se crea al conectar desde el servidor (https).'
+                    : 'Buzón conectado.'
+              });
+              await refresh();
+            });
+          }}
+        >
+          <label htmlFor="resend-key" className="sr-only">
+            Clave de API de Resend
+          </label>
+          <input
+            id="resend-key"
+            type="password"
+            autoComplete="off"
+            placeholder="re_…"
+            value={key}
+            onChange={(e) => setKey(e.target.value)}
+            className="h-9 min-w-[240px] flex-1 rounded-lg border border-input bg-background px-3 text-sm shadow-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+          />
+          <Button type="submit" size="sm" className="h-9 bg-brand text-white hover:bg-brand/90" disabled={busy || !key.trim()}>
+            Conectar
+          </Button>
+        </form>
+      )}
+      {note && <MsgLine msg={note} />}
+    </section>
   );
 }
 
@@ -294,10 +461,37 @@ export function CorreosView({ clients }: { clients: { id: string; name: string }
             </header>
 
             <div className="px-4 py-4 sm:px-5">
+              {detail.aiSummary && (
+                <p className="mb-4 flex items-start gap-2 rounded-lg bg-muted/60 px-3 py-2 text-sm">
+                  <Bot className="mt-0.5 size-4 shrink-0 text-brand" aria-hidden />
+                  <span>
+                    <span className="font-medium">Lo que entendió el agente: </span>
+                    {detail.aiSummary}
+                  </span>
+                </p>
+              )}
               <h3 className="sr-only">Texto del correo</h3>
               <pre className="max-h-[32rem] overflow-auto whitespace-pre-wrap break-words font-sans text-sm leading-relaxed text-foreground">
                 {detail.bodyText || '(sin texto)'}
               </pre>
+              {detail.pendingReply && (
+                <ReplyProposal
+                  key={detail.pendingReply.actionId}
+                  proposal={detail.pendingReply}
+                  disabled={pending}
+                  onApprove={(text) =>
+                    run(
+                      () => approveEmailReplyAction(detail.pendingReply!.actionId, text),
+                      'Respuesta enviada',
+                      undefined,
+                      detail.id
+                    )
+                  }
+                  onReject={() =>
+                    run(() => rejectEmailReplyAction(detail.pendingReply!.actionId), 'Respuesta descartada', undefined, detail.id)
+                  }
+                />
+              )}
               {detail.attachments.length > 0 && (
                 <div className="mt-4 flex flex-wrap items-center gap-1.5 border-t pt-3 text-xs text-muted-foreground">
                   <Paperclip className="size-3.5 shrink-0" aria-hidden />
@@ -458,10 +652,10 @@ export function CorreosView({ clients }: { clients: { id: string; name: string }
     <div className="space-y-4 animate-fade-up">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <h2 className="text-base font-semibold tracking-tight">Correos de clientes</h2>
+          <h2 className="text-base font-semibold tracking-tight">Correos del agente</h2>
           <p className="mt-0.5 max-w-3xl text-sm text-muted-foreground text-pretty">
-            Aquí llegan los correos de tus clientes y se reconoce de quién es cada uno. Un correo nunca crea nada por sí solo: es un dato que
-            una persona revisa.
+            Aquí llegan los correos de clientes y del equipo. El agente reconoce de quién es cada uno, lo resume y te propone una respuesta;
+            nunca envía nada sin tu aprobación.
           </p>
         </div>
         <Button size="sm" variant="outline" className="shrink-0 self-start" aria-expanded={pasting} onClick={() => setPasting((v) => !v)}>
@@ -469,6 +663,7 @@ export function CorreosView({ clients }: { clients: { id: string; name: string }
           {pasting ? 'Cerrar' : 'Pegar un correo'}
         </Button>
       </div>
+      <MailboxCard />
 
       {/* Filtros por estado */}
       <div className="-mx-1 overflow-x-auto px-1 pb-1">

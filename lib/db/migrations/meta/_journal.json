@@ -288,6 +288,13 @@
       "when": 1794092400000,
       "tag": "0040_ops_agent_actions",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1794096000000,
+      "tag": "0041_ops_email_agente",
+      "breakpoints": true
     }
   ]
 }

@@ -35,6 +35,12 @@ import { savePilotStartAction } from '@/lib/operaciones/pilot-actions';
 import { sendCleanupAction } from '@/lib/operaciones/cleanup-actions';
 import { inboxAccept, inboxApproveProposal, inboxRejectProposal } from '@/lib/operaciones/flow-actions';
 import { setAgentAutonomyAction } from '@/lib/operaciones/agent-panel-actions';
+import {
+  approveEmailReplyAction,
+  connectEmailAction,
+  rejectEmailReplyAction,
+  saveEmailWebhookSecretAction
+} from '@/lib/operaciones/email-agent-actions';
 import { saveKickoffAnswers } from '@/lib/seo/actions';
 import { generateShareToken, deleteKwCluster } from '@/lib/seo/kw-actions';
 import { createProject } from '@/lib/projects/actions';
@@ -98,7 +104,9 @@ const ACCIONES_ADMIN: [string, () => unknown][] = [
   ['deleteClientMemory (borrar dato de memoria)', () => deleteClientMemory(ZERO)],
   ['deleteClientSender (borrar contacto)', () => deleteClientSender(ZERO)],
   ['deleteInboundEmail (borrar correo)', () => deleteInboundEmail(ZERO)],
-  ['setAgentAutonomyAction (autonomía del agente)', () => setAgentAutonomyAction('tipo-que-no-existe', 'sombra')]
+  ['setAgentAutonomyAction (autonomía del agente)', () => setAgentAutonomyAction('tipo-que-no-existe', 'sombra')],
+  ['connectEmailAction (buzón del agente)', () => connectEmailAction('')],
+  ['saveEmailWebhookSecretAction (buzón del agente)', () => saveEmailWebhookSecretAction('')]
 ];
 const ACCIONES_EDITOR: [string, () => unknown][] = [
   ['deleteNote (Bloc)', () => deleteNote(ZERO)],
@@ -243,6 +251,8 @@ describe('un editor no puede tocar tokens, automatizaciones ni usuarios', () => 
     // Motor de acciones: tampoco puede aprobar ni descartar las propuestas del agente.
     expect(await outcome(() => inboxApproveProposal(ZERO))).toBe('denegado');
     expect(await outcome(() => inboxRejectProposal(ZERO))).toBe('denegado');
+    expect(await outcome(() => approveEmailReplyAction(ZERO))).toBe('denegado');
+    expect(await outcome(() => rejectEmailReplyAction(ZERO))).toBe('denegado');
   });
 
   it('no accede a las pantallas de administración, pero sí a las de edición (control positivo)', async () => {
