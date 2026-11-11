@@ -10,6 +10,13 @@ Backups de DigitalOcean activados (semanales). Sin secretos en este documento.
 - En el servidor, `/opt/kijutech/`: el código, el `.env` (permisos 600, secretos NUEVOS, distintos a los de desarrollo) y `backups/`.
 
 ## Subir una versión
+**Atajo (11 nov):** `bash scripts/deploy.sh` hace los pasos 1-3 y verifica (migraciones, web, Telegram y errores en logs);
+`bash scripts/deploy.sh --migrate` además hace el backup con `pg_dump` antes y aplica las migraciones después. Exige que
+`main` local coincida con `origin/main`. Para que Claude Code lo ejecute sin pedir permiso cada vez, en
+`.claude/settings.local.json` (no versionado) se permiten exactamente `Bash(bash scripts/deploy.sh)` y
+`Bash(bash scripts/deploy.sh --migrate)`.
+
+Pasos a mano:
 1. En el PC: `git archive --format=tar.gz -o <ruta>/kijutech.tgz HEAD` (solo lo versionado, sin `.env`).
 2. `scp` al servidor y descomprimir en `/opt/kijutech/` (sin tocar `.env` ni `backups/`).
 3. En el servidor: `docker compose -f docker-compose.prod.yml up -d --build`.
