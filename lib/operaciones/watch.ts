@@ -30,6 +30,7 @@ import { getAuto, num } from '@/lib/operaciones/automations';
 
 export const WATCH_EVERY_MS = 150_000; // por defecto; se cambia en Automatizaciones
 const OVERLAP_MS = 10_000;
+const RETRY_FAILED_MS = 60 * 60_000;
 const OPEN_STATES = ['asignado', 'en_curso', 'devuelto', 'bloqueado'];
 
 export async function getWatch(tenantId: string) {
@@ -128,10 +129,14 @@ export async function runWatch(tenantId: string, now = new Date()): Promise<void
     if (spaceIds.length === 0) throw new Error('No hay espacios seleccionados');
     const cursor = claimed[0].cursor ?? w.activatedAt.getTime();
 
-    const { tasks } = await fetchWatchTasks(conn.token, conn.workspaceId, {
+    const { tasks, truncated } = await fetchWatchTasks(conn.token, conn.workspaceId, {
       spaceIds,
       updatedAfterMs: cursor - OVERLAP_MS
     });
+    // Tareas cuyo procesamiento falló: no se guarda su instantánea y el cursor no las salta,
+    // para que la pasada siguiente las vuelva a intentar (antes se perdían sin reintento).
+    const failedMs: number[] = [];
+    const failedIds = new Set<string>();
 
     if (tasks.length > 0) {
       const cfg = await getTelegramConfig(tenantId);
@@ -165,15 +170,25 @@ export async function runWatch(tenantId: string, now = new Date()): Promise<void
           }
         } catch (e) {
           console.error('[watch] tarea', t.id, e instanceof Error ? e.message : e);
+          // Se reintenta mientras el cambio sea reciente (1 h); después se da por perdido para
+          // que una tarea rota no bloquee el cursor para siempre.
+          if (now.getTime() - t.updatedMs < RETRY_FAILED_MS) failedMs.push(t.updatedMs);
+          failedIds.add(t.id);
         }
       }
-      await upsertSnapshots(tenantId, tasks);
+      await upsertSnapshots(tenantId, tasks.filter((t) => !failedIds.has(t.id)));
     }
 
-    const newCursor = Math.max(cursor, ...tasks.map((t) => t.updatedMs));
+    const maxSeen = Math.max(cursor, ...tasks.map((t) => t.updatedMs));
+    const newCursor = failedMs.length ? Math.max(cursor, Math.min(...failedMs) - 1) : maxSeen;
+    const warning = truncated
+      ? 'Había más cambios de los que caben en una pasada: el resto se leerá en la siguiente.'
+      : failedIds.size
+        ? `${failedIds.size} tarea(s) no se pudieron procesar; se reintentarán.`
+        : null;
     await db
       .update(opsClickupWatch)
-      .set({ cursorMs: newCursor, lastError: null, updatedAt: new Date() })
+      .set({ cursorMs: newCursor, lastError: warning, updatedAt: new Date() })
       .where(eq(opsClickupWatch.tenantId, tenantId));
   } catch (e) {
     await db

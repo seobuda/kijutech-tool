@@ -3,7 +3,7 @@
 > **Documento vivo y de referencia.** Recoge todo lo que existe, cómo funciona, qué está decidido, qué se ha probado y qué falta. Se actualiza al cerrar cada paso de trabajo (junto al documento de sesión y al Mapa Visual).
 > **No contiene claves, contraseñas ni valores de `.env`** (solo sus nombres).
 
-**Fecha de esta versión:** 2026-11-07 (producción en marcha con Telegram por webhook; en la rama `feature/memoria-cliente-email` se construye «Operaciones como puesto de trabajo»: paso A, memoria y contactos de cliente, hecho; paso B1, recibir y reconocer correos de clientes por Cloudflare, hecho en local; B2, proponer y aprobar por Telegram, pendiente)
+**Fecha de esta versión:** 2026-11-11 (producción en marcha con Telegram por webhook; en la rama `feature/memoria-cliente-email`: paso A, memoria y contactos de cliente, hecho; paso B1, recibir y reconocer correos, hecho en local; **la vía de entrada cambia a un usuario propio de Google Workspace** (11 nov, sustituye a Cloudflare); arreglos de la revisión de Operaciones fusionados desde `fix/operaciones-revision`, ver §16 «Revisión del 11 nov»; diseño del cliente en el núcleo en `docs/DISENO-CLIENTE-NUCLEO.md`)
 **Producción:** `https://brain.kijutech.com` (droplet `kijutech-brain`, Frankfurt). Procedimiento en `docs/DESPLIEGUE.md`. Rama de trabajo del despliegue: `feature/despliegue`.
 **Rama de trabajo:** `feature/seguridad` (creada desde `feature/paso-7-piloto`, que aún no está fusionada en `main`; el paso 8 depende del 7). **No se ha unido a `main`: espera la aprobación de Enric.** **Operaciones ya está fusionada en `main`** (fast-forward, 30 oct): `main` y `operaciones` coinciden en `9110754f`; la rama `operaciones` se mantiene.
 **Rama `main`:** `9110754f` hasta que se apruebe y fusione el paso 7. Ramas antiguas de SEO (`feature/fase-d-*`, `feature/mapa-visual-sistema`) ya fusionadas.
@@ -402,6 +402,19 @@ Construido en agosto de 2026 (Fases A–D). Detalle y auditoría completa en `do
 - Redirección para el enlace «Abrir tarea» de Encargos (hoy no registra clics): pasar por la herramienta.
 - Cachés por proceso (un solo servidor por ahora).
 
+**Revisión del 11 nov (rama `fix/operaciones-revision`, desde `main`)**
+Cuatro revisiones de código en paralelo (Telegram y planificador, ClickUp y encargos, tiempos y métricas, seguridad e IA). Arreglado:
+- Botones «Empezar»/«Más tarde» sin efecto en tareas con varios responsables (regex `d{1,20}` → `\d{1,20}`, ahora `FLOW_CALLBACK_RE` con prueba contra todos los teclados).
+- Planificador: cada paso aislado con su propio `try/catch` (un fallo de ClickUp ya no para avisos, bandeja, vigilancia ni recordatorios) y «Sistema en marcha» ya no se repite cada 30 s si falla el arranque.
+- Doble envío: «Enviar todo» reclama la nota en una transacción antes de insertar; cada envío a ClickUp toma un candado por encargo (`pg_try_advisory_xact_lock`), así «Reintentar» a la vez no crea la tarea dos veces.
+- Bandeja de salida: un cambio de estado o fecha antiguo se descarta si hay uno posterior para la misma tarea (un reintento ya no reabre una tarea cerrada).
+- Telegram: el recorte de mensajes ya no parte etiquetas ni entidades HTML y, si Telegram rechaza el formato, el aviso se reenvía como texto plano.
+- Bloqueos: booleano estricto (`"false"` ya no es verdadero); el contenido de la tarea va marcado como dato no fiable; una respuesta apoyada en comentarios de ClickUp se escala; los bloqueos que quedan «abierto» más de 5 min se vuelven a revisar (`retriageStaleBlockers`, nueva tarea del planificador); errores de la IA genéricos para el dueño.
+- Vigilancia: una tarea que falla no se salta (sin instantánea y el cursor no la pasa durante 1 h); consulta en orden ascendente y aviso si una pasada no cabe.
+- Botones viejos: con la tarea ya en marcha solo actúa el responsable actual.
+- Candado del líder: se cierra la conexión vieja al fallar.
+Pendiente de la revisión (siguientes pasos): ver hoja de ruta del 11 nov en §17 y `docs/DISENO-CLIENTE-NUCLEO.md` (en la rama de correo). Hallazgos sin arreglar aún: minutos laborables con tope de 14 días y muestreo de 5 min, comida contada como jornada, «hoy» con la hora de Madrid para quien está en otra zona, horas por cliente sumadas en paralelo, estados de lista que no se refrescan, tareas duplicadas en ClickUp con la marca `[kiju:]`, límite de coste de IA, remitentes de correo no autenticados.
+
 **Deuda técnica conocida**
 - **Columnas obsoletas por borrar** con una migración futura: `ops_telegram_members.timezone`, `ops_telegram_members.work_start`, `ops_telegram_config.digest_timezone`, `ops_telegram_config.digest_times`.
 - **Festivos** no contemplados en plazos ni horas laborables.
@@ -443,7 +456,9 @@ Cada uno con su nodo en el nivel 1 del Mapa Visual:
 - **6 nov:** cierre del arranque en producción: Enric cambia la contraseña inicial (archivo borrado con `shred`), introduce los tokens, se desbloquea un bloqueo por intentos (5 fallos propios en `auth_login_attempts`), se configura el bot en modo pruebas y se activa el webhook de Telegram (verificado con `getWebhookInfo` y `/ayuda`). Cloudflare proxy aparcado.
 - **6 nov (noche):** `feature/despliegue` fusionada en `main` (`abd1d4f4`) y subida a origin. Nueva rama `feature/memoria-cliente-email`: paso A, memoria y contactos de cliente (migración 0038, `client-memory-rules.ts`, `client-memory-actions.ts`, `client-memoria.tsx`, nodo del Mapa Visual y 21 pruebas nuevas).
 - **7 nov:** investigación de la vía de entrada de correo (IMAP frente a Gmail API, Postmark o Cloudflare) y decisión: **Cloudflare Email Routing + Email Worker** por no guardar contraseñas de buzón. Paso B1 en la rama `feature/memoria-cliente-email`: migración 0039, ruta firmada `/api/email/entrada`, reglas de limpieza y de correos automáticos, pestaña «Correos», «Pegar un correo», nodo del Mapa Visual y 18+ pruebas nuevas. El token de Cloudflare ya estaba en el `.env` del proyecto (`CLOUDFLARE_API_TOKEN`) y se comprobó válido; solo lee DNS.
-- Historial completo: `git log` (240 commits) y `docs/sessions/` (47 documentos).
+- **11 nov:** revisión completa de Operaciones con cuatro revisiones en paralelo; rama `fix/operaciones-revision` con los arreglos de mayor riesgo (ver §16). Hoja de ruta acordada: arreglos → motor de acciones del agente con aprobación y métricas → correo con usuario propio de Google Workspace → latido y colas → jornada real → estrategia viva → conectores de Google → agente de alta de cliente.
+- **11 nov (tarde):** se descarta Cloudflare/Resend para el correo: el agente tendrá **su propio usuario de Google Workspace** (respuestas a clientes solo tras aprobación por Telegram). Análisis «tipo Ahrefs/Semrush» del cliente en el núcleo (`docs/DISENO-CLIENTE-NUCLEO.md`: cliente + activos + ids externos). Nueva regla de `CLAUDE.md`: cuestionar tres veces cada decisión y comparar alternativas.
+- Historial completo: `git log` y `docs/sessions/`.
 
 ## 19. Mapa de archivos
 

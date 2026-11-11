@@ -528,8 +528,17 @@ export async function sendNoteRequests(
 
   const typeKeys = await Promise.all(items.map((i) => validWorkTypeKey(user.tenantId, i.workTypeKey)));
 
-  // 1) Todos los encargos se guardan primero como pendiente_clickup, vinculados a la nota…
-  const rows = await db
+  // 1) En una transacción: primero se RECLAMA la nota (solo si sigue en borrador) y después se
+  //    guardan los encargos como pendiente_clickup. Un doble clic o dos pestañas ya no duplican:
+  //    la segunda petición no consigue reclamarla y no inserta nada.
+  const rows = await db.transaction(async (tx) => {
+    const [claimed] = await tx
+      .update(opsNotes)
+      .set({ status: 'convertida', convertedAt: new Date(), updatedAt: new Date() })
+      .where(and(eq(opsNotes.id, note.id), eq(opsNotes.status, 'borrador')))
+      .returning({ id: opsNotes.id });
+    if (!claimed) return null;
+    return tx
     .insert(opsRequests)
     .values(
       items.map((i, idx) => ({
@@ -552,12 +561,10 @@ export async function sendNoteRequests(
       }))
     )
     .returning({ id: opsRequests.id });
-
-  // …y la nota pasa a "convertida" (ya no se puede reenviar; los fallos se reintentan desde Encargos).
-  await db
-    .update(opsNotes)
-    .set({ status: 'convertida', convertedAt: new Date(), updatedAt: new Date() })
-    .where(eq(opsNotes.id, note.id));
+  });
+  // La nota ya estaba convertida (otra petición la reclamó antes): no se repite nada.
+  // Desde aquí no se puede reenviar; los fallos se reintentan desde Encargos.
+  if (!rows) return { ok: false, error: 'Esta nota ya está convertida' };
 
   // 2) Cada encargo usa el mismo envío fiable del paso 3 (uno tras otro, por el límite de ClickUp).
   const results: { key: string; title: string; result: SyncResult }[] = [];

@@ -34,6 +34,11 @@ import { refreshNotice } from '@/lib/operaciones/notifications';
 import { acceptWork, finishWork, getRequest, laterWork, returnWork, startWork } from '@/lib/operaciones/workflow';
 import { getBlocker, ownerAnswerBlocker, reportBlock } from '@/lib/operaciones/blockers';
 
+// Botones del flujo: código, id del encargo (o del bloqueo) y, con varios responsables, el id
+// de ClickUp de la persona a la que iba el botón. Exportado para probarlo contra los teclados
+// que genera noticeKeyboard (un `\d` olvidado dejó sin efecto los botones con varios responsables).
+export const FLOW_CALLBACK_RE = /^(st|lt|bl|dn|dr|ok|rt|rp):([0-9a-f-]{36})(?::(\d{1,20}))?$/;
+
 export async function handleUpdate(tenantId: string, token: string, update: TgUpdate): Promise<void> {
   if (update.message) return handleMessage(tenantId, token, update.message);
   if (update.callback_query) return handleCallback(tenantId, token, update.callback_query);
@@ -273,7 +278,7 @@ async function handleWorkflowCallback(
   messageId: number,
   answer: Answer
 ): Promise<void> {
-  const m = cb.data?.match(/^(st|lt|bl|dn|dr|ok|rt|rp):([0-9a-f-]{36})(?::(d{1,20}))?$/);
+  const m = cb.data?.match(FLOW_CALLBACK_RE);
   const sk = cb.data?.match(/^sk:([dr]):([0-9a-f-]{36})$/);
   if (!m && !sk) return void (await answer());
   const code = m ? m[1] : 'sk';
@@ -302,9 +307,14 @@ async function handleWorkflowCallback(
   // Aceptar y Devolver: solo el dueño. Los demás: solo el responsable (o el dueño en modo pruebas).
   const reviewerAction = code === 'ok' || code === 'rt';
   const mine = (id: string | null) => Boolean(id) && (id === req.assigneeClickupId || (req.candidateIds ?? []).includes(id!));
+  // Los demás candidatos solo pueden «Empezar» o «Más tarde» mientras nadie haya cogido la
+  // tarea. Con la tarea ya en marcha, solo actúa el responsable actual: un mensaje viejo de
+  // otro candidato no puede cerrarla ni quedársela.
+  const candidatePhase = (code === 'st' || code === 'lt') && req.workStatus === 'asignado';
+  const isAssignee = Boolean(presser.clickupUserId) && presser.clickupUserId === req.assigneeClickupId;
   const allowed = reviewerAction
     ? isOwner
-    : mine(presser.clickupUserId) || (Boolean(cfg?.testMode) && isOwner);
+    : (candidatePhase ? mine(presser.clickupUserId) : isAssignee) || (Boolean(cfg?.testMode) && isOwner);
   if (!allowed) {
     await logEvent(tenantId, { requestId: req.id, actor, type: 'button_rejected', payload: { button: code } });
     return void (await answer('No puedes usar este botón.', true));

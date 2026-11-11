@@ -81,8 +81,32 @@ export async function processOutbox(tenantId?: string): Promise<number> {
   return done;
 }
 
+// ¿Hay un cambio del mismo tipo (estado o fecha) para la misma tarea guardado DESPUÉS de este?
+// Entonces este ya no vale: un reintento antiguo de «en curso» no debe reabrir una tarea que
+// después se marcó como hecha. Los comentarios nunca se descartan.
+async function isSuperseded(c: Claimed): Promise<boolean> {
+  if (c.action === 'comment') return false;
+  const rows = (await db.execute(sql`
+    SELECT 1 FROM ops_clickup_outbox n, ops_clickup_outbox o
+    WHERE o.id = ${c.id}
+      AND n.tenant_id = o.tenant_id
+      AND n.action = o.action
+      AND n.payload->>'taskId' = o.payload->>'taskId'
+      AND n.created_at > o.created_at
+    LIMIT 1
+  `)) as unknown as unknown[];
+  return rows.length > 0;
+}
+
 async function sendOne(c: Claimed) {
   try {
+    if (await isSuperseded(c)) {
+      await db
+        .update(opsClickupOutbox)
+        .set({ status: 'hecho', doneAt: new Date(), lastError: 'Descartado: hay un cambio posterior para esta tarea' })
+        .where(eq(opsClickupOutbox.id, c.id));
+      return;
+    }
     const conn = await getClickUpToken(c.tenant_id);
     if (!conn) throw new Error('ClickUp no está conectado');
     if (c.action === 'set_status') {
