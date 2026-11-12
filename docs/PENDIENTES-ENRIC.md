@@ -3,7 +3,7 @@
 Lista viva de lo que solo puede hacer Enric (accesos, decisiones, el equipo). Claude la actualiza al terminar cada bloque.
 Detalle paso a paso de la activación en `docs/PRUEBAS-EN-VIVO.md`.
 
-**Última actualización:** 13 nov 2026, de madrugada. En producción: `main` `0850e320` (autonomía e informes), sin migraciones nuevas.
+**Última actualización:** 13 nov 2026, de madrugada. En producción: `main` `9cc5e08d` (autonomía e informes + fichas desde el historial), sin migraciones nuevas.
 
 ## Viernes 13 — antes de activar al equipo (unos 45 min)
 - [ ] **Revisar con tu cuenta de admin** lo que Claude no puede ver (no hay usuario de pruebas en producción):
