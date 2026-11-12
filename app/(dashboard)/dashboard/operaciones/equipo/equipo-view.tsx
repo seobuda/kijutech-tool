@@ -557,9 +557,9 @@ function ProfileForm({
             <Input
               id="p-hours"
               type="number"
-              min={0.5}
+              min={0.05}
               max={24}
-              step={0.5}
+              step={0.05}
               className="w-28"
               value={f.hoursPerDay}
               onChange={(e) => set({ hoursPerDay: Number(e.target.value) })}
