@@ -35,6 +35,7 @@ import { savePilotStartAction } from '@/lib/operaciones/pilot-actions';
 import { sendCleanupAction } from '@/lib/operaciones/cleanup-actions';
 import { inboxAccept, inboxApproveProposal, inboxRejectProposal } from '@/lib/operaciones/flow-actions';
 import { setAgentAutonomyAction } from '@/lib/operaciones/agent-panel-actions';
+import { retryStuckAction } from '@/lib/operaciones/health-actions';
 import {
   approveEmailReplyAction,
   connectEmailAction,
@@ -106,7 +107,8 @@ const ACCIONES_ADMIN: [string, () => unknown][] = [
   ['deleteInboundEmail (borrar correo)', () => deleteInboundEmail(ZERO)],
   ['setAgentAutonomyAction (autonomía del agente)', () => setAgentAutonomyAction('tipo-que-no-existe', 'sombra')],
   ['connectEmailAction (buzón del agente)', () => connectEmailAction('')],
-  ['saveEmailWebhookSecretAction (buzón del agente)', () => saveEmailWebhookSecretAction('')]
+  ['saveEmailWebhookSecretAction (buzón del agente)', () => saveEmailWebhookSecretAction('')],
+  ['retryStuckAction (salud)', () => retryStuckAction()]
 ];
 const ACCIONES_EDITOR: [string, () => unknown][] = [
   ['deleteNote (Bloc)', () => deleteNote(ZERO)],

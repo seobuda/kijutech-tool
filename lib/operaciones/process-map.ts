@@ -158,6 +158,20 @@ const OPS_OVERVIEW: ProcessStep[] = [
     tables: ['ops_agent_actions', 'ops_settings'],
   },
   {
+    id: 'ops_health',
+    lane: 'Memoria, fiabilidad y pruebas',
+    name: 'Salud del sistema',
+    description:
+      'Pestaña «Salud»: estado de cada pieza con recomendación, incidencias de 30 días, gráficas (peticiones a ClickUp, coste de IA, avisos) y «Reintentar lo atascado». Avisa a Enric al abrir y al resolver cada incidencia.',
+    status: 'built',
+    file: 'lib/operaciones/health.ts',
+    when: 'Cada 5 min desde el planificador; al arrancar registra la parada si la hubo; y desde fuera, cada 5 min, el vigilante del servidor (scripts/watchdog.sh) llama a /api/health.',
+    ai: 'Nada: las comprobaciones y recomendaciones son reglas fijas del código.',
+    code: 'Comprueba avisos y cambios de ClickUp agotados o atascados (>15 min), encargos con error o pendientes, correos con error o interpretándose, errores de vigilancia y del bot, fallos de IA por hora y el pico de peticiones a ClickUp por minuto (aviso al 80 % de 100). Una incidencia abierta por comprobación (índice único) y un aviso por Telegram al abrirla y al resolverla. El vigilante externo avisa directamente por la API de Telegram si la web no responde o no hay latido (dos intentos, un aviso al caer y otro al volver).',
+    tables: ['ops_health_incidents', 'ops_notifications'],
+    runs: ['runHealthChecks'],
+  },
+  {
     id: 'ops_memory',
     lane: 'Memoria, fiabilidad y pruebas',
     to: ['ops_entry'],

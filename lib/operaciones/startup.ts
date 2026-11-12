@@ -6,6 +6,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { opsSettings } from '@/lib/db/schema';
 import { getAuto, num } from '@/lib/operaciones/automations';
+import { recordDowntime } from '@/lib/operaciones/health';
 import { enqueueNotification } from '@/lib/operaciones/notifications';
 import { getOwnerMember, getTelegramConfig } from '@/lib/operaciones/telegram-config';
 import { getScheduleMap } from '@/lib/operaciones/team-profiles';
@@ -118,6 +119,13 @@ export async function sendStartupNotice(tenantId: string): Promise<void> {
       forName: owner?.username ?? 'Dueño',
       payload: { text: await buildStartupText(tenantId, lastBeat, now), toOwner: true }
     });
+  }
+  // Salud: una parada de más de 3 min queda en el historial como incidencia ya resuelta.
+  if (lastBeat && now - lastBeat > 3 * 60_000) {
+    const mins = Math.round((now - lastBeat) / 60_000);
+    await recordDowntime(tenantId, new Date(lastBeat), new Date(now), `Sin latido durante ${mins} min (reinicio, despliegue o caída).`).catch(
+      (e) => console.error('[salud] no se pudo registrar la parada:', e instanceof Error ? e.message : e)
+    );
   }
   // El latido se escribe DESPUÉS: si el aviso falla, el siguiente intento aún ve el latido anterior.
   await writeHeartbeat(tenantId, now);

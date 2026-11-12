@@ -1250,7 +1250,7 @@ export const opsNotifications = pgTable(
     check('ops_notifications_status_check', sql`${table.status} IN ('pendiente', 'enviado', 'fallido')`),
     check(
       'ops_notifications_kind_check',
-      sql`${table.kind} IN ('new_request', 'daily_summary', 'test', 'review_request', 'block_alert', 'reply', 'returned', 'digest', 'reminder', 'cleanup', 'cleanup_summary', 'startup', 'email_proposal')`
+      sql`${table.kind} IN ('new_request', 'daily_summary', 'test', 'review_request', 'block_alert', 'reply', 'returned', 'digest', 'reminder', 'cleanup', 'cleanup_summary', 'startup', 'email_proposal', 'health')`
     ),
   ]
 );
@@ -1884,3 +1884,33 @@ export const authLoginAttempts = pgTable(
   },
   (table) => [index('auth_login_attempts_email_created_idx').on(table.email, table.createdAt)]
 );
+
+// Salud del sistema (paso 4, 12 nov 2026): incidencias de las comprobaciones periódicas (colas atascadas,
+// errores de ClickUp/Telegram/IA…) y paradas detectadas al arrancar. Como mucho una abierta por
+// comprobación (índice único parcial). Se avisa a Enric al abrirse y al resolverse.
+export const opsHealthIncidents = pgTable(
+  'ops_health_incidents',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    checkKey: varchar('check_key', { length: 40 }).notNull(),
+    severity: varchar('severity', { length: 10 }).notNull(),
+    title: varchar('title', { length: 255 }).notNull(),
+    detail: text('detail').notNull().default(''),
+    openedAt: timestamp('opened_at').notNull().defaultNow(),
+    resolvedAt: timestamp('resolved_at'),
+    notifiedAt: timestamp('notified_at'),
+    resolvedNotifiedAt: timestamp('resolved_notified_at'),
+  },
+  (table) => [
+    index('ops_health_incidents_tenant_idx').on(table.tenantId, table.openedAt),
+    uniqueIndex('ops_health_incidents_open_unique')
+      .on(table.tenantId, table.checkKey)
+      .where(sql`${table.resolvedAt} IS NULL`),
+    check('ops_health_incidents_severity_check', sql`${table.severity} IN ('aviso', 'critico')`),
+  ]
+);
+
+export type OpsHealthIncident = typeof opsHealthIncidents.$inferSelect;
