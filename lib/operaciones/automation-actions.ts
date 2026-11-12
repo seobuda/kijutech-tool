@@ -23,6 +23,7 @@ import { processNotifications } from '@/lib/operaciones/notifications';
 import { clampMessage, escapeHtml } from '@/lib/operaciones/telegram';
 import { disableWatch, enableWatch } from '@/lib/operaciones/watch';
 import { buildStartupText, getLastHeartbeat } from '@/lib/operaciones/startup';
+import { jornadaTestPrompt } from '@/lib/operaciones/jornada-bot';
 import { publicError } from '@/lib/errors';
 
 type Res<T = object> = ({ ok: true } & T) | { ok: false; error: string };
@@ -115,6 +116,24 @@ export async function sendAutomationTestAction(key: string, draft?: string): Pro
       const err = validateTemplate(def, tpl);
       if (err) return { ok: false, error: err };
       body = renderTemplate(def, tpl, sampleValues(def));
+    } else if (key === 'jornada') {
+      // Los buenos días reales del dueño, con sus botones (funcionan de verdad: registran tu propia jornada).
+      const p = await jornadaTestPrompt(user.tenantId, owner);
+      await db.insert(opsNotifications).values({
+        tenantId: user.tenantId,
+        kind: 'test',
+        dedupeKey: `test:automation:${key}:${Date.now()}`,
+        forClickupUserId: owner.clickupUserId,
+        forName: owner.username,
+        payload: {
+          text: clampMessage(`🧪 <b>Prueba · ${escapeHtml(def.title)}</b> <i>(los botones registran TU jornada)</i>\n\n${p.text}`),
+          testMode: false,
+          buttons: p.buttons,
+          jwTasks: p.jwTasks
+        }
+      });
+      void processNotifications(user.tenantId);
+      return { ok: true, message: 'Prueba en cola: te llegará a Telegram en unos segundos.' };
     } else if (key === 'startup') {
       body = await buildStartupText(user.tenantId, await getLastHeartbeat(user.tenantId));
     } else {

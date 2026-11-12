@@ -118,6 +118,7 @@ export async function getMapLive(tenantId: string): Promise<LiveData> {
     digest: byKind(['digest']),
     daily: byKind(['daily_summary']),
     reminders: byKind(['reminder']),
+    jornada: byKind(['jornada']),
     queue: byKind(['new_request', 'daily_summary', 'digest', 'reminder', 'review_request', 'block_alert', 'reply', 'returned']),
     outbox: {
       label: 'Último cambio enviado a ClickUp',

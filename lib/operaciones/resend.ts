@@ -241,3 +241,18 @@ export async function sendReply(
     })
   });
 }
+
+// --- Correo interno al equipo (p. ej. «¿empiezas?» de la jornada) ---------------------------------
+// Sin «Re:» ni copia oculta: es un aviso interno, no una respuesta a un cliente. La clave de idempotencia
+// evita duplicados si se reintenta.
+export async function sendInternalEmail(
+  cfg: EmailConfig,
+  input: { to: string; subject: string; text: string; idempotencyKey: string }
+): Promise<{ id: string }> {
+  if (!cfg.apiKey) throw new Error('El buzón del agente no está conectado');
+  return call<{ id: string }>(cfg.apiKey, '/emails', {
+    method: 'POST',
+    headers: { 'Idempotency-Key': input.idempotencyKey.slice(0, 256) },
+    body: JSON.stringify({ from: `${cfg.fromName} <${cfg.address}>`, to: [input.to], subject: input.subject, text: input.text })
+  });
+}

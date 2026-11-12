@@ -309,6 +309,13 @@
       "when": 1794186000000,
       "tag": "0043_ops_health",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1794189600000,
+      "tag": "0044_ops_jornada",
+      "breakpoints": true
     }
   ]
 }

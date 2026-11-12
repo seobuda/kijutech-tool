@@ -34,6 +34,7 @@ export type AutomationDef = {
   template?: { default: string; placeholders: PlaceholderDef[] };
   link?: { href: string; label: string };
   testNote?: string; // qué manda «Enviarme una prueba» cuando no hay texto editable
+  defaultEnabled?: boolean; // si no se ha guardado nada (por defecto, encendida)
 };
 
 export const AUTOMATIONS: AutomationDef[] = [
@@ -107,6 +108,24 @@ export const AUTOMATIONS: AutomationDef[] = [
         { name: 'fecha', label: 'Fecha de hoy', sample: 'jue, 30 oct' }
       ]
     }
+  },
+  {
+    key: 'jornada',
+    title: 'Jornada real',
+    what: 'A su hora de entrada da los buenos días a cada persona con sus tareas y botones para empezar; registra descansos, comida, salidas con motivo y la salida, y retiene los avisos mientras está fuera. Sustituye al resumen diario del equipo mientras está encendida.',
+    canDisable: true,
+    defaultEnabled: false,
+    link: { href: '/dashboard/operaciones/jornada', label: 'Registros y correcciones en Equipo → Jornada' },
+    testNote: 'Te manda el mensaje de buenos días con tus tareas y los botones de la jornada.',
+    fields: [
+      { key: 'repingMin', label: 'Volver a avisar si no empieza', type: 'number', unit: 'min', min: 5, max: 60, default: 10 },
+      { key: 'maxPings', label: 'Avisos máximos sin respuesta', type: 'number', unit: 'avisos', min: 1, max: 10, default: 4, help: 'Después, sale en tu resumen como «no empezó»' },
+      { key: 'emailPing', label: 'Avisar también por correo', type: 'bool', default: true, help: 'Desde el buzón del agente, al correo de ClickUp de la persona' },
+      { key: 'breakQuotaMin', label: 'Cupo diario de descansos', type: 'number', unit: 'min', min: 0, max: 120, default: 20, help: 'Por encima, sale marcado en tu resumen y en la pestaña Jornada' },
+      { key: 'lunchMarginMin', label: 'Margen de la comida', type: 'number', unit: 'min', min: 0, max: 60, default: 10, help: 'Tras la duración de la ficha más este margen, el bot pregunta si ha vuelto' },
+      { key: 'autoCloseMin', label: 'Cierre automático tras el horario', type: 'number', unit: 'min', min: 30, max: 480, default: 120, help: 'Si no marcó «Termino», la jornada se cierra sola (marcada) y se le pregunta al día siguiente' },
+      { key: 'holdNotices', label: 'Retener avisos mientras está fuera', type: 'bool', default: true, help: 'En pausa, tras terminar o ausente: los avisos no urgentes esperan a que vuelva' }
+    ]
   },
   {
     key: 'digest',
@@ -318,7 +337,7 @@ export async function getAutoAll(tenantId: string): Promise<Record<string, AutoS
     const custom = Boolean(row?.template);
     out[def.key] = {
       key: def.key,
-      enabled: def.key === 'watch' ? Boolean(watch?.enabled) : (row?.enabled ?? true),
+      enabled: def.key === 'watch' ? Boolean(watch?.enabled) : (row?.enabled ?? def.defaultEnabled ?? true),
       cfg,
       template: row?.template ?? def.template?.default ?? '',
       customTemplate: custom,

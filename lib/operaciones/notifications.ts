@@ -47,6 +47,8 @@ type Payload = {
   photoFileId?: string; // captura adjunta (file_id de Telegram)
   sentText?: string; // lo que realmente se envió (para editarlo al pulsar un botón)
   skipped?: string; // resumen omitido (p. ej. "sin tareas")
+  heldByJornada?: boolean; // retenido porque la persona está en pausa o fuera (jornada real)
+  jwTasks?: { id: string; name: string }[]; // tareas de los botones «▶️ Empiezo con…» (jornada real)
 };
 
 export type { Payload as NotificationPayload };
@@ -161,17 +163,18 @@ export async function enqueueNewRequestNotification(
 // (dedupe_key único) y se envía después. Nunca lanza: un fallo de Telegram no rompe la acción.
 export async function enqueueNotification(input: {
   tenantId: string;
-  kind: 'review_request' | 'block_alert' | 'reply' | 'returned' | 'digest' | 'reminder' | 'cleanup' | 'cleanup_summary' | 'startup' | 'email_proposal' | 'health';
+  kind: 'review_request' | 'block_alert' | 'reply' | 'returned' | 'digest' | 'reminder' | 'cleanup' | 'cleanup_summary' | 'startup' | 'email_proposal' | 'health' | 'jornada';
   dedupeKey: string;
   forClickupUserId: string | null;
   forName: string | null;
   requestId?: string | null;
   payload: Omit<Payload, 'testMode'>;
   skipped?: boolean;
-}): Promise<void> {
+  notBefore?: Date; // envío programado (p. ej. «Empezaré en 30 min»)
+}): Promise<boolean> {
   const cfg = await getTelegramConfig(input.tenantId);
-  if (!cfg) return;
-  await db
+  if (!cfg) return false;
+  const inserted = await db
     .insert(opsNotifications)
     .values({
       tenantId: input.tenantId,
@@ -181,10 +184,13 @@ export async function enqueueNotification(input: {
       forName: input.forName,
       requestId: input.requestId ?? null,
       payload: { ...input.payload, testMode: cfg.testMode } satisfies Payload,
-      status: input.skipped ? 'enviado' : 'pendiente'
+      status: input.skipped ? 'enviado' : 'pendiente',
+      ...(input.notBefore ? { nextAttemptAt: input.notBefore } : {})
     })
-    .onConflictDoNothing();
-  if (!input.skipped) void processNotifications(input.tenantId);
+    .onConflictDoNothing()
+    .returning({ id: opsNotifications.id });
+  if (!input.skipped && !input.notBefore) void processNotifications(input.tenantId);
+  return inserted.length > 0;
 }
 
 // Teclado del aviso de encargo según el estado y la persona: solo se ofrece lo que tiene sentido ahora.
@@ -364,6 +370,23 @@ async function sendOne(c: Claimed): Promise<void> {
         .where(eq(opsNotifications.id, c.id));
       return;
     }
+    // Jornada real: en pausa, tras terminar o ausente, los avisos no urgentes esperan a que vuelva
+    // (salen al pulsar «He vuelto» o «Empiezo»). Los mensajes de la propia jornada nunca se retienen.
+    if (!urgent && c.kind !== 'jornada' && !c.payload.toOwner) {
+      const { jornadaHoldUntil } = await import('@/lib/operaciones/jornada');
+      const until = await jornadaHoldUntil(c.tenant_id, c.for_clickup_user_id, nowMs);
+      if (until) {
+        await db
+          .update(opsNotifications)
+          .set({
+            attempts: Math.max(0, c.attempts - 1),
+            nextAttemptAt: new Date(until),
+            payload: { ...c.payload, heldByJornada: true }
+          })
+          .where(eq(opsNotifications.id, c.id));
+        return;
+      }
+    }
   }
 
   const header =
@@ -520,6 +543,9 @@ export async function runDailySummaries(tenantId: string, now = new Date()): Pro
   if (!cfg) return;
   const auto = await getAuto(tenantId, 'daily_team');
   if (!auto.enabled) return;
+  // Con la jornada real encendida, los buenos días (con las mismas tareas y los botones para empezar)
+  // los manda jornada-worker.ts.
+  if ((await getAuto(tenantId, 'jornada')).enabled) return;
   const windowMin = num(auto, 'windowMin');
 
   const members = await db

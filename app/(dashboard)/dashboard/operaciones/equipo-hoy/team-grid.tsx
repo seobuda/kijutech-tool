@@ -88,7 +88,9 @@ type NoDateState =
   | { status: 'ready'; counts: Record<string, number>; computedAt: number }
   | { status: 'error'; error: string };
 
-export function TeamGrid({ data }: { data: TeamTodayData }) {
+export type JornadaBadge = { icon: string; label: string; detail: string; tone: 'ok' | 'warn' | 'muted' };
+
+export function TeamGrid({ data, jornada }: { data: TeamTodayData; jornada?: Record<string, JornadaBadge> }) {
   const router = useRouter();
   const [refreshing, startRefresh] = useTransition();
   const [refreshError, setRefreshError] = useState<string | null>(null);
@@ -206,7 +208,23 @@ export function TeamGrid({ data }: { data: TeamTodayData }) {
                 {initials(member.username)}
               </span>
               <p className="min-w-0 flex-1 truncate font-medium">{member.username}</p>
+              {jornada?.[member.id] && (
+                <span
+                  title={jornada[member.id].detail}
+                  className={cn(
+                    'shrink-0 rounded-full px-2 py-0.5 text-xs font-medium',
+                    jornada[member.id].tone === 'ok' && 'bg-success-soft text-success',
+                    jornada[member.id].tone === 'warn' && 'bg-warning-soft text-warning-strong',
+                    jornada[member.id].tone === 'muted' && 'bg-muted text-muted-foreground'
+                  )}
+                >
+                  <span aria-hidden>{jornada[member.id].icon}</span> {jornada[member.id].label}
+                </span>
+              )}
             </header>
+            {jornada?.[member.id]?.detail && (
+              <p className="border-b px-4 py-1.5 text-xs text-muted-foreground">{jornada[member.id].detail}</p>
+            )}
 
             <div className="grid grid-cols-3 gap-2 px-4 pt-3">
               <Counter value={overdue.length} label="vencidas" tone={overdue.length > 0 ? 'danger' : 'neutral'} />
