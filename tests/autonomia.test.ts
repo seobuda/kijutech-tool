@@ -50,6 +50,7 @@ import { buildMorningBrief, buildWeeklyReport, firstWorkdayOfMonth, mondayOf, su
 import { nextWorkday, shouldDemote, shouldPromote } from '@/lib/operaciones/autopilot';
 import { evaluate, type Snapshot } from '@/lib/operaciones/health';
 import type { InboxItem } from '@/lib/operaciones/inbox';
+import { proposeFor, serviceFor } from '@/lib/operaciones/client-proposals';
 
 const entry = (e: Partial<CalendarEntry>): CalendarEntry => ({
   id: 'x',
@@ -254,5 +255,59 @@ describe('calendario e informes con la base de datos', () => {
     const text = weeklyText(r, null);
     expect(text).toContain('Informe semanal');
     expect(text).toContain('a tiempo 50 %');
+  });
+});
+
+describe('propuestas de fichas de clientes (puro)', () => {
+  const services = [
+    { key: 'seo', label: 'SEO' },
+    { key: 'google_ads', label: 'Google Ads' },
+    { key: 'web', label: 'Web' },
+    { key: 'mantenimiento', label: 'Mantenimiento' }
+  ];
+  it('reconoce el servicio por el nombre de la lista o del espacio', () => {
+    expect(serviceFor('SEO y Contenidos', 'Artículos blog', services)).toBe('seo');
+    expect(serviceFor('Marketing', 'Campañas Google Ads', services)).toBe('google_ads');
+    expect(serviceFor('Desarrollo y Diseño Web', 'Landing pages', services)).toBe('web');
+    expect(serviceFor('Varios', 'Facturas', services)).toBeNull();
+  });
+  it('propone listas habituales, servicios y responsable por mayoría', () => {
+    const t = (listId: string, listName: string, spaceName: string, who: string) => ({ listId, listName, spaceName, assignees: [{ id: who, username: who }], updatedMs: Date.now() - 86_400_000 });
+    const p = proposeFor(
+      [t('L1', 'Artículos', 'SEO', 'ana'), t('L1', 'Artículos', 'SEO', 'ana'), t('L1', 'Artículos', 'SEO', 'beto'), t('L2', 'Landing', 'Web', 'beto'), t('L2', 'Landing', 'Web', 'beto'), t('L3', 'Otra', 'Varios', 'ana')],
+      services,
+      new Map([['ana', 'Ana'], ['beto', 'Beto']])
+    );
+    expect(p.lists.map((l) => l.id)).toEqual(['L1', 'L2']);
+    expect(p.services.map((s) => [s.key, s.responsible?.name])).toEqual([['seo', 'Ana'], ['web', 'Beto']]);
+    expect(p.lastDays).toBe(1);
+  });
+});
+
+describe('prueba de restauración en Salud (puro)', () => {
+  const base: Snapshot = {
+    heartbeatAgeS: 20, notificationsFailed: 0, notificationsStuck: 0, outboxFailed: 0, outboxStuck: 0, requestsError: 0, requestsStuck: 0,
+    emailsError: 0, emailsStuck: 0, watchError: null, telegramError: null, aiFailedHour: 0, aiTotalHour: 0, clickupPeakPerMin: 1
+  };
+  const st = (r: Snapshot['restoreTest']) => evaluate({ ...base, restoreTest: r }).find((c) => c.key === 'restauracion')?.status;
+  it('ok, antigua o fallida', () => {
+    expect(st({ ageD: 3, ok: true, detail: 'x' })).toBe('ok');
+    expect(st({ ageD: 45, ok: true, detail: 'x' })).toBe('aviso');
+    expect(st({ ageD: 1, ok: false, detail: 'vacía' })).toBe('critico');
+    expect(st(null)).toBeUndefined();
+  });
+});
+
+describe('cuota de correo en Salud (puro)', () => {
+  const base: Snapshot = {
+    heartbeatAgeS: 20, notificationsFailed: 0, notificationsStuck: 0, outboxFailed: 0, outboxStuck: 0, requestsError: 0, requestsStuck: 0,
+    emailsError: 0, emailsStuck: 0, watchError: null, telegramError: null, aiFailedHour: 0, aiTotalHour: 0, clickupPeakPerMin: 1
+  };
+  const st = (n: number | null) => evaluate({ ...base, emailsToday: n }).find((c) => c.key === 'correo_cuota')?.status;
+  it('aviso al 80 % y crítico al 95 % de 100 al día', () => {
+    expect(st(10)).toBe('ok');
+    expect(st(82)).toBe('aviso');
+    expect(st(97)).toBe('critico');
+    expect(st(null)).toBeUndefined();
   });
 });

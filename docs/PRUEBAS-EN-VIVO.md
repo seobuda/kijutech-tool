@@ -55,7 +55,16 @@ crontab -e                               # cambia la línea de la copia de las 0
 0 3 * * * /opt/kijutech/scripts/backup.sh >> /opt/kijutech/backups/backup.log 2>&1
 ```
 
-En la línea vieja del cron aparece `/opt/kijutech/backup.sh`; la nueva usa la carpeta `scripts/`. Cuando quieras la copia
+En la línea vieja del cron aparece `/opt/kijutech/backup.sh`; la nueva usa la carpeta `scripts/`. Añade también la **prueba de restauración mensual** (restaura la última copia en una base desechable y te avisa si no sirve):
+
+```
+chmod +x /opt/kijutech/scripts/restore-test.sh
+/opt/kijutech/scripts/restore-test.sh   # pruébala una vez (tarda 1-2 min): debe terminar en «ok …»
+# en crontab -e, añade:
+0 4 1 * * /opt/kijutech/scripts/restore-test.sh >> /opt/kijutech/backups/restore-test.log 2>&1
+```
+
+ Cuando quieras la copia
 **fuera de DigitalOcean** (NAS o Google Drive), se instala `rclone` y se pone `RCLONE_REMOTE=…` en `/opt/kijutech/backup.env`.
 Lo vemos juntos: hace falta tu acceso a Drive o al NAS.
 

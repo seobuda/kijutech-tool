@@ -92,7 +92,7 @@ export default async function BandejaPage() {
           </ul>
         </section>
       )}
-      <BandejaList items={items} />
+      <BandejaList items={items} otherPending={emails.length} />
     </div>
   );
 }
