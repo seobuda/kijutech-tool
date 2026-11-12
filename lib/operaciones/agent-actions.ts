@@ -197,7 +197,23 @@ export type KindStats = {
   hitRate: number | null; // aprobadas / decididas (0-1)
   avgDecisionMin: number | null;
   recommendation: string | null;
+  // Solo «Responder correos»: calidad de las respuestas propuestas (para ver si mejora con el tiempo).
+  quality?: { proposals: number; endsWithQuestion: number; promises: number };
 };
+
+// Una respuesta «acaba en pregunta» si la última frase antes de la firma lleva «?».
+export function endsWithQuestion(answer: string): boolean {
+  const body = answer.split(/\n\s*Un saludo,/i)[0].trim();
+  const last = body.split(/\n+/).filter((l) => l.trim()).pop() ?? '';
+  return /\?\s*$/.test(last.trim()) || /\?[^.!?]*$/.test(last);
+}
+
+// Promesas de acciones que solo hace el sistema (crear/actualizar/asignar tareas): no deben salir de la IA.
+export function promisesAction(answer: string): boolean {
+  return /\b(lo dejo|lo dejamos|dejo anotad|actualizo|he actualizado|he creado|creo la tarea|lo asigno|he asignado|queda asignad|lo apunto como encargo)\b/i.test(
+    answer
+  );
+}
 
 const MIN_FOR_RECOMMENDATION = 30;
 
@@ -256,6 +272,25 @@ export async function getAgentStats(tenantId: string, days = 30): Promise<KindSt
     const decided = s.approved + s.corrected + s.rejected;
     s.hitRate = decided ? s.approved / decided : null;
     s.recommendation = recommend(s);
+    if (kind === 'email_reply') {
+      const answers = (
+        await db
+          .select({ proposal: opsAgentActions.proposal })
+          .from(opsAgentActions)
+          .where(
+            and(eq(opsAgentActions.tenantId, tenantId), eq(opsAgentActions.kind, 'email_reply'), gte(opsAgentActions.createdAt, since))
+          )
+          .orderBy(desc(opsAgentActions.createdAt))
+          .limit(200)
+      )
+        .map((r) => String((r.proposal as { answer?: string }).answer ?? ''))
+        .filter(Boolean);
+      (s as KindStats).quality = {
+        proposals: answers.length,
+        endsWithQuestion: answers.filter(endsWithQuestion).length,
+        promises: answers.filter(promisesAction).length
+      };
+    }
     out.push(s);
   }
   return out;

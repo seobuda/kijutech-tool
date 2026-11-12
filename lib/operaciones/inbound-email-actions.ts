@@ -45,7 +45,12 @@ export type InboundEmailDetail = InboundEmailRow & {
   sentAt: string | null;
   // Lo que entendió el agente y, si hay, su respuesta propuesta pendiente de aprobar (paso 3).
   aiSummary: string;
-  pendingReply: { actionId: string; answer: string } | null;
+  pendingReply: {
+    actionId: string;
+    answer: string;
+    requests: { title: string; listName: string; assigneeName: string; assigneeReason: string; dueDate: string; priority: number }[];
+    addTo: { requestId: string; title: string; note: string } | null;
+  } | null;
 };
 
 const rowSelect = {
