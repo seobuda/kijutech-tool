@@ -8,6 +8,7 @@ import { opsClientActivity } from '@/lib/db/schema';
 import { db } from '@/lib/db/drizzle';
 import { eq } from 'drizzle-orm';
 import { ClientesView, type ClientView } from './clientes-view';
+import { ClientProposals } from './client-proposals';
 
 export const dynamic = 'force-dynamic';
 
@@ -74,7 +75,11 @@ export default async function ClientesPage() {
   for (const f of Object.values(structure.clientFields)) for (const o of f.options) options.set(o.id, o.label);
   const linked = new Set(clients.map((c) => c.clickupOptionId).filter(Boolean));
 
+  const incomplete = clients.filter((c) => c.active && c.clickupOptionId && (c.services.length === 0 || c.usualListIds.length === 0)).length;
+
   return (
+    <div className="space-y-4">
+    {incomplete > 0 && <ClientProposals incomplete={incomplete} />}
     <ClientesView
       clients={views}
       levels={levels}
@@ -90,5 +95,6 @@ export default async function ClientesPage() {
       missingOptions={[...options].filter(([id]) => !linked.has(id)).length}
       duplicates={possibleDuplicates(clients.filter((c) => c.active))}
     />
+    </div>
   );
 }

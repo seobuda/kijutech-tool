@@ -30,6 +30,7 @@ import { inboundSecret, signInbound } from '@/lib/operaciones/inbound-email-rule
 import { deleteProfile, setProfileActive, setProfileWebUser } from '@/lib/operaciones/profile-actions';
 import { correctTaskTimeAction, saveBandAction, voidTaskTimeAction } from '@/lib/operaciones/tiempos-actions';
 import { addCalendarEntryAction, removeCalendarEntryAction } from '@/lib/operaciones/calendar-actions';
+import { applyClientProposalAction, getClientProposalsAction } from '@/lib/operaciones/client-proposal-actions';
 import { deleteNote } from '@/lib/operaciones/note-actions';
 import { saveClickUpToken } from '@/lib/operaciones/actions';
 import { saveTelegramToken } from '@/lib/operaciones/telegram-actions';
@@ -126,6 +127,8 @@ const ACCIONES_ADMIN: [string, () => unknown][] = [
 ];
 const ACCIONES_EDITOR: [string, () => unknown][] = [
   ['deleteNote (Bloc)', () => deleteNote(ZERO)],
+  ['getClientProposalsAction (fichas)', () => getClientProposalsAction()],
+  ['applyClientProposalAction (fichas)', () => applyClientProposalAction({ clientId: ZERO, services: [], listIds: [] })],
   ['setClientActive (fichas)', () => setClientActive(ZERO, false)],
   ['listClientMemory (memoria)', () => listClientMemory(ZERO)],
   ['addClientMemory (memoria)', () => addClientMemory({ clientId: ZERO, kind: 'contexto', text: 'x' })],

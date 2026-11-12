@@ -70,7 +70,7 @@ export function monthRange(offset: 0 | -1, now = Date.now()) {
 }
 
 // Opción del campo «Cliente» elegida en una tarea (cualquiera de los campos Cliente de la caché).
-function taskClientOption(t: WatchTask, fieldIds: Set<string>): string | null {
+export function taskClientOption(t: WatchTask, fieldIds: Set<string>): string | null {
   for (const [fieldId, d] of Object.entries(t.dropdowns)) if (fieldIds.has(fieldId)) return d.optionId;
   return null;
 }

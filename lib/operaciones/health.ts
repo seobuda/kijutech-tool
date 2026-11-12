@@ -62,6 +62,7 @@ export type Snapshot = {
   aiBudget?: { enabled: boolean; daily: number; monthly: number };
   diskUsedPct?: number | null;
   backupAgeH?: number | null;
+  restoreTest?: { ageD: number; ok: boolean; detail: string } | null;
 };
 
 const usd = (n: number) => `${n.toFixed(2)} $`;
@@ -182,6 +183,13 @@ export function evaluate(s: Snapshot): Check[] {
     else add('copia', 'Copia de seguridad', 'ok', `Última copia hace ${Math.round(s.backupAgeH)} h.`);
   }
 
+  if (s.restoreTest) {
+    const r = s.restoreTest;
+    if (!r.ok) add('restauracion', 'Prueba de restauración', 'critico', `La última prueba falló: ${r.detail}`, 'La copia podría no servir. Revisa /opt/kijutech/backups/restore-test.log y vuelve a lanzar scripts/restore-test.sh.');
+    else if (r.ageD > 40) add('restauracion', 'Prueba de restauración', 'aviso', `La última prueba buena es de hace ${Math.round(r.ageD)} días.`, 'Revisa el cron mensual de scripts/restore-test.sh en el servidor.');
+    else add('restauracion', 'Prueba de restauración', 'ok', `Hace ${Math.round(r.ageD)} días: ${r.detail}`);
+  }
+
   return checks;
 }
 
@@ -261,6 +269,12 @@ export async function collectSnapshot(tenantId: string): Promise<Snapshot> {
     .where(and(eq(opsSettings.tenantId, tenantId), eq(opsSettings.key, BACKUP_SETTING)))
     .limit(1);
   const backupMs = Date.parse(backupRow?.value ?? '');
+  const restoreRows = await db
+    .select({ key: opsSettings.key, value: opsSettings.value })
+    .from(opsSettings)
+    .where(and(eq(opsSettings.tenantId, tenantId), inArray(opsSettings.key, ['restore_test_at', 'restore_test_result'])));
+  const restoreAt = Date.parse(restoreRows.find((r) => r.key === 'restore_test_at')?.value ?? '');
+  const [restoreStatus, ...restoreDetail] = (restoreRows.find((r) => r.key === 'restore_test_result')?.value ?? '').split('|');
 
   return {
     aiSpendDay: Number(spend[0]?.day ?? 0),
@@ -268,6 +282,7 @@ export async function collectSnapshot(tenantId: string): Promise<Snapshot> {
     aiBudget: { enabled: budget.enabled, daily: num(budget, 'dailyUsd'), monthly: num(budget, 'monthlyUsd') },
     diskUsedPct: await diskUsedPct(),
     backupAgeH: Number.isFinite(backupMs) ? (Date.now() - backupMs) / 3_600_000 : null,
+    restoreTest: Number.isFinite(restoreAt) ? { ageD: (Date.now() - restoreAt) / 86_400_000, ok: restoreStatus === 'ok', detail: restoreDetail.join('|') } : null,
     heartbeatAgeS: await heartbeatAgeS(tenantId),
     notificationsFailed,
     notificationsStuck,

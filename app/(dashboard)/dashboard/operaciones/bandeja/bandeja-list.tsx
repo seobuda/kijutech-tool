@@ -44,7 +44,10 @@ export type BandejaItem =
 const areaClass =
   'w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-xs placeholder:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-brand';
 
-export function BandejaList({ items }: { items: BandejaItem[] }) {
+export function BandejaList({ items, otherPending = 0 }: { items: BandejaItem[]; otherPending?: number }) {
+  if (items.length === 0 && otherPending > 0) {
+    return <p className="text-sm text-muted-foreground">Sin revisiones ni bloqueos pendientes.</p>;
+  }
   if (items.length === 0) {
     return (
       <EmptyState
