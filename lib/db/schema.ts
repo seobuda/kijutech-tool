@@ -1250,7 +1250,7 @@ export const opsNotifications = pgTable(
     check('ops_notifications_status_check', sql`${table.status} IN ('pendiente', 'enviado', 'fallido')`),
     check(
       'ops_notifications_kind_check',
-      sql`${table.kind} IN ('new_request', 'daily_summary', 'test', 'review_request', 'block_alert', 'reply', 'returned', 'digest', 'reminder', 'cleanup', 'cleanup_summary', 'startup', 'email_proposal', 'health')`
+      sql`${table.kind} IN ('new_request', 'daily_summary', 'test', 'review_request', 'block_alert', 'reply', 'returned', 'digest', 'reminder', 'cleanup', 'cleanup_summary', 'startup', 'email_proposal', 'health', 'jornada')`
     ),
   ]
 );
@@ -1914,3 +1914,45 @@ export const opsHealthIncidents = pgTable(
 );
 
 export type OpsHealthIncident = typeof opsHealthIncidents.$inferSelect;
+
+// Jornada real (paso 5A): cada registro de la jornada de una persona (entrada, descanso, comida, salida
+// urgente, vuelta, salida, ausencia). El estado del día se calcula a partir de estos registros
+// (lib/operaciones/jornada.ts). Nunca se borran: una corrección anula el registro (voided_*) y añade otro.
+export const opsWorkEvents = pgTable(
+  'ops_work_events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    profileId: uuid('profile_id').references(() => opsTeamProfiles.id, { onDelete: 'set null' }),
+    clickupUserId: varchar('clickup_user_id', { length: 50 }).notNull(),
+    personName: varchar('person_name', { length: 255 }).notNull(),
+    // Día laboral en la zona horaria de la persona (YYYY-MM-DD).
+    workDate: date('work_date', { mode: 'string' }).notNull(),
+    kind: varchar('kind', { length: 20 }).notNull(),
+    at: timestamp('at').notNull(),
+    plannedMinutes: integer('planned_minutes'),
+    reason: text('reason'),
+    // Tarea con la que empezó (entrada): { clickupTaskId, name, requestId }.
+    task: jsonb('task'),
+    source: varchar('source', { length: 15 }).notNull().default('telegram'),
+    createdByUserId: integer('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    createdByName: varchar('created_by_name', { length: 255 }),
+    voidedAt: timestamp('voided_at'),
+    voidedByName: varchar('voided_by_name', { length: 255 }),
+    voidReason: text('void_reason'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    index('ops_work_events_person_day_idx').on(table.tenantId, table.clickupUserId, table.workDate),
+    index('ops_work_events_day_idx').on(table.tenantId, table.workDate),
+    check(
+      'ops_work_events_kind_check',
+      sql`${table.kind} IN ('entrada', 'descanso', 'comida', 'salida_urgente', 'vuelta', 'salida', 'ausencia')`
+    ),
+    check('ops_work_events_source_check', sql`${table.source} IN ('telegram', 'web', 'auto', 'correccion')`),
+  ]
+);
+
+export type OpsWorkEvent = typeof opsWorkEvents.$inferSelect;

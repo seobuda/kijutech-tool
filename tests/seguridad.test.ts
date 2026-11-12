@@ -36,6 +36,7 @@ import { sendCleanupAction } from '@/lib/operaciones/cleanup-actions';
 import { inboxAccept, inboxApproveProposal, inboxRejectProposal } from '@/lib/operaciones/flow-actions';
 import { setAgentAutonomyAction } from '@/lib/operaciones/agent-panel-actions';
 import { retryStuckAction } from '@/lib/operaciones/health-actions';
+import { addWorkEventAction, voidWorkEventAction } from '@/lib/operaciones/jornada-actions';
 import {
   approveEmailReplyAction,
   connectEmailAction,
@@ -108,7 +109,12 @@ const ACCIONES_ADMIN: [string, () => unknown][] = [
   ['setAgentAutonomyAction (autonomía del agente)', () => setAgentAutonomyAction('tipo-que-no-existe', 'sombra')],
   ['connectEmailAction (buzón del agente)', () => connectEmailAction('')],
   ['saveEmailWebhookSecretAction (buzón del agente)', () => saveEmailWebhookSecretAction('')],
-  ['retryStuckAction (salud)', () => retryStuckAction()]
+  ['retryStuckAction (salud)', () => retryStuckAction()],
+  ['voidWorkEventAction (jornada)', () => voidWorkEventAction(ZERO, 'corrección de prueba')],
+  [
+    'addWorkEventAction (jornada)',
+    () => addWorkEventAction({ clickupUserId: '1', date: '2026-11-12', kind: 'entrada', time: '09:00', reason: 'corrección de prueba', plannedMinutes: null })
+  ]
 ];
 const ACCIONES_EDITOR: [string, () => unknown][] = [
   ['deleteNote (Bloc)', () => deleteNote(ZERO)],

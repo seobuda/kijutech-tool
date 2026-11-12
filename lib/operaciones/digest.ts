@@ -15,6 +15,7 @@ import { getInbox, waitLabel } from '@/lib/operaciones/inbox';
 import { getOwnerTimezone, getScheduleMap, scheduleOrDefault } from '@/lib/operaciones/team-profiles';
 import { getUnanswered } from '@/lib/operaciones/reminders';
 import { getClientAlertsToShow, markClientAlertsShown, type ClientAlertItem } from '@/lib/operaciones/client-activity';
+import { buildJornadaDigestSection } from '@/lib/operaciones/jornada';
 
 const MAX_LIST = 8;
 const MAX_BUTTON_ROWS = 5;
@@ -24,7 +25,8 @@ const short = (t: string, n = 28) => (t.length > n ? `${t.slice(0, n - 1)}…` :
 async function buildDigest(
   tenantId: string,
   since: Date,
-  withClientAlerts = false
+  withClientAlerts = false,
+  withJornada = false
 ): Promise<{ text: string; buttons: { text: string; data: string }[][]; empty: boolean; unansweredIds: string[]; clientAlerts: ClientAlertItem[]; suggestionIds: string[] }> {
   const events = await db
     .select()
@@ -118,6 +120,10 @@ async function buildDigest(
     sections.push(renderTemplate(DEF.get('client_alerts')!, alertsAuto.template, { total: String(clientAlerts.length), lista: lines.join('\n') }));
   }
 
+  // Jornada real (solo en el primer resumen del día): el último día laborable cerrado de cada persona.
+  const jornada = withJornada ? await buildJornadaDigestSection(tenantId) : '';
+  if (jornada) sections.push(jornada);
+
   const buttons: { text: string; data: string }[][] = [];
   if (inbox.length) {
     const lines = inbox.slice(0, MAX_LIST).map((i) => {
@@ -186,13 +192,13 @@ export async function runDigests(tenantId: string, now = new Date()): Promise<vo
     .limit(1);
   if (exists) return;
   // Las alertas de clientes solo van en el último resumen del día (el de las 18:00 por defecto).
-  const lastSlot = [...slots].sort((a, b) => toMinutes(a) - toMinutes(b)).at(-1);
-  await queueDigest(tenantId, key, await lastDigestAt(tenantId), slot === lastSlot);
+  const sorted = [...slots].sort((a, b) => toMinutes(a) - toMinutes(b));
+  await queueDigest(tenantId, key, await lastDigestAt(tenantId), slot === sorted.at(-1), slot === sorted[0]);
 }
 
-async function queueDigest(tenantId: string, key: string, since: Date, withClientAlerts = false): Promise<boolean> {
+async function queueDigest(tenantId: string, key: string, since: Date, withClientAlerts = false, withJornada = false): Promise<boolean> {
   const owner = await getOwnerMember(tenantId);
-  const d = await buildDigest(tenantId, since, withClientAlerts);
+  const d = await buildDigest(tenantId, since, withClientAlerts, withJornada);
   await enqueueNotification({
     tenantId,
     kind: 'digest',
@@ -215,6 +221,6 @@ async function queueDigest(tenantId: string, key: string, since: Date, withClien
 
 // Botón «Enviar resumen de la bandeja ahora» (pruebas): fuerza un resumen con las últimas 24 h.
 export async function sendDigestNow(tenantId: string): Promise<{ sent: boolean }> {
-  const sent = await queueDigest(tenantId, `digest-manual:${Date.now()}`, new Date(Date.now() - 24 * 3600 * 1000), true);
+  const sent = await queueDigest(tenantId, `digest-manual:${Date.now()}`, new Date(Date.now() - 24 * 3600 * 1000), true, true);
   return { sent };
 }

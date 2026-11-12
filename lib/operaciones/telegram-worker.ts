@@ -24,6 +24,7 @@ import { sendStartupNotice, writeHeartbeat } from '@/lib/operaciones/startup';
 import { retriageStaleBlockers } from '@/lib/operaciones/blockers';
 import { runEmailInterpretations } from '@/lib/operaciones/email-agent';
 import { runHealthChecks } from '@/lib/operaciones/health';
+import { runJornada } from '@/lib/operaciones/jornada-worker';
 
 const LOCK_KEY = 74200126; // identifica "oyente de Telegram de Kijutech"
 const POLL_TIMEOUT_S = 50;
@@ -227,6 +228,7 @@ async function schedulerLoop(state: WorkerState) {
         await step('arranque/latido', () => (sendStartup ? sendStartupNotice(t) : writeHeartbeat(t)));
         await step('avisos', () => processNotifications(t));
         await step('resúmenes diarios', () => runDailySummaries(t));
+        await step('jornada', () => runJornada(t)); // buenos días, reintentos, pausas, fin de horario y cierre automático
         await step('resúmenes de bandeja', () => runDigests(t));
         await step('bandeja de salida', () => processOutbox(t));
         await step('vigilancia', () => runWatch(t)); // tareas creadas o asignadas en ClickUp (cada ~2,5 min)

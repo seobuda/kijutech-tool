@@ -20,6 +20,8 @@ import { getScheduleMap, scheduleOrDefault, WEEKDAY_ISO, type Schedule } from '@
 import { logEvent } from '@/lib/operaciones/events';
 import { clampMessage, escapeHtml } from '@/lib/operaciones/telegram';
 import { DEF, getAuto, num, renderTemplate } from '@/lib/operaciones/automations';
+import { inWindows, windowsOf } from '@/lib/operaciones/quiet';
+import { shiftDate, workedIntervals } from '@/lib/operaciones/jornada';
 
 
 // SOLO DESARROLLO: acorta los tiempos para poder probar. Con N minutos, las "2 horas laborables" pasan a
@@ -42,19 +44,30 @@ const MAX_SCAN_DAYS = 14;
 const MAX_NOTICE_AGE_MS = 3 * 24 * 3600 * 1000;
 const REMINDERS_FROM = new Date('2026-10-30T10:30:00Z'); // despliegue del paso 6C
 
+// Momento laborable según la ficha: día de trabajo, dentro de su horario y fuera de su hueco de comida.
 export function isWorkMoment(sch: Schedule, t: number): boolean {
   const lp = localParts(sch.timezone, new Date(t));
   if (!sch.workDays.includes(WEEKDAY_ISO[lp.weekday])) return false;
   const start = toMinutes(sch.workStart);
-  return lp.minutes >= start && lp.minutes < start + sch.hoursPerDay * 60;
+  if (lp.minutes < start || lp.minutes >= start + sch.hoursPerDay * 60) return false;
+  const lunch = windowsOf({ lunchStart: sch.lunchStart, lunchEnd: sch.lunchEnd, quietStart: null, quietEnd: null });
+  return !inWindows(lunch, lp.minutes);
 }
 
+// Jornada real: días en los que la persona fichó y sus tramos realmente trabajados. Esos días cuentan
+// solo los tramos trabajados; el resto de días, el horario de la ficha.
+export type ActualWork = { days: Set<string>; intervals: [number, number][] };
+
 // Minutos laborables (de la persona) entre dos instantes; para al llegar a `cap`.
-export function workingMinutesBetween(sch: Schedule, fromMs: number, toMs: number, cap = Infinity): number {
+export function workingMinutesBetween(sch: Schedule, fromMs: number, toMs: number, cap = Infinity, actual?: ActualWork): number {
   const from = Math.max(fromMs, toMs - MAX_SCAN_DAYS * 24 * 3600 * 1000);
   let minutes = 0;
   for (let t = from; t < toMs; t += STEP_MS) {
-    if (isWorkMoment(sch, t)) {
+    const worked =
+      actual && actual.days.has(localParts(sch.timezone, new Date(t)).date)
+        ? actual.intervals.some(([a, b]) => t >= a && t < b)
+        : isWorkMoment(sch, t);
+    if (worked) {
       minutes += STEP_MS / 60000;
       if (minutes >= cap) break;
     }
@@ -136,6 +149,10 @@ export async function runReminders(tenantId: string, now = new Date()): Promise<
   if (!aUn.enabled && !aLater.enabled) return;
   const unMinutes = num(aUn, 'minutes');
   const dayFrac = num(aLater, 'dayPct') / 100;
+  // Jornada real (si está encendida): minutos realmente trabajados en los días fichados.
+  const users = [...new Set(notices.map((n) => n.forClickupUserId).filter((x): x is string => Boolean(x)))];
+  const todayIso = now.toISOString().slice(0, 10);
+  const actual = await workedIntervals(tenantId, users, shiftDate(todayIso, -MAX_SCAN_DAYS - 1), shiftDate(todayIso, 1), now.getTime());
 
   for (const req of reqs) {
     for (const n of notices.filter((x) => x.requestId === req.id)) {
@@ -161,7 +178,7 @@ export async function runReminders(tenantId: string, now = new Date()): Promise<
           ? req.dueDate === localParts(sch.timezone, now).date && now.getTime() - laterEvent!.createdAt.getTime() >= dev * 60000
           : now.getTime() - n.sentAt.getTime() >= dev * 60000;
       } else if (!later) {
-        due = workingMinutesBetween(sch, n.sentAt.getTime(), now.getTime(), unMinutes) >= unMinutes;
+        due = workingMinutesBetween(sch, n.sentAt.getTime(), now.getTime(), unMinutes, actual.get(user)) >= unMinutes;
       } else {
         // «Más tarde» + vence hoy + pasada la mitad de su jornada (y sin haber terminado).
         const lp = localParts(sch.timezone, now);

@@ -29,7 +29,8 @@ export type EventType =
   | 'cleanup_rescheduled'
   | 'cleanup_discarded'
   | 'cleanup_finished'
-  | 'suggestion';
+  | 'suggestion'
+  | 'jornada';
 
 export async function logEvent(
   tenantId: string,

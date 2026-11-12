@@ -8,7 +8,9 @@ import { getUser } from '@/lib/db/queries';
 import { getClickUpConnection } from '@/lib/operaciones/queries';
 import { ensureFresh } from '@/lib/operaciones/structure';
 import { getTeamToday } from '@/lib/operaciones/team-today';
-import { TeamGrid } from './team-grid';
+import { TeamGrid, type JornadaBadge } from './team-grid';
+import { getCurrentDays, jornadaSettings } from '@/lib/operaciones/jornada';
+import { breakOver, fmtDuration, STATUS_ICON, STATUS_LABEL } from '@/lib/operaciones/jornada-core';
 
 export const dynamic = 'force-dynamic';
 
@@ -74,10 +76,35 @@ function Cargando() {
   );
 }
 
+// Estado de la jornada real de cada persona (solo base de datos; vacío si la jornada está apagada).
+async function jornadaBadges(tenantId: string): Promise<Record<string, JornadaBadge> | undefined> {
+  const cfg = await jornadaSettings(tenantId);
+  if (!cfg.enabled) return undefined;
+  const days = await getCurrentDays(tenantId);
+  const out: Record<string, JornadaBadge> = {};
+  const hm = (ms: number, tz: string) => new Intl.DateTimeFormat('es-ES', { timeZone: tz, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(ms));
+  for (const [u, d] of days) {
+    const st = d.state;
+    const tz = d.sch.timezone;
+    const parts: string[] = [];
+    if (st.entradaAt) parts.push(`Entrada ${hm(st.entradaAt, tz)}${st.firstTask ? ` · «${st.firstTask.name}»` : ''}`);
+    if (st.current) parts.push(`desde las ${hm(st.current.start, tz)}${st.current.reason ? ` · ${st.current.reason}` : ''}`);
+    if (st.entradaAt) parts.push(`${fmtDuration(st.workedMin)} trabajadas · descansos ${fmtDuration(st.breakMin)}${breakOver(st, cfg.breakQuotaMin) ? ' ⚠️' : ''}`);
+    if (st.status === 'ausente' && st.absenceReason) parts.push(st.absenceReason);
+    out[u] = {
+      icon: STATUS_ICON[st.status],
+      label: STATUS_LABEL[st.status],
+      detail: parts.join(' · '),
+      tone: st.status === 'trabajando' ? 'ok' : st.status === 'sin_empezar' || st.status === 'fuera' ? 'warn' : 'muted'
+    };
+  }
+  return out;
+}
+
 async function TeamTodayContent({ tenantId }: { tenantId: string }) {
   try {
-    const data = await getTeamToday(tenantId);
-    return <TeamGrid data={data} />;
+    const [data, jornada] = await Promise.all([getTeamToday(tenantId), jornadaBadges(tenantId)]);
+    return <TeamGrid data={data} jornada={jornada} />;
   } catch (e) {
     return (
       <div role="alert" className="flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive-soft p-4">

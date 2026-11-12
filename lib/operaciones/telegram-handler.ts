@@ -43,6 +43,7 @@ import {
 import { getAction } from '@/lib/operaciones/agent-actions';
 import { approveEmailReply, rejectEmailReply, renderProposal, setProposalAssignee } from '@/lib/operaciones/email-agent';
 import { teamLoad } from '@/lib/operaciones/email-pm';
+import { handleJornadaCallback, handleJornadaCommand, handleJornadaPending, JORNADA_COMMAND_RE } from '@/lib/operaciones/jornada-bot';
 
 // Botones del motor de acciones del agente: ag:<id de la acción>:ok (aprobar) | no (descartar) | ed (corregir).
 export const AGENT_CALLBACK_RE = /^ag:([0-9a-f-]{36}):(ok|no|ed|re|pa|as:(\d{1,20}))$/;
@@ -115,6 +116,8 @@ async function handleMessage(tenantId: string, token: string, msg: TgMessage): P
 
   // Comandos de la voz del equipo (no tocan la conversación pendiente).
   if (/^\/ayuda(?:@\w+)?(?:\s|$)/i.test(text)) return void (await reply(token, chatId, HELP_TEXT));
+  // Jornada real: /empiezo, /descanso 10, /comida, /salir, /vuelvo, /termino, /ausente, /jornada.
+  if (JORNADA_COMMAND_RE.test(text)) return void (await handleJornadaCommand(tenantId, token, linked, chatId, text));
   const sug = text.match(/^\/sugerencia(?:@\w+)?(?:\s+([\s\S]+))?$/i);
   if (sug) {
     const fileId = msg.photo?.length ? msg.photo[msg.photo.length - 1].file_id : null;
@@ -169,6 +172,14 @@ const HELP_TEXT = [
   '🗑 <b>Ya no aplica</b>: la descarta (queda cerrada con un comentario).',
   '⏹ <b>Parar limpieza</b>: lo que queda sigue como está.',
   '',
+  '<b>Tu jornada</b>',
+  '/empiezo: elige con qué tarea empiezas (así queda tu entrada).',
+  '/descanso 10: descanso de 10 min (o los minutos que digas).',
+  '/comida: sales a comer · /vuelvo: has vuelto de una pausa.',
+  '/salir motivo: tienes que salir (el motivo queda registrado).',
+  '/termino: terminas la jornada · /ausente motivo: hoy no trabajas.',
+  '/jornada: cómo va tu día y los botones.',
+  '',
   '<b>Comandos</b>',
   '/sugerencia: cuéntanos qué mejorarías (texto o captura).',
   '/ayuda: este mensaje.',
@@ -210,6 +221,9 @@ async function handlePending(
     .returning();
   if (!p || p.expiresAt.getTime() < Date.now()) return; // nada esperado (o ya caducó)
   if (/^\/cancelar/i.test(text)) return void (await reply(token, chatId, 'Cancelado.'));
+
+  // Jornada real: motivo de salida o ausencia, con qué empieza, hora real de salida.
+  if (p.kind.startsWith('jw')) return void (await handleJornadaPending(tenantId, token, chatId, p.kind, text, member.username));
 
   const owner = await getOwnerMember(tenantId);
   const isOwner = owner?.id === member.id;
@@ -473,6 +487,9 @@ async function handleCallback(tenantId: string, token: string, cb: TgCallbackQue
 
   // Limpieza de vencidas (cl:…).
   if (cb.data?.startsWith('cl:')) return handleCleanupCallback(tenantId, token, cb, presser, chatId, messageId, answer);
+
+  // Jornada real (jw:…): empezar, descansos, comida, salidas, vuelta, termino.
+  if (cb.data?.startsWith('jw:')) return handleJornadaCallback(tenantId, token, cb, presser, chatId, messageId, answer);
 
   // Motor de acciones del agente: «✅ Enviar la propuesta» / «✖️ Descartar propuesta» (solo el dueño).
   const ag = cb.data?.match(AGENT_CALLBACK_RE);
