@@ -363,7 +363,9 @@ async function sendOne(c: Claimed): Promise<void> {
     const sch = scheduleOrDefault(await getScheduleMap(c.tenant_id), c.for_clickup_user_id);
     const urgent = URGENT_KINDS.includes(c.kind);
     const nowMs = Date.now();
-    if (isQuietAt(sch, nowMs, urgent)) {
+    // Los mensajes de la jornada responden a lo que hace la persona (o la saludan a su hora de entrada):
+    // no esperan a su hueco de comida o silencio de la ficha.
+    if (c.kind !== 'jornada' && isQuietAt(sch, nowMs, urgent)) {
       await db
         .update(opsNotifications)
         .set({ attempts: Math.max(0, c.attempts - 1), nextAttemptAt: new Date(releaseAt(sch, nowMs, urgent)) })

@@ -955,7 +955,7 @@ const OPS_JORNADA: ProcessStep[] = [
     file: 'lib/operaciones/notifications.ts',
     when: 'Cada vez que la cola va a enviar un aviso a esa persona.',
     ai: 'Nada.',
-    code: 'Los bloqueos y revisiones urgentes no se retienen. En pausa se vuelve a mirar cada 10 min; tras terminar o ausente, hasta su próxima entrada según la ficha. No se aplica en modo pruebas.',
+    code: 'Los bloqueos y revisiones urgentes no se retienen. En pausa se vuelve a mirar cada 10 min; tras terminar o ausente, hasta su próxima entrada según la ficha. No se aplica en modo pruebas. Los mensajes de la propia jornada nunca se retienen ni esperan al hueco de comida o silencio de la ficha.',
     tables: ['ops_notifications'],
     settings: [{ automation: 'jornada', fields: ['holdNotices'] }],
   },
