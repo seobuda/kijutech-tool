@@ -30,6 +30,17 @@ Otras opciones del mismo mensaje:
 
 > Si no respondes, el bot te lo vuelve a preguntar cada pocos minutos, por Telegram y por **correo**. La entrada **nunca se marca sola**: la marcas tú al empezar una tarea.
 
+### 1b. ⏱ Tus tareas y su tiempo
+
+Cuenta el tiempo de **la tarea con la que estás**. Las pausas no cuentan.
+
+- **Al empezar una tarea**, el bot te pregunta: **«¿Cuánto crees que te llevará?»**, con tres opciones. Pulsa una o **Saltar**. Si la tarea no tiene tipo, antes te pregunta qué tipo es.
+- **¿Cambias a otra tarea?** Pulsa **🔄 Cambiar tarea** en el panel, o **▶️ Empezar** en el aviso de la otra tarea. Lo que llevabas queda en la tarea anterior.
+- **Al terminarla** (✅ Hecho), el bot te dice cuánto ha sido de verdad: «Estimaste 30 y han sido 34. ¡Muy cerca! 🎯». Después te pregunta **«¿Con qué sigues?»**.
+- **Si una tarea se alarga mucho más de lo habitual**, el bot te pregunta **qué la complicó** (el cliente cambió el encargo, era más grande de lo esperado, estuviste bloqueado…) y te pide la **URL**. **No es una falta**: sirve para que los tiempos de referencia sean justos.
+
+> Esto no va de correr. **Nadie gana por ir más rápido**: lo que cuenta es estimar bien, entregar cuando dijiste y con calidad. Tu precisión se puede mejorar, como una habilidad.
+
 ### 2. ☕ Descansos
 
 Pulsa **☕ 5 min**, **☕ 10 min** o **☕ 15 min**, o escribe `/descanso 10` (los minutos que quieras).
@@ -88,7 +99,10 @@ Nada grave. Avisa a Enric y lo corrige. Las correcciones quedan anotadas con qui
 No. Los avisos normales esperan a que pulses «He vuelto». Solo los **urgentes** llegan siempre.
 
 **¿Quién ve mi registro?**
-Solo la administración (Enric). Más adelante tendrás tu propio panel para ver tu jornada, tus tiempos y tus puntos.
+La administración (Enric) y tú. En la web, **Equipo → Mi panel** te enseña tu jornada de hoy, tus tareas, tu precisión y tus tiempos frente a la mediana del equipo. No hay ranking entre compañeros. Si no lo ves, pide a Enric que enlace tu usuario con tu ficha.
+
+**¿Me comparan con mis compañeros por el tiempo?**
+No. El tiempo sirve para ajustar los tiempos de referencia de cada tipo de tarea y para que los plazos sean realistas. No hay ranking.
 
 **¿Y si un día trabajo hasta tarde?**
 Pulsa «⏳ Sigo un rato» cuando el bot te pregunte y «⏹ Termino» al acabar. Cuenta todo lo que trabajes.
@@ -97,7 +111,7 @@ Pulsa «⏳ Sigo un rato» cuando el bot te pregunte y «⏹ Termino» al acabar
 No. Son unos 4–6 toques al día: empezar, descansos, comida y terminar. El resto, como siempre.
 
 **¿Lo de los puntos y el bonus ya funciona?**
-Todavía no. Primero arrancamos con la jornada; los tiempos por tarea y el sistema de puntos, niveles y recompensas llegarán después, y os lo explicaremos cuando estén listos. Lo que registres desde hoy ya cuenta como base.
+Todavía no. Primero arrancamos con la jornada y los tiempos de tarea. El sistema de puntos, niveles y recompensas llegará después: empezará con una **temporada de prueba sin dinero en juego** para ajustarlo con vosotros. Contará entregar a tiempo, la calidad, tu precisión y llevar bien la jornada, nunca ir más rápido que nadie.
 
 ---
 

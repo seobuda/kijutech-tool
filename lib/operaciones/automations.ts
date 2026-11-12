@@ -128,6 +128,20 @@ export const AUTOMATIONS: AutomationDef[] = [
     ]
   },
   {
+    key: 'tiempos',
+    title: 'Tiempos de tarea',
+    what: 'Mide el tiempo real de cada tarea con la jornada (una tarea activa a la vez; las pausas no cuentan). Al empezar pide una estimación de un toque y al terminar enseña cómo ha ido. Si una tarea pasa del margen de su tipo, pide el motivo y la URL. Necesita la Jornada real encendida.',
+    canDisable: true,
+    defaultEnabled: false,
+    link: { href: '/dashboard/operaciones/tiempos', label: 'Márgenes y tiempos en Equipo → Tiempos' },
+    fields: [
+      { key: 'askEstimate', label: 'Pedir estimación al empezar', type: 'bool', default: true, help: 'Tres opciones de un toque alrededor de lo habitual del tipo; se puede saltar' },
+      { key: 'askJustify', label: 'Pedir motivo y URL si pasa del margen', type: 'bool', default: true },
+      { key: 'precisionPct', label: 'Tolerancia de la precisión', type: 'number', unit: '%', min: 5, max: 50, default: 20, help: 'Acierta si lo real queda dentro de este % de lo estimado (mínimo 5 min), por arriba o por abajo' },
+      { key: 'minSamples', label: 'Tareas para proponer un margen', type: 'number', unit: 'tareas', min: 3, max: 50, default: 8, help: 'Con estas tareas terminadas de un tipo, la pestaña Tiempos propone su margen real' }
+    ]
+  },
+  {
     key: 'digest',
     title: 'Resúmenes de mi bandeja',
     what: 'A las horas indicadas (lunes a viernes) te manda lo completado, lo que ha resuelto el agente solo y lo que necesita de ti.',

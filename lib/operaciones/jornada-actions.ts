@@ -41,7 +41,7 @@ export async function voidWorkEventAction(id: string, reason: string): Promise<R
 const addSchema = z.object({
   clickupUserId: z.string().regex(/^\d{1,20}$/),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  kind: z.enum(WORK_KINDS as [string, ...string[]]),
+  kind: z.enum(WORK_KINDS.filter((k) => k !== 'tarea') as [string, ...string[]]),
   time: z.string().regex(/^([01]?\d|2[0-3]):[0-5]\d$/, 'Hora no válida (HH:MM)'),
   reason: z.string().trim().min(3, 'Escribe el motivo de la corrección').max(500),
   plannedMinutes: z.number().int().min(1).max(600).nullable()

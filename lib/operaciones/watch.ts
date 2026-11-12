@@ -207,6 +207,9 @@ async function syncExisting(ctx: Ctx, req: OpsRequest, t: WatchTask) {
     if (row) {
       await logEvent(ctx.tenantId, { requestId: req.id, actor: null, type: 'clickup_closed', payload: { status: t.statusName } });
       await refreshNotice(ctx.tenantId, req.id);
+      // Tiempos (5B): cerrada directamente en ClickUp → se cierra igual el tiempo de quien la hacía.
+      const { onTaskFinished } = await import('@/lib/operaciones/tiempos');
+      await onTaskFinished(ctx.tenantId, { clickupTaskId: row.clickupTaskId, title: row.title }, { source: 'clickup' });
     }
     return;
   }

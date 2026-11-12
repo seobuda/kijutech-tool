@@ -140,6 +140,16 @@ export async function startWork(
   });
   await pushToClickUp(row, 'inProgress', actor.name);
   await refreshNotice(req.tenantId, req.id);
+  // Jornada y tiempos (5A/5B): empezar un encargo es empezar (o cambiar a) esa tarea. Import dinámico para
+  // no crear un ciclo (jornada-bot importa este archivo).
+  if (row.assigneeClickupId && row.clickupTaskId) {
+    const { onTaskStarted } = await import('@/lib/operaciones/tiempos');
+    await onTaskStarted(
+      req.tenantId,
+      { clickupUserId: row.assigneeClickupId, name: row.assigneeName ?? actor.name },
+      { clickupTaskId: row.clickupTaskId, name: row.title, requestId: row.id }
+    );
+  }
   return { ok: true, req: row };
 }
 
@@ -191,6 +201,9 @@ export async function finishWork(
     if (reviewer) await reviewer.requestReview({ req: row, submittedBy: actor, note: cleanNote });
   }
   await refreshNotice(req.tenantId, req.id);
+  // Tiempos (5B): cierra el tiempo de quien la hacía, le enseña cómo ha ido y le pregunta con qué sigue.
+  const { onTaskFinished } = await import('@/lib/operaciones/tiempos');
+  await onTaskFinished(req.tenantId, { clickupTaskId: row.clickupTaskId, title: row.title }, { user: row.assigneeClickupId, source: 'bot', note: cleanNote });
   return { ok: true, req: row };
 }
 

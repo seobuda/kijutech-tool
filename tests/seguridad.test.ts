@@ -27,7 +27,8 @@ import {
 } from '@/lib/operaciones/inbound-email-actions';
 import { POST as postInboundEmailRoute } from '@/app/api/email/entrada/route';
 import { inboundSecret, signInbound } from '@/lib/operaciones/inbound-email-rules';
-import { deleteProfile, setProfileActive } from '@/lib/operaciones/profile-actions';
+import { deleteProfile, setProfileActive, setProfileWebUser } from '@/lib/operaciones/profile-actions';
+import { correctTaskTimeAction, saveBandAction, voidTaskTimeAction } from '@/lib/operaciones/tiempos-actions';
 import { deleteNote } from '@/lib/operaciones/note-actions';
 import { saveClickUpToken } from '@/lib/operaciones/actions';
 import { saveTelegramToken } from '@/lib/operaciones/telegram-actions';
@@ -114,7 +115,11 @@ const ACCIONES_ADMIN: [string, () => unknown][] = [
   [
     'addWorkEventAction (jornada)',
     () => addWorkEventAction({ clickupUserId: '1', date: '2026-11-12', kind: 'entrada', time: '09:00', reason: 'corrección de prueba', plannedMinutes: null })
-  ]
+  ],
+  ['saveBandAction (tiempos)', () => saveBandAction({ key: 'articulo', min: 20, max: 30 })],
+  ['voidTaskTimeAction (tiempos)', () => voidTaskTimeAction(ZERO, 'corrección de prueba')],
+  ['correctTaskTimeAction (tiempos)', () => correctTaskTimeAction({ id: ZERO, minutes: 10, reason: 'corrección de prueba' })],
+  ['setProfileWebUser (Mi panel)', () => setProfileWebUser(ZERO, null)]
 ];
 const ACCIONES_EDITOR: [string, () => unknown][] = [
   ['deleteNote (Bloc)', () => deleteNote(ZERO)],

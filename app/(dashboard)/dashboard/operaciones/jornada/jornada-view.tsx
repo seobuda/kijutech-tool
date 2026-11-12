@@ -19,8 +19,11 @@ const KIND_LABEL: Record<string, string> = {
   salida_urgente: '🚪 Salida urgente',
   vuelta: '↩️ Vuelta',
   salida: '⏹ Salida',
-  ausencia: '🏠 Ausencia'
+  ausencia: '🏠 Ausencia',
+  tarea: '🔄 Cambio de tarea'
 };
+// En el formulario de añadir no se ofrece el cambio de tarea (necesita una tarea concreta: lo marca el bot).
+const ADDABLE = Object.entries(KIND_LABEL).filter(([k]) => k !== 'tarea');
 const SOURCE_LABEL: Record<string, string> = { telegram: 'Telegram', web: 'web', auto: 'automático', correccion: 'corrección' };
 
 const dur = (min: number) => (min < 60 ? `${min} min` : `${Math.floor(min / 60)} h${min % 60 ? ` ${min % 60}` : ''}`);
@@ -167,6 +170,11 @@ export function JornadaView({
                             <span className={cn('tabular-nums', p.lateMin > 5 && 'font-medium text-warning-strong')}>{p.entrada}</span>
                             {p.lateMin > 5 && <span className="ml-1 text-xs text-warning-strong">+{p.lateMin} min</span>}
                             {p.firstTask && <div className="max-w-[200px] truncate text-xs text-muted-foreground" title={p.firstTask}>{p.firstTask}</div>}
+                            {p.activeTask && p.activeTask !== p.firstTask && (
+                              <div className="max-w-[200px] truncate text-xs text-muted-foreground" title={`Ahora con: ${p.activeTask}`}>
+                                🔄 {p.activeTask}
+                              </div>
+                            )}
                           </>
                         ) : (
                           '—'
@@ -322,6 +330,7 @@ function Timeline({ person, date }: { person: OverviewPerson; date: string }) {
               <span className={cn('w-12 tabular-nums', e.voided && 'text-muted-foreground line-through')}>{e.time}</span>
               <span className={cn('font-medium', e.voided && 'text-muted-foreground line-through')}>{KIND_LABEL[e.kind] ?? e.kind}</span>
               {e.planned && <span className="text-xs text-muted-foreground">{e.planned} min previstos</span>}
+              {e.taskName && <span className="text-xs text-muted-foreground">con «{e.taskName}»</span>}
               {e.reason && <span className="text-xs text-muted-foreground">«{e.reason}»</span>}
               <Badge tone={e.source === 'auto' ? 'warning' : e.source === 'correccion' ? 'info' : 'neutral'}>
                 {SOURCE_LABEL[e.source] ?? e.source}
@@ -368,7 +377,7 @@ function Timeline({ person, date }: { person: OverviewPerson; date: string }) {
               onChange={(e) => setForm({ ...form, kind: e.target.value })}
               className="h-9 w-full rounded-md border bg-background px-2 text-sm"
             >
-              {Object.entries(KIND_LABEL).map(([k, l]) => (
+              {ADDABLE.map(([k, l]) => (
                 <option key={k} value={k}>
                   {l}
                 </option>

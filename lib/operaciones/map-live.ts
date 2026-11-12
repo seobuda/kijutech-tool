@@ -82,6 +82,10 @@ export async function getMapLive(tenantId: string): Promise<LiveData> {
   const [sugg] = (await db.execute(sql`
     SELECT max(created_at) AS last_at, count(*)::int AS total, count(*) FILTER (WHERE digest_shown_at IS NULL)::int AS pending
     FROM ops_suggestions WHERE tenant_id = ${tenantId}`)) as unknown as { last_at: Date | null; total: number; pending: number }[];
+  const [times] = (await db.execute(sql`
+    SELECT max(done_at) AS last_at, count(*) FILTER (WHERE status = 'abierta' AND voided_at IS NULL)::int AS open,
+           count(*) FILTER (WHERE justify_status = 'pendiente' AND voided_at IS NULL)::int AS pending
+    FROM ops_task_times WHERE tenant_id = ${tenantId}`)) as unknown as { last_at: Date | null; open: number; pending: number }[];
   const beat = settings.find((s) => s.key === 'worker_heartbeat')?.value ?? '';
   const [reqCount] = await db
     .select({ n: sql<number>`count(*)::int` })
@@ -119,6 +123,12 @@ export async function getMapLive(tenantId: string): Promise<LiveData> {
     daily: byKind(['daily_summary']),
     reminders: byKind(['reminder']),
     jornada: byKind(['jornada']),
+    tiempos: {
+      label: 'Última tarea medida',
+      at: ms(times?.last_at),
+      error: null,
+      note: times ? `${times.open} en curso, ${times.pending} esperando motivo` : null
+    },
     queue: byKind(['new_request', 'daily_summary', 'digest', 'reminder', 'review_request', 'block_alert', 'reply', 'returned']),
     outbox: {
       label: 'Último cambio enviado a ClickUp',
