@@ -190,12 +190,14 @@ async function askAboutAutoClose(tenantId: string, d: PersonDay) {
 
 async function emailPing(tenantId: string, d: PersonDay, key: string, n: number) {
   try {
-    const to = await memberEmail(tenantId, d.person.clickupUserId);
+    // En modo pruebas el correo va al dueño (la copia oculta del buzón), nunca a la persona.
+    const testMode = Boolean((await getTelegramConfig(tenantId))?.testMode);
     const ecfg = await getEmailConfig(tenantId);
+    const to = testMode ? ecfg.bcc : await memberEmail(tenantId, d.person.clickupUserId);
     if (!to || !ecfg.apiKey) return;
     await sendInternalEmail(ecfg, {
       to,
-      subject: `¿Empiezas, ${d.person.name}? Aún no has marcado tu entrada`,
+      subject: `${testMode ? `[Modo pruebas · iba para ${d.person.name}] ` : ''}¿Empiezas, ${d.person.name}? Aún no has marcado tu entrada`,
       text: htmlToPlain(
         `Hola, ${d.person.name}:\n\nAún no has marcado tu entrada de hoy (aviso ${n}). Abre Telegram y pulsa la tarea con la que empiezas, o «Hoy no trabajo» si no vas a trabajar.\n\nEquipo Kijutech`
       ),

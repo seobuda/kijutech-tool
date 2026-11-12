@@ -123,7 +123,7 @@ export const AUTOMATIONS: AutomationDef[] = [
       { key: 'emailPing', label: 'Avisar también por correo', type: 'bool', default: true, help: 'Desde el buzón del agente, al correo de ClickUp de la persona' },
       { key: 'breakQuotaMin', label: 'Cupo diario de descansos', type: 'number', unit: 'min', min: 0, max: 120, default: 20, help: 'Por encima, sale marcado en tu resumen y en la pestaña Jornada' },
       { key: 'lunchMarginMin', label: 'Margen de la comida', type: 'number', unit: 'min', min: 0, max: 60, default: 10, help: 'Tras la duración de la ficha más este margen, el bot pregunta si ha vuelto' },
-      { key: 'autoCloseMin', label: 'Cierre automático tras el horario', type: 'number', unit: 'min', min: 30, max: 480, default: 120, help: 'Si no marcó «Termino», la jornada se cierra sola (marcada) y se le pregunta al día siguiente' },
+      { key: 'autoCloseMin', label: 'Cierre automático tras el horario', type: 'number', unit: 'min', min: 5, max: 480, default: 120, help: 'Si no marcó «Termino», la jornada se cierra sola (marcada) y se le pregunta al día siguiente' },
       { key: 'holdNotices', label: 'Retener avisos mientras está fuera', type: 'bool', default: true, help: 'En pausa, tras terminar o ausente: los avisos no urgentes esperan a que vuelva' }
     ]
   },
