@@ -232,6 +232,7 @@ describe('calendario e informes con la base de datos', () => {
     expect(b.text).toContain('Se cae hoy');
     expect(b.text).toContain('Beto Prueba');
     expect(b.buttons.flat().map((x) => x.data)).toContain('ap:due:au-tk1');
+    expect(b.buttons.flat().map((x) => x.data)).toContain('ap:as:au-tk1:900000023:900000022');
   });
 
   it('el informe semanal cuenta entregas y si fueron a tiempo (consultas reales)', async () => {

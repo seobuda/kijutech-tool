@@ -188,13 +188,15 @@ export const AUTOMATIONS: AutomationDef[] = [
   },
   {
     key: 'ai_budget',
-    title: 'Tope de gasto de IA',
-    what: 'Vigila lo que cuesta la IA (registro de llamadas). Al pasar del 80 % del tope diario o mensual abre una incidencia de Salud y te avisa; al pasar del 100 %, crítica.',
+    title: 'Vigía de gasto de IA',
+    what: 'Vigila lo que cuesta la IA: previsión de fin de mes frente al presupuesto, picos anormales por función con su porqué y recomendaciones de ahorro. Avisa al 50/80/100 % del presupuesto, si la previsión lo supera (una vez por semana) y ante un pico (una vez por función y día). En Salud abre incidencia al 80 % y al 100 % de los topes.',
     canDisable: true,
-    link: { href: '/dashboard/operaciones/salud', label: 'Incidencias en Sistema → Salud' },
+    link: { href: '/dashboard/operaciones/gasto-ia', label: 'Detalle en Sistema → Gasto de IA' },
     fields: [
+      { key: 'monthlyUsd', label: 'Presupuesto mensual', type: 'number', unit: 'USD', min: 5, max: 2000, default: 80, help: 'Con la cuenta de Anthropic conectada, cuenta todo su gasto (también Claude Code u otras claves)' },
       { key: 'dailyUsd', label: 'Tope diario', type: 'number', unit: 'USD', min: 1, max: 200, default: 5 },
-      { key: 'monthlyUsd', label: 'Tope mensual', type: 'number', unit: 'USD', min: 5, max: 2000, default: 60 }
+      { key: 'spikeFactor', label: 'Pico: veces lo normal', type: 'number', unit: '×', min: 2, max: 10, default: 3, help: 'Una función es un pico si hoy gasta este múltiplo de su mediana de 14 días (y al menos 0,30 $)' },
+      { key: 'alerts', label: 'Avisos por Telegram', type: 'bool', default: true, help: 'Umbrales del mes, previsión y picos, de 8:00 a 21:00' }
     ]
   },
   {

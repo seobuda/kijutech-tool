@@ -31,6 +31,7 @@ import { deleteProfile, setProfileActive, setProfileWebUser } from '@/lib/operac
 import { correctTaskTimeAction, saveBandAction, voidTaskTimeAction } from '@/lib/operaciones/tiempos-actions';
 import { addCalendarEntryAction, removeCalendarEntryAction } from '@/lib/operaciones/calendar-actions';
 import { applyClientProposalAction, getClientProposalsAction } from '@/lib/operaciones/client-proposal-actions';
+import { connectAnthropicAdminAction, disconnectAnthropicAdminAction, refreshOrgCostAction } from '@/lib/operaciones/ai-watch-actions';
 import { deleteNote } from '@/lib/operaciones/note-actions';
 import { saveClickUpToken } from '@/lib/operaciones/actions';
 import { saveTelegramToken } from '@/lib/operaciones/telegram-actions';
@@ -123,7 +124,10 @@ const ACCIONES_ADMIN: [string, () => unknown][] = [
   ['correctTaskTimeAction (tiempos)', () => correctTaskTimeAction({ id: ZERO, minutes: 10, reason: 'corrección de prueba' })],
   ['setProfileWebUser (Mi panel)', () => setProfileWebUser(ZERO, null)],
   ['addCalendarEntryAction (calendario)', () => addCalendarEntryAction({ kind: 'festivo', from: '2026-12-08', to: '2026-12-08', name: 'Prueba', users: null })],
-  ['removeCalendarEntryAction (calendario)', () => removeCalendarEntryAction(ZERO)]
+  ['removeCalendarEntryAction (calendario)', () => removeCalendarEntryAction(ZERO)],
+  ['connectAnthropicAdminAction (gasto de IA)', () => connectAnthropicAdminAction('sk-ant-admin01-xxxxxxxxxxxxxxxx')],
+  ['disconnectAnthropicAdminAction (gasto de IA)', () => disconnectAnthropicAdminAction()],
+  ['refreshOrgCostAction (gasto de IA)', () => refreshOrgCostAction()]
 ];
 const ACCIONES_EDITOR: [string, () => unknown][] = [
   ['deleteNote (Bloc)', () => deleteNote(ZERO)],

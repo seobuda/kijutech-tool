@@ -47,9 +47,17 @@ Detalle paso a paso de la activación en `docs/PRUEBAS-EN-VIVO.md`.
 - [ ] Encender **Tiempos de tarea** (Automatizaciones) y, si puedes, poner los márgenes en Equipo → Tiempos.
 - [ ] Si llega la propuesta de subir la autonomía del agente, decidir con el botón.
 
+## Vigía de IA (cuando puedas)
+- [ ] **Clave de administración de Anthropic** (opcional pero recomendada): en la consola de Anthropic → Settings → Admin keys,
+  crear una y pegarla en Sistema → Gasto de IA. Así el presupuesto cuenta el gasto real de toda la cuenta, también Claude Code.
+  Si la consola no ofrece «Admin keys», la cuenta es individual: hay que crear una organización en Settings → Organization.
+- [ ] **Confirmar qué son los 80 $/mes:** límite o recarga de la cuenta de la API (lo cubre el informe) o la suscripción de
+  Claude Code (no sale en la API). El presupuesto se cambia en Automatizaciones → Vigía de gasto de IA.
+- [ ] **IA de reserva:** para que funcione hace falta una segunda clave con saldo de otro proveedor (OpenAI, Gemini o DeepSeek) en IA
+  y modelos. La de Gemini no tiene créditos.
+
 ## Decisiones que esperan tu aprobación (Claude no las hace sin tu OK)
-- [ ] **Reasignar desde el parte con un botón:** necesita una migración pequeña (añadir la acción «reasignar» a la bandeja de
-  salida hacia ClickUp).
-- [ ] **IA de reserva:** si falla el proveedor principal, usar otro. Toca la pasarela de IA del núcleo (`lib/ai/gateway.ts`).
+- [x] **Reasignar desde el parte con un botón:** aprobada (migración 0046). Se despliega con `--migrate`.
+- [x] **IA de reserva:** aprobada y construida (falta la segunda clave, ver arriba).
 - [ ] **5C: temporadas, niveles y misiones.** El diseño está aprobado; falta aprobar su esquema de base de datos. Mejor después de
   1–2 semanas de jornada real.
