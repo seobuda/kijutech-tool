@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import { Dialog as DialogPrimitive } from 'radix-ui';
 import { CornerDownLeft, Search, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { OPERACIONES_TABS, type NavGroup } from './nav';
+import { OPERACIONES_TABS, visibleTabs, type NavGroup, type Roles } from './nav';
 
 type Cmd = { id: string; label: string; group: string; href: string; icon: LucideIcon; keywords?: string };
 
@@ -30,11 +30,13 @@ function score(cmd: Cmd, q: string): number {
 export function CommandPalette({
   open,
   onOpenChange,
-  groups
+  groups,
+  roles
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   groups: NavGroup[];
+  roles: Roles;
 }) {
   const router = useRouter();
   const [q, setQ] = useState('');
@@ -45,7 +47,7 @@ export function CommandPalette({
     const nav = groups.flatMap((g) =>
       g.items.map((i) => ({ id: i.href, label: i.label, group: g.label, href: i.href, icon: i.icon, keywords: i.keywords }))
     );
-    const ops = OPERACIONES_TABS.map((t) => ({
+    const ops = visibleTabs(OPERACIONES_TABS, roles).map((t) => ({
       id: `ops:${t.href}`,
       label: t.label,
       group: 'Operaciones',
@@ -54,7 +56,7 @@ export function CommandPalette({
       keywords: t.keywords
     }));
     return [...ops, ...nav.filter((n) => !ops.some((o) => o.href === n.href))];
-  }, [groups]);
+  }, [groups, roles]);
 
   const results = useMemo(
     () =>

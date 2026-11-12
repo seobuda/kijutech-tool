@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { sectionOf } from '@/components/app-shell/nav';
+import { sectionOf, visibleTabs } from '@/components/app-shell/nav';
+import { useRoles } from '@/components/app-shell/use-roles';
 import { PageHeader } from '@/components/ui/page';
 
 // Cabecera y pestañas de la sección actual del módulo (Operaciones, Equipo o Sistema): barra con iconos,
@@ -11,6 +12,7 @@ import { PageHeader } from '@/components/ui/page';
 export function OperacionesTabs() {
   const pathname = usePathname();
   const section = sectionOf(pathname);
+  const roles = useRoles();
   return (
     <>
       <PageHeader icon={section.icon} title={section.label} description={section.description} />
@@ -19,7 +21,7 @@ export function OperacionesTabs() {
         className="-mx-4 overflow-x-auto px-4 [scrollbar-width:none] lg:-mx-8 lg:px-8 [&::-webkit-scrollbar]:hidden"
       >
         <div className="inline-flex min-w-full items-center gap-1 border-b">
-          {section.tabs.map((t) => {
+          {visibleTabs(section.tabs, roles).map((t) => {
             const active = pathname === t.href || (t.href !== '/dashboard/operaciones' && pathname.startsWith(`${t.href}/`));
             return (
               <Link

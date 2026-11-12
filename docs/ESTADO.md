@@ -3,7 +3,7 @@
 > **Documento vivo y de referencia.** Recoge todo lo que existe, cómo funciona, qué está decidido, qué se ha probado y qué falta. Se actualiza al cerrar cada paso de trabajo (junto al documento de sesión y al Mapa Visual).
 > **No contiene claves, contraseñas ni valores de `.env`** (solo sus nombres).
 
-**Fecha de esta versión:** 2026-11-12 (paso 5A, jornada real, en la rama `feature/jornada` pendiente de aprobación; producción en `4f56dad9` con la salud del sistema del paso 4)
+**Fecha de esta versión:** 2026-11-12 (paso 5A, jornada real, en producción en `035440d2`; rama `fix/pestanas-por-rol` pendiente de aprobación: las pestañas solo para admin se ocultan al resto)
 **Producción:** `https://brain.kijutech.com` (droplet `kijutech-brain`, Frankfurt). Procedimiento en `docs/DESPLIEGUE.md`. Rama de trabajo del despliegue: `feature/despliegue`.
 **Rama de trabajo:** `feature/seguridad` (creada desde `feature/paso-7-piloto`, que aún no está fusionada en `main`; el paso 8 depende del 7). **No se ha unido a `main`: espera la aprobación de Enric.** **Operaciones ya está fusionada en `main`** (fast-forward, 30 oct): `main` y `operaciones` coinciden en `9110754f`; la rama `operaciones` se mantiene.
 **Rama `main`:** `c9dfa198` (11 nov): incluye arreglos de la revisión, memoria de cliente, correos B1 y rediseño; desplegada en producción.
@@ -363,6 +363,8 @@ Construido en agosto de 2026 (Fases A–D). Detalle y auditoría completa en `do
 | `admin` | además: tokens de ClickUp y Telegram, Automatizaciones, Niveles y servicios, estados y tipos de trabajo, Piloto y limpiezas, vigilancia, borrar fichas o clientes, archivar/borrar proyectos |
 | `super_admin` | además: gestionar usuarios, ajustes de IA y de SEO |
 
+**Menú según el rol (12 nov):** las pestañas de Operaciones cuya página exige admin (Agente, Piloto, Equipo → Jornada y todo Sistema) llevan `show: adminOnly` en `components/app-shell/nav.ts` y se ocultan en las pestañas y en la paleta de comandos a quien no es admin (`visibleTabs`, roles con `components/app-shell/use-roles.ts`). Es solo visual; `tests/nav-roles.test.ts` comprueba que cada pestaña coincide con el guard de su página.
+
 - **Mi bandeja:** solo del dueño (la persona cuya ficha de equipo está enlazada al usuario de ClickUp del token; si no hay ficha enlazada, solo `super_admin`).
 - **Un usuario sin ningún rol no puede ni ver.** El usuario de pruebas `ops-test` tiene rol `editor` (asignado el 4 nov).
 - Las pantallas de Ajustes ClickUp, Automatizaciones, Telegram y Piloto redirigen a quien no es admin. **Pendiente cosmético:** sus pestañas aún se ven (la acción se rechaza igual).
@@ -499,6 +501,7 @@ Cada uno con su nodo en el nivel 1 del Mapa Visual:
 - **12 nov (madrugada), agente como project manager:** prompt de correo v2 (migración 0042), hilo de la conversación, aprende de las correcciones, propone y crea tareas reales en ClickUp mirando la carga del equipo, añade datos a la tarea del hilo, cambia de responsable desde Telegram y mide preguntas y promesas. Ver `docs/sessions/2026-11-12-01-agente-project-manager.md`.
 - **12 nov, paso 4 (salud del sistema):** comprobaciones cada 5 min con incidencias y avisos al abrir y resolver, pestaña «Salud» con gráficas y recomendaciones, `/api/health` y vigilante externo por cron en el servidor (`scripts/watchdog.sh`). Migración 0043. Ver `docs/sessions/2026-11-12-02-salud-del-sistema.md`.
 - **12 nov, paso 5A (jornada real):** el paso 5 se amplía a un sistema de rendimiento del equipo en tres fases. 5A: entrada al empezar una tarea desde Telegram, reintentos por Telegram y correo, descansos con cupo, comida, salidas con motivo, cierre automático, avisos retenidos, minutos reales en los recordatorios, pestaña Equipo → Jornada con correcciones y secciones nuevas del menú (Equipo, Sistema). Migración 0044. Ver `docs/sessions/2026-11-12-11-jornada-real-5a.md`.
+- **12 nov, pestañas por rol:** al revisar en local con el usuario de pruebas (editor) se vio que Jornada, Agente y Piloto aparecían como pestañas pero redirigían al Bloc al no ser admin. Ahora se ocultan a quien no es admin. Ver `docs/sessions/2026-11-12-14-pestanas-por-rol.md`.
 - Historial completo: `git log` y `docs/sessions/`.
 
 ## 19. Mapa de archivos

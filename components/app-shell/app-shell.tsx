@@ -20,19 +20,11 @@ import {
 import { cn } from '@/lib/utils';
 import { signOut } from '@/app/(login)/actions';
 import type { SafeUser } from '@/lib/db/queries';
-import { breadcrumbs, isActive, visibleNav, type NavGroup, type Roles } from './nav';
+import { breadcrumbs, isActive, visibleNav, type NavGroup } from './nav';
 import { CommandPalette } from './command-palette';
+import { useRoles } from './use-roles';
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
-
-function useRoles(): Roles {
-  const { data } = useSWR<{ roles: string[]; aiKeyModeAllowed: string }>('/api/user/roles', fetcher);
-  const roles = data?.roles ?? [];
-  const isSuperAdmin = roles.includes('super_admin');
-  const isAdmin = isSuperAdmin || roles.includes('admin');
-  const byok = (data?.aiKeyModeAllowed ?? 'platform_only') !== 'platform_only';
-  return { isAdmin, isSuperAdmin, canAccessAi: isSuperAdmin || (roles.includes('admin') && byok) };
-}
 
 // --- Tema ---------------------------------------------------------------------
 
@@ -403,7 +395,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <main className="flex-1 animate-fade-up">{children}</main>
       </div>
 
-      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} groups={groups} />
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} groups={groups} roles={roles} />
     </div>
   );
 }

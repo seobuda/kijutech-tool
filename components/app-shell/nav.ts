@@ -52,6 +52,10 @@ export type NavGroup = { label: string; items: NavItem[] };
 export type SectionKey = 'operaciones' | 'equipo' | 'sistema';
 export type TabSection = { key: SectionKey; label: string; description: string; icon: LucideIcon; tabs: NavItem[] };
 
+// Pestañas cuya página exige admin (requirePagePermission('admin')): se ocultan al resto para no llevarles
+// a una redirección. Solo visual; el guard real está en cada página.
+const adminOnly = (r: Roles) => r.isAdmin;
+
 export const OPS_SECTIONS: TabSection[] = [
   {
     key: 'operaciones',
@@ -65,8 +69,8 @@ export const OPS_SECTIONS: TabSection[] = [
       { href: '/dashboard/operaciones/nuevo', label: 'Nuevo encargo', icon: PlusCircle, keywords: 'crear tarea' },
       { href: '/dashboard/operaciones/clientes', label: 'Clientes', icon: Building2, keywords: 'fichas semáforo alertas' },
       { href: '/dashboard/operaciones/correos', label: 'Correos', icon: Mail, keywords: 'email entrada' },
-      { href: '/dashboard/operaciones/agente', label: 'Agente', icon: Bot, keywords: 'propuestas aprobación autonomía acierto' },
-      { href: '/dashboard/operaciones/piloto', label: 'Piloto', icon: Gauge, keywords: 'métricas rendimiento' }
+      { href: '/dashboard/operaciones/agente', label: 'Agente', icon: Bot, keywords: 'propuestas aprobación autonomía acierto', show: adminOnly },
+      { href: '/dashboard/operaciones/piloto', label: 'Piloto', icon: Gauge, keywords: 'métricas rendimiento', show: adminOnly }
     ]
   },
   {
@@ -76,7 +80,7 @@ export const OPS_SECTIONS: TabSection[] = [
     description: 'Las personas: tareas de hoy, jornada real (entradas, pausas y salidas) y fichas con su horario.',
     tabs: [
       { href: '/dashboard/operaciones/equipo-hoy', label: 'Hoy', icon: CalendarCheck, keywords: 'equipo hoy tareas vencidas estado' },
-      { href: '/dashboard/operaciones/jornada', label: 'Jornada', icon: Clock, keywords: 'fichaje entrada salida descansos comida horas' },
+      { href: '/dashboard/operaciones/jornada', label: 'Jornada', icon: Clock, keywords: 'fichaje entrada salida descansos comida horas', show: adminOnly },
       { href: '/dashboard/operaciones/equipo', label: 'Fichas', icon: IdCard, keywords: 'equipo fichas personas horario' }
     ]
   },
@@ -86,16 +90,21 @@ export const OPS_SECTIONS: TabSection[] = [
     icon: Cog,
     description: 'Lo técnico: automatizaciones, salud del sistema, bot de Telegram y conexión con ClickUp.',
     tabs: [
-      { href: '/dashboard/operaciones/automatizaciones', label: 'Automatizaciones', icon: Workflow, keywords: 'avisos recordatorios resúmenes' },
-      { href: '/dashboard/operaciones/salud', label: 'Salud', icon: HeartPulse, keywords: 'errores incidencias caídas colas atascadas estado' },
-      { href: '/dashboard/operaciones/telegram', label: 'Telegram', icon: MessageCircle, keywords: 'bot avisos' },
-      { href: '/dashboard/operaciones/ajustes', label: 'Ajustes ClickUp', icon: SlidersHorizontal, keywords: 'token estados listas' }
+      { href: '/dashboard/operaciones/automatizaciones', label: 'Automatizaciones', icon: Workflow, keywords: 'avisos recordatorios resúmenes', show: adminOnly },
+      { href: '/dashboard/operaciones/salud', label: 'Salud', icon: HeartPulse, keywords: 'errores incidencias caídas colas atascadas estado', show: adminOnly },
+      { href: '/dashboard/operaciones/telegram', label: 'Telegram', icon: MessageCircle, keywords: 'bot avisos', show: adminOnly },
+      { href: '/dashboard/operaciones/ajustes', label: 'Ajustes ClickUp', icon: SlidersHorizontal, keywords: 'token estados listas', show: adminOnly }
     ]
   }
 ];
 
 /** Todas las pestañas del módulo (paleta de comandos y migas). */
 export const OPERACIONES_TABS: NavItem[] = OPS_SECTIONS.flatMap((s) => s.tabs);
+
+/** Pestañas que puede ver este usuario (las de admin, solo a admin). */
+export function visibleTabs(tabs: NavItem[], roles: Roles): NavItem[] {
+  return tabs.filter((t) => !t.show || t.show(roles));
+}
 
 /** Sección de una ruta de Operaciones: pestaña exacta o, en subrutas (detalle), la pestaña más larga que la contiene. */
 export function sectionOf(pathname: string): TabSection {
