@@ -198,6 +198,14 @@ export function AgenteView({ stats, recent }: { stats: KindStats[]; recent: Rece
                     </div>
                   )}
                 </dl>
+                {s.quality && s.quality.proposals > 0 && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Calidad de las respuestas: <span className="font-medium text-foreground">{pct(s.quality.endsWithQuestion / s.quality.proposals)}</span>{' '}
+                    acaban con pregunta ·{' '}
+                    <span className={cn('font-medium', s.quality.promises ? 'text-destructive' : 'text-foreground')}>{s.quality.promises}</span>{' '}
+                    prometen acciones que no hace el sistema
+                  </p>
+                )}
                 {s.recommendation && (
                   <p className="mt-3 flex items-start gap-2 rounded-lg bg-brand-soft px-3 py-2 text-sm">
                     <Lightbulb className="mt-0.5 size-4 shrink-0 text-brand" />

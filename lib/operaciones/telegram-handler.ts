@@ -22,7 +22,7 @@ import {
   type OpsTelegramMember
 } from '@/lib/db/schema';
 import { handleCleanupCallback, handleCleanupDateReply } from '@/lib/operaciones/cleanup';
-import { escapeHtml, tg, type TgCallbackQuery, type TgMessage, type TgUpdate } from '@/lib/operaciones/telegram';
+import { clampMessage, escapeHtml, tg, type TgCallbackQuery, type TgMessage, type TgUpdate } from '@/lib/operaciones/telegram';
 import {
   getMemberByChat,
   getMemberByUser,
@@ -41,10 +41,11 @@ import {
 } from '@/lib/operaciones/blockers';
 
 import { getAction } from '@/lib/operaciones/agent-actions';
-import { approveEmailReply, rejectEmailReply } from '@/lib/operaciones/email-agent';
+import { approveEmailReply, rejectEmailReply, renderProposal, setProposalAssignee } from '@/lib/operaciones/email-agent';
+import { teamLoad } from '@/lib/operaciones/email-pm';
 
 // Botones del motor de acciones del agente: ag:<id de la acción>:ok (aprobar) | no (descartar) | ed (corregir).
-export const AGENT_CALLBACK_RE = /^ag:([0-9a-f-]{36}):(ok|no|ed)$/;
+export const AGENT_CALLBACK_RE = /^ag:([0-9a-f-]{36}):(ok|no|ed|re|pa|as:(\d{1,20}))$/;
 
 // Botones del flujo: código, id del encargo (o del bloqueo) y, con varios responsables, el id
 // de ClickUp de la persona a la que iba el botón. Exportado para probarlo contra los teclados
@@ -278,7 +279,7 @@ async function handlePending(
   if (p.kind === 'agent_correct' && p.agentActionId) {
     if (!isOwner) return;
     if (!text) return void (await reply(token, chatId, 'Escribe la respuesta corregida.'));
-    const res = await approveEmailReply(tenantId, p.agentActionId, actorOf(member), 'telegram', text);
+    const res = await approveEmailReply(tenantId, p.agentActionId, actorOf(member), 'telegram', text, { createRequests: true });
     await reply(token, chatId, res.ok ? '📧 Enviada con tu corrección.' : res.reason);
   }
 }
@@ -493,17 +494,42 @@ async function handleCallback(tenantId: string, token: string, cb: TgCallbackQue
       return;
     }
 
+    // «👤 Cambiar responsable»: botones con cada persona del equipo y su carga (vencidas/hoy/abiertos).
+    if (ag[2] === 'pa' && action.kind === 'email_reply') {
+      const loads = await teamLoad(tenantId);
+      const rows = loads.map((l) => [{ text: `${l.name} · ${l.overdue}/${l.today}/${l.open}`, callback_data: `ag:${action.id}:as:${l.clickupId}` }]);
+      await tg(token, 'editMessageReplyMarkup', { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: rows } }).catch(() => undefined);
+      return void (await answer('Elige quién lo lleva (vencidas/hoy/abiertos)'));
+    }
+    if (ag[2].startsWith('as:') && ag[3]) {
+      const res = await setProposalAssignee(tenantId, action.id, ag[3]);
+      if (!res.ok) return void (await answer(res.reason, true));
+      const view = await renderProposal(tenantId, action.id);
+      if (view) {
+        await tg(token, 'editMessageText', {
+          chat_id: chatId,
+          message_id: messageId,
+          text: clampMessage(view.text),
+          parse_mode: 'HTML',
+          disable_web_page_preview: true,
+          reply_markup: { inline_keyboard: view.buttons.map((r) => r.map((b) => ({ text: b.text, callback_data: b.data }))) }
+        }).catch(() => undefined);
+      }
+      return void (await answer('Responsable cambiado'));
+    }
+
     const actor = actorOf(presser);
     const res =
       action.kind === 'email_reply'
-        ? ag[2] === 'ok'
-          ? await approveEmailReply(tenantId, action.id, actor, 'telegram')
+        ? ag[2] === 'ok' || ag[2] === 're'
+          ? await approveEmailReply(tenantId, action.id, actor, 'telegram', undefined, { createRequests: ag[2] === 'ok' })
           : await rejectEmailReply(tenantId, action.id, actor, 'telegram')
         : ag[2] === 'ok'
           ? await approveBlockerProposal(tenantId, action.id, actor, 'telegram')
           : await rejectBlockerProposal(tenantId, action.id, actor, 'telegram');
     if (res.ok) await closeButtons(token, chatId, messageId);
-    return void (await answer(res.ok ? (ag[2] === 'ok' ? '✅ Enviada' : 'Propuesta descartada') : res.reason, !res.ok));
+    const created = res.ok && 'created' in res && res.created ? ` y ${res.created} encargo(s) creado(s) en ClickUp` : '';
+    return void (await answer(res.ok ? (ag[2] === 'no' ? 'Propuesta descartada' : `✅ Enviada${created}`) : res.reason, !res.ok));
   }
 
   // Botones del flujo de trabajo (Empezar, Bloqueado, Hecho, Aceptar, Devolver, Responder…).

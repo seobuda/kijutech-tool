@@ -58,13 +58,20 @@ export async function saveEmailWebhookSecretAction(secret: string): Promise<Ok> 
   }
 }
 
-export async function approveEmailReplyAction(actionId: string, corrected?: string): Promise<Ok> {
+export async function approveEmailReplyAction(
+  actionId: string,
+  corrected?: string,
+  createRequests = true
+): Promise<Ok<{ created: number }>> {
   try {
     const user = await requireInboxOwner();
     const text = corrected?.trim() ? corrected.trim().slice(0, 6000) : undefined;
-    const res = await approveEmailReply(user.tenantId, actionId, await ownerActor(user.tenantId), 'panel', text);
+    const res = await approveEmailReply(user.tenantId, actionId, await ownerActor(user.tenantId), 'panel', text, {
+      createRequests: Boolean(createRequests)
+    });
     refresh();
-    return res.ok ? { ok: true } : { ok: false, error: res.reason };
+    revalidatePath('/dashboard/operaciones/encargos');
+    return res.ok ? { ok: true, created: res.created ?? 0 } : { ok: false, error: res.reason };
   } catch (e) {
     return { ok: false, error: publicError(e, 'No se pudo enviar la respuesta') };
   }
