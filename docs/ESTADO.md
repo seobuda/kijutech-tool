@@ -3,7 +3,7 @@
 > **Documento vivo y de referencia.** Recoge todo lo que existe, cómo funciona, qué está decidido, qué se ha probado y qué falta. Se actualiza al cerrar cada paso de trabajo (junto al documento de sesión y al Mapa Visual).
 > **No contiene claves, contraseñas ni valores de `.env`** (solo sus nombres).
 
-**Fecha de esta versión:** 2026-11-11 (producción en marcha: arreglos de la revisión, memoria de cliente, correos B1, rediseño completo de la interfaz y motor de acciones del agente (§6.16); el correo pasa a un usuario propio de Google Workspace; diseños en `docs/DISENO-CLIENTE-NUCLEO.md` y `docs/DISENO-MOTOR-ACCIONES.md`)
+**Fecha de esta versión:** 2026-11-12 (paso 5A, jornada real, en la rama `feature/jornada` pendiente de aprobación; producción en `4f56dad9` con la salud del sistema del paso 4)
 **Producción:** `https://brain.kijutech.com` (droplet `kijutech-brain`, Frankfurt). Procedimiento en `docs/DESPLIEGUE.md`. Rama de trabajo del despliegue: `feature/despliegue`.
 **Rama de trabajo:** `feature/seguridad` (creada desde `feature/paso-7-piloto`, que aún no está fusionada en `main`; el paso 8 depende del 7). **No se ha unido a `main`: espera la aprobación de Enric.** **Operaciones ya está fusionada en `main`** (fast-forward, 30 oct): `main` y `operaciones` coinciden en `9110754f`; la rama `operaciones` se mantiene.
 **Rama `main`:** `c9dfa198` (11 nov): incluye arreglos de la revisión, memoria de cliente, correos B1 y rediseño; desplegada en producción.
@@ -228,6 +228,17 @@ Envío sin duplicados (marca `[kiju:]` + índice único); copia local del Bloc y
 - **Pestaña «Agente»** (solo administración): propuestas de 30 días, % aprobadas a la primera, corregidas, tiempo medio de decisión, autonomía por tipo con recomendación (≥ 30 decisiones: ≥ 95 % → «puedes pasarla a autónomo»; < 80 % en autónomo → «conviene volver») y las últimas 40 acciones con lo que se propuso y lo que se hizo.
 - **Pruebas:** `tests/agente.test.ts` (comparación de notas, recomendaciones, botones, base de datos: autonomía, clave única, decisión única y aislamiento entre cuentas) y permisos en `tests/seguridad.test.ts` (cambiar la autonomía es de administración; aprobar o descartar, solo del dueño de Mi bandeja).
 
+### 6.18 Jornada real, paso 5A (12 nov)
+- **Para qué:** primera de las tres fases del sistema de rendimiento del equipo (5A jornada → 5B tiempos por tarea → 5C puntos, niveles y «Mi panel»). Que cada persona rinda cuentas de su jornada ante el sistema (entrada, descansos, comida, salidas), sin suponer nada por ella.
+- **Sección nueva «Equipo» en el menú** (el código sigue en el módulo Operaciones; las rutas siguen bajo `/dashboard/operaciones` para no romper enlaces): **Hoy** (antes «Equipo hoy», ahora con el estado de jornada de cada persona), **Jornada** (nueva, solo administración) y **Fichas** (antes «Equipo»). Las pestañas técnicas (Automatizaciones, Salud, Telegram, Ajustes ClickUp) pasan a una sección **«Sistema»** (solo administración). Definido en `OPS_SECTIONS` (`components/app-shell/nav.ts`).
+- **Tabla `ops_work_events`** (migración 0044): un registro por acción (`entrada`, `descanso`, `comida`, `salida_urgente`, `vuelta`, `salida`, `ausencia`), con día laboral en la zona de la persona, minutos previstos, motivo, tarea con la que empezó, origen (`telegram` / `web` / `auto` / `correccion`) y anulación (quién y por qué). **Nunca se borra nada.** El estado del día se calcula con `computeDay` (`lib/operaciones/jornada-core.ts`, puro y probado). La 0044 añade también el tipo de aviso `jornada`.
+- **Bot:** a la hora de entrada, buenos días con las tareas vencidas y de hoy y un botón por tarea, «Otra cosa», «Empezaré en 15/30 min» y «Hoy no trabajo» (con motivo). **La entrada se registra al empezar una tarea concreta**; si es un encargo suyo sin empezar, queda «en curso». Sin respuesta: reintento cada `repingMin` por Telegram y correo (buzón del agente → correo de ClickUp), hasta `maxPings`. Comandos `/empiezo`, `/descanso N`, `/comida`, `/salir motivo`, `/vuelvo`, `/termino`, `/ausente motivo`, `/jornada`. «Tengo que salir» exige justificación. Al acabar el descanso o si la comida se alarga: «¿Has vuelto?». Pasado su hueco de comida sin marcarla: le pregunta. Al final del horario: «¿Terminas?»; sin respuesta, cierre automático (marcado `auto`) tras `autoCloseMin` y pregunta en los siguientes buenos días para corregir la hora.
+- **Efectos en lo existente:** con la jornada encendida, los buenos días sustituyen al resumen diario del equipo; los avisos no urgentes se **retienen** en pausa, tras terminar o ausente (salen al volver); los recordatorios cuentan **minutos realmente trabajados** en los días fichados; y la comida de la ficha ya no cuenta como jornada en ningún cálculo de minutos laborables (fallo de la revisión del 11 nov). El primer resumen del día del dueño lleva la sección «🕘 Jornada del último día laborable».
+- **Quién ficha:** personas con ficha activa y Telegram vinculado; quien lleva las operaciones (dueño del token de ClickUp) no ficha.
+- **Automatización `jornada`** (panel): **apagada por defecto** (`defaultEnabled: false`), para activarla tras explicar el sistema al equipo.
+- **Correcciones** (pestaña Jornada, solo `admin`): anular (con motivo) y añadir registros; acciones `voidWorkEventAction` y `addWorkEventAction` (`lib/operaciones/jornada-actions.ts`).
+- **Pruebas:** `tests/jornada.test.ts` (cálculo del día, transiciones, horas locales, minutos reales, botones y una integración con la base de datos) y permisos en `tests/seguridad.test.ts`.
+
 ## 7. Panel de Automatizaciones: todos los valores
 
 Los valores por defecto viven en el código (`lib/operaciones/automations.ts`); la tabla `ops_automations` solo guarda lo que se cambia (restaurar = borrar la fila). Caché de 10 s. Textos en formato de Telegram (`<b>`, `<i>`, `<u>`, `<code>`, `<a href>`) con huecos validados; una línea con un hueco opcional vacío desaparece.
@@ -238,7 +249,8 @@ Los valores por defecto viven en el código (`lib/operaciones/automations.ts`); 
 | `reminder_unanswered` Recordatorio sin respuesta | Un recordatorio si nadie pulsa nada | `minutes` 120 → 15–480 min laborables | `{nombre}` `{tarea}` `{fecha}` `{cliente}` `{url}` |
 | `reminder_later` Recordatorio tras «Más tarde» | Si vence hoy y no ha empezado a mitad de jornada | `dayPct` 50 → 10–90 % de la jornada | ídem |
 | `daily_team` Resumen diario del equipo | «Buenos días» a la hora de entrada | `windowMin` 180 → 30–360 | `{nombre}` `{vencidas}` `{hoy}` `{fecha}` |
-| `digest` Resúmenes de mi bandeja | Lo completado, del agente y lo que necesita de ti | `times` 13:00,18:00 (1–4 horas); `windowMin` 180 → 30–360; `includeUnanswered` sí | `{secciones}` |
+| `jornada` Jornada real (**apagada por defecto**) | Buenos días con botones, reintentos, pausas, cierre automático y avisos retenidos | `repingMin` 10 → 5–60; `maxPings` 4 → 1–10; `emailPing` sí; `breakQuotaMin` 20 → 0–120; `lunchMarginMin` 10 → 0–60; `autoCloseMin` 120 → 30–480; `holdNotices` sí | — |
+| `digest` Resúmenes de mi bandeja | Lo completado, del agente y lo que necesita de ti (+ jornada en el primero) | `times` 13:00,18:00 (1–4 horas); `windowMin` 180 → 30–360; `includeUnanswered` sí | `{secciones}` |
 | `client_alerts` Alertas de clientes | Sección «Clientes en alerta» | `remindDays` 7 → 1–30 | `{total}` `{lista}` |
 | `activity_scan` Pasada diaria de actividad | Calcula la actividad por cliente | `time` 03:00 (Madrid); `retryMin` 30 → 5–240 | — |
 | `watch` Vigilancia de ClickUp | Mira ClickUp (interruptor con su propia lógica de activación) | `everySec` 150 → 60–900 | — |
@@ -282,7 +294,7 @@ Construido en agosto de 2026 (Fases A–D). Detalle y auditoría completa en `do
 
 ## 10. Base de datos
 
-**Total: 70 tablas** (12 núcleo, 15 SEO, 7 IA, 36 Operaciones; la nueva `ops_inbound_emails` es de la migración 0039 y las 2 anteriores, `ops_client_senders` y `ops_client_memory`, de la 0038; la nueva del paso 8 es `auth_login_attempts`, intentos de inicio de sesión, migración 0037). Conteos reales a 2026-10-30; las 3 tablas del paso 7 (`ops_cleanup_runs`, `ops_cleanup_items`, `ops_suggestions`) se crearon el 31 oct (1 tanda de limpieza real en curso para Enric, 30 tareas).
+**Total: 70 tablas** (12 núcleo, 15 SEO, 7 IA, 36 Operaciones; la nueva `ops_inbound_emails` es de la migración 0039 y las 2 anteriores, `ops_client_senders` y `ops_client_memory`, de la 0038; la nueva del paso 8 es `auth_login_attempts`, intentos de inicio de sesión, migración 0037). Conteos reales a 2026-10-30; las 3 tablas del paso 7 (`ops_cleanup_runs`, `ops_cleanup_items`, `ops_suggestions`) se crearon el 31 oct (1 tanda de limpieza real en curso para Enric, 30 tareas). **Desde el 11 nov** se añadieron `ops_agent_actions` (0040), `ops_health_incidents` (0043) y `ops_work_events` (0044, jornada real: un registro por acción de la jornada, nunca se borra; ver §6.18): el módulo tiene ya **39 tablas `ops_*`** (las cuenta `node scripts/check-architecture-map.js`).
 
 **Núcleo / plantilla:** `tenants` 1 · `users` 2 · `roles` 4 · `user_roles` 1 · `projects` 1 · `modules` 1 · `project_modules` 0 · `teams` 2 · `team_members` 2 · `invitations` 0 · `activity_logs` 10 (`teams`, `team_members` e `invitations` son restos de la plantilla pendientes de limpieza).
 
@@ -453,8 +465,8 @@ Pendiente de la revisión (siguientes pasos): ver hoja de ruta del 11 nov en §1
 
 Cada uno con su nodo en el nivel 1 del Mapa Visual:
 - **Servidor:** **en marcha desde el 5 nov** (ver §16 y `docs/DESPLIEGUE.md`). Telegram por webhook desde el 6 nov. Quedan: copias fuera de DigitalOcean, limpieza de la plantilla (Cloudflare aparcado).
-- **Jornada y rendimiento:** medir rendimiento, no presencia, con flexibilidad: botones «tengo que salir» y «he vuelto», y hora de entrada frente a primera actividad real. Se apoya en `ops_request_events`.
-- **Niveles y recompensas:** progreso visible, carreras con formaciones desbloqueables y bonos mensuales que se pueden perder, con un salario base que solo sube.
+- **Rendimiento del equipo (paso 5, acordado el 12 nov):** 5A **jornada real hecha** (§6.18). **5B Tiempos por tarea:** horquilla mín–máx editable por tipo de trabajo, cronómetro neto (se para en las pausas; empezar otra tarea pausa la anterior), URL obligatoria y motivo si se pasa de la horquilla, panel por tipo, persona y casos atípicos (necesitará su propia aprobación de esquema). **5C Puntos, niveles y «Mi panel»:** puntuación diaria recalculada cada noche desde los hechos, reglas editables, niveles, bonus anual (p. ej. ≥ 90 %) y panel propio de cada empleado (requiere usuario web enlazado a su ficha).
+- **Niveles y recompensas:** progreso visible, carreras con formaciones desbloqueables y bonos mensuales que se pueden perder, con un salario base que solo sube (se concreta en el 5C).
 - **Subagentes por área:** agentes de IA por área o por cliente que revisan el trabajo antes que Enric, con su ficha y su criterio (p. ej. redacción con el tono de cada cliente o diseño web con el criterio de Enric); se enchufan como **revisor intercambiable** (`reviewers.ts`: solo tendrán que llamar a `acceptWork()` o `returnWork()`).
 - **Diccionario de la agencia:** herramientas, clientes y personas, más los errores del dictado por voz; en parte ya lo cubren los nombres alternativos de las fichas de clientes.
 - **Audios al bot de Telegram** desde el móvil para crear notas.
@@ -484,6 +496,7 @@ Cada uno con su nodo en el nivel 1 del Mapa Visual:
 - **12 nov:** pantallas en directo (Correos cada 10 s con marca «Nuevo»; Mi bandeja y Encargos cada 20 s; Agente cada 30 s; solo con la pestaña visible) y script de despliegue `scripts/deploy.sh` (con `--migrate` hace backup y migraciones). Desplegado en producción (`main` `73564f4f`): 42 migraciones, web 200, Telegram sin errores, 0 errores en logs.
 - **12 nov (madrugada), agente como project manager:** prompt de correo v2 (migración 0042), hilo de la conversación, aprende de las correcciones, propone y crea tareas reales en ClickUp mirando la carga del equipo, añade datos a la tarea del hilo, cambia de responsable desde Telegram y mide preguntas y promesas. Ver `docs/sessions/2026-11-12-01-agente-project-manager.md`.
 - **12 nov, paso 4 (salud del sistema):** comprobaciones cada 5 min con incidencias y avisos al abrir y resolver, pestaña «Salud» con gráficas y recomendaciones, `/api/health` y vigilante externo por cron en el servidor (`scripts/watchdog.sh`). Migración 0043. Ver `docs/sessions/2026-11-12-02-salud-del-sistema.md`.
+- **12 nov, paso 5A (jornada real):** el paso 5 se amplía a un sistema de rendimiento del equipo en tres fases. 5A: entrada al empezar una tarea desde Telegram, reintentos por Telegram y correo, descansos con cupo, comida, salidas con motivo, cierre automático, avisos retenidos, minutos reales en los recordatorios, pestaña Equipo → Jornada con correcciones y secciones nuevas del menú (Equipo, Sistema). Migración 0044. Ver `docs/sessions/2026-11-12-11-jornada-real-5a.md`.
 - Historial completo: `git log` y `docs/sessions/`.
 
 ## 19. Mapa de archivos
@@ -493,6 +506,7 @@ Cada uno con su nodo en el nivel 1 del Mapa Visual:
 - **`lib/auth/`** — `session.ts` (JWT, bcrypt), `permissions.ts` (roles y guards), `rate-limit.ts` (intentos), `mask.ts` (tokens enmascarados), `middleware.ts` (acciones validadas), `security-process-map.ts` (mapa de Seguridad). **`lib/errors.ts`** (`publicError`), **`proxy.ts`** (antes `middleware.ts`), **`lib/seo/access.ts`** (funciones internas de SEO), **`lib/operaciones/inbox-owner.ts`**.
 - **Memoria de cliente:** `lib/operaciones/client-memory-rules.ts` (reglas puras), `client-memory-actions.ts` (acciones con guards), `app/(dashboard)/dashboard/operaciones/clientes/client-memoria.tsx` (sección de la ficha).
 - **`tests/`** — Vitest (`seguridad`, `permisos`, `auditoria`, `http`, `client-memoria`), `setup.ts` (simula solo cookies/cabeceras/redirecciones de Next), `fixtures.ts`.
+- **Jornada real (5A):** `lib/operaciones/jornada-core.ts` (cálculo puro del día), `jornada.ts` (base de datos, avisos retenidos, resumen), `jornada-bot.ts` (comandos y botones `jw:`), `jornada-worker.ts` (planificador), `jornada-overview.ts` y `jornada-actions.ts` (pestaña y correcciones), `app/(dashboard)/dashboard/operaciones/jornada/`.
 - **`app/(dashboard)/dashboard/usuarios/`** — alta de usuarios (solo `super_admin`).
 - **`lib/ai/`** — pasarela (`gateway.ts`, adaptadores), clustering (`clustering/pipeline.ts`), cifrado, precios.
 - **`lib/seo/`**, **`modules/seo/manifest.json`** — módulo SEO.
