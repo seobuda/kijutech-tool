@@ -16,7 +16,7 @@ import {
   type NotificationPayload
 } from '@/lib/operaciones/notifications';
 import { getTelegramConfig } from '@/lib/operaciones/telegram-config';
-import { getScheduleMap, scheduleOrDefault, WEEKDAY_ISO, type Schedule } from '@/lib/operaciones/team-profiles';
+import { getScheduleMap, scheduleOrDefault, WEEKDAY_ISO, worksOn, type Schedule } from '@/lib/operaciones/team-profiles';
 import { logEvent } from '@/lib/operaciones/events';
 import { clampMessage, escapeHtml } from '@/lib/operaciones/telegram';
 import { DEF, getAuto, num, renderTemplate } from '@/lib/operaciones/automations';
@@ -47,7 +47,7 @@ const REMINDERS_FROM = new Date('2026-10-30T10:30:00Z'); // despliegue del paso 
 // Momento laborable según la ficha: día de trabajo, dentro de su horario y fuera de su hueco de comida.
 export function isWorkMoment(sch: Schedule, t: number): boolean {
   const lp = localParts(sch.timezone, new Date(t));
-  if (!sch.workDays.includes(WEEKDAY_ISO[lp.weekday])) return false;
+  if (!worksOn(sch, lp.date, lp.weekday)) return false; // festivos y ausencias del calendario incluidos
   const start = toMinutes(sch.workStart);
   if (lp.minutes < start || lp.minutes >= start + sch.hoursPerDay * 60) return false;
   const lunch = windowsOf({ lunchStart: sch.lunchStart, lunchEnd: sch.lunchEnd, quietStart: null, quietEnd: null });
@@ -82,7 +82,7 @@ export function jornadaEndedBetween(sch: Schedule, fromMs: number, toMs: number)
   let prev = localParts(sch.timezone, new Date(from));
   for (let t = from + 10 * 60 * 1000; t <= toMs; t += 10 * 60 * 1000) {
     const cur = localParts(sch.timezone, new Date(t));
-    if (cur.date === prev.date && prev.minutes < end && cur.minutes >= end && sch.workDays.includes(WEEKDAY_ISO[cur.weekday])) {
+    if (cur.date === prev.date && prev.minutes < end && cur.minutes >= end && worksOn(sch, cur.date, cur.weekday)) {
       return true;
     }
     prev = cur;
@@ -186,7 +186,7 @@ export async function runReminders(tenantId: string, now = new Date()): Promise<
         const half = start + sch.hoursPerDay * 60 * dayFrac;
         due =
           req.dueDate === lp.date &&
-          sch.workDays.includes(WEEKDAY_ISO[lp.weekday]) &&
+          worksOn(sch, lp.date, lp.weekday) &&
           lp.minutes >= half &&
           lp.minutes < start + sch.hoursPerDay * 60;
       }

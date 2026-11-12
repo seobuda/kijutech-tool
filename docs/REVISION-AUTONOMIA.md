@@ -7,6 +7,30 @@ autónomo… que me informe de lo necesario, me envíe los reportes… analizar 
 > producción**: el permiso de la sesión bloqueó la consulta de solo lectura por SSH. Lo marcado con **(sin verificar en producción)**
 > sale de la documentación y conviene confirmarlo (consulta al final).
 
+> **Estado (12 nov, noche): aprobado por Enric («dale a todo») y construido en `feature/autonomia`, sin migraciones.**
+>
+> **Hecho:**
+> - B1 calendario;
+> - B2 correos en Mi bandeja y en los resúmenes;
+> - B3 plazos con recordatorio. La decisión por defecto al vencer el plazo **no** se ha hecho: solo recuerda;
+> - B4 parte con «Mover a mañana» y sugerencia de quién cubre. Reasignar sigue siendo en ClickUp, porque la bandeja de salida no
+>   tiene esa acción y añadirla necesita una migración;
+> - B5 limpieza semanal (apagada por defecto);
+> - B6 autonomía con propuesta y bajada automática;
+> - B7 tope de IA como incidencia de Salud. Avisa, no corta las llamadas;
+> - C1–C4 informes;
+> - D2 comprobaciones de salud (IA, disco, copia);
+> - E ESTADO.md.
+>
+> **Preparado, pero lo instala Enric:** D3 (`scripts/backup.sh` con subida opcional con `rclone`) y D1 (servicio externo).
+>
+> **Sin hacer:**
+> - D4 IA de reserva, porque toca la pasarela del núcleo;
+> - el aviso de cuota de Resend;
+> - la prueba de restauración automática.
+>
+> **Guía de activación:** `docs/PRUEBAS-EN-VIVO.md`.
+
 ---
 
 ## 1. Diagnóstico en una frase

@@ -29,6 +29,7 @@ import { POST as postInboundEmailRoute } from '@/app/api/email/entrada/route';
 import { inboundSecret, signInbound } from '@/lib/operaciones/inbound-email-rules';
 import { deleteProfile, setProfileActive, setProfileWebUser } from '@/lib/operaciones/profile-actions';
 import { correctTaskTimeAction, saveBandAction, voidTaskTimeAction } from '@/lib/operaciones/tiempos-actions';
+import { addCalendarEntryAction, removeCalendarEntryAction } from '@/lib/operaciones/calendar-actions';
 import { deleteNote } from '@/lib/operaciones/note-actions';
 import { saveClickUpToken } from '@/lib/operaciones/actions';
 import { saveTelegramToken } from '@/lib/operaciones/telegram-actions';
@@ -119,7 +120,9 @@ const ACCIONES_ADMIN: [string, () => unknown][] = [
   ['saveBandAction (tiempos)', () => saveBandAction({ key: 'articulo', min: 20, max: 30 })],
   ['voidTaskTimeAction (tiempos)', () => voidTaskTimeAction(ZERO, 'corrección de prueba')],
   ['correctTaskTimeAction (tiempos)', () => correctTaskTimeAction({ id: ZERO, minutes: 10, reason: 'corrección de prueba' })],
-  ['setProfileWebUser (Mi panel)', () => setProfileWebUser(ZERO, null)]
+  ['setProfileWebUser (Mi panel)', () => setProfileWebUser(ZERO, null)],
+  ['addCalendarEntryAction (calendario)', () => addCalendarEntryAction({ kind: 'festivo', from: '2026-12-08', to: '2026-12-08', name: 'Prueba', users: null })],
+  ['removeCalendarEntryAction (calendario)', () => removeCalendarEntryAction(ZERO)]
 ];
 const ACCIONES_EDITOR: [string, () => unknown][] = [
   ['deleteNote (Bloc)', () => deleteNote(ZERO)],

@@ -31,7 +31,9 @@ export type EventType =
   | 'cleanup_finished'
   | 'suggestion'
   | 'jornada'
-  | 'tiempos';
+  | 'tiempos'
+  | 'calendario'
+  | 'autonomia';
 
 export async function logEvent(
   tenantId: string,

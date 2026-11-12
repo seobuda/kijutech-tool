@@ -104,6 +104,9 @@ La administración (Enric) y tú. En la web, **Equipo → Mi panel** te enseña 
 **¿Me comparan con mis compañeros por el tiempo?**
 No. El tiempo sirve para ajustar los tiempos de referencia de cada tipo de tarea y para que los plazos sean realistas. No hay ranking.
 
+**¿Y en vacaciones o festivos?**
+Avisa a Enric con tiempo de tus vacaciones o de una ausencia que ya conozcas (médico, permiso). Las apunta en el calendario y esos días el bot no te escribe, los avisos te esperan a la vuelta y los plazos se corren solos. Los festivos ya están apuntados. Si algo surge el mismo día, pulsa **🏠 Hoy no trabajo**.
+
 **¿Y si un día trabajo hasta tarde?**
 Pulsa «⏳ Sigo un rato» cuando el bot te pregunte y «⏹ Termino» al acabar. Cuenta todo lo que trabajes.
 

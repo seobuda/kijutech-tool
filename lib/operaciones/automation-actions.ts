@@ -136,6 +136,29 @@ export async function sendAutomationTestAction(key: string, draft?: string): Pro
       return { ok: true, message: 'Prueba en cola: te llegará a Telegram en unos segundos.' };
     } else if (key === 'startup') {
       body = await buildStartupText(user.tenantId, await getLastHeartbeat(user.tenantId));
+    } else if (key === 'reports' || key === 'autopilot') {
+      // Datos reales de hoy (el parte de la mañana o la propuesta de autonomía), con sus botones.
+      let p: { text: string; buttons: { text: string; data: string }[][] };
+      if (key === 'reports') {
+        const { buildMorningBrief } = await import('@/lib/operaciones/reports');
+        p = await buildMorningBrief(user.tenantId);
+      } else {
+        const { autonomyProposal } = await import('@/lib/operaciones/autopilot');
+        p = (await autonomyProposal(user.tenantId)) ?? {
+          text: '🤖 Ningún tipo de propuesta del agente cumple hoy el criterio para subir a autónomo (30+ decisiones en 30 días y 95 % aprobadas tal cual).',
+          buttons: []
+        };
+      }
+      await db.insert(opsNotifications).values({
+        tenantId: user.tenantId,
+        kind: 'test',
+        dedupeKey: `test:automation:${key}:${Date.now()}`,
+        forClickupUserId: owner.clickupUserId,
+        forName: owner.username,
+        payload: { text: clampMessage(`🧪 <b>Prueba · ${escapeHtml(def.title)}</b> <i>(datos reales de hoy)</i>\n\n${p.text}`), testMode: false, buttons: p.buttons.length ? p.buttons : undefined }
+      });
+      void processNotifications(user.tenantId);
+      return { ok: true, message: 'Prueba en cola: te llegará a Telegram en unos segundos.' };
     } else {
       const cfg = def.fields.map((f) => `• ${escapeHtml(f.label)}: <b>${escapeHtml(String(auto.cfg[f.key]))}</b>${f.unit ? ` ${escapeHtml(f.unit)}` : ''}`);
       body = [escapeHtml(def.testNote ?? ''), `Estado: <b>${auto.enabled ? 'encendida' : 'apagada'}</b>`, ...cfg].filter(Boolean).join('\n');

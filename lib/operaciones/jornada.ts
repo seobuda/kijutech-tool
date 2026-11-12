@@ -7,7 +7,7 @@ import { opsClickupMembers, opsNotifications, opsRequestEvents, opsTeamProfiles,
 import { getAuto, num } from '@/lib/operaciones/automations';
 import { logEvent } from '@/lib/operaciones/events';
 import { localParts, toMinutes } from '@/lib/operaciones/notifications';
-import { getScheduleMap, scheduleOrDefault, WEEKDAY_ISO, type Schedule } from '@/lib/operaciones/team-profiles';
+import { getScheduleMap, scheduleOrDefault, worksOn, type Schedule } from '@/lib/operaciones/team-profiles';
 import {
   AWAY_STATUSES,
   breakOver,
@@ -63,7 +63,7 @@ export function localTimeMs(tz: string, date: string, hhmm: string): number {
   return t;
 }
 
-export const isWorkDay = (sch: Schedule, date: string) => sch.workDays.includes(WEEKDAY_ISO[localParts('UTC', new Date(`${date}T12:00:00Z`)).weekday]);
+export const isWorkDay = (sch: Schedule, date: string) => worksOn(sch, date); // incluye festivos y ausencias del calendario
 
 /** Inicio y fin del horario de la ficha en una fecha (ms). */
 export function scheduledBounds(sch: Schedule, date: string): { start: number; end: number } {
@@ -287,7 +287,10 @@ export async function jornadaHoldUntil(tenantId: string, clickupUserId: string, 
   const cfg = await jornadaSettings(tenantId);
   if (!cfg.enabled || !cfg.holdNotices) return null;
   const day = await getPersonDay(tenantId, clickupUserId, new Date(nowMs));
-  if (!day || !AWAY_STATUSES.includes(day.state.status)) return null;
+  if (!day) return null;
+  // Festivo o ausencia planificada (calendario) sin haber empezado: los avisos esperan a su próximo día laborable.
+  if (day.state.status === 'sin_empezar' && !isWorkDay(day.sch, day.date)) return nextWorkStartMs(day.sch, nowMs);
+  if (!AWAY_STATUSES.includes(day.state.status)) return null;
   if (day.state.status === 'terminado' || day.state.status === 'ausente') return nextWorkStartMs(day.sch, nowMs);
   return nowMs + 10 * 60_000;
 }

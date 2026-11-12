@@ -142,6 +142,62 @@ export const AUTOMATIONS: AutomationDef[] = [
     ]
   },
   {
+    key: 'owner_sla',
+    title: 'Plazos de lo que espera de ti',
+    what: 'Nada que necesite tu decisión espera en silencio: si una revisión, un bloqueo o una respuesta a un correo de cliente pasa de su plazo, te lo recuerda una vez con sus botones (de lunes a viernes, de 8:00 a 20:00 en tu zona).',
+    canDisable: true,
+    testNote: 'Te manda un recordatorio de ejemplo.',
+    link: { href: '/dashboard/operaciones/bandeja', label: 'Lo pendiente está en Mi bandeja' },
+    fields: [
+      { key: 'reviewH', label: 'Revisión sin decidir', type: 'number', unit: 'h', min: 1, max: 168, default: 24 },
+      { key: 'blockerH', label: 'Bloqueo escalado sin responder', type: 'number', unit: 'h', min: 1, max: 48, default: 2, help: 'Alguien del equipo está parado esperando' },
+      { key: 'emailH', label: 'Respuesta a un correo de cliente sin decidir', type: 'number', unit: 'h', min: 1, max: 72, default: 4 },
+      { key: 'topEmailH', label: 'Ídem si el cliente es de nivel Top', type: 'number', unit: 'h', min: 1, max: 24, default: 1 }
+    ]
+  },
+  {
+    key: 'reports',
+    title: 'Informes',
+    what: 'Parte de la mañana (quién ha empezado, quién falta y qué se cae, lo que vence hoy y lo que espera de ti), informe semanal del lunes (equipo, clientes, agente y sistema) y, el primer día laborable del mes, el aviso de que los borradores del trabajo del mes por cliente están listos. Llegan por Telegram; el detalle está en Operaciones → Informes y el semanal también por correo.',
+    canDisable: true,
+    testNote: 'Te manda el parte de la mañana de hoy.',
+    link: { href: '/dashboard/operaciones/informes', label: 'Informes en Operaciones → Informes' },
+    fields: [
+      { key: 'morning', label: 'Parte de la mañana', type: 'bool', default: true },
+      { key: 'morningTime', label: 'Hora del parte', type: 'time', default: '09:30', help: 'Hora de Madrid, de lunes a viernes. Si no hay nada que decir, no se envía.' },
+      { key: 'weekly', label: 'Informe semanal (lunes)', type: 'bool', default: true },
+      { key: 'weeklyTime', label: 'Hora del semanal', type: 'time', default: '08:30' },
+      { key: 'weeklyEmail', label: 'Copia del semanal por correo', type: 'bool', default: true, help: 'Desde el buzón del agente al dueño' },
+      { key: 'monthly', label: 'Aviso del trabajo del mes por cliente', type: 'bool', default: true, help: 'El primer día laborable del mes, a la hora del semanal' }
+    ]
+  },
+  {
+    key: 'autopilot',
+    title: 'Piloto automático',
+    what: 'Decisiones de rutina que el sistema toma o propone solo: reparto cuando alguien falta y tiene tareas que vencen, limpieza semanal de vencidas, propuesta semanal de subir la autonomía del agente cuando acierta y bajada automática cuando falla.',
+    canDisable: true,
+    testNote: 'Te manda la propuesta semanal de autonomía con los datos de hoy.',
+    link: { href: '/dashboard/operaciones/agente', label: 'Autonomía del agente en Operaciones → Agente' },
+    fields: [
+      { key: 'absenceReassign', label: 'Proponer reparto si alguien falta', type: 'bool', default: true, help: 'Con botones; nada se reasigna sin tu pulsación' },
+      { key: 'weeklyCleanup', label: 'Limpieza semanal de vencidas (lunes)', type: 'bool', default: false, help: 'A la hora de entrada de cada persona, con el tope de «Limpieza de vencidas»' },
+      { key: 'minOverdue', label: 'Vencidas mínimas para la limpieza', type: 'number', unit: 'tareas', min: 1, max: 50, default: 3 },
+      { key: 'autonomyWeekly', label: 'Proponer subir la autonomía (lunes)', type: 'bool', default: true },
+      { key: 'autoDemote', label: 'Bajar sola la autonomía si falla', type: 'bool', default: true, help: 'Con 10+ decisiones en 7 días y menos del 80 % aprobadas tal cual, «Autónomo» pasa a «Con tu aprobación» y te avisa' }
+    ]
+  },
+  {
+    key: 'ai_budget',
+    title: 'Tope de gasto de IA',
+    what: 'Vigila lo que cuesta la IA (registro de llamadas). Al pasar del 80 % del tope diario o mensual abre una incidencia de Salud y te avisa; al pasar del 100 %, crítica.',
+    canDisable: true,
+    link: { href: '/dashboard/operaciones/salud', label: 'Incidencias en Sistema → Salud' },
+    fields: [
+      { key: 'dailyUsd', label: 'Tope diario', type: 'number', unit: 'USD', min: 1, max: 200, default: 5 },
+      { key: 'monthlyUsd', label: 'Tope mensual', type: 'number', unit: 'USD', min: 5, max: 2000, default: 60 }
+    ]
+  },
+  {
     key: 'digest',
     title: 'Resúmenes de mi bandeja',
     what: 'A las horas indicadas (lunes a viernes) te manda lo completado, lo que ha resuelto el agente solo y lo que necesita de ti.',

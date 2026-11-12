@@ -136,8 +136,8 @@ export function clientDeliveryDays(c: Pick<OpsClient, 'level' | 'deliveryDays'>,
 }
 
 // Fecha AAAA-MM-DD resultante de contar `days` días laborables desde hoy (zona dada). Se cuentan solo
-// los días de la semana marcados (por defecto lunes a viernes); los festivos no se tienen en cuenta.
-export function addWorkingDays(days: number, workDaysRaw: string | null, timeZone: string, now = new Date()): string {
+// los días de la semana marcados (por defecto lunes a viernes) y se saltan los festivos de la agencia (calendar.ts).
+export function addWorkingDays(days: number, workDaysRaw: string | null, timeZone: string, now = new Date(), daysOff?: Set<string>): string {
   const workDays = new Set(workDaysRaw ? parseWorkDays(workDaysRaw) : [1, 2, 3, 4, 5]);
   if (workDays.size === 0) [1, 2, 3, 4, 5].forEach((d) => workDays.add(d));
   const today = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
@@ -146,7 +146,7 @@ export function addWorkingDays(days: number, workDaysRaw: string | null, timeZon
   while (left > 0) {
     d.setUTCDate(d.getUTCDate() + 1);
     const iso = d.getUTCDay() === 0 ? 7 : d.getUTCDay();
-    if (workDays.has(iso)) left--;
+    if (workDays.has(iso) && !daysOff?.has(d.toISOString().slice(0, 10))) left--;
   }
   return d.toISOString().slice(0, 10);
 }

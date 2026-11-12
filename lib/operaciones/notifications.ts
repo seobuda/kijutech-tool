@@ -24,7 +24,8 @@ import {
   getMemberTimezone,
   getScheduleMap,
   scheduleOrDefault,
-  WEEKDAY_ISO
+  WEEKDAY_ISO,
+  worksOn
 } from '@/lib/operaciones/team-profiles';
 import { madridNoonMs } from '@/lib/operaciones/clickup';
 import { DEF, getAuto, num, renderTemplate } from '@/lib/operaciones/automations';
@@ -563,7 +564,7 @@ export async function runDailySummaries(tenantId: string, now = new Date()): Pro
     const sch = scheduleOrDefault(schedules, m.clickupUserId);
     if (!sch.active) continue; // ficha desactivada
     const lp = localParts(sch.timezone, now);
-    if (!sch.workDays.includes(WEEKDAY_ISO[lp.weekday])) continue;
+    if (!worksOn(sch, lp.date, lp.weekday)) continue; // día de su ficha y sin festivo ni ausencia
     // Si la hora de entrada cae en su comida o silencio, sale en el momento permitido más cercano.
     const start = cfg.testMode ? toMinutes(sch.workStart) : nearestAllowedMinute(sch, toMinutes(sch.workStart));
     if (lp.minutes < start || lp.minutes >= start + windowMin) continue;

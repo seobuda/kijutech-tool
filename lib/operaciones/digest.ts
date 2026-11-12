@@ -16,6 +16,7 @@ import { getOwnerTimezone, getScheduleMap, scheduleOrDefault } from '@/lib/opera
 import { getUnanswered } from '@/lib/operaciones/reminders';
 import { getClientAlertsToShow, markClientAlertsShown, type ClientAlertItem } from '@/lib/operaciones/client-activity';
 import { buildJornadaDigestSection } from '@/lib/operaciones/jornada';
+import { emailLine, getPendingEmailProposals } from '@/lib/operaciones/owner-queue';
 
 const MAX_LIST = 8;
 const MAX_BUTTON_ROWS = 5;
@@ -125,13 +126,20 @@ async function buildDigest(
   if (jornada) sections.push(jornada);
 
   const buttons: { text: string; data: string }[][] = [];
-  if (inbox.length) {
-    const lines = inbox.slice(0, MAX_LIST).map((i) => {
-      const what = i.kind === 'review' ? '👀 revisión' : '🚫 bloqueo';
-      return `• ${what}: ${escapeHtml(i.req.title)} <i>(espera ${waitLabel(i.since)})</i>`;
-    });
-    if (inbox.length > MAX_LIST) lines.push(`… y ${inbox.length - MAX_LIST} más (en «Mi bandeja»)`);
-    sections.push(`🙋 <b>Necesita de ti (${inbox.length})</b>\n${lines.join('\n')}`);
+  // Respuestas a correos de clientes sin decidir: también aquí, para que ninguna se quede en un Telegram perdido.
+  const emails = await getPendingEmailProposals(tenantId);
+  if (inbox.length || emails.length) {
+    const lines = [
+      ...emails.slice(0, MAX_LIST).map((e) => emailLine(e)),
+      ...inbox.slice(0, Math.max(0, MAX_LIST - emails.length)).map((i) => {
+        const what = i.kind === 'review' ? '👀 revisión' : '🚫 bloqueo';
+        return `• ${what}: ${escapeHtml(i.req.title)} <i>(espera ${waitLabel(i.since)})</i>`;
+      })
+    ];
+    const total = inbox.length + emails.length;
+    if (total > lines.length) lines.push(`… y ${total - lines.length} más (en «Mi bandeja»)`);
+    if (emails.length) lines.push('<i>Los correos se responden con los botones de su aviso o en Operaciones → Correos.</i>');
+    sections.push(`🙋 <b>Necesita de ti (${total})</b>\n${lines.join('\n')}`);
     for (const i of inbox.slice(0, MAX_BUTTON_ROWS)) {
       if (i.kind === 'review') {
         buttons.push([
