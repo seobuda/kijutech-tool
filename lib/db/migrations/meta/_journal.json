@@ -302,6 +302,13 @@
       "when": 1794182400000,
       "tag": "0042_ops_email_prompt_v2",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1794186000000,
+      "tag": "0043_ops_health",
+      "breakpoints": true
     }
   ]
 }
