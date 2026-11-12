@@ -15,6 +15,7 @@ import {
   deleteProfile,
   saveProfile,
   setProfileActive,
+  setProfileWebUser,
   type ProfileDraft,
   type ProfileInput
 } from '@/lib/operaciones/profile-actions';
@@ -37,6 +38,7 @@ export type ProfileView = {
   urgentBypassQuiet: boolean;
   active: boolean;
   workTypes: { key: string; role: 'primary' | 'support' }[];
+  userId?: number | null; // usuario de la web enlazado (Mi panel)
 };
 
 type Member = { id: string; username: string };
@@ -111,10 +113,12 @@ export function EquipoView({
   withoutProfile,
   workTypes,
   cleanupPeople,
-  testMode
+  testMode,
+  webUsers
 }: {
   cleanupPeople: CleanupPersonView[];
   testMode: boolean;
+  webUsers?: { id: number; label: string }[]; // solo para admin: enlazar la ficha con su usuario web
   profiles: ProfileView[];
   members: Member[];
   withoutProfile: Member[];
@@ -284,6 +288,32 @@ export function EquipoView({
                     </div>
                   ) : (
                     <p className="text-xs text-muted-foreground">Sin tipos de trabajo asignados.</p>
+                  )}
+                  {webUsers && (
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <label htmlFor={`wu-${p.id}`} className="text-muted-foreground">
+                        Mi panel:
+                      </label>
+                      <select
+                        id={`wu-${p.id}`}
+                        className="h-7 max-w-[220px] rounded-md border bg-background px-2 text-xs"
+                        value={p.userId ?? ''}
+                        disabled={pending}
+                        onChange={(e) =>
+                          act(
+                            () => setProfileWebUser(p.id, e.target.value ? Number(e.target.value) : null),
+                            e.target.value ? 'Usuario web enlazado: ya puede ver su Mi panel.' : 'Usuario web desenlazado.'
+                          )
+                        }
+                      >
+                        <option value="">— sin usuario web —</option>
+                        {webUsers.map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   )}
                   {p.description && <p className="line-clamp-4 text-sm whitespace-pre-line">{p.description}</p>}
                   {p.notes && (

@@ -2,7 +2,7 @@
 // /salir, /vuelvo, /termino, /ausente, /jornada), botones (jw:…) y respuestas escritas (motivo de salida,
 // ausencia, con qué empieza, hora real de salida). Cada acción queda en ops_work_events (jornada.ts) y en
 // ops_request_events (logEvent). La entrada SIEMPRE se registra al empezar una tarea concreta.
-import { and, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { opsNotifications, opsRequests, opsTelegramPending, opsWorkEvents, type OpsTelegramMember } from '@/lib/db/schema';
 import { getAuto, num } from '@/lib/operaciones/automations';
@@ -12,6 +12,7 @@ import { escapeHtml, tg, type TgCallbackQuery } from '@/lib/operaciones/telegram
 import { getOwnerMember, getTelegramConfig } from '@/lib/operaciones/telegram-config';
 import { getTeamToday } from '@/lib/operaciones/team-today';
 import { startWork } from '@/lib/operaciones/workflow';
+import { onTaskStarted } from '@/lib/operaciones/tiempos';
 import {
   fmtDuration,
   lunchPlannedMin,
@@ -33,6 +34,9 @@ import {
 
 // jw:<código>:<dato>:<usuario de ClickUp de la persona>. El usuario va en el botón para que, en modo
 // pruebas (todo llega al dueño), la acción se apunte a quien iba dirigido.
+// Códigos: st empezar · lt luego · ab ausente · br descanso · lu comida · ex salir · bk vuelta · en termino ·
+// go sigue · mo más descanso · ly/ln comida declarada · fo/fx cierre automático · pn panel ·
+// cw abrir «cambiar tarea» · sw cambiar a una tarea · so cambiar a «otra cosa» (paso 5B).
 export const JORNADA_CALLBACK_RE = /^jw:([a-z]{2}):([\w-]{1,40}):(\d{1,20})$/;
 export const JORNADA_COMMAND_RE = /^\/(empiezo|jornada|descanso|comida|salir|vuelvo|termino|ausente)(?:@\w+)?(?:\s+([\s\S]*))?$/i;
 
@@ -49,7 +53,7 @@ export function panelButtons(st: DayState, user: string): Btn[][] {
       return [
         [b('☕ 5 min', 'br', '5'), b('☕ 10 min', 'br', '10'), b('☕ 15 min', 'br', '15')],
         [b('🍽 Voy a comer', 'lu'), b('🚪 Tengo que salir', 'ex')],
-        [b('⏹ Termino', 'en')]
+        [b('🔄 Cambiar tarea', 'cw'), b('⏹ Termino', 'en')]
       ];
     case 'descanso':
     case 'comida':
@@ -68,6 +72,7 @@ export function statusText(day: PersonDay, quotaMin: number): string {
   const tz = day.sch.timezone;
   const lines = [`${STATUS_ICON[st.status]} <b>${STATUS_LABEL[st.status]}</b>`];
   if (st.entradaAt) lines.push(`Entrada: ${hm(st.entradaAt, tz)}${st.firstTask ? ` con «${escapeHtml(st.firstTask.name)}»` : ''}`);
+  if (st.activeTask && st.status !== 'terminado') lines.push(`Con: «${escapeHtml(st.activeTask.name)}»`);
   if (st.current) {
     const planned = st.current.planned ? ` de ${st.current.planned} min` : '';
     lines.push(`Desde las ${hm(st.current.start, tz)}${planned}`);
@@ -110,6 +115,46 @@ export async function buildStartPrompt(
   return { text: `${head}\n\n${ask}`, buttons, jwTasks: tasks.map((t) => ({ id: t.id, name: t.name })) };
 }
 
+/**
+ * «¿Con qué sigues?» / «¿A qué tarea cambias?» (paso 5B): encargos abiertos de la persona más sus tareas de hoy
+ * y vencidas, sin la tarea activa. Va siempre como aviso (payload.jwTasks) para saber el nombre al pulsar.
+ */
+export async function buildSwitchPrompt(
+  tenantId: string,
+  person: Person,
+  excludeTaskId: string | null,
+  afterDone: boolean
+): Promise<{ text: string; buttons: Btn[][]; jwTasks: { id: string; name: string }[] }> {
+  const data = await getTeamToday(tenantId);
+  const b = data.members.find((x) => x.member.id === person.clickupUserId);
+  const fromToday = b ? [...b.today, ...b.overdue].map((t) => ({ id: t.id, name: t.name })) : [];
+  const open = await db
+    .select({ id: opsRequests.clickupTaskId, name: opsRequests.title })
+    .from(opsRequests)
+    .where(
+      and(
+        eq(opsRequests.tenantId, tenantId),
+        eq(opsRequests.assigneeClickupId, person.clickupUserId),
+        inArray(opsRequests.workStatus, ['asignado', 'en_curso', 'devuelto', 'bloqueado']),
+        isNotNull(opsRequests.clickupTaskId)
+      )
+    )
+    .orderBy(desc(opsRequests.workStatusAt))
+    .limit(10);
+  const seen = new Set<string>();
+  const tasks = [...open.map((t) => ({ id: t.id!, name: t.name })), ...fromToday]
+    .filter((t) => t.id !== excludeTaskId && !seen.has(t.id) && Boolean(seen.add(t.id)))
+    .slice(0, 6);
+  const u = person.clickupUserId;
+  const buttons: Btn[][] = tasks.map((t) => [{ text: `▶️ ${short(t.name)}`, data: `jw:sw:${t.id}:${u}` }]);
+  buttons.push([{ text: '▶️ Otra cosa', data: `jw:so:-:${u}` }]);
+  if (afterDone) buttons.push([{ text: '☕ Descanso 10 min', data: `jw:br:10:${u}` }, { text: '⏹ Termino por hoy', data: `jw:en:-:${u}` }]);
+  const text = afterDone
+    ? '➡️ <b>¿Con qué sigues?</b> Pulsa la tarea: el tiempo empieza a contar para ella.'
+    : '🔄 <b>¿A qué tarea cambias?</b> Lo que llevas queda en la tarea anterior.';
+  return { text, buttons, jwTasks: tasks };
+}
+
 // --- Envío ----------------------------------------------------------------------------------
 
 async function send(token: string, chatId: number, text: string, buttons: Btn[][] = []) {
@@ -126,7 +171,7 @@ async function closeButtons(token: string, chatId: number, messageId: number) {
   await tg(token, 'editMessageReplyMarkup', { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [] } }).catch(() => undefined);
 }
 
-async function setJwPending(tenantId: string, chatId: number, code: 's' | 'x' | 'a' | 'f', user: string) {
+async function setJwPending(tenantId: string, chatId: number, code: 's' | 'x' | 'a' | 'f' | 'w', user: string) {
   const row = {
     tenantId,
     kind: `jw${code}:${user}`.slice(0, 20),
@@ -166,17 +211,30 @@ async function resolveTask(tenantId: string, user: string, taskId: string): Prom
   return { clickupTaskId: taskId, name: t?.name ?? '(tarea de ClickUp)', requestId: null };
 }
 
+// Si la tarea es un encargo suyo sin empezar, queda «en curso» también (ClickUp vía bandeja de salida).
+async function markRequestStarted(person: Person, task: TaskRef): Promise<void> {
+  if (!task.requestId) return;
+  const [req] = await db.select().from(opsRequests).where(eq(opsRequests.id, task.requestId)).limit(1);
+  const mine = req && (req.assigneeClickupId === person.clickupUserId || (req.candidateIds ?? []).includes(person.clickupUserId));
+  if (req && mine && ['asignado', 'devuelto', 'bloqueado'].includes(req.workStatus)) {
+    await startWork(req, { clickupUserId: person.clickupUserId, name: person.name }, { id: person.clickupUserId, name: person.name });
+  }
+}
+
+/** Cambio de tarea activa (paso 5B): lo trabajado hasta ahora queda en la tarea anterior. */
+async function doSwitch(tenantId: string, token: string, chatId: number, person: Person, task: TaskRef): Promise<void> {
+  const res = await onTaskStarted(tenantId, person, task);
+  if (!res.ok) return send(token, chatId, res.reason ?? 'No se pudo cambiar de tarea.');
+  await markRequestStarted(person, task);
+  const day = await getPersonDay(tenantId, person.clickupUserId);
+  await send(token, chatId, `🔄 <b>Ahora con «${escapeHtml(task.name)}».</b> Lo anterior queda en la tarea anterior.`, day ? panelButtons(day.state, person.clickupUserId) : []);
+}
+
 async function doStart(tenantId: string, token: string, chatId: number, person: Person, task: TaskRef): Promise<void> {
   const res = await recordWorkEvent(tenantId, person, 'entrada', { source: 'telegram', task });
   if (!res.ok) return send(token, chatId, res.reason);
-  // Si la tarea es un encargo suyo sin empezar, queda «en curso» también (ClickUp vía bandeja de salida).
-  if (task.requestId) {
-    const [req] = await db.select().from(opsRequests).where(eq(opsRequests.id, task.requestId)).limit(1);
-    const mine = req && (req.assigneeClickupId === person.clickupUserId || (req.candidateIds ?? []).includes(person.clickupUserId));
-    if (req && mine && ['asignado', 'devuelto', 'bloqueado'].includes(req.workStatus)) {
-      await startWork(req, { clickupUserId: person.clickupUserId, name: person.name }, { id: person.clickupUserId, name: person.name });
-    }
-  }
+  await markRequestStarted(person, task);
+  await onTaskStarted(tenantId, person, task); // tiempos (5B): abre su tiempo y pide tipo o estimación
   const cfg = await jornadaSettings(tenantId);
   await send(
     token,
@@ -266,7 +324,7 @@ export async function handleJornadaCommand(tenantId: string, token: string, memb
 
 /** Respuesta escrita a una pregunta de la jornada (kind jw<código>:<usuario>). */
 export async function handleJornadaPending(tenantId: string, token: string, chatId: number, kind: string, text: string, presserName: string): Promise<void> {
-  const m = kind.match(/^jw([sxaf]):(\d+)$/);
+  const m = kind.match(/^jw([sxafw]):(\d+)$/);
   if (!m) return;
   const user = m[2];
   const day = await getPersonDay(tenantId, user);
@@ -274,9 +332,10 @@ export async function handleJornadaPending(tenantId: string, token: string, chat
   const person: Person = { clickupUserId: user, name: day.person.name };
   const clean = text.trim().slice(0, 500);
   if (m[1] !== 'f' && clean.length < 3) {
-    await setJwPending(tenantId, chatId, m[1] as 's' | 'x' | 'a', user);
+    await setJwPending(tenantId, chatId, m[1] as 's' | 'x' | 'a' | 'w', user);
     return send(token, chatId, 'Escríbelo con un poco más de detalle (o /cancelar).');
   }
+  if (m[1] === 'w') return doSwitch(tenantId, token, chatId, person, { name: clean, clickupTaskId: null, requestId: null });
   if (m[1] === 's') return doStart(tenantId, token, chatId, person, { name: clean, clickupTaskId: null, requestId: null });
   if (m[1] === 'x') return doAction(tenantId, token, chatId, person, 'salida_urgente', { reason: clean });
   if (m[1] === 'a') return doAction(tenantId, token, chatId, person, 'ausencia', { reason: clean });
@@ -446,6 +505,27 @@ export async function handleJornadaCallback(
       await closeButtons(token, chatId, messageId);
       await setJwPending(tenantId, chatId, 'f', user);
       return send(token, chatId, '✏️ ¿A qué hora saliste? Escríbela así: 18:30 (o /cancelar).');
+    case 'cw': {
+      if (day.state.status === 'sin_empezar' || day.state.status === 'terminado' || day.state.status === 'ausente') return void (await answer('Aún no has empezado la jornada.', true));
+      const p = await buildSwitchPrompt(tenantId, person, day.state.activeTask?.clickupTaskId ?? null, false);
+      await enqueueNotification({
+        tenantId,
+        kind: 'jornada',
+        dedupeKey: `jw:switch:${user}:${Date.now()}`,
+        forClickupUserId: user,
+        forName: person.name,
+        payload: { text: p.text, buttons: p.buttons, jwTasks: p.jwTasks }
+      });
+      return void (await answer());
+    }
+    case 'sw':
+      await answer();
+      await closeButtons(token, chatId, messageId);
+      return doSwitch(tenantId, token, chatId, person, await resolveTask(tenantId, user, arg));
+    case 'so':
+      await answer();
+      await setJwPending(tenantId, chatId, 'w', user);
+      return send(token, chatId, '▶️ ¿Con qué sigues? Escribe la tarea (o /cancelar).');
     case 'pn': {
       const cfg = await jornadaSettings(tenantId);
       await answer();

@@ -44,6 +44,7 @@ import { getAction } from '@/lib/operaciones/agent-actions';
 import { approveEmailReply, rejectEmailReply, renderProposal, setProposalAssignee } from '@/lib/operaciones/email-agent';
 import { teamLoad } from '@/lib/operaciones/email-pm';
 import { handleJornadaCallback, handleJornadaCommand, handleJornadaPending, JORNADA_COMMAND_RE } from '@/lib/operaciones/jornada-bot';
+import { handleTiemposCallback, handleTiemposPending } from '@/lib/operaciones/tiempos-bot';
 
 // Botones del motor de acciones del agente: ag:<id de la acción>:ok (aprobar) | no (descartar) | ed (corregir).
 export const AGENT_CALLBACK_RE = /^ag:([0-9a-f-]{36}):(ok|no|ed|re|pa|as:(\d{1,20}))$/;
@@ -179,6 +180,8 @@ const HELP_TEXT = [
   '/salir motivo: tienes que salir (el motivo queda registrado).',
   '/termino: terminas la jornada · /ausente motivo: hoy no trabajas.',
   '/jornada: cómo va tu día y los botones.',
+  '🔄 <b>Cambiar tarea</b> (en el panel): el tiempo pasa a contar para la otra tarea.',
+  '⏱ Al empezar una tarea te pregunto cuánto crees que te llevará; al terminarla, te digo cuánto ha sido.',
   '',
   '<b>Comandos</b>',
   '/sugerencia: cuéntanos qué mejorarías (texto o captura).',
@@ -224,6 +227,8 @@ async function handlePending(
 
   // Jornada real: motivo de salida o ausencia, con qué empieza, hora real de salida.
   if (p.kind.startsWith('jw')) return void (await handleJornadaPending(tenantId, token, chatId, p.kind, text, member.username));
+  // Tiempos de tarea: URL de una tarea que se pasó del margen.
+  if (p.kind.startsWith('ttu:')) return void (await handleTiemposPending(tenantId, token, chatId, p.kind, text));
 
   const owner = await getOwnerMember(tenantId);
   const isOwner = owner?.id === member.id;
@@ -490,6 +495,8 @@ async function handleCallback(tenantId: string, token: string, cb: TgCallbackQue
 
   // Jornada real (jw:…): empezar, descansos, comida, salidas, vuelta, termino.
   if (cb.data?.startsWith('jw:')) return handleJornadaCallback(tenantId, token, cb, presser, chatId, messageId, answer);
+  // Tiempos de tarea (tt:…): estimación, tipo de tarea y motivo de exceso.
+  if (cb.data?.startsWith('tt:')) return handleTiemposCallback(tenantId, token, cb, presser, chatId, messageId, answer);
 
   // Motor de acciones del agente: «✅ Enviar la propuesta» / «✖️ Descartar propuesta» (solo el dueño).
   const ag = cb.data?.match(AGENT_CALLBACK_RE);

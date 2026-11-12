@@ -1271,8 +1271,17 @@ export const opsWorkTypes = pgTable(
     label: varchar('label', { length: 100 }).notNull(),
     sortOrder: integer('sort_order').notNull().default(0),
     active: boolean('active').notNull().default(true),
+    // Margen de minutos de una tarea de este tipo (paso 5B); null = sin margen.
+    minMinutes: integer('min_minutes'),
+    maxMinutes: integer('max_minutes'),
   },
-  (table) => [unique('ops_work_types_tenant_key_unique').on(table.tenantId, table.key)]
+  (table) => [
+    unique('ops_work_types_tenant_key_unique').on(table.tenantId, table.key),
+    check(
+      'ops_work_types_band_check',
+      sql`(${table.minMinutes} IS NULL OR ${table.minMinutes} >= 0) AND (${table.maxMinutes} IS NULL OR ${table.maxMinutes} > 0) AND (${table.minMinutes} IS NULL OR ${table.maxMinutes} IS NULL OR ${table.minMinutes} <= ${table.maxMinutes})`
+    ),
+  ]
 );
 
 // Correspondencia de estados de ClickUp por lista (editable en Ajustes).
@@ -1949,10 +1958,61 @@ export const opsWorkEvents = pgTable(
     index('ops_work_events_day_idx').on(table.tenantId, table.workDate),
     check(
       'ops_work_events_kind_check',
-      sql`${table.kind} IN ('entrada', 'descanso', 'comida', 'salida_urgente', 'vuelta', 'salida', 'ausencia')`
+      sql`${table.kind} IN ('entrada', 'descanso', 'comida', 'salida_urgente', 'vuelta', 'salida', 'ausencia', 'tarea')`
     ),
     check('ops_work_events_source_check', sql`${table.source} IN ('telegram', 'web', 'auto', 'correccion')`),
   ]
 );
 
 export type OpsWorkEvent = typeof opsWorkEvents.$inferSelect;
+
+// Tiempos de tarea (paso 5B): una fila por tarea y persona. Se abre al empezar la tarea y se cierra al
+// terminarla (bot, web o ClickUp). Los minutos salen de la jornada (solo tiempo trabajado con esa tarea
+// activa). Guarda el margen vigente al cerrar para que cambiarlo después no altere el histórico.
+export const opsTaskTimes = pgTable(
+  'ops_task_times',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    clickupTaskId: varchar('clickup_task_id', { length: 50 }).notNull(),
+    requestId: uuid('request_id').references(() => opsRequests.id, { onDelete: 'set null' }),
+    clickupUserId: varchar('clickup_user_id', { length: 50 }).notNull(),
+    personName: varchar('person_name', { length: 255 }).notNull(),
+    taskName: varchar('task_name', { length: 500 }).notNull(),
+    workTypeKey: varchar('work_type_key', { length: 40 }),
+    status: varchar('status', { length: 20 }).notNull().default('abierta'),
+    startedAt: timestamp('started_at').notNull(),
+    doneAt: timestamp('done_at'),
+    workedMinutes: integer('worked_minutes'),
+    estimateMinutes: integer('estimate_minutes'),
+    bandMin: integer('band_min'),
+    bandMax: integer('band_max'),
+    verdict: varchar('verdict', { length: 20 }),
+    precisionHit: boolean('precision_hit'),
+    justifyStatus: varchar('justify_status', { length: 20 }).notNull().default('no_necesaria'),
+    evidenceUrl: text('evidence_url'),
+    overReason: varchar('over_reason', { length: 30 }),
+    overNote: text('over_note'),
+    source: varchar('source', { length: 20 }).notNull().default('bot'),
+    voidedAt: timestamp('voided_at'),
+    voidedByName: varchar('voided_by_name', { length: 255 }),
+    voidReason: text('void_reason'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('ops_task_times_open_unique')
+      .on(table.tenantId, table.clickupTaskId, table.clickupUserId)
+      .where(sql`${table.status} = 'abierta' AND ${table.voidedAt} IS NULL`),
+    index('ops_task_times_done_idx').on(table.tenantId, table.doneAt),
+    index('ops_task_times_person_idx').on(table.tenantId, table.clickupUserId, table.doneAt),
+    check('ops_task_times_status_check', sql`${table.status} IN ('abierta', 'cerrada')`),
+    check('ops_task_times_verdict_check', sql`${table.verdict} IS NULL OR ${table.verdict} IN ('dentro', 'rapido', 'pasado', 'sin_margen')`),
+    check('ops_task_times_justify_check', sql`${table.justifyStatus} IN ('no_necesaria', 'pendiente', 'enviada')`),
+    check('ops_task_times_source_check', sql`${table.source} IN ('bot', 'web', 'clickup', 'correccion')`),
+  ]
+);
+
+export type OpsTaskTime = typeof opsTaskTimes.$inferSelect;

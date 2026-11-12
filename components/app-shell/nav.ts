@@ -28,6 +28,8 @@ import {
   Clock,
   IdCard,
   Cog,
+  Timer,
+  UserRound,
   type LucideIcon
 } from 'lucide-react';
 
@@ -77,11 +79,13 @@ export const OPS_SECTIONS: TabSection[] = [
     key: 'equipo',
     label: 'Equipo',
     icon: UsersRound,
-    description: 'Las personas: tareas de hoy, jornada real (entradas, pausas y salidas) y fichas con su horario.',
+    description: 'Las personas: tareas de hoy, jornada real, tiempos de tarea, fichas con su horario y el panel de cada uno.',
     tabs: [
       { href: '/dashboard/operaciones/equipo-hoy', label: 'Hoy', icon: CalendarCheck, keywords: 'equipo hoy tareas vencidas estado' },
       { href: '/dashboard/operaciones/jornada', label: 'Jornada', icon: Clock, keywords: 'fichaje entrada salida descansos comida horas', show: adminOnly },
-      { href: '/dashboard/operaciones/equipo', label: 'Fichas', icon: IdCard, keywords: 'equipo fichas personas horario' }
+      { href: '/dashboard/operaciones/tiempos', label: 'Tiempos', icon: Timer, keywords: 'tiempos tareas márgenes estimación precisión', show: adminOnly },
+      { href: '/dashboard/operaciones/equipo', label: 'Fichas', icon: IdCard, keywords: 'equipo fichas personas horario' },
+      { href: '/dashboard/operaciones/mi-panel', label: 'Mi panel', icon: UserRound, keywords: 'mi jornada mis tiempos precisión' }
     ]
   },
   {

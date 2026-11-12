@@ -2,11 +2,11 @@
 
 // Acciones web de la sección «Equipo»: crear, editar, desactivar y borrar fichas, y el botón
 // «Rellenar con IA» (propone los campos; nunca guarda por su cuenta).
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull, ne } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
-import { opsTeamProfileWorkTypes, opsTeamProfiles, opsWorkTypes } from '@/lib/db/schema';
+import { opsTeamProfileWorkTypes, opsTeamProfiles, opsWorkTypes, users } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
 import { getUserIfAllowed, requirePermission, type Permission } from '@/lib/auth/permissions';
 import { callAI, getPrompt } from '@/lib/ai/gateway';
@@ -196,6 +196,40 @@ export async function setProfileActive(id: string, active: boolean): Promise<Ok>
     return { ok: true };
   } catch (e) {
     return fail(e, 'No se pudo cambiar el estado');
+  }
+}
+
+// Enlaza la ficha con un usuario de la web para que esa persona vea su «Mi panel» (paso 5B). Solo admin:
+// da acceso a los datos de jornada y tiempos de esa persona. Un usuario solo puede estar en una ficha.
+export async function setProfileWebUser(profileId: string, userId: number | null): Promise<Ok> {
+  try {
+    const user = await requireManager('admin');
+    const parsed = z.object({ profileId: z.string().uuid(), userId: z.number().int().positive().nullable() }).safeParse({ profileId, userId });
+    if (!parsed.success) return { ok: false, error: 'Datos no válidos' };
+    if (parsed.data.userId !== null) {
+      const [u] = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(and(eq(users.id, parsed.data.userId), eq(users.tenantId, user.tenantId), isNull(users.deletedAt)))
+        .limit(1);
+      if (!u) return { ok: false, error: 'Ese usuario no existe en esta cuenta' };
+      const [dup] = await db
+        .select({ name: opsTeamProfiles.name })
+        .from(opsTeamProfiles)
+        .where(and(eq(opsTeamProfiles.tenantId, user.tenantId), eq(opsTeamProfiles.userId, parsed.data.userId), ne(opsTeamProfiles.id, parsed.data.profileId)))
+        .limit(1);
+      if (dup) return { ok: false, error: `Ese usuario ya está enlazado a la ficha de ${dup.name}` };
+    }
+    const [row] = await db
+      .update(opsTeamProfiles)
+      .set({ userId: parsed.data.userId, updatedAt: new Date() })
+      .where(and(eq(opsTeamProfiles.id, parsed.data.profileId), eq(opsTeamProfiles.tenantId, user.tenantId)))
+      .returning({ id: opsTeamProfiles.id });
+    if (!row) return { ok: false, error: 'Esa ficha no existe' };
+    refresh();
+    return { ok: true };
+  } catch (e) {
+    return fail(e, 'No se pudo enlazar el usuario');
   }
 }
 

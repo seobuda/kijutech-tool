@@ -136,3 +136,19 @@ El planificador mira cada 30 s, así que cada mensaje puede tardar **hasta medio
 - **Sistema → Telegram:** que tu Telegram esté vinculado (en modo pruebas todo va a tu chat).
 - Comprueba que la ficha de la persona está **activa**, que **hoy** está entre sus días y que la **zona** es Europe/Madrid.
 - Si los buenos días no salen: ¿ya salieron hoy para esa persona? Solo salen una vez al día. Usa a otra persona.
+
+## 8. Tiempos de tarea (paso 5B), unos 10 minutos más
+
+Con la jornada en marcha (después del paso T+3 del circuito, antes del descanso), y con **Sistema → Automatizaciones → Tiempos de tarea** encendida:
+
+1. En **Equipo → Tiempos**, pon a un tipo (por ejemplo, Artículo) un margen pequeño: **1–2 min**.
+2. Empieza la jornada con una tarea de ese tipo. Llega **«¿Cuánto crees que te llevará?»**: pulsa una opción. Si la tarea no tenía tipo, antes llega **«¿Qué tipo de tarea es?»**.
+3. Pulsa **🔄 Cambiar tarea** en el panel y elige otra. Llega **«Ahora con…»**. Al minuto, vuelve a la primera.
+4. Pasados 3 minutos, pulsa **✅ Hecho** en el aviso de la primera tarea y luego «Sin comentario». Llegan:
+   - el resultado: minutos reales frente a tu estimación;
+   - **«¿Qué la complicó?»** con botones, porque te has pasado del margen de 2 min;
+   - **«¿Con qué sigues?»**.
+5. Pulsa un motivo y pega una URL. Llega **«Anotado»**.
+6. En **Equipo → Tiempos**: la tarea sale en «Fuera de margen» con su motivo y su URL. En «Todas las tareas medidas», prueba **Corregir** y **Anular**: quedan anotadas con tu nombre y el motivo.
+7. En **Equipo → Fichas**, enlaza **temporalmente** tu usuario web con la ficha de la persona de prueba («Mi panel:») y abre **Equipo → Mi panel**: verás lo que vería ella. Después, desenlázalo («— sin usuario web —»).
+8. Al terminar, vuelve a poner el margen real del tipo, o déjalo vacío.

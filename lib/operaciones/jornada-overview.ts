@@ -14,6 +14,7 @@ export type OverviewEvent = {
   time: string;
   planned: number | null;
   reason: string | null;
+  taskName: string | null; // tarea de la entrada o del cambio de tarea
   source: string;
   createdByName: string | null;
   voided: boolean;
@@ -33,6 +34,7 @@ export type OverviewPerson = {
   entrada: string | null;
   lateMin: number;
   firstTask: string | null;
+  activeTask: string | null; // tarea con la que está ahora (5B)
   lunchMin: number;
   lunchPlanned: number;
   breakMin: number;
@@ -83,6 +85,7 @@ export async function getJornadaOverview(tenantId: string, date: string, now = n
       entrada: st.entradaAt ? hm(st.entradaAt, tz) : null,
       lateMin: st.entradaAt ? Math.round((st.entradaAt - bounds.start) / 60000) : 0,
       firstTask: st.firstTask?.name ?? null,
+      activeTask: st.status === 'terminado' ? null : (st.activeTask?.name ?? null),
       lunchMin: st.lunchMin,
       lunchPlanned: lunchPlannedMin(sch.lunchStart, sch.lunchEnd),
       breakMin: st.breakMin,
@@ -99,6 +102,7 @@ export async function getJornadaOverview(tenantId: string, date: string, now = n
         time: hm(r.at.getTime(), tz),
         planned: r.plannedMinutes,
         reason: r.reason,
+        taskName: (r.task as { name?: string } | null)?.name ?? null,
         source: r.source,
         createdByName: r.createdByName,
         voided: Boolean(r.voidedAt),

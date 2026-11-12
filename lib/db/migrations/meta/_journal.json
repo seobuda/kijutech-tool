@@ -316,6 +316,13 @@
       "when": 1794189600000,
       "tag": "0044_ops_jornada",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1794276000000,
+      "tag": "0045_ops_tiempos",
+      "breakpoints": true
     }
   ]
 }

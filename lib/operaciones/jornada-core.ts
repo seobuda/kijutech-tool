@@ -2,11 +2,12 @@
 // Sin base de datos ni IA, para poder probarlo. Lo usan el bot, el planificador, los avisos, los
 // recordatorios (minutos reales trabajados), «Equipo hoy», la pestaña Jornada y el resumen del dueño.
 
-export type WorkKind = 'entrada' | 'descanso' | 'comida' | 'salida_urgente' | 'vuelta' | 'salida' | 'ausencia';
+// «tarea» (paso 5B) = cambio de tarea activa: no cambia el estado del día, solo a qué tarea va el tiempo.
+export type WorkKind = 'entrada' | 'descanso' | 'comida' | 'salida_urgente' | 'vuelta' | 'salida' | 'ausencia' | 'tarea';
 export type PauseKind = 'descanso' | 'comida' | 'salida_urgente';
 export type DayStatus = 'sin_empezar' | 'trabajando' | 'descanso' | 'comida' | 'fuera' | 'terminado' | 'ausente';
 
-export const WORK_KINDS: WorkKind[] = ['entrada', 'descanso', 'comida', 'salida_urgente', 'vuelta', 'salida', 'ausencia'];
+export const WORK_KINDS: WorkKind[] = ['entrada', 'descanso', 'comida', 'salida_urgente', 'vuelta', 'salida', 'ausencia', 'tarea'];
 export const PAUSE_KINDS: PauseKind[] = ['descanso', 'comida', 'salida_urgente'];
 
 export type TaskRef = { clickupTaskId?: string | null; name: string; requestId?: string | null };
@@ -30,6 +31,9 @@ export type Pause = {
   reason: string | null;
 };
 
+/** Tramo trabajado con una tarea activa (paso 5B). */
+export type TaskPiece = { task: TaskRef | null; start: number; end: number };
+
 export type DayState = {
   status: DayStatus;
   entradaAt: number | null; // primera entrada del día
@@ -40,6 +44,8 @@ export type DayState = {
   pauses: Pause[];
   current: Pause | null;
   workIntervals: [number, number][]; // tramos realmente trabajados (sin pausas)
+  activeTask: TaskRef | null; // tarea a la que va el tiempo ahora (entrada o último cambio de tarea)
+  taskPieces: TaskPiece[]; // tramos trabajados repartidos por tarea activa
   workedMin: number;
   breakMin: number;
   breakCount: number;
@@ -63,6 +69,8 @@ export function computeDay(events: DayEvent[], now: number): DayState {
     pauses: [],
     current: null,
     workIntervals: [],
+    activeTask: null,
+    taskPieces: [],
     workedMin: 0,
     breakMin: 0,
     breakCount: 0,
@@ -73,7 +81,10 @@ export function computeDay(events: DayEvent[], now: number): DayState {
   let segStart: number | null = null; // inicio del tramo trabajado en curso
 
   const closeSegment = (at: number) => {
-    if (segStart !== null && at > segStart) st.workIntervals.push([segStart, at]);
+    if (segStart !== null && at > segStart) {
+      st.workIntervals.push([segStart, at]);
+      st.taskPieces.push({ task: st.activeTask, start: segStart, end: at });
+    }
     segStart = null;
   };
 
@@ -95,8 +106,17 @@ export function computeDay(events: DayEvent[], now: number): DayState {
           st.salidaAt = null;
           st.salidaSource = null;
           st.absenceReason = null;
+          st.activeTask = e.task;
           segStart = e.at;
         }
+        break;
+      case 'tarea':
+        // Cambio de tarea activa: corta el tramo en curso para que lo anterior quede en la tarea anterior.
+        if (st.status === 'trabajando') {
+          closeSegment(e.at);
+          st.activeTask = e.task;
+          segStart = e.at;
+        } else if (st.current) st.activeTask = e.task;
         break;
       case 'descanso':
       case 'comida':
@@ -131,7 +151,10 @@ export function computeDay(events: DayEvent[], now: number): DayState {
     }
   }
   // Tramo abierto: cuenta hasta ahora.
-  if (segStart !== null && st.status === 'trabajando' && now > segStart) st.workIntervals.push([segStart, now]);
+  if (segStart !== null && st.status === 'trabajando' && now > segStart) {
+    st.workIntervals.push([segStart, now]);
+    st.taskPieces.push({ task: st.activeTask, start: segStart, end: now });
+  }
 
   st.workedMin = minutes(st.workIntervals.reduce((s, [a, b]) => s + (b - a), 0));
   for (const p of st.pauses) {
@@ -167,6 +190,10 @@ export function transitionError(status: DayStatus, kind: WorkKind): string | nul
       return null;
     case 'ausencia':
       return status === 'sin_empezar' ? null : 'Ya has empezado la jornada de hoy.';
+    case 'tarea':
+      if (status === 'sin_empezar' || status === 'ausente') return 'Aún no has empezado la jornada.';
+      if (status === 'terminado') return 'Tu jornada de hoy ya terminó.';
+      return null;
   }
 }
 
