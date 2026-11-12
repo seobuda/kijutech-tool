@@ -63,7 +63,10 @@ export type Snapshot = {
   diskUsedPct?: number | null;
   backupAgeH?: number | null;
   restoreTest?: { ageD: number; ok: boolean; detail: string } | null;
+  emailsToday?: number | null; // correos del buzón del agente hoy (entrada + salida, aproximado); plan gratuito: 100/día
 };
+
+export const EMAIL_DAILY_LIMIT = 100;
 
 const usd = (n: number) => `${n.toFixed(2)} $`;
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
@@ -183,6 +186,14 @@ export function evaluate(s: Snapshot): Check[] {
     else add('copia', 'Copia de seguridad', 'ok', `Última copia hace ${Math.round(s.backupAgeH)} h.`);
   }
 
+  if (s.emailsToday != null) {
+    const p = Math.round((s.emailsToday / EMAIL_DAILY_LIMIT) * 100);
+    const detail = `Unos ${s.emailsToday} correos hoy (recibidos y enviados) de ${EMAIL_DAILY_LIMIT} del plan gratuito de Resend.`;
+    if (p >= 95) add('correo_cuota', 'Cuota de correo', 'critico', detail, 'Al llegar a 100 Resend deja de enviar y recibir hasta mañana. Si se repite, conviene el plan de pago de Resend.');
+    else if (p >= 80) add('correo_cuota', 'Cuota de correo', 'aviso', detail, 'Cerca del límite diario. Si se repite, conviene el plan de pago de Resend.');
+    else add('correo_cuota', 'Cuota de correo', 'ok', detail);
+  }
+
   if (s.restoreTest) {
     const r = s.restoreTest;
     if (!r.ok) add('restauracion', 'Prueba de restauración', 'critico', `La última prueba falló: ${r.detail}`, 'La copia podría no servir. Revisa /opt/kijutech/backups/restore-test.log y vuelve a lanzar scripts/restore-test.sh.');
@@ -269,6 +280,10 @@ export async function collectSnapshot(tenantId: string): Promise<Snapshot> {
     .where(and(eq(opsSettings.tenantId, tenantId), eq(opsSettings.key, BACKUP_SETTING)))
     .limit(1);
   const backupMs = Date.parse(backupRow?.value ?? '');
+  const [mail] = (await db.execute(sql`
+    SELECT (SELECT count(*)::int FROM ops_inbound_emails WHERE tenant_id = ${tenantId} AND source = 'resend' AND created_at >= date_trunc('day', now())) +
+           (SELECT count(*)::int FROM ops_agent_actions WHERE tenant_id = ${tenantId} AND kind = 'email_reply' AND executed_at >= date_trunc('day', now())) +
+           (SELECT count(*)::int FROM ops_notifications WHERE tenant_id = ${tenantId} AND dedupe_key LIKE 'jw:ping:%' AND created_at >= date_trunc('day', now())) AS n`)) as unknown as { n: number }[];
   const restoreRows = await db
     .select({ key: opsSettings.key, value: opsSettings.value })
     .from(opsSettings)
@@ -282,6 +297,7 @@ export async function collectSnapshot(tenantId: string): Promise<Snapshot> {
     aiBudget: { enabled: budget.enabled, daily: num(budget, 'dailyUsd'), monthly: num(budget, 'monthlyUsd') },
     diskUsedPct: await diskUsedPct(),
     backupAgeH: Number.isFinite(backupMs) ? (Date.now() - backupMs) / 3_600_000 : null,
+    emailsToday: Number(mail?.n ?? 0),
     restoreTest: Number.isFinite(restoreAt) ? { ageD: (Date.now() - restoreAt) / 86_400_000, ok: restoreStatus === 'ok', detail: restoreDetail.join('|') } : null,
     heartbeatAgeS: await heartbeatAgeS(tenantId),
     notificationsFailed,

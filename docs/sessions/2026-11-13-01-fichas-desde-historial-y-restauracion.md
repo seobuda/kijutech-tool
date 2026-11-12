@@ -55,4 +55,4 @@ Ninguna.
 - Siguen pendientes de la revisión:
   - D4 IA de reserva (toca el núcleo);
   - acción «reasignar» en la bandeja de salida (migración);
-  - aviso de cuota de Resend.
+  - (hecho después: aviso de cuota de Resend en Salud).

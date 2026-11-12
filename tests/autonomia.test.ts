@@ -297,3 +297,17 @@ describe('prueba de restauración en Salud (puro)', () => {
     expect(st(null)).toBeUndefined();
   });
 });
+
+describe('cuota de correo en Salud (puro)', () => {
+  const base: Snapshot = {
+    heartbeatAgeS: 20, notificationsFailed: 0, notificationsStuck: 0, outboxFailed: 0, outboxStuck: 0, requestsError: 0, requestsStuck: 0,
+    emailsError: 0, emailsStuck: 0, watchError: null, telegramError: null, aiFailedHour: 0, aiTotalHour: 0, clickupPeakPerMin: 1
+  };
+  const st = (n: number | null) => evaluate({ ...base, emailsToday: n }).find((c) => c.key === 'correo_cuota')?.status;
+  it('aviso al 80 % y crítico al 95 % de 100 al día', () => {
+    expect(st(10)).toBe('ok');
+    expect(st(82)).toBe('aviso');
+    expect(st(97)).toBe('critico');
+    expect(st(null)).toBeUndefined();
+  });
+});
