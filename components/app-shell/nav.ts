@@ -6,6 +6,8 @@ import {
   Bot,
   Brain,
   CalendarCheck,
+  CalendarDays,
+  FileBarChart,
   ClipboardList,
   FolderKanban,
   Inbox,
@@ -72,6 +74,7 @@ export const OPS_SECTIONS: TabSection[] = [
       { href: '/dashboard/operaciones/clientes', label: 'Clientes', icon: Building2, keywords: 'fichas semáforo alertas' },
       { href: '/dashboard/operaciones/correos', label: 'Correos', icon: Mail, keywords: 'email entrada' },
       { href: '/dashboard/operaciones/agente', label: 'Agente', icon: Bot, keywords: 'propuestas aprobación autonomía acierto', show: adminOnly },
+      { href: '/dashboard/operaciones/informes', label: 'Informes', icon: FileBarChart, keywords: 'informe semanal mensual parte resumen', show: adminOnly },
       { href: '/dashboard/operaciones/piloto', label: 'Piloto', icon: Gauge, keywords: 'métricas rendimiento', show: adminOnly }
     ]
   },
@@ -84,6 +87,7 @@ export const OPS_SECTIONS: TabSection[] = [
       { href: '/dashboard/operaciones/equipo-hoy', label: 'Hoy', icon: CalendarCheck, keywords: 'equipo hoy tareas vencidas estado' },
       { href: '/dashboard/operaciones/jornada', label: 'Jornada', icon: Clock, keywords: 'fichaje entrada salida descansos comida horas', show: adminOnly },
       { href: '/dashboard/operaciones/tiempos', label: 'Tiempos', icon: Timer, keywords: 'tiempos tareas márgenes estimación precisión', show: adminOnly },
+      { href: '/dashboard/operaciones/calendario', label: 'Calendario', icon: CalendarDays, keywords: 'festivos vacaciones ausencias días libres', show: adminOnly },
       { href: '/dashboard/operaciones/equipo', label: 'Fichas', icon: IdCard, keywords: 'equipo fichas personas horario' },
       { href: '/dashboard/operaciones/mi-panel', label: 'Mi panel', icon: UserRound, keywords: 'mi jornada mis tiempos precisión' }
     ]

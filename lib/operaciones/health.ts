@@ -56,8 +56,15 @@ export type Snapshot = {
   aiFailedHour: number;
   aiTotalHour: number;
   clickupPeakPerMin: number;
+  // Revisión de autonomía (12 nov): gasto de IA frente al tope, disco y copia diaria. Opcionales: sin dato, sin comprobación.
+  aiSpendDay?: number;
+  aiSpendMonth?: number;
+  aiBudget?: { enabled: boolean; daily: number; monthly: number };
+  diskUsedPct?: number | null;
+  backupAgeH?: number | null;
 };
 
+const usd = (n: number) => `${n.toFixed(2)} $`;
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 /** Reglas: del estado actual a comprobaciones con su recomendación. Función pura (se prueba sin base de datos). */
@@ -153,7 +160,44 @@ export function evaluate(s: Snapshot): Check[] {
     );
   else add('clickup_limite', 'Límite de ClickUp', 'ok', `Pico de ${s.clickupPeakPerMin}/min en la última hora (${pct} %).`);
 
+  if (s.aiBudget?.enabled && s.aiSpendDay !== undefined && s.aiSpendMonth !== undefined) {
+    const dPct = Math.round((s.aiSpendDay / s.aiBudget.daily) * 100);
+    const mPct = Math.round((s.aiSpendMonth / s.aiBudget.monthly) * 100);
+    const worst = Math.max(dPct, mPct);
+    const detail = `Hoy ${usd(s.aiSpendDay)} de ${usd(s.aiBudget.daily)} (${dPct} %) · este mes ${usd(s.aiSpendMonth)} de ${usd(s.aiBudget.monthly)} (${mPct} %).`;
+    if (worst >= 100) add('ia_gasto', 'Gasto de IA', 'critico', detail, 'Se ha pasado el tope. Mira en IA y modelos → Cerebro qué función gasta más; si es un pico puntual, sube el tope en Automatizaciones → Tope de gasto de IA.');
+    else if (worst >= 80) add('ia_gasto', 'Gasto de IA', 'aviso', detail, 'Cerca del tope. Si es lo normal de este mes, súbelo en Automatizaciones → Tope de gasto de IA.');
+    else add('ia_gasto', 'Gasto de IA', 'ok', detail);
+  }
+
+  if (s.diskUsedPct != null) {
+    if (s.diskUsedPct >= 90) add('disco', 'Disco del servidor', 'critico', `Disco al ${s.diskUsedPct} %.`, 'Si se llena, la base de datos se para. Borra copias antiguas o imágenes de Docker sin usar (docker system prune) o amplía el disco.');
+    else if (s.diskUsedPct >= 80) add('disco', 'Disco del servidor', 'aviso', `Disco al ${s.diskUsedPct} %.`, 'Conviene liberar espacio pronto (copias antiguas, imágenes de Docker sin usar).');
+    else add('disco', 'Disco del servidor', 'ok', `Disco al ${s.diskUsedPct} %.`);
+  }
+
+  if (s.backupAgeH != null) {
+    if (s.backupAgeH > 50) add('copia', 'Copia de seguridad', 'critico', `La última copia diaria es de hace ${Math.round(s.backupAgeH)} h.`, 'La copia de las 03:00 lleva más de dos días sin hacerse: revisa el cron del servidor y /opt/kijutech/backups.');
+    else if (s.backupAgeH > 27) add('copia', 'Copia de seguridad', 'aviso', `La última copia diaria es de hace ${Math.round(s.backupAgeH)} h.`, 'La copia de esta madrugada no se ha registrado: revisa el cron del servidor.');
+    else add('copia', 'Copia de seguridad', 'ok', `Última copia hace ${Math.round(s.backupAgeH)} h.`);
+  }
+
   return checks;
+}
+
+/** Fecha ISO de la última copia diaria: la escribe scripts/backup.sh en el servidor al terminar bien. */
+export const BACKUP_SETTING = 'backup_last_at';
+
+/** % de disco usado donde vive la app (el mismo disco que la base de datos en el servidor). */
+async function diskUsedPct(): Promise<number | null> {
+  try {
+    const { statfs } = await import('node:fs/promises');
+    const s = await statfs('/');
+    if (!s.blocks) return null;
+    return Math.round(((s.blocks - s.bavail) / s.blocks) * 100);
+  } catch {
+    return null;
+  }
 }
 
 async function heartbeatAgeS(tenantId: string): Promise<number | null> {
@@ -205,7 +249,25 @@ export async function collectSnapshot(tenantId: string): Promise<Snapshot> {
       WHERE tenant_id = ${tenantId} AND requested_at >= now() - interval '1 hour'
       GROUP BY date_trunc('minute', requested_at)) t`)) as unknown as { peak: number }[];
 
+  const budget = await getAuto(tenantId, 'ai_budget');
+  const spend = (await db.execute(sql`
+    SELECT coalesce(sum(estimated_cost) FILTER (WHERE created_at >= date_trunc('day', now() AT TIME ZONE 'Europe/Madrid') AT TIME ZONE 'Europe/Madrid'), 0)::float AS day,
+           coalesce(sum(estimated_cost), 0)::float AS month
+    FROM ai_jobs
+    WHERE tenant_id = ${tenantId} AND created_at >= date_trunc('month', now() AT TIME ZONE 'Europe/Madrid') AT TIME ZONE 'Europe/Madrid'`)) as unknown as { day: number; month: number }[];
+  const [backupRow] = await db
+    .select({ value: opsSettings.value })
+    .from(opsSettings)
+    .where(and(eq(opsSettings.tenantId, tenantId), eq(opsSettings.key, BACKUP_SETTING)))
+    .limit(1);
+  const backupMs = Date.parse(backupRow?.value ?? '');
+
   return {
+    aiSpendDay: Number(spend[0]?.day ?? 0),
+    aiSpendMonth: Number(spend[0]?.month ?? 0),
+    aiBudget: { enabled: budget.enabled, daily: num(budget, 'dailyUsd'), monthly: num(budget, 'monthlyUsd') },
+    diskUsedPct: await diskUsedPct(),
+    backupAgeH: Number.isFinite(backupMs) ? (Date.now() - backupMs) / 3_600_000 : null,
     heartbeatAgeS: await heartbeatAgeS(tenantId),
     notificationsFailed,
     notificationsStuck,

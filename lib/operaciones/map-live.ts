@@ -86,6 +86,10 @@ export async function getMapLive(tenantId: string): Promise<LiveData> {
     SELECT max(done_at) AS last_at, count(*) FILTER (WHERE status = 'abierta' AND voided_at IS NULL)::int AS open,
            count(*) FILTER (WHERE justify_status = 'pendiente' AND voided_at IS NULL)::int AS pending
     FROM ops_task_times WHERE tenant_id = ${tenantId}`)) as unknown as { last_at: Date | null; open: number; pending: number }[];
+  const [reports] = (await db.execute(sql`
+    SELECT max(sent_at) FILTER (WHERE dedupe_key LIKE 'report:%' AND status = 'enviado' AND payload->>'skipped' IS NULL) AS last_at,
+           count(*) FILTER (WHERE dedupe_key LIKE 'sla:%' AND created_at > now() - interval '7 days')::int AS sla7
+    FROM ops_notifications WHERE tenant_id = ${tenantId} AND (dedupe_key LIKE 'report:%' OR dedupe_key LIKE 'sla:%')`)) as unknown as { last_at: Date | null; sla7: number }[];
   const beat = settings.find((s) => s.key === 'worker_heartbeat')?.value ?? '';
   const [reqCount] = await db
     .select({ n: sql<number>`count(*)::int` })
@@ -128,6 +132,12 @@ export async function getMapLive(tenantId: string): Promise<LiveData> {
       at: ms(times?.last_at),
       error: null,
       note: times ? `${times.open} en curso, ${times.pending} esperando motivo` : null
+    },
+    reports: {
+      label: 'Último informe enviado',
+      at: ms(reports?.last_at),
+      error: null,
+      note: reports ? `${reports.sla7} recordatorio(s) de plazo en 7 días` : null
     },
     queue: byKind(['new_request', 'daily_summary', 'digest', 'reminder', 'review_request', 'block_alert', 'reply', 'returned']),
     outbox: {

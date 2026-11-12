@@ -10,6 +10,7 @@ import {
   opsWorkTypes,
   type OpsTeamProfile
 } from '@/lib/db/schema';
+import { daysOffFor, getCalendar } from '@/lib/operaciones/calendar';
 
 export const DEFAULT_TEAM_TIMEZONE = 'America/Santo_Domingo';
 export const OWNER_TIMEZONE = 'Europe/Madrid';
@@ -31,7 +32,15 @@ export type Schedule = {
   quietStart: string | null;
   quietEnd: string | null;
   urgentBypassQuiet: boolean;
+  /** Días libres del calendario (festivos que le aplican y sus ausencias planificadas), YYYY-MM-DD. */
+  daysOff?: Set<string>;
 };
+
+/** ¿Trabaja la persona ese día? Día de la semana de su ficha y sin festivo ni ausencia en el calendario. */
+export function worksOn(sch: Schedule, date: string, weekday?: string): boolean {
+  const wd = weekday ?? new Date(`${date}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
+  return sch.workDays.includes(WEEKDAY_ISO[wd]) && !sch.daysOff?.has(date);
+}
 
 // Quién puede ver o editar fichas. Hoy solo quien lleva las operaciones (cualquier usuario con
 // acceso a este módulo). Cuando cada miembro pueda entrar a ver su propio perfil, bastará con que
@@ -90,6 +99,7 @@ export async function getScheduleMap(tenantId: string): Promise<Map<string, Sche
     .select()
     .from(opsTeamProfiles)
     .where(eq(opsTeamProfiles.tenantId, tenantId));
+  const calendar = await getCalendar(tenantId);
   const map = new Map<string, Schedule>();
   for (const p of rows) {
     if (!p.clickupUserId) continue;
@@ -103,7 +113,8 @@ export async function getScheduleMap(tenantId: string): Promise<Map<string, Sche
       lunchEnd: p.lunchEnd,
       quietStart: p.quietStart,
       quietEnd: p.quietEnd,
-      urgentBypassQuiet: p.urgentBypassQuiet
+      urgentBypassQuiet: p.urgentBypassQuiet,
+      daysOff: daysOffFor(calendar, p.clickupUserId)
     });
   }
   return map;

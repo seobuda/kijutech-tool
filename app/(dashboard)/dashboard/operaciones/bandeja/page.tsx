@@ -3,7 +3,10 @@ import { redirect } from 'next/navigation';
 import { Lock } from 'lucide-react';
 import { EmptyState } from '@/components/ui/page';
 import { getUser } from '@/lib/db/queries';
+import Link from 'next/link';
+import { Mail } from 'lucide-react';
 import { getInbox, waitLabel } from '@/lib/operaciones/inbox';
+import { getPendingEmailProposals } from '@/lib/operaciones/owner-queue';
 import { isInboxOwner } from '@/lib/operaciones/inbox-owner';
 import { BandejaList, type BandejaItem } from './bandeja-list';
 
@@ -26,7 +29,7 @@ export default async function BandejaPage() {
   }
 
   const now = new Date();
-  const inbox = await getInbox(user.tenantId);
+  const [inbox, emails] = await Promise.all([getInbox(user.tenantId), getPendingEmailProposals(user.tenantId)]);
   const items: BandejaItem[] = inbox.map((i) =>
     i.kind === 'review'
       ? {
@@ -66,6 +69,29 @@ export default async function BandejaPage() {
           Lo que está pendiente de ti, del que más espera al que menos. Desde aquí puedes aceptar, devolver o responder.
         </p>
       </div>
+      {emails.length > 0 && (
+        <section className="rounded-xl border bg-card shadow-xs" aria-label="Correos de clientes por responder">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b px-5 py-3">
+            <h3 className="flex items-center gap-2 text-sm font-semibold">
+              <Mail className="size-4" aria-hidden /> Correos de clientes por responder ({emails.length})
+            </h3>
+            <Link href="/dashboard/operaciones/correos" className="text-sm font-medium text-primary underline-offset-2 hover:underline">
+              Abrir Correos
+            </Link>
+          </div>
+          <ul className="divide-y">
+            {emails.map((e) => (
+              <li key={e.actionId} className="px-5 py-3 text-sm">
+                <p className="font-medium">
+                  {e.top && <span title="Cliente Top">⭐ </span>}
+                  {e.clientName ?? e.from} · <span className="font-normal">{e.subject}</span>
+                </p>
+                <p className="text-muted-foreground">Espera {waitLabel(e.since, now)} · la respuesta propuesta está en Correos y en su aviso de Telegram</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       <BandejaList items={items} />
     </div>
   );

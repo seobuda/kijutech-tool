@@ -45,6 +45,7 @@ import { approveEmailReply, rejectEmailReply, renderProposal, setProposalAssigne
 import { teamLoad } from '@/lib/operaciones/email-pm';
 import { handleJornadaCallback, handleJornadaCommand, handleJornadaPending, JORNADA_COMMAND_RE } from '@/lib/operaciones/jornada-bot';
 import { handleTiemposCallback, handleTiemposPending } from '@/lib/operaciones/tiempos-bot';
+import { handleAutopilotCallback } from '@/lib/operaciones/autopilot';
 
 // Botones del motor de acciones del agente: ag:<id de la acción>:ok (aprobar) | no (descartar) | ed (corregir).
 export const AGENT_CALLBACK_RE = /^ag:([0-9a-f-]{36}):(ok|no|ed|re|pa|as:(\d{1,20}))$/;
@@ -497,6 +498,8 @@ async function handleCallback(tenantId: string, token: string, cb: TgCallbackQue
   if (cb.data?.startsWith('jw:')) return handleJornadaCallback(tenantId, token, cb, presser, chatId, messageId, answer);
   // Tiempos de tarea (tt:…): estimación, tipo de tarea y motivo de exceso.
   if (cb.data?.startsWith('tt:')) return handleTiemposCallback(tenantId, token, cb, presser, chatId, messageId, answer);
+  // Piloto automático (ap:…): «Mover a mañana» del parte y «Pasar a autónomo» (solo el dueño).
+  if (cb.data?.startsWith('ap:')) return handleAutopilotCallback(tenantId, cb, presser, answer);
 
   // Motor de acciones del agente: «✅ Enviar la propuesta» / «✖️ Descartar propuesta» (solo el dueño).
   const ag = cb.data?.match(AGENT_CALLBACK_RE);

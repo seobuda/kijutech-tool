@@ -10,6 +10,7 @@ import { callAI } from '@/lib/ai/gateway';
 import { extractJsonFromLLMResponse } from '@/lib/ai/parsers/json-extractor';
 import { OPS_TIMEZONE } from '@/lib/operaciones/clickup';
 import { profilesForPrompt } from '@/lib/operaciones/team-profiles';
+import { agencyHolidays, getCalendar } from '@/lib/operaciones/calendar';
 import {
   addWorkingDays,
   clientDeliveryDays,
@@ -210,6 +211,7 @@ export async function proposeRequests(
   const usualLists = (c: ClientWithServices) =>
     c.usualSpaceId === input.spaceId ? c.usualListIds.filter((id) => validListIds.has(id)) : [];
 
+  const holidays = agencyHolidays(await getCalendar(tenantId)); // los plazos saltan los festivos de la agencia
   const items: ProposalItem[] = parsed.encargos.map((e) => {
     const own = Boolean(me && isOwnTask(e.titulo));
     const proposed = byName.get(e.responsable.trim().toLowerCase());
@@ -269,7 +271,7 @@ export async function proposeRequests(
     if (!dueDate && client && !own) {
       const days = clientDeliveryDays(client, levels);
       if (days != null) {
-        dueDate = addWorkingDays(days, client.workDays, OPS_TIMEZONE);
+        dueDate = addWorkingDays(days, client.workDays, OPS_TIMEZONE, new Date(), holidays);
         dueReason = `Plazo de ${client.name} (nivel ${levelLabel.get(client.level) ?? client.level}): ${days} día${days === 1 ? '' : 's'} laborable${days === 1 ? '' : 's'}.`;
       }
     }

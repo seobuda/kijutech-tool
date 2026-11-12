@@ -3,10 +3,10 @@
 > **Documento vivo y de referencia.** Recoge todo lo que existe, cómo funciona, qué está decidido, qué se ha probado y qué falta. Se actualiza al cerrar cada paso de trabajo (junto al documento de sesión y al Mapa Visual).
 > **No contiene claves, contraseñas ni valores de `.env`** (solo sus nombres).
 
-**Fecha de esta versión:** 2026-11-12 (paso 5B, tiempos de tarea, en la rama `feature/tiempos-tarea` pendiente de desplegar, migración 0045 aplicada solo en local; producción en `2c6121d4` con la jornada real 5A y las pestañas por rol)
+**Fecha de esta versión:** 2026-11-12 (revisión de autonomía: calendario, plazos del dueño, informes, piloto automático y salud ampliada, en la rama `feature/autonomia`, sin migraciones; producción en `75481a59` con la jornada real 5A y los tiempos de tarea 5B)
 **Producción:** `https://brain.kijutech.com` (droplet `kijutech-brain`, Frankfurt). Procedimiento en `docs/DESPLIEGUE.md`. Rama de trabajo del despliegue: `feature/despliegue`.
-**Rama de trabajo:** `feature/seguridad` (creada desde `feature/paso-7-piloto`, que aún no está fusionada en `main`; el paso 8 depende del 7). **No se ha unido a `main`: espera la aprobación de Enric.** **Operaciones ya está fusionada en `main`** (fast-forward, 30 oct): `main` y `operaciones` coinciden en `9110754f`; la rama `operaciones` se mantiene.
-**Rama `main`:** `c9dfa198` (11 nov): incluye arreglos de la revisión, memoria de cliente, correos B1 y rediseño; desplegada en producción.
+**Ramas:** cada mejora en su rama (`feature/…`, `fix/…`, `docs/…`); `main` solo recibe lo terminado y aprobado y es lo que está en producción. Las ramas antiguas (`operaciones`, `feature/seguridad`, `feature/despliegue`…) ya están fusionadas y se mantienen.
+**Rama `main`:** `75481a59` (12 nov, tiempos de tarea 5B), desplegada en producción con 46 migraciones. Revisión de autonomía en `docs/REVISION-AUTONOMIA.md`.
 **Repositorio:** `https://github.com/seobuda/kijutech-tool` (origen `origin`).
 **Informes anteriores:** `docs/INFORME-ESTADO.md` (auditoría del 29 oct, previa a Operaciones; su análisis de SEO y de seguridad sigue vigente) y `docs/sessions/` (un documento por sesión, 47 hasta hoy). Reglas y comandos de seguridad: §13.
 
@@ -61,7 +61,7 @@ Todo corre **dentro de Docker**. **Nunca** se ejecuta `pnpm`/`npm` en el host Wi
 | Backup antes de migrar un módulo | `docker exec kijutech_db pg_dump -U kijutech -d kijutech_db > backups/backup_pre_<modulo>_<fecha>.sql` |
 | Restaurar (sobre BD limpia) | `docker exec -i kijutech_db psql -U kijutech -d kijutech_db < backups/backup_pre_<modulo>_<fecha>.sql` |
 | Comprobar el Mapa Visual | `node scripts/check-architecture-map.js` (o `pnpm check:map` en el contenedor) |
-| **Pruebas de seguridad** (91 pruebas; reconstruir antes para que lleven el código actual) | `docker exec kijutech_app pnpm test` |
+| **Pruebas automáticas** (unas 230; reconstruir antes para que lleven el código actual) | `docker exec kijutech_app pnpm test` |
 | Logs | `docker logs kijutech_app` |
 
 - **URL de la app:** `http://127.0.0.1:3000` (**nunca `localhost`**: da `ERR_CONNECTION_RESET` en esta máquina por IPv6 + WSL2 + Docker Desktop). Para el usuario de pruebas se usa `http://ops-test.localhost:3000` (host aparte, para tener otra sesión).
@@ -72,7 +72,7 @@ Todo corre **dentro de Docker**. **Nunca** se ejecuta `pnpm`/`npm` en el host Wi
 - **`.dockerignore`** (arreglado en el paso 8: tenía comillas invertidas y no excluía nada): deja fuera `.env`, `.git`, `backups/`, `node_modules` y `.next` de la imagen.
 - **Para cambiar dependencias sin tocar Windows** (patrón usado en el paso 8): `docker run --rm -v "C:\dev\kijutech-tool:/work" -v /work/node_modules -w /work node:24-alpine sh -c "corepack enable && pnpm …"` (el volumen anónimo evita que `node_modules` aterrice en el host).
 - **Nunca** `docker compose down -v` ni nada que borre el volumen de la base de datos.
-- **Migraciones:** `lib/db/migrations/0000`…`0039` (40). `0039_ops_inbound_emails` (correos de clientes recibidos, a mano, solo aplicada en la base local). `0038_ops_client_memory` (memoria y contactos de cliente, escrita a mano: **no usar `pnpm db:generate`**, porque sin snapshots desde la 0029 genera SQL para tablas que ya existen). Las de Operaciones son `0022`–`0036`; `0037_auth_login_attempts` es la del límite de intentos de inicio de sesión (a mano, como las anteriores: el journal no tiene snapshots desde la 0029). Hay scripts SQL sueltos de prompts en `scripts/` (ver §8).
+- **Migraciones:** `lib/db/migrations/0000`…`0045` (46, todas aplicadas en producción). Desde la 0029 se escriben a mano con su entrada en `meta/_journal.json`: **no usar `pnpm db:generate`** (sin snapshots genera SQL para tablas que ya existen). Hay scripts SQL sueltos de prompts en `scripts/` (ver §8).
 
 ## 3. Stack y versiones
 
@@ -89,7 +89,7 @@ Todo corre **dentro de Docker**. **Nunca** se ejecuta `pnpm`/`npm` en el host Wi
 | Clustering | embeddings + `hdbscan-ts` |
 | Otras | `zod`, `swr`. **Stripe eliminado** en el paso 8 (rutas, `lib/payments`, dependencia, `db:setup`); las columnas `stripe_*` de `teams` siguen en la BD (deuda) |
 | Gestor | `pnpm` (dentro de Docker) |
-| Pruebas automáticas | **Vitest 5.1.0** (`pnpm test` dentro del contenedor: 91 pruebas de seguridad), `tsc` en el build y la comprobación del Mapa Visual |
+| Pruebas automáticas | **Vitest 5.1.0** (`pnpm test` dentro del contenedor: unas 230 pruebas de seguridad, flujos y circuitos), `tsc` en el build y la comprobación del Mapa Visual |
 
 ## 4. Reglas de trabajo y restricciones vigentes
 
@@ -252,6 +252,15 @@ Envío sin duplicados (marca `[kiju:]` + índice único); copia local del Bloc y
 - **Acciones nuevas (admin):** `saveBandAction`, `voidTaskTimeAction`, `correctTaskTimeAction` (`lib/operaciones/tiempos-actions.ts`) y `setProfileWebUser` (`profile-actions.ts`), en `tests/seguridad.test.ts`.
 - **Pruebas:** `tests/tiempos.test.ts`: cálculo puro (reparto por tarea, pausas, resultado, precisión, opciones, margen propuesto) y el circuito completo con la base de datos (empezar, estimar, descanso, cambiar de tarea, tipo, volver, Hecho con 35 min reales por encima del margen, motivo y URL, cierre en ClickUp, pestaña y Mi panel, y con los tiempos apagados).
 
+### 6.20 Autonomía e informes (revisión de autonomía, 12 nov)
+- **Para qué:** que el sistema funcione sin estar pendiente: «silencio = todo bien», toda cola con dueño, plazo y escalado, informes periódicos. Diagnóstico y plan en `docs/REVISION-AUTONOMIA.md`.
+- **Calendario** (`lib/operaciones/calendar.ts`, pestaña **Equipo → Calendario**, admin): festivos (de toda la agencia o de algunas personas) y vacaciones o ausencias por rango. Se guarda en `ops_settings` (clave `calendar`). `getScheduleMap()` añade `daysOff` al horario de cada persona y `worksOn()` (team-profiles) lo usan la jornada (sin buenos días ni reintentos), el resumen diario, los recordatorios, los minutos laborables y los avisos retenidos (sin empezar en un día libre, esperan al siguiente día laborable). Los plazos de los encargos (`addWorkingDays`) saltan los festivos de toda la agencia.
+- **Lo que espera de ti** (`owner-queue.ts`): las respuestas propuestas a correos de clientes salen ahora en **Mi bandeja** y en «Necesita de ti» de los resúmenes (antes solo en un Telegram). Automatización `owner_sla`: pasado el plazo de cada tipo, un recordatorio con sus botones (clave `sla:tipo:id`), L-V de 8:00 a 20:00 del dueño.
+- **Informes** (`reports.ts`, pestaña **Operaciones → Informes**, admin): parte de la mañana (quién ha empezado y quién falta, lo que se cae hoy con «📅 Mover a mañana» y a quién se le podría pasar, lo que espera de ti, incidencias; no sale si no hay nada), informe semanal del lunes (semana anterior frente a la otra; equipo sin ranking, clientes, agente, sistema y pendientes; Telegram + página + correo desde el buzón del agente) y aviso del trabajo del mes por cliente (borradores para copiar; nunca se envían solos). Claves `report:morning:fecha`, `report:weekly:lunes`, `report:monthly:mes`.
+- **Piloto automático** (`autopilot.ts`): botón `ap:due:<tarea>` (cambia la fecha en ClickUp por la bandeja de salida; reasignar sigue siendo en ClickUp), limpieza semanal de vencidas (lunes, apagada por defecto), propuesta semanal de subir a autónomo (botón `ap:up:<tipo>`, 30+ decisiones y 95 %) y bajada automática a «Con tu aprobación» si un tipo autónomo baja del 80 % con 10+ decisiones en 7 días. Responder correos nunca puede ser autónomo.
+- **Salud ampliada:** gasto de IA frente al tope (`ai_budget`), disco del servidor (80 %/90 %) y antigüedad de la copia diaria. La copia la anota `scripts/backup.sh` (nuevo, versionado: `pg_dump`, comprobación del volcado, `backup_last_at` en `ops_settings` y subida opcional fuera de DigitalOcean con `rclone`). **Hay que instalarlo en el cron del servidor** (lo hace Enric; ver `docs/PRUEBAS-EN-VIVO.md`).
+- **Pruebas:** `tests/autonomia.test.ts` (calendario, días libres en el horario y en los plazos, plazos del dueño, semanas, a quién sugerir, primer día laborable, autonomía, salud ampliada, y con la base de datos: vacaciones en el horario, parte de la mañana y entregas a tiempo en el semanal) y las dos acciones del calendario en `tests/seguridad.test.ts`.
+
 ## 7. Panel de Automatizaciones: todos los valores
 
 Los valores por defecto viven en el código (`lib/operaciones/automations.ts`); la tabla `ops_automations` solo guarda lo que se cambia (restaurar = borrar la fila). Caché de 10 s. Textos en formato de Telegram (`<b>`, `<i>`, `<u>`, `<code>`, `<a href>`) con huecos validados; una línea con un hueco opcional vacío desaparece.
@@ -264,6 +273,10 @@ Los valores por defecto viven en el código (`lib/operaciones/automations.ts`); 
 | `daily_team` Resumen diario del equipo | «Buenos días» a la hora de entrada | `windowMin` 180 → 30–360 | `{nombre}` `{vencidas}` `{hoy}` `{fecha}` |
 | `jornada` Jornada real (**apagada por defecto**) | Buenos días con botones, reintentos, pausas, cierre automático y avisos retenidos | `repingMin` 10 → 5–60; `maxPings` 4 → 1–10; `emailPing` sí; `breakQuotaMin` 20 → 0–120; `lunchMarginMin` 10 → 0–60; `autoCloseMin` 120 → 5–480; `holdNotices` sí | — |
 | `tiempos` Tiempos de tarea (**apagada por defecto**; necesita la jornada) | Estimación al empezar, feedback al terminar, motivo y URL si pasa del margen | `askEstimate` sí; `askJustify` sí; `precisionPct` 20 → 5–50 %; `minSamples` 8 → 3–50 tareas | — |
+| `owner_sla` Plazos de lo que espera de ti | Un recordatorio con botones cuando una revisión, un bloqueo escalado o una respuesta a un correo de cliente pasa de su plazo (L-V, 8:00–20:00 del dueño) | `reviewH` 24 → 1–168 h; `blockerH` 2 → 1–48 h; `emailH` 4 → 1–72 h; `topEmailH` 1 → 1–24 h | — |
+| `reports` Informes | Parte de la mañana (solo si hay algo), informe semanal del lunes (Telegram, pestaña Informes y correo) y aviso del trabajo del mes por cliente | `morning` sí; `morningTime` 09:30; `weekly` sí; `weeklyTime` 08:30; `weeklyEmail` sí; `monthly` sí | — |
+| `autopilot` Piloto automático | Reparto propuesto si alguien falta, limpieza semanal de vencidas, propuesta de subir la autonomía y bajada automática | `absenceReassign` sí; `weeklyCleanup` **no**; `minOverdue` 3 → 1–50; `autonomyWeekly` sí; `autoDemote` sí | — |
+| `ai_budget` Tope de gasto de IA | Incidencia de Salud al 80 % (aviso) y al 100 % (crítica) del tope diario o mensual | `dailyUsd` 5 → 1–200; `monthlyUsd` 60 → 5–2000 | — |
 | `digest` Resúmenes de mi bandeja | Lo completado, del agente y lo que necesita de ti (+ jornada en el primero) | `times` 13:00,18:00 (1–4 horas); `windowMin` 180 → 30–360; `includeUnanswered` sí | `{secciones}` |
 | `client_alerts` Alertas de clientes | Sección «Clientes en alerta» | `remindDays` 7 → 1–30 | `{total}` `{lista}` |
 | `activity_scan` Pasada diaria de actividad | Calcula la actividad por cliente | `time` 03:00 (Madrid); `retryMin` 30 → 5–240 | — |
@@ -308,7 +321,7 @@ Construido en agosto de 2026 (Fases A–D). Detalle y auditoría completa en `do
 
 ## 10. Base de datos
 
-**Total: 70 tablas** (12 núcleo, 15 SEO, 7 IA, 36 Operaciones; la nueva `ops_inbound_emails` es de la migración 0039 y las 2 anteriores, `ops_client_senders` y `ops_client_memory`, de la 0038; la nueva del paso 8 es `auth_login_attempts`, intentos de inicio de sesión, migración 0037). Conteos reales a 2026-10-30; las 3 tablas del paso 7 (`ops_cleanup_runs`, `ops_cleanup_items`, `ops_suggestions`) se crearon el 31 oct (1 tanda de limpieza real en curso para Enric, 30 tareas). **Desde el 11 nov** se añadieron `ops_agent_actions` (0040), `ops_health_incidents` (0043) `ops_work_events` (0044, jornada real: un registro por acción de la jornada, nunca se borra; ver §6.18) y `ops_task_times` (0045, tiempos de tarea; ver §6.19): el módulo tiene ya **40 tablas `ops_*`** (las cuenta `node scripts/check-architecture-map.js`).
+**Total: 74 tablas** (12 núcleo, 15 SEO, 7 IA y **40 `ops_*`**, que cuenta `node scripts/check-architecture-map.js`). Las últimas: `ops_agent_actions` (0040), `ops_health_incidents` (0043), `ops_work_events` (0044, jornada real; ver §6.18) y `ops_task_times` (0045, tiempos de tarea; ver §6.19). La revisión de autonomía no añade tablas: el calendario y la última copia diaria van en `ops_settings` (claves `calendar` y `backup_last_at`). Los conteos de filas de abajo son de la base local del 30 oct (orientativos).
 
 **Núcleo / plantilla:** `tenants` 1 · `users` 2 · `roles` 4 · `user_roles` 1 · `projects` 1 · `modules` 1 · `project_modules` 0 · `teams` 2 · `team_members` 2 · `invitations` 0 · `activity_logs` 10 (`teams`, `team_members` e `invitations` son restos de la plantilla pendientes de limpieza).
 
@@ -360,11 +373,11 @@ Construido en agosto de 2026 (Fases A–D). Detalle y auditoría completa en `do
 - **Mapa vivo:** muestra los **valores actuales del panel** y la **última ejecución / error** de vigilancia, pasada de actividad, resúmenes, recordatorios, cola de avisos, bandeja de salida, Telegram, planificador y caché de ClickUp (`lib/operaciones/map-live.ts`).
 - **Recorrido nota → completada** con botones «Sigue en…».
 - **Datos:** `lib/operaciones/process-map.ts` (`OPS_MAPS`), `lib/architecture-map/registry.ts` (nivel 1, `FUTURE_NODES`, `PROCESS_MAP_IDS`); SEO usa `CLUSTERING_PROCESS_MAP` y `COMPETITOR_ANALYSIS_PROCESS_MAP`; Seguridad usa `SECURITY_PROCESS_MAP` (`lib/auth/security-process-map.ts`).
-- **Comprobación automática:** `scripts/check-architecture-map.js` falla si una automatización del panel, una tarea del planificador, un prompt de IA o una tabla `ops_*` no tiene su entrada, o si el mapa está roto. **Estado: pasa** (13 automatizaciones, 7 tareas del planificador, 6 prompts, 33 tablas, 77 pasos, 13 mapas; desde el paso 8 también comprueba que existan los archivos que cita el mapa de Seguridad). Solo cubre Operaciones y Seguridad y valida presencia y coherencia, no la veracidad de las descripciones.
+- **Comprobación automática:** `scripts/check-architecture-map.js` falla si una automatización del panel, una tarea del planificador, un prompt de IA o una tabla `ops_*` no tiene su entrada, o si el mapa está roto. **Estado: pasa** (19 automatizaciones, 14 tareas del planificador, 7 prompts, 40 tablas, 102 pasos, 16 mapas; desde el paso 8 también comprueba que existan los archivos que cita el mapa de Seguridad). Solo cubre Operaciones y Seguridad y valida presencia y coherencia, no la veracidad de las descripciones.
 
 ## 13. Seguridad
 
-**Estado (4 nov, paso 8, rama `feature/seguridad`, sin fusionar en `main`):** los riesgos altos y medios heredados están cerrados y comprobados con 70 pruebas automáticas (`docker exec kijutech_app pnpm test`). Lo que queda para producción está al final de esta sección.
+**Estado:** el paso 8 (4 nov) cerró los riesgos altos y medios heredados; está en `main` y en producción desde el 5 nov. Las pruebas automáticas (`docker exec kijutech_app pnpm test`) lo vigilan. Lo que queda está al final de esta sección.
 
 **Permisos por rol** (`lib/auth/permissions.ts`, comprobados en el servidor en **todas** las acciones y rutas de API; ocultar un botón no cuenta):
 
@@ -438,7 +451,7 @@ Construido en agosto de 2026 (Fases A–D). Detalle y auditoría completa en `do
 **Antes de subir a un servidor**
 - **Seguridad:** hecha en el paso 8 (§13); falta **rotar secretos** al migrar (`scripts/rotate-encryption-key.js`, `AUTH_SECRET` y contraseña de la BD nuevos) y decidir cuándo se fusiona `feature/seguridad`.
 - **Limpieza de la plantilla que queda:** `README.md`, tablas `teams`/`team_members`/`invitations` y columnas `stripe_*` de `teams` (migración futura), páginas `general`, `activity` y `security` heredadas del starter (revisar o quitar), textos sobrantes en inglés.
-- Pantalla para cambiar el rol o dar de baja a un usuario (hoy solo alta); ocultar las pestañas de administración a quien no es admin.
+- Pantalla para cambiar el rol o dar de baja a un usuario (hoy solo alta). Las pestañas de administración ya se ocultan a quien no es admin (12 nov).
 - CSP con `script-src` por nonce cuando haya servidor y HTTPS.
 - **Servidor (5 nov, hecho):** HTTPS, secretos nuevos, base de datos limpia sin usuario de pruebas ni datos de prueba, copia diaria `pg_dump` en `/opt/kijutech/backups` y snapshots de DigitalOcean.
 - **Servidor (6 nov, hecho):** contraseña inicial del admin cambiada y archivo borrado del servidor; tokens de ClickUp, Telegram e IA introducidos en el panel; Telegram por webhook; app local parada para evitar el 409. **Aparcado por decisión de Enric:** proxy de Cloudflare (SSL Full strict), no necesario por ahora.
@@ -481,7 +494,7 @@ Pendiente de la revisión (siguientes pasos): ver hoja de ruta del 11 nov en §1
 
 Cada uno con su nodo en el nivel 1 del Mapa Visual:
 - **Servidor:** **en marcha desde el 5 nov** (ver §16 y `docs/DESPLIEGUE.md`). Telegram por webhook desde el 6 nov. Quedan: copias fuera de DigitalOcean, limpieza de la plantilla (Cloudflare aparcado).
-- **Rendimiento del equipo (paso 5, acordado el 12 nov):** 5A **jornada real hecha** (§6.18). 5B **tiempos de tarea hechos** (§6.19, con Mi panel). **5C Temporadas, niveles y misiones** (diseño aprobado en `docs/DISENO-RENDIMIENTO-EQUIPO.md`): puntos por resultado (a tiempo, calidad, precisión, jornada, con tope diario), niveles por especialidad, rachas con 2 comodines al mes, misión semanal, objetivo de equipo, logros, cierre diario, sin ranking, y bonus progresivo por temporadas trimestrales; empezar con una temporada 0 sin dinero (necesitará su propia aprobación de esquema).
+- **Rendimiento del equipo (paso 5, acordado el 12 nov):** 5A **jornada real hecha** (§6.18). 5B **tiempos de tarea hechos** (§6.19, con Mi panel). **Autonomía e informes hechos** (§6.20: calendario, plazos, informes, piloto automático). **5C Temporadas, niveles y misiones** (diseño aprobado en `docs/DISENO-RENDIMIENTO-EQUIPO.md`): puntos por resultado (a tiempo, calidad, precisión, jornada, con tope diario), niveles por especialidad, rachas con 2 comodines al mes, misión semanal, objetivo de equipo, logros, cierre diario, sin ranking, y bonus progresivo por temporadas trimestrales; empezar con una temporada 0 sin dinero (necesitará su propia aprobación de esquema).
 - **Niveles y recompensas:** progreso visible, carreras con formaciones desbloqueables y bonos mensuales que se pueden perder, con un salario base que solo sube (se concreta en el 5C).
 - **Subagentes por área:** agentes de IA por área o por cliente que revisan el trabajo antes que Enric, con su ficha y su criterio (p. ej. redacción con el tono de cada cliente o diseño web con el criterio de Enric); se enchufan como **revisor intercambiable** (`reviewers.ts`: solo tendrán que llamar a `acceptWork()` o `returnWork()`).
 - **Diccionario de la agencia:** herramientas, clientes y personas, más los errores del dictado por voz; en parte ya lo cubren los nombres alternativos de las fichas de clientes.
@@ -515,6 +528,7 @@ Cada uno con su nodo en el nivel 1 del Mapa Visual:
 - **12 nov, paso 5A (jornada real):** el paso 5 se amplía a un sistema de rendimiento del equipo en tres fases. 5A: entrada al empezar una tarea desde Telegram, reintentos por Telegram y correo, descansos con cupo, comida, salidas con motivo, cierre automático, avisos retenidos, minutos reales en los recordatorios, pestaña Equipo → Jornada con correcciones y secciones nuevas del menú (Equipo, Sistema). Migración 0044. Ver `docs/sessions/2026-11-12-11-jornada-real-5a.md`.
 - **12 nov, paso 5B (tiempos de tarea):** tras rechazar Enric un primer diseño solo técnico, se rediseñó 5B+5C con investigación de psicología y gamificación (`docs/DISENO-RENDIMIENTO-EQUIPO.md`). Construido: una tarea activa a la vez, estimación de un toque con feedback de precisión, margen por tipo con propuesta real, motivo y URL si se pasa, Equipo → Tiempos, Mi panel y enlace de la ficha con el usuario web. Migración 0045 (solo en local). Ver `docs/sessions/2026-11-12-18-tiempos-de-tarea-5b.md`.
 - **12 nov, pestañas por rol:** al revisar en local con el usuario de pruebas (editor) se vio que Jornada, Agente y Piloto aparecían como pestañas pero redirigían al Bloc al no ser admin. Ahora se ocultan a quien no es admin. Ver `docs/sessions/2026-11-12-14-pestanas-por-rol.md`.
+- **12 nov (noche), revisión de autonomía:** 5B desplegado (`75481a59`, migración 0045). Revisión completa con el objetivo «autónomo, que informe de lo necesario» (`docs/REVISION-AUTONOMIA.md`) y construidas las fases 1–4 sin migraciones: calendario de festivos y ausencias, correos pendientes en Mi bandeja con plazos y recordatorios, parte de la mañana, informe semanal, trabajo del mes por cliente, piloto automático y salud ampliada (IA, disco, copia). Ver `docs/sessions/2026-11-12-23-autonomia-e-informes.md`.
 - Historial completo: `git log` y `docs/sessions/`.
 
 ## 19. Mapa de archivos
@@ -526,6 +540,7 @@ Cada uno con su nodo en el nivel 1 del Mapa Visual:
 - **`tests/`** — Vitest (`seguridad`, `permisos`, `auditoria`, `http`, `client-memoria`), `setup.ts` (simula solo cookies/cabeceras/redirecciones de Next), `fixtures.ts`.
 - **Jornada real (5A):** `lib/operaciones/jornada-core.ts` (cálculo puro del día), `jornada.ts` (base de datos, avisos retenidos, resumen), `jornada-bot.ts` (comandos y botones `jw:`), `jornada-worker.ts` (planificador), `jornada-overview.ts` y `jornada-actions.ts` (pestaña y correcciones), `app/(dashboard)/dashboard/operaciones/jornada/`.
 - **Tiempos de tarea (5B):** `lib/operaciones/tiempos-core.ts` (cálculo puro), `tiempos.ts` (base de datos y mensajes, enganchado a `startWork`/`finishWork` y a la vigilancia), `tiempos-bot.ts` (botones `tt:` y URL), `tiempos-overview.ts` y `tiempos-actions.ts` (pestaña, Mi panel y correcciones), `app/(dashboard)/dashboard/operaciones/tiempos/` y `mi-panel/`.
+- **Autonomía e informes:** `lib/operaciones/calendar.ts` / `calendar-actions.ts` (calendario), `owner-queue.ts` (lo que espera del dueño y plazos), `reports.ts` (parte, semanal y mensual), `autopilot.ts` (botones `ap:`, limpieza semanal, autonomía), `app/(dashboard)/dashboard/operaciones/calendario/` e `informes/`, `scripts/backup.sh` (copia diaria del servidor).
 - **`app/(dashboard)/dashboard/usuarios/`** — alta de usuarios (solo `super_admin`).
 - **`lib/ai/`** — pasarela (`gateway.ts`, adaptadores), clustering (`clustering/pipeline.ts`), cifrado, precios.
 - **`lib/seo/`**, **`modules/seo/manifest.json`** — módulo SEO.
@@ -540,9 +555,9 @@ Cada uno con su nodo en el nivel 1 del Mapa Visual:
 1. `docker compose up --build -d` y, si hay migración, backup + `docker exec kijutech_app pnpm db:migrate`.
 2. Iniciar sesión con el usuario de pruebas en `http://ops-test.localhost:3000` y recorrer **Bloc de notas, Equipo hoy y Encargos** (y la pestaña tocada): cargan sin errores y el autoguardado confirma.
 3. `docker logs kijutech_app` sin `ReferenceError`.
-4. `node scripts/check-architecture-map.js` pasa y **`docker exec kijutech_app pnpm test` pasa** (91 pruebas de seguridad; las 8 de `tests/http.test.ts` necesitan el servidor en `127.0.0.1:3000`, ver §16 antes de arrancarlo en local).
+4. `node scripts/check-architecture-map.js` pasa y **`docker exec kijutech_app pnpm test` pasa** (las 8 de `tests/http.test.ts` necesitan el servidor en `127.0.0.1:3000` y la de auditoría falla si ve el `.env` montado en un contenedor temporal).
 5. Si se tocó Telegram: comprobar la pestaña Telegram (sin conflicto 409) y enviar una prueba desde Automatizaciones.
-6. Documento de sesión, commit y push a `operaciones` (con autorización).
+6. Documento de sesión, commit en la rama, fusión en `main` y push con autorización; despliegue con `bash scripts/deploy.sh` (`--migrate` si hay migración).
 
 ## 21. Glosario
 

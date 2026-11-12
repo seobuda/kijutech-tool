@@ -25,6 +25,9 @@ import { retriageStaleBlockers } from '@/lib/operaciones/blockers';
 import { runEmailInterpretations } from '@/lib/operaciones/email-agent';
 import { runHealthChecks } from '@/lib/operaciones/health';
 import { runJornada } from '@/lib/operaciones/jornada-worker';
+import { runOwnerSla } from '@/lib/operaciones/owner-queue';
+import { runReports } from '@/lib/operaciones/reports';
+import { runAutopilot } from '@/lib/operaciones/autopilot';
 
 const LOCK_KEY = 74200126; // identifica "oyente de Telegram de Kijutech"
 const POLL_TIMEOUT_S = 50;
@@ -236,6 +239,9 @@ async function schedulerLoop(state: WorkerState) {
         await step('bloqueos pendientes', () => retriageStaleBlockers(t)); // tras un reinicio a mitad del triaje
         await step('correos del agente', () => runEmailInterpretations(t)); // propone respuestas (nunca envía solo)
         await step('salud', () => runHealthChecks(t)); // cada 5 min: colas atascadas y errores (avisa una vez)
+        await step('plazos del dueño', () => runOwnerSla(t)); // lo que espera de Enric y pasó su plazo: un recordatorio
+        await step('informes', () => runReports(t)); // parte de la mañana, semanal y aviso mensual
+        await step('piloto automático', () => runAutopilot(t)); // limpieza semanal y autonomía del agente
         await step('actividad de clientes', () => runActivityDaily(t)); // una vez al día, de madrugada
       }
     } catch (e) {
