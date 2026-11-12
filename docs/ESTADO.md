@@ -237,6 +237,7 @@ Envío sin duplicados (marca `[kiju:]` + índice único); copia local del Bloc y
 - **Quién ficha:** personas con ficha activa y Telegram vinculado; quien lleva las operaciones (dueño del token de ClickUp) no ficha.
 - **Automatización `jornada`** (panel): **apagada por defecto** (`defaultEnabled: false`), para activarla tras explicar el sistema al equipo.
 - **Correcciones** (pestaña Jornada, solo `admin`): anular (con motivo) y añadir registros; acciones `voidWorkEventAction` y `addWorkEventAction` (`lib/operaciones/jornada-actions.ts`).
+- **Plan de pruebas y guía:** `docs/PRUEBAS-JORNADA.md` (circuito completo en ~20 min con modo pruebas: cierre automático desde 5 min y horas por día en pasos de 0,05 h; en modo pruebas el correo de reintento va al dueño) y `docs/GUIA-EQUIPO-JORNADA.md` (explicación para el equipo). Enviados por correo a Enric el 12 nov.
 - **Pruebas:** `tests/jornada.test.ts` (cálculo del día, transiciones, horas locales, minutos reales, botones y una integración con la base de datos) y permisos en `tests/seguridad.test.ts`.
 
 ## 7. Panel de Automatizaciones: todos los valores
