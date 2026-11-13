@@ -3,7 +3,7 @@
 Lista viva de lo que solo puede hacer Enric (accesos, decisiones, el equipo). Claude la actualiza al terminar cada bloque.
 Detalle paso a paso de la activación en `docs/PRUEBAS-EN-VIVO.md`.
 
-**Última actualización:** 13 nov 2026, de madrugada. En producción: `main` `0850e320` (autonomía e informes), sin migraciones nuevas.
+**Última actualización:** 13 nov 2026, de madrugada. En producción: `main` `9cc5e08d` (autonomía e informes + fichas desde el historial), sin migraciones nuevas.
 
 ## Viernes 13 — antes de activar al equipo (unos 45 min)
 - [ ] **Revisar con tu cuenta de admin** lo que Claude no puede ver (no hay usuario de pruebas en producción):
@@ -47,9 +47,17 @@ Detalle paso a paso de la activación en `docs/PRUEBAS-EN-VIVO.md`.
 - [ ] Encender **Tiempos de tarea** (Automatizaciones) y, si puedes, poner los márgenes en Equipo → Tiempos.
 - [ ] Si llega la propuesta de subir la autonomía del agente, decidir con el botón.
 
+## Vigía de IA (cuando puedas)
+- [x] **Los 80 $/mes son solo de la API** (confirmado el 13 nov): el informe de costes de Anthropic los cubriría.
+- [ ] **Clave de administración de Anthropic** (opcional): en tu consola no aparece «Admin keys». Según la documentación, una cuenta
+  individual tiene que crear antes una organización en `platform.claude.com/settings/organization`. Después, en Settings → Admin keys,
+  crear una y pegarla en Sistema → Gasto de IA. Mientras tanto el vigía usa el coste estimado de cada llamada de la herramienta, que
+  es lo mismo si la clave de la API solo la usa la herramienta (no cuenta la caché de prompt ni la búsqueda web).
+- [ ] **IA de reserva:** para que funcione hace falta una segunda clave con saldo de otro proveedor (OpenAI, Gemini o DeepSeek) en IA
+  y modelos. La de Gemini no tiene créditos.
+
 ## Decisiones que esperan tu aprobación (Claude no las hace sin tu OK)
-- [ ] **Reasignar desde el parte con un botón:** necesita una migración pequeña (añadir la acción «reasignar» a la bandeja de
-  salida hacia ClickUp).
-- [ ] **IA de reserva:** si falla el proveedor principal, usar otro. Toca la pasarela de IA del núcleo (`lib/ai/gateway.ts`).
+- [x] **Reasignar desde el parte con un botón:** aprobada (migración 0046). Se despliega con `--migrate`.
+- [x] **IA de reserva:** aprobada y construida (falta la segunda clave, ver arriba).
 - [ ] **5C: temporadas, niveles y misiones.** El diseño está aprobado; falta aprobar su esquema de base de datos. Mejor después de
   1–2 semanas de jornada real.

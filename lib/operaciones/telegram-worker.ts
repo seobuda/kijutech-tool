@@ -28,6 +28,7 @@ import { runJornada } from '@/lib/operaciones/jornada-worker';
 import { runOwnerSla } from '@/lib/operaciones/owner-queue';
 import { runReports } from '@/lib/operaciones/reports';
 import { runAutopilot } from '@/lib/operaciones/autopilot';
+import { runAiWatch } from '@/lib/operaciones/ai-watch';
 
 const LOCK_KEY = 74200126; // identifica "oyente de Telegram de Kijutech"
 const POLL_TIMEOUT_S = 50;
@@ -242,6 +243,7 @@ async function schedulerLoop(state: WorkerState) {
         await step('plazos del dueño', () => runOwnerSla(t)); // lo que espera de Enric y pasó su plazo: un recordatorio
         await step('informes', () => runReports(t)); // parte de la mañana, semanal y aviso mensual
         await step('piloto automático', () => runAutopilot(t)); // limpieza semanal y autonomía del agente
+        await step('vigía de IA', () => runAiWatch(t)); // cada 15 min: picos, previsión y umbrales del presupuesto de IA
         await step('actividad de clientes', () => runActivityDaily(t)); // una vez al día, de madrugada
       }
     } catch (e) {

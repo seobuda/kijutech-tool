@@ -561,6 +561,11 @@ export async function updateTaskDue(token: string, taskId: string, ymd: string):
   await cuPut(token, `/task/${taskId}`, { due_date: madridNoonMs(ymd), due_date_time: false });
 }
 
+// Cambia el responsable: añade a la persona nueva y quita a las anteriores indicadas.
+export async function updateTaskAssignees(token: string, taskId: string, add: string[], rem: string[]): Promise<void> {
+  await cuPut(token, `/task/${taskId}`, { assignees: { add: add.map(Number), rem: rem.map(Number) } });
+}
+
 export async function addTaskComment(token: string, taskId: string, text: string): Promise<void> {
   await cuSend(token, `/task/${taskId}/comment`, { comment_text: text, notify_all: false });
 }

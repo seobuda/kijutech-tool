@@ -125,8 +125,30 @@ export async function getModelPricing(provider: string, model: string) {
     .orderBy(desc(aiModelPricing.effectiveFrom))
     .limit(1);
 
-  return rows[0] ?? null;
+  if (rows[0]) return rows[0];
+  // Sin fila en la tabla (p. ej. una instalación nueva): precio oficial de respaldo para no registrar el coste vacío,
+  // que dejaría al vigía de gasto en 0 $. La tabla editable siempre manda sobre esto.
+  // La API puede devolver el modelo con sufijo de fecha: se acepta por prefijo (el más largo).
+  const key = `${provider}/${model}`;
+  const fbKey = FALLBACK_PRICING[key] ? key : Object.keys(FALLBACK_PRICING).filter((k) => key.startsWith(`${k}-`)).sort((a, b) => b.length - a.length)[0];
+  const fb = fbKey ? FALLBACK_PRICING[fbKey] : undefined;
+  return fb ? { provider, model, inputCostPer1k: fb[0], outputCostPer1k: fb[1], fallback: true as const } : null;
 }
+
+// Precios de lista por 1.000 tokens (USD), de la tabla oficial de Anthropic a 3 nov 2026 (entrada, salida).
+// Solo se usan si ai_model_pricing no tiene el modelo.
+export const FALLBACK_PRICING: Record<string, [string, string]> = {
+  'anthropic/claude-sonnet-4-6': ['0.003', '0.015'],
+  'anthropic/claude-sonnet-5': ['0.002', '0.010'],
+  'anthropic/claude-sonnet-5-5': ['0.002', '0.010'],
+  'anthropic/claude-opus-4-6': ['0.005', '0.025'],
+  'anthropic/claude-opus-4-7': ['0.005', '0.025'],
+  'anthropic/claude-opus-4-8': ['0.005', '0.025'],
+  'anthropic/claude-opus-5': ['0.005', '0.025'],
+  'anthropic/claude-opus-5-5': ['0.004', '0.020'],
+  'anthropic/claude-haiku-4-5': ['0.001', '0.005'],
+  'anthropic/claude-haiku-5-5': ['0.0001', '0.0005']
+};
 
 export function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -259,8 +281,37 @@ export async function callAI(
     })
     .returning();
 
+  const finish = async (
+    response: AIResponse,
+    keyMode: string,
+    fallback: { from: string; reason: string } | null
+  ) => {
+    const pricing = await getModelPricing(response.provider, response.model);
+    const estimatedCost = pricing
+      ? (response.input_tokens / 1000) * Number(pricing.inputCostPer1k) +
+        (response.output_tokens / 1000) * Number(pricing.outputCostPer1k)
+      : null;
+    await db
+      .update(aiJobs)
+      .set({
+        status: 'completed',
+        output: fallback ? { content: response.content, fallback } : { content: response.content },
+        provider: response.provider,
+        model: response.model,
+        keyModeUsed: keyMode,
+        inputTokens: response.input_tokens,
+        outputTokens: response.output_tokens,
+        estimatedCost: estimatedCost !== null ? estimatedCost.toFixed(6) : null,
+        completedAt: new Date(),
+      })
+      .where(eq(aiJobs.id, job.id));
+    return { ...response, jobId: job.id };
+  };
+
+  let primary: { provider: string; model: string } | null = null;
   try {
     const setting = await resolveActiveProvider(tenantId, preferredProvider);
+    primary = { provider: setting.provider, model: setting.model };
 
     const adapter = ADAPTERS[setting.provider];
     if (!adapter) {
@@ -271,31 +322,33 @@ export async function callAI(
       adapter.sendMessage(messages, setting.model, setting.apiKey, maxTokens),
       CALL_TIMEOUT_MS
     );
-
-    const pricing = await getModelPricing(response.provider, response.model);
-    const estimatedCost = pricing
-      ? (response.input_tokens / 1000) * Number(pricing.inputCostPer1k) +
-        (response.output_tokens / 1000) * Number(pricing.outputCostPer1k)
-      : null;
-
-    await db
-      .update(aiJobs)
-      .set({
-        status: 'completed',
-        output: { content: response.content },
-        provider: response.provider,
-        model: response.model,
-        keyModeUsed: setting.keyMode,
-        inputTokens: response.input_tokens,
-        outputTokens: response.output_tokens,
-        estimatedCost: estimatedCost !== null ? estimatedCost.toFixed(6) : null,
-        completedAt: new Date(),
-      })
-      .where(eq(aiJobs.id, job.id));
-
-    return { ...response, jobId: job.id };
+    return await finish(response, setting.keyMode, null);
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Error desconocido';
+    let message = error instanceof Error ? error.message : 'Error desconocido';
+
+    // IA de reserva (13 nov 2026): si el fallo es del proveedor (caído, saturado, sin saldo, clave rechazada,
+    // modelo retirado, tiempo agotado) y hay otra clave activa de OTRO proveedor, se reintenta una vez con ella.
+    // Queda anotado en el job (output.fallback) para que el vigía de gasto lo cuente y avise.
+    if (primary && shouldFallback(message)) {
+      try {
+        const alt = await resolveFallbackProvider(tenantId, primary.provider);
+        if (alt) {
+          const altAdapter = ADAPTERS[alt.provider];
+          if (altAdapter) {
+            const response = await withTimeout(
+              altAdapter.sendMessage(messages, alt.model, alt.apiKey, maxTokens),
+              CALL_TIMEOUT_MS
+            );
+            return await finish(response, alt.keyMode, {
+              from: `${primary.provider}/${primary.model}`,
+              reason: message.slice(0, 300),
+            });
+          }
+        }
+      } catch (fallbackError) {
+        message = `${message} · Reserva: ${fallbackError instanceof Error ? fallbackError.message : 'error desconocido'}`;
+      }
+    }
 
     await db
       .update(aiJobs)
@@ -308,4 +361,53 @@ export async function callAI(
 
     throw error;
   }
+}
+
+/**
+ * ¿El fallo es del proveedor y merece probar la reserva? Sí: caído o saturado (5xx, 529), límite (429), clave
+ * rechazada (401/403), modelo retirado (404), sin saldo (400 con «credit/balance/billing»), tiempo agotado o red.
+ * No: una petición mal formada (400 normal), que fallaría igual con otro proveedor.
+ */
+export function shouldFallback(message: string): boolean {
+  const m = message.match(/\((\d{3})\)/);
+  if (m) {
+    const status = Number(m[1]);
+    if ([401, 403, 404, 408, 429, 500, 502, 503, 504, 529].includes(status)) return true;
+    if (status === 400) return /credit|balance|billing|quota|saldo/i.test(message);
+    return false;
+  }
+  return /timeout|superó el timeout|fetch failed|ECONNRESET|ETIMEDOUT|ENOTFOUND|socket hang up/i.test(message);
+}
+
+/** Otra clave activa de un proveedor distinto (respetando el modo de claves del tenant), o null. */
+export async function resolveFallbackProvider(
+  tenantId: string,
+  excludeProvider: string
+): Promise<{ provider: string; model: string; apiKey: string; keyMode: string } | null> {
+  const [tenant] = await db
+    .select({ aiKeyModeAllowed: tenants.aiKeyModeAllowed })
+    .from(tenants)
+    .where(eq(tenants.id, tenantId))
+    .limit(1);
+  if (!tenant) return null;
+  const modes: ('platform' | 'byok')[] =
+    tenant.aiKeyModeAllowed === 'byok_required' ? ['byok'] : tenant.aiKeyModeAllowed === 'byok_allowed' ? ['byok', 'platform'] : ['platform'];
+  for (const keyMode of modes) {
+    const rows = await db
+      .select()
+      .from(aiProviderSettings)
+      .where(
+        and(
+          eq(aiProviderSettings.keyMode, keyMode),
+          eq(aiProviderSettings.isActive, true),
+          ...(keyMode === 'byok' ? [eq(aiProviderSettings.tenantId, tenantId)] : [])
+        )
+      )
+      .orderBy(desc(aiProviderSettings.isDefault));
+    const alt = rows.find((r) => r.provider !== excludeProvider && r.apiKeyEncrypted && r.apiKeyIv && ADAPTERS[r.provider]);
+    if (alt) {
+      return { provider: alt.provider, model: alt.model, apiKey: decrypt(alt.apiKeyEncrypted!, alt.apiKeyIv!), keyMode };
+    }
+  }
+  return null;
 }

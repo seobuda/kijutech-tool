@@ -8,7 +8,7 @@ import { sql } from 'drizzle-orm';
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { opsClickupOutbox } from '@/lib/db/schema';
-import { addTaskComment, updateTaskDue, updateTaskStatus } from '@/lib/operaciones/clickup';
+import { addTaskComment, updateTaskAssignees, updateTaskDue, updateTaskStatus } from '@/lib/operaciones/clickup';
 import { getClickUpToken } from '@/lib/operaciones/queries';
 
 const MAX_ATTEMPTS = 6;
@@ -17,12 +17,13 @@ const LEASE_SECONDS = 90;
 export type OutboxPayload =
   | { taskId: string; status: string } // set_status
   | { taskId: string; text: string } // comment
-  | { taskId: string; dueYmd: string }; // set_due (YYYY-MM-DD)
+  | { taskId: string; dueYmd: string } // set_due (YYYY-MM-DD)
+  | { taskId: string; add: string[]; rem: string[] }; // set_assignee (ids de miembros de ClickUp)
 
 export async function enqueueOutbox(input: {
   tenantId: string;
   requestId?: string | null; // null en acciones sin encargo (limpieza de vencidas)
-  action: 'set_status' | 'comment' | 'set_due';
+  action: 'set_status' | 'comment' | 'set_due' | 'set_assignee';
   payload: OutboxPayload;
   dedupeKey: string;
 }): Promise<void> {
@@ -42,7 +43,7 @@ export async function enqueueOutbox(input: {
 type Claimed = {
   id: string;
   tenant_id: string;
-  action: 'set_status' | 'comment' | 'set_due';
+  action: 'set_status' | 'comment' | 'set_due' | 'set_assignee';
   payload: OutboxPayload;
   attempts: number;
 };
@@ -115,6 +116,9 @@ async function sendOne(c: Claimed) {
     } else if (c.action === 'set_due') {
       const p = c.payload as { taskId: string; dueYmd: string };
       await updateTaskDue(conn.token, p.taskId, p.dueYmd);
+    } else if (c.action === 'set_assignee') {
+      const p = c.payload as { taskId: string; add: string[]; rem: string[] };
+      await updateTaskAssignees(conn.token, p.taskId, p.add, p.rem);
     } else {
       const p = c.payload as { taskId: string; text: string };
       await addTaskComment(conn.token, p.taskId, p.text);

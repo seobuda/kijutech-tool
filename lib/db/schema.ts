@@ -1378,7 +1378,7 @@ export const opsClickupOutbox = pgTable(
     unique('ops_clickup_outbox_tenant_dedupe_unique').on(table.tenantId, table.dedupeKey),
     index('ops_outbox_status_idx').on(table.status, table.nextAttemptAt),
     check('ops_outbox_status_check', sql`${table.status} IN ('pendiente', 'hecho', 'fallido')`),
-    check('ops_outbox_action_check', sql`${table.action} IN ('set_status', 'comment', 'set_due')`),
+    check('ops_outbox_action_check', sql`${table.action} IN ('set_status', 'comment', 'set_due', 'set_assignee')`),
   ]
 );
 

@@ -21,7 +21,7 @@ import { escapeHtml, type TgCallbackQuery } from '@/lib/operaciones/telegram';
 import { getOwnerMember } from '@/lib/operaciones/telegram-config';
 
 const TZ = 'Europe/Madrid';
-export const AUTOPILOT_CALLBACK_RE = /^ap:(due|up):([\w-]{1,40})$/;
+export const AUTOPILOT_CALLBACK_RE = /^ap:(due|up|as):([\w-]{1,40})(?::(\d{1,20}):(\d{1,20}))?$/;
 export const DEMOTE_MIN_DECIDED = 10;
 export const DEMOTE_BELOW = 0.8;
 
@@ -175,6 +175,17 @@ export async function handleAutopilotCallback(
   }
 
   const kind = m[2];
+  if (m[1] === 'as') {
+    // «👤 A …» del parte: reasigna en ClickUp por la bandeja de salida; la vigilancia ve el cambio y avisa a la nueva persona.
+    const [, , taskId, to, from] = m;
+    if (!to || !from) return void (await answer());
+    const { getStructure } = await import('@/lib/operaciones/structure');
+    const member = (await getStructure(tenantId)).members.find((x) => x.id === to);
+    if (!member) return void (await answer('Esa persona ya no está en ClickUp.', true));
+    await enqueueOutbox({ tenantId, action: 'set_assignee', payload: { taskId, add: [to], rem: [from] }, dedupeKey: `ap:as:${taskId}:${to}:${todayIn(TZ)}` });
+    await logEvent(tenantId, { actor, type: 'autonomia', payload: { kind: 'reasignar', taskId, to, from } });
+    return void (await answer(`👤 Reasignada a ${member.username} en ClickUp; el bot le avisará.`));
+  }
   if (!isAgentKind(kind) || !AGENT_KINDS[kind as AgentKind].allowed.includes('autonomo')) return void (await answer('Ese tipo no admite autonomía.', true));
   await setAutonomy(tenantId, kind as AgentKind, 'autonomo');
   await logEvent(tenantId, { actor, type: 'autonomia', payload: { kind, from: 'aprobacion', to: 'autonomo', via: 'telegram' } });

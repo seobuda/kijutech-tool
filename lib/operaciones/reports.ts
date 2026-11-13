@@ -161,13 +161,15 @@ export async function buildMorningBrief(tenantId: string, now = new Date()): Pro
     for (const task of due.slice(0, 6)) {
       falling.push(`   – <a href="${task.url.replace(/"/g, '%22')}">${escapeHtml(task.name.slice(0, 70))}</a>`);
       if (auto.enabled && auto.cfg.absenceReassign && buttons.length < 6) {
-        buttons.push([{ text: `📅 Mañana · ${task.name.slice(0, 22)}`, data: `ap:due:${task.id}` }]);
+        const row = [{ text: `📅 Mañana · ${task.name.slice(0, 18)}`, data: `ap:due:${task.id}` }];
+        if (cover) row.push({ text: `👤 A ${cover.name.split(' ')[0].slice(0, 12)}`, data: `ap:as:${task.id}:${cover.id}:${o.u}` });
+        buttons.push(row);
       }
     }
   }
   if (falling.length) {
     sections.push(
-      `⚠️ <b>Se cae hoy</b>\n${falling.join('\n')}\n<i>Para pasarla a otra persona, cámbiala de responsable en ClickUp: el bot avisa a la nueva solo.</i>`
+      `⚠️ <b>Se cae hoy</b>\n${falling.join('\n')}\n<i>«👤 A…» la reasigna en ClickUp y el bot avisa a la nueva persona; «📅 Mañana» la mueve al siguiente día laborable.</i>`
     );
   }
 
@@ -230,6 +232,7 @@ export type WeeklyReport = {
   clients: { inactive: number; unplanned: number; emailsIn: number; emailsAnswered: number };
   agent: { label: string; autonomy: string; decided: number; hitRate: number | null; auto: number; recommendation: string | null }[];
   system: { incidents: { title: string; severity: string; minutes: number | null }[]; downMin: number; aiUsd: number; clickupRequests: number };
+  ai: { spentMonth: number; forecast: number; budget: number; account: boolean; topRecommendation: string | null } | null;
   pending: { count: number; oldest: string | null };
 };
 
@@ -394,8 +397,29 @@ export async function buildWeeklyReport(tenantId: string, monday: string): Promi
       aiUsd: Math.round(n(sys?.ai) * 100) / 100,
       clickupRequests: n(sys?.cu)
     },
+    ai: await aiLine(tenantId),
     pending: { count: inbox.length + emails.length, oldest: oldest ? waitLabel(oldest) : null }
   };
+}
+
+/** Línea del vigía de IA para el semanal (con la cuenta conectada usa su coste real, de la caché de 1 h). */
+async function aiLine(tenantId: string): Promise<WeeklyReport['ai']> {
+  try {
+    const { getAiOverview } = await import('@/lib/operaciones/ai-watch');
+    const o = await getAiOverview(tenantId);
+    const account = o.org.connected && !o.org.error;
+    const rec = o.recommendations.find((r) => r.savingUsdMonth) ?? o.recommendations[0];
+    return {
+      spentMonth: o.org.connected && !o.org.error ? o.org.mtdUsd : o.mtd,
+      forecast: o.forecast,
+      budget: o.settings.monthly,
+      account,
+      topRecommendation: rec ? `${rec.title}${rec.savingUsdMonth ? ` (≈ ${rec.savingUsdMonth.toFixed(2)} $/mes)` : ''}` : null
+    };
+  } catch (e) {
+    console.error('[informes] vigía de IA:', e instanceof Error ? e.message : e);
+    return null;
+  }
 }
 
 /** Texto de Telegram del informe semanal (corto: el detalle está en la web). */
@@ -431,6 +455,10 @@ export function weeklyText(r: WeeklyReport, link: string | null): string {
   lines.push(
     `• ${r.system.incidents.length ? `${r.system.incidents.length} incidencia(s)` : 'Sin incidencias'}${r.system.downMin ? ` · ${fmtDuration(r.system.downMin)} parado` : ''} · IA ${r.system.aiUsd.toFixed(2)} $ · ClickUp ${r.system.clickupRequests} peticiones`
   );
+  if (r.ai) {
+    lines.push(`• IA este mes: ${r.ai.spentMonth.toFixed(2)} $${r.ai.account ? ' (toda la cuenta)' : ''} · previsión ${r.ai.forecast.toFixed(2)} $ de ${r.ai.budget.toFixed(0)} $${r.ai.forecast > r.ai.budget ? ' ⚠️' : ''}`);
+    if (r.ai.topRecommendation) lines.push(`   💡 ${escapeHtml(r.ai.topRecommendation)}`);
+  }
   lines.push('', r.pending.count ? `🙋 <b>Te esperan ${r.pending.count}</b> (lo más antiguo, ${r.pending.oldest}).` : '🙋 Nada esperando tu decisión.');
   if (link) lines.push('', `<a href="${link}">Ver el informe completo</a>`);
   return clampMessage(lines.join('\n'));

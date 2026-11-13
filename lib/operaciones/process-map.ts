@@ -982,6 +982,20 @@ const OPS_AUTONOMIA: ProcessStep[] = [
     settings: [{ automation: 'autopilot' }, { automation: 'cleanup', fields: ['maxTasks'] }],
     runs: ['runAutopilot'],
   },
+  {
+    id: 'ops-au-aiwatch',
+    lane: 'Vigía de IA',
+    name: 'Gasto de IA: previsión, picos y recomendaciones',
+    description: 'Sistema → Gasto de IA: presupuesto mensual y previsión de fin de mes, gasto por día y por función, picos con su porqué, recomendaciones de ahorro y, con la clave de administración de Anthropic, el coste real de toda la cuenta (también Claude Code). La pasarela de IA prueba otro proveedor si el principal falla (IA de reserva) y queda anotado.',
+    status: 'built',
+    file: 'lib/operaciones/ai-watch.ts',
+    when: 'Cada 15 min desde el planificador (avisos de 8:00 a 21:00); la pantalla, al abrirla; el informe de Anthropic se refresca cada hora.',
+    ai: 'Nada: reglas y cuentas sobre el registro de llamadas (ai_jobs).',
+    code: 'Previsión = gastado + ritmo de los últimos 7 días × días que quedan. Pico = hoy ≥ N× la mediana de 14 días (y ≥ 0,30 $), explicado por llamadas, tokens por llamada, fallos y reserva. Recomendaciones: caché de prompt (entrada grande y repetida), modelo pequeño (respuestas cortas con modelo grande), fallos, reserva y gasto fuera de la herramienta. Avisos: 50/80/100 % del presupuesto, previsión por encima (semanal) y picos (uno por función y día). No hay endpoint de saldo en Anthropic.',
+    tables: ['ops_settings', 'ops_notifications'],
+    settings: [{ automation: 'ai_budget' }],
+    runs: ['runAiWatch'],
+  },
 ];
 
 const OPS_TIEMPOS: ProcessStep[] = [
