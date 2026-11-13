@@ -34,7 +34,7 @@ export function systemPrompt(agent: AgtAgent, ctx: ToolContext, opts: { summary?
       : ctx.channel === 'email'
         ? 'Respondes por correo: texto plano, sin HTML ni Markdown, con saludo breve y firma «— Operations manager de Kijutech».'
         : ctx.channel === 'job'
-          ? 'Trabajas en segundo plano y tu respuesta final es el INFORME que se entregará: completo, ordenado y sin preguntas (no hay nadie para contestarlas). Formato: texto plano con títulos en MAYÚSCULAS y guiones.'
+          ? 'Trabajas en segundo plano y tu respuesta final es el INFORME que se entregará: completo, ordenado y sin preguntas (no hay nadie para contestarlas). Empieza directamente por el informe, sin frases previas del tipo «ya tengo los datos». Formato: texto plano con títulos en MAYÚSCULAS y guiones.'
           : 'Respondes en texto breve.';
   return [
     `Eres «${agent.name}». ${agent.role}`,
@@ -49,6 +49,19 @@ export function systemPrompt(agent: AgtAgent, ctx: ToolContext, opts: { summary?
   ]
     .filter(Boolean)
     .join('\n');
+}
+
+/** Ajusta el formato al canal: Telegram usa HTML (el Markdown se vería tal cual); correo e informes, texto plano. */
+export function tidyForChannel(text: string, channel: ToolContext['channel']): string {
+  let t = text.replace(/^\s*---+\s*$/gm, '').replace(/\n{3,}/g, '\n\n').trim();
+  // Primera línea de «pensar en voz alta» (p. ej. «Tengo todo lo que necesito. Redacto el informe.»): fuera.
+  t = t.replace(/^(?:ya )?(?:tengo|datos suficientes|perfecto|vale|bien|procedo|redacto|con esto)[^\n]{0,100}\n+/i, '');
+  if (channel === 'telegram' || channel === 'web') {
+    t = t.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/(^|\s)\*(\S[^*]*?)\*(?=\s|$)/g, '$1<i>$2</i>').replace(/^#{1,6}\s+(.+)$/gm, '<b>$1</b>').replace(/`([^`]+)`/g, '$1');
+  } else {
+    t = t.replace(/\*\*(.+?)\*\*/g, '$1').replace(/^#{1,6}\s+/gm, '').replace(/`([^`]+)`/g, '$1').replace(/<\/?(b|i|u|code)>/g, '');
+  }
+  return t;
 }
 
 /** Historial válido para la API: empieza por el usuario y alterna (los consecutivos del mismo rol se unen). */
@@ -121,10 +134,15 @@ export async function runAgent(params: {
   const messages = toMessages(params.history ?? [], params.userText);
   const pricing = await getModelPricing('anthropic', model);
   const addUsage = (u: { input_tokens: number; output_tokens: number; cache_read_input_tokens?: number | null; cache_creation_input_tokens?: number | null }) => {
-    const input = u.input_tokens + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
-    run.inputTokens += input;
+    const read = u.cache_read_input_tokens ?? 0;
+    const write = u.cache_creation_input_tokens ?? 0;
+    run.inputTokens += u.input_tokens + read + write;
     run.outputTokens += u.output_tokens;
-    if (pricing) run.costUsd += (input / 1000) * Number(pricing.inputCostPer1k) + (u.output_tokens / 1000) * Number(pricing.outputCostPer1k);
+    // Caché de prompt: leer cuesta ~10 % del precio de entrada y escribir ~125 % (precios de lista de Anthropic).
+    if (pricing) {
+      const p = Number(pricing.inputCostPer1k) / 1000;
+      run.costUsd += u.input_tokens * p + read * p * 0.1 + write * p * 1.25 + (u.output_tokens / 1000) * Number(pricing.outputCostPer1k);
+    }
   };
 
   try {
@@ -132,16 +150,27 @@ export async function runAgent(params: {
       const response = await client.messages.create({
         model,
         max_tokens: params.maxTokens ?? 4096,
+        // Caché de prompt: instrucciones + herramientas se repiten en cada vuelta y en cada mensaje (~10 % del coste al leerlas).
+        cache_control: { type: 'ephemeral' },
         system,
         tools: tools.length ? tools : undefined,
         messages
       });
       addUsage(response.usage);
-      const text = response.content
-        .filter((b): b is Anthropic.TextBlock => b.type === 'text')
-        .map((b) => b.text)
-        .join('\n')
-        .trim();
+      // Solo el texto posterior al último uso de herramientas del servidor (lectura web): lo de antes es «pensar en voz alta».
+      let lastToolIdx = -1;
+      response.content.forEach((b, idx) => {
+        if (b.type !== 'text') lastToolIdx = idx;
+      });
+      const tail = lastToolIdx >= 0 ? response.content.slice(lastToolIdx + 1) : response.content;
+      const text = tidyForChannel(
+        (tail.some((b) => b.type === 'text') ? tail : response.content)
+          .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+          .map((b) => b.text)
+          .join('\n')
+          .trim(),
+        ctx.channel
+      );
       if (response.stop_reason === 'pause_turn') {
         messages.push({ role: 'assistant', content: response.content });
         continue;

@@ -222,3 +222,19 @@ describe('agentes con la base de datos', () => {
     expect(before.length).toBeGreaterThanOrEqual(2);
   });
 });
+
+describe('formato por canal', () => {
+  it('Markdown → HTML en Telegram y texto plano en informes', async () => {
+    const { tidyForChannel } = await import('@/lib/agentes/engine');
+    expect(tidyForChannel('**Hola** y `código`\n## Título', 'telegram')).toBe('<b>Hola</b> y código\n<b>Título</b>');
+    expect(tidyForChannel('**Hola**\n---\n## Título', 'job')).toBe('Hola\n\nTítulo');
+  });
+});
+
+describe('limpieza del informe', () => {
+  it('quita la frase previa de «pensar en voz alta»', async () => {
+    const { tidyForChannel } = await import('@/lib/agentes/engine');
+    expect(tidyForChannel('Tengo todo lo que necesito. Redacto el informe.\n\nINFORME\nTexto', 'job')).toBe('INFORME\nTexto');
+    expect(tidyForChannel('INFORME\nTengo dudas sobre el H1', 'job')).toBe('INFORME\nTengo dudas sobre el H1');
+  });
+});
