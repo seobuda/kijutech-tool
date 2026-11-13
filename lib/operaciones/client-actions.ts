@@ -23,6 +23,7 @@ import { canManageProfiles } from '@/lib/operaciones/team-profiles';
 import { getLevels, getServices, requestCountsByOption } from '@/lib/operaciones/clients';
 import { getMonthWork, runActivityNow, type MonthWorkItem } from '@/lib/operaciones/client-activity';
 import { publicError } from '@/lib/errors';
+import { SECRET_RE } from '@/lib/operaciones/client-write';
 
 type Ok<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 
@@ -63,8 +64,7 @@ export type ClientInput = {
   services: { key: string; responsibleClickupId: string }[];
 };
 
-// Las herramientas no pueden llevar contraseñas (decisión del usuario): se rechaza algo que lo parezca.
-const SECRET_RE = /(contrase[ñn]a|password|passwd|pwd|clave de acceso)\s*[:=]/i;
+// Las herramientas no pueden llevar contraseñas (decisión del usuario): se rechaza algo que lo parezca (SECRET_RE, compartido con el agente).
 
 type StructureLike = Awaited<ReturnType<typeof getStructure>>;
 
