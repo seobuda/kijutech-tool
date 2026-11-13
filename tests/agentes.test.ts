@@ -238,3 +238,9 @@ describe('limpieza del informe', () => {
     expect(tidyForChannel('INFORME\nTengo dudas sobre el H1', 'job')).toBe('INFORME\nTengo dudas sobre el H1');
   });
 });
+
+describe('texto hablado', () => {
+  it('sin emojis, viñetas ni guiones largos', () => {
+    expect(speakableText('Resumen 😄\n\n— <b>Enric</b>: 2 tareas ⚠️\n— Eury: todo al día ✅')).toBe('Resumen. Enric: 2 tareas. Eury: todo al día');
+  });
+});

@@ -293,6 +293,7 @@ Envío sin duplicados (marca `[kiju:]` + índice único); copia local del Bloc y
   - Transcripción con `gpt-transcribe` en español (reserva: `gpt-4o-mini-transcribe`).
   - Voz con `gpt-4o-mini-tts` (voz `marin`, OGG/Opus para nota de voz; se retira en enero de 2027, configurable con `AGT_TTS_MODEL`).
   - Coste aproximado en `ai_jobs`.
+- **Panel de voz** (Agentes → Voz, 13 nov tarde): modelo de voz, voz por defecto, velocidad, tono (instrucciones, con tres estilos de partida) y modelos de transcripción, con **prueba en el navegador** (MP3). Se guarda como la integración «voz» en `agt_integrations` (servicio externo; sin tabla nueva). El agente sabe cuándo su respuesta se va a escuchar (aviso en el turno, sin romper la caché) y escribe para ser escuchado; el texto hablado quita emojis, viñetas y guiones. La descarga del audio de Telegram reintenta 3 veces y enseña el motivo si falla.
 - **Acciones con aprobación:** las herramientas de cambio pasan por el motor de acciones (tipo `agent_tool`) con **autonomía por herramienta** (`agent_autonomy:tool:<nombre>`, pantalla Agentes).
   - Herramientas: crear encargo con la conversión del Bloc y el envío fiable, reasignar, mover fecha, comentar y apuntar ausencias.
   - Botones `at:ok`/`at:no`, solo el dueño.

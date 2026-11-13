@@ -12,7 +12,7 @@ export const AGENTES_PROCESS_MAP: ProcessStep[] = [
     file: 'lib/agentes/inbound.ts',
     when: 'Cada mensaje libre o audio del dueño en Telegram (sin nada pendiente del bot) y cada correo autenticado del dueño.',
     ai: 'La transcripción del audio (OpenAI) y la respuesta del agente (Claude).',
-    code: 'Solo el dueño (fase 1). Un mensaje cada vez por conversación. Audio: se descarga de Telegram y se transcribe en español; si le hablas en audio (o pides «respóndeme en audio»), además de texto contesta con nota de voz. Correo: solo remitente autenticado (SPF/DKIM/DMARC) y que sea el dueño.',
+    code: 'Solo el dueño (fase 1). Un mensaje cada vez por conversación. Audio: se descarga de Telegram (3 intentos) y se transcribe en español; si le hablas en audio (o pides «respóndeme en audio»), el agente lo sabe, escribe para ser escuchado y contesta también con nota de voz. Voz configurable en Agentes → Voz (modelo, voz, velocidad, tono, transcripción; integración «voz» en agt_integrations) con prueba en el navegador. Correo: solo remitente autenticado (SPF/DKIM/DMARC) y que sea el dueño.',
     tables: ['agt_conversations', 'agt_messages', 'agt_agents']
   },
   {

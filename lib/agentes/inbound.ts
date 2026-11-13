@@ -58,7 +58,12 @@ async function converse(m: InboundMessage, agent: NonNullable<Awaited<ReturnType
 
   const ctx: ToolContext = { tenantId: m.tenantId, agentKey: agent.key, channel: m.channel, conversationId: conv.id, actor: { name: m.peerName, isOwner: true, clickupUserId: m.clickupUserId } };
   if (tgOut) await tgOut.sendTyping(m.tenantId, m.peer, 'typing');
-  const run = await runAgent({ tenantId: m.tenantId, agent, ctx, userText: text, history, summary: conv.summary });
+  // Si la respuesta se va a escuchar, el agente lo sabe (va en el turno, no en las instrucciones fijas: así no rompe la caché).
+  const wantsVoice = m.channel === 'telegram' && (Boolean(m.audio) || VOICE_REQUEST_RE.test(text));
+  const userText = wantsVoice
+    ? `${text}\n\n[Nota del sistema: tu respuesta se enviará por escrito y también como nota de voz. Escribe como hablarías: frases naturales y cortas, sin emojis, sin listas largas ni símbolos; si hay datos, los esenciales.]`
+    : text;
+  const run = await runAgent({ tenantId: m.tenantId, agent, ctx, userText, history, summary: conv.summary });
   await addMessage({ tenantId: m.tenantId, conversationId: conv.id, role: 'assistant', content: run.text, toolCalls: run.toolCalls.length ? run.toolCalls : null, costUsd: run.costUsd });
 
   if (m.channel === 'email') {
@@ -69,7 +74,7 @@ async function converse(m: InboundMessage, agent: NonNullable<Awaited<ReturnType
   } else if (tgOut) {
     const heard = transcript ? `<i>🎙 «${escape(transcript.length > 220 ? `${transcript.slice(0, 220)}…` : transcript)}»</i>\n\n` : '';
     await tgOut.sendText(m.tenantId, m.peer, `${heard}${run.text}`);
-    if ((m.audio || VOICE_REQUEST_RE.test(text)) && !run.error) {
+    if (wantsVoice && !run.error) {
       await tgOut.sendTyping(m.tenantId, m.peer, 'record_voice');
       const v = await speak(m.tenantId, speakableText(run.text), agent.voice);
       if (v.ok) await tgOut.sendVoice(m.tenantId, m.peer, v.ogg);

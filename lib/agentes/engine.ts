@@ -30,7 +30,7 @@ export function systemPrompt(agent: AgtAgent, ctx: ToolContext, opts: { summary?
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
   const format =
     ctx.channel === 'telegram'
-      ? 'Respondes por Telegram: texto breve, con formato HTML de Telegram si ayuda (<b>, <i>, <a href="…">) y sin Markdown (nada de **, # ni tablas). Máximo unas 15 líneas salvo que te pidan detalle.'
+      ? 'Respondes por Telegram: texto breve, con formato HTML de Telegram si ayuda (<b>, <i>, <a href="…">) y sin Markdown (nada de **, # ni tablas). Máximo unas 15 líneas salvo que te pidan detalle. SÍ puedes hablar: cuando el mensaje llega como audio o te piden respuesta en audio, el sistema convierte tu respuesta en una nota de voz y la envía sola. Nunca digas que no puedes mandar audios.'
       : ctx.channel === 'email'
         ? 'Respondes por correo: texto plano, sin HTML ni Markdown, con saludo breve y firma «— Operations manager de Kijutech».'
         : ctx.channel === 'job'
