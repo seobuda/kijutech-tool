@@ -42,7 +42,7 @@ describe('previsión y picos', () => {
 
 describe('recomendaciones', () => {
   const fn = (p: Partial<FnStat>): FnStat => ({
-    fn: 'f', model: 'claude-sonnet-4-6', calls30: 60, usd30: 6, usd7: 1.4, usdPrev7: 1.2, calls7: 20, avgIn: 1000, avgOut: 800, inUsdShare: 0.5, failed30: 0, fallback30: 0, ...p
+    fn: 'f', model: 'claude-sonnet-4-6', calls30: 60, usd30: 6, usd7: 1.4, usdPrev7: 1.2, calls7: 20, avgIn: 1000, avgOut: 800, inUsdShare: 0.5, failed30: 0, fallback30: 0, uncosted30: 0, ...p
   });
   it('caché, modelo pequeño, fallos, reserva, previsión y gasto fuera de la herramienta', () => {
     const recs = recommend(
@@ -82,5 +82,19 @@ describe('botones del parte', () => {
     expect('ap:up:blocker_answer'.match(AUTOPILOT_CALLBACK_RE)?.[2]).toBe('blocker_answer');
     expect('ap:as:86c1abc:no-num:1'.match(AUTOPILOT_CALLBACK_RE)).toBeNull();
     expect('ap:as:86c1abc:123456:654321'.length).toBeLessThanOrEqual(64);
+  });
+});
+
+describe('precio de respaldo', () => {
+  it('cubre los modelos de Anthropic y acepta el sufijo de fecha', async () => {
+    const { FALLBACK_PRICING } = await import('@/lib/ai/gateway');
+    expect(FALLBACK_PRICING['anthropic/claude-sonnet-4-6']).toEqual(['0.003', '0.015']);
+    const key = 'anthropic/claude-sonnet-4-6-20260101';
+    const match = Object.keys(FALLBACK_PRICING).filter((k) => key.startsWith(`${k}-`)).sort((a, b) => b.length - a.length)[0];
+    expect(match).toBe('anthropic/claude-sonnet-4-6');
+  });
+  it('recomienda poner precio si hay llamadas sin coste', () => {
+    const r = recommend([{ fn: 'x', model: 'm-rara', calls30: 5, usd30: 0, usd7: 0, usdPrev7: 0, calls7: 2, avgIn: 100, avgOut: 50, inUsdShare: 0.5, failed30: 0, fallback30: 0, uncosted30: 5 }], { forecast: 0, budget: 80, orgOtherUsd: null, toolMtd: 0 });
+    expect(r[0].title).toContain('sin precio');
   });
 });

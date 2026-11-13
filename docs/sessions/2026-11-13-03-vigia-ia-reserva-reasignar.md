@@ -70,6 +70,6 @@ ALTER TABLE "ops_clickup_outbox" ADD CONSTRAINT "ops_outbox_action_check" CHECK 
 
 ## Pendientes detectados
 - La reserva necesita una segunda clave con saldo de otro proveedor; hoy Gemini no tiene créditos.
-- El coste propio es una estimación con la tabla de precios `ai_model_pricing`, que no cuenta tokens de caché. Con la clave de administración se puede comparar con lo real.
+- El coste propio es una estimación con la tabla de precios `ai_model_pricing` (con precio oficial de respaldo si falta el modelo), que no cuenta tokens de caché. Con la clave de administración se puede comparar con lo real. Enric confirmó que los 80 $ son solo de la API; su consola no tiene «Admin keys» (cuenta individual: hace falta crear una organización).
 - El clustering de SEO no usa la reserva: resuelve el proveedor por su cuenta.
 - La Usage and Cost API es «legacy»; Anthropic recomienda la nueva Analytics API. Cambiar si la deja de mantener.

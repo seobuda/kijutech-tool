@@ -48,11 +48,11 @@ Detalle paso a paso de la activación en `docs/PRUEBAS-EN-VIVO.md`.
 - [ ] Si llega la propuesta de subir la autonomía del agente, decidir con el botón.
 
 ## Vigía de IA (cuando puedas)
-- [ ] **Clave de administración de Anthropic** (opcional pero recomendada): en la consola de Anthropic → Settings → Admin keys,
-  crear una y pegarla en Sistema → Gasto de IA. Así el presupuesto cuenta el gasto real de toda la cuenta, también Claude Code.
-  Si la consola no ofrece «Admin keys», la cuenta es individual: hay que crear una organización en Settings → Organization.
-- [ ] **Confirmar qué son los 80 $/mes:** límite o recarga de la cuenta de la API (lo cubre el informe) o la suscripción de
-  Claude Code (no sale en la API). El presupuesto se cambia en Automatizaciones → Vigía de gasto de IA.
+- [x] **Los 80 $/mes son solo de la API** (confirmado el 13 nov): el informe de costes de Anthropic los cubriría.
+- [ ] **Clave de administración de Anthropic** (opcional): en tu consola no aparece «Admin keys». Según la documentación, una cuenta
+  individual tiene que crear antes una organización en `platform.claude.com/settings/organization`. Después, en Settings → Admin keys,
+  crear una y pegarla en Sistema → Gasto de IA. Mientras tanto el vigía usa el coste estimado de cada llamada de la herramienta, que
+  es lo mismo si la clave de la API solo la usa la herramienta (no cuenta la caché de prompt ni la búsqueda web).
 - [ ] **IA de reserva:** para que funcione hace falta una segunda clave con saldo de otro proveedor (OpenAI, Gemini o DeepSeek) en IA
   y modelos. La de Gemini no tiene créditos.
 

@@ -101,6 +101,7 @@ export type FnStat = {
   inUsdShare: number; // parte del coste que es entrada (estimada con los tokens)
   failed30: number;
   fallback30: number;
+  uncosted30: number; // llamadas completadas sin precio (el coste real es mayor que el mostrado)
 };
 export type Recommendation = { fn: string | null; title: string; detail: string; savingUsdMonth: number | null };
 
@@ -132,6 +133,14 @@ export function recommend(fns: FnStat[], ctx: { forecast: number; budget: number
         fn: f.fn,
         title: `Fallos en «${f.fn}»`,
         detail: `${f.failed30} de ${f.calls30} llamadas fallaron en 30 días: se pierden reintentos y el trabajo se retrasa. Mira el error en IA → Cerebro.`,
+        savingUsdMonth: null
+      });
+    }
+    if (f.uncosted30 > 0) {
+      out.push({
+        fn: f.fn,
+        title: `Llamadas sin precio en «${f.fn}»`,
+        detail: `${f.uncosted30} llamada(s) en 30 días se registraron sin coste porque su modelo (${f.model ?? 'desconocido'}) no tiene precio: el gasto real es mayor que el mostrado. Añade el precio en IA y modelos.`,
         savingUsdMonth: null
       });
     }
@@ -188,7 +197,8 @@ async function loadToolData(tenantId: string, now: Date) {
            count(*)::int AS calls, coalesce(sum(estimated_cost), 0)::float AS usd,
            coalesce(sum(input_tokens), 0)::float AS in_tok, coalesce(sum(output_tokens), 0)::float AS out_tok,
            count(*) FILTER (WHERE status = 'failed')::int AS failed,
-           count(*) FILTER (WHERE output ? 'fallback')::int AS fallback
+           count(*) FILTER (WHERE output ? 'fallback')::int AS fallback,
+           count(*) FILTER (WHERE status = 'completed' AND estimated_cost IS NULL)::int AS uncosted
     FROM ai_jobs
     WHERE tenant_id = ${tenantId} AND (created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Madrid')::date >= ${from}::date
     GROUP BY 1, 2`)) as unknown as Row[];
@@ -231,13 +241,14 @@ export async function getAiOverview(tenantId: string, now = new Date(), opts: { 
     byDayMap.set(day, (byDayMap.get(day) ?? 0) + n(r.usd));
     const f =
       fnMap.get(fn) ??
-      { fn, model: null, calls30: 0, usd30: 0, usd7: 0, usdPrev7: 0, calls7: 0, avgIn: 0, avgOut: 0, inUsdShare: 0, failed30: 0, fallback30: 0, inTok7: 0, outTok7: 0 };
+      { fn, model: null, calls30: 0, usd30: 0, usd7: 0, usdPrev7: 0, calls7: 0, avgIn: 0, avgOut: 0, inUsdShare: 0, failed30: 0, fallback30: 0, uncosted30: 0, inTok7: 0, outTok7: 0 };
     if (r.model) f.model = String(r.model);
     if (last30.has(day)) {
       f.calls30 += n(r.calls);
       f.usd30 += n(r.usd);
       f.failed30 += n(r.failed);
       f.fallback30 += n(r.fallback);
+      f.uncosted30 += n(r.uncosted);
     }
     if (last7Days.has(day)) {
       f.usd7 += n(r.usd);
@@ -274,7 +285,8 @@ export async function getAiOverview(tenantId: string, now = new Date(), opts: { 
         avgOut: f.outTok7 / calls,
         inUsdShare: inShare,
         failed30: f.failed30,
-        fallback30: f.fallback30
+        fallback30: f.fallback30,
+        uncosted30: f.uncosted30
       };
     })
     .sort((a, b) => b.usd30 - a.usd30);

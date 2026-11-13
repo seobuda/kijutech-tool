@@ -125,8 +125,30 @@ export async function getModelPricing(provider: string, model: string) {
     .orderBy(desc(aiModelPricing.effectiveFrom))
     .limit(1);
 
-  return rows[0] ?? null;
+  if (rows[0]) return rows[0];
+  // Sin fila en la tabla (p. ej. una instalación nueva): precio oficial de respaldo para no registrar el coste vacío,
+  // que dejaría al vigía de gasto en 0 $. La tabla editable siempre manda sobre esto.
+  // La API puede devolver el modelo con sufijo de fecha: se acepta por prefijo (el más largo).
+  const key = `${provider}/${model}`;
+  const fbKey = FALLBACK_PRICING[key] ? key : Object.keys(FALLBACK_PRICING).filter((k) => key.startsWith(`${k}-`)).sort((a, b) => b.length - a.length)[0];
+  const fb = fbKey ? FALLBACK_PRICING[fbKey] : undefined;
+  return fb ? { provider, model, inputCostPer1k: fb[0], outputCostPer1k: fb[1], fallback: true as const } : null;
 }
+
+// Precios de lista por 1.000 tokens (USD), de la tabla oficial de Anthropic a 3 nov 2026 (entrada, salida).
+// Solo se usan si ai_model_pricing no tiene el modelo.
+export const FALLBACK_PRICING: Record<string, [string, string]> = {
+  'anthropic/claude-sonnet-4-6': ['0.003', '0.015'],
+  'anthropic/claude-sonnet-5': ['0.002', '0.010'],
+  'anthropic/claude-sonnet-5-5': ['0.002', '0.010'],
+  'anthropic/claude-opus-4-6': ['0.005', '0.025'],
+  'anthropic/claude-opus-4-7': ['0.005', '0.025'],
+  'anthropic/claude-opus-4-8': ['0.005', '0.025'],
+  'anthropic/claude-opus-5': ['0.005', '0.025'],
+  'anthropic/claude-opus-5-5': ['0.004', '0.020'],
+  'anthropic/claude-haiku-4-5': ['0.001', '0.005'],
+  'anthropic/claude-haiku-5-5': ['0.0001', '0.0005']
+};
 
 export function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
