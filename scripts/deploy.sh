@@ -36,10 +36,20 @@ fi
 
 echo "→ Subiendo código"
 scp -i "$KEY" -o BatchMode=yes -q "$TMP/kijutech.tgz" "$HOST:/tmp/kijutech.tgz"
-"${SSH[@]}" "cd $REMOTE_DIR && tar -xzf /tmp/kijutech.tgz -C $REMOTE_DIR && rm /tmp/kijutech.tgz"
+# Descomprimir encima NO borra los archivos que se quitaron de git: en las carpetas de código (solo código versionado)
+# se borran los que ya no están en `main`, si no la compilación los encuentra y puede fallar (pasó el 14 nov).
+"${SSH[@]}" "cd $REMOTE_DIR && tar -tzf /tmp/kijutech.tgz | grep -v '/\$' | sort > /tmp/kiju-new.list \
+  && find app lib components tests scripts modules -type f 2>/dev/null | sort > /tmp/kiju-old.list \
+  && comm -23 /tmp/kiju-old.list /tmp/kiju-new.list > /tmp/kiju-stale.list \
+  && N=\$(wc -l < /tmp/kiju-stale.list) && if [ \"\$N\" -gt 0 ]; then echo \"  archivos que ya no están en main: \$N (se borran)\"; sed 's/^/    - /' /tmp/kiju-stale.list | head -20; xargs -r -d '\n' rm -f -- < /tmp/kiju-stale.list; fi \
+  && tar -xzf /tmp/kijutech.tgz -C $REMOTE_DIR && rm /tmp/kijutech.tgz /tmp/kiju-new.list /tmp/kiju-old.list /tmp/kiju-stale.list"
 
 echo "→ Reconstruyendo (unos minutos)"
-"${SSH[@]}" "cd $REMOTE_DIR && docker compose -f docker-compose.prod.yml up -d --build 2>&1 | grep -E 'rror|Started|Built' | tail -3"
+# Si la compilación falla, Docker no sustituye el contenedor (sigue la versión anterior) y aquí se para: sin migrar.
+"${SSH[@]}" "cd $REMOTE_DIR && docker compose -f docker-compose.prod.yml up -d --build > /tmp/kiju-build.log 2>&1; rc=\$?; grep -E 'rror|Started|Built' /tmp/kiju-build.log | tail -8; exit \$rc" || {
+  echo "✗ La reconstrucción falló: producción sigue con la versión anterior y NO se ha migrado. Log en el servidor: /tmp/kiju-build.log" >&2
+  exit 1
+}
 
 if [[ $MIGRATE -eq 1 ]]; then
   echo "→ Migraciones"
@@ -47,6 +57,9 @@ if [[ $MIGRATE -eq 1 ]]; then
 fi
 
 echo "→ Verificación"
+EXPECTED="$(git show main:lib/db/migrations/meta/_journal.json | grep -c '"tag"')"
+APPLIED="$("${SSH[@]}" "docker exec kijutech_db psql -U kijutech -d kijutech_db -tAc 'select count(*) from drizzle.__drizzle_migrations'" | tr -d '[:space:]')"
+if [[ "$APPLIED" != "$EXPECTED" ]]; then echo "  ⚠ migraciones: $APPLIED aplicadas de $EXPECTED en main (¿falta --migrate o falló?)" >&2; fi
 "${SSH[@]}" "sleep 5; \
   echo \"  migraciones: \$(docker exec kijutech_db psql -U kijutech -d kijutech_db -tAc 'select count(*) from drizzle.__drizzle_migrations')\"; \
   echo \"  web: \$(curl -s -o /dev/null -w '%{http_code}' https://brain.kijutech.com/sign-in)\"; \
