@@ -33,7 +33,7 @@ import { addCalendarEntryAction, removeCalendarEntryAction } from '@/lib/operaci
 import { applyClientProposalAction, getClientProposalsAction } from '@/lib/operaciones/client-proposal-actions';
 import { connectAnthropicAdminAction, disconnectAnthropicAdminAction, refreshOrgCostAction } from '@/lib/operaciones/ai-watch-actions';
 import { connectDoTokenAction, disconnectDoTokenAction, refreshInfraAction } from '@/lib/operaciones/infra-actions';
-import { chatWithAgentAction, deleteAgentAction, deleteIntegrationAction, retryJobAction, saveAgentAction, saveIntegrationAction } from '@/lib/agentes/actions';
+import { chatWithAgentAction, deleteAgentAction, deleteIntegrationAction, previewVoiceAction, retryJobAction, saveAgentAction, saveIntegrationAction, saveVoiceSettingsAction } from '@/lib/agentes/actions';
 import { setToolAutonomyAction } from '@/lib/operaciones/agent-capabilities-actions';
 import { deleteNote } from '@/lib/operaciones/note-actions';
 import { saveClickUpToken } from '@/lib/operaciones/actions';
@@ -140,7 +140,9 @@ const ACCIONES_ADMIN: [string, () => unknown][] = [
   ['retryJobAction (agentes)', () => retryJobAction(ZERO)],
   ['saveIntegrationAction (agentes)', () => saveIntegrationAction('clarity', { token: 'x' })],
   ['deleteIntegrationAction (agentes)', () => deleteIntegrationAction('clarity')],
-  ['setToolAutonomyAction (agentes)', () => setToolAutonomyAction('crear_encargo', 'autonomo')]
+  ['setToolAutonomyAction (agentes)', () => setToolAutonomyAction('crear_encargo', 'autonomo')],
+  ['saveVoiceSettingsAction (voz)', () => saveVoiceSettingsAction({ ttsModel: 'gpt-4o-mini-tts', defaultVoice: 'marin', speed: 1, tone: 'x', sttModels: ['gpt-transcribe'] })],
+  ['previewVoiceAction (voz)', () => previewVoiceAction({ text: 'hola', settings: { ttsModel: 'gpt-4o-mini-tts', defaultVoice: 'marin', speed: 1, tone: 'x', sttModels: ['gpt-transcribe'] } })]
 ];
 const ACCIONES_EDITOR: [string, () => unknown][] = [
   ['deleteNote (Bloc)', () => deleteNote(ZERO)],

@@ -11,6 +11,9 @@
   - Solo con correos autenticados de tu dirección: un correo falsificado no le da órdenes.
 - **Desde la web:** en **Agentes → Probar** (en cada ficha).
 
+## Su voz
+En **Agentes → Voz** eliges la voz (marin y cedar son las recomendadas), la velocidad y el tono, y la **escuchas antes de guardar**. Cada agente puede tener su propia voz en su ficha. Cuando le hablas en audio, el agente lo sabe y escribe pensando en que se va a escuchar (frases naturales, sin emojis ni listas).
+
 ## Qué puedes pedirle
 | Para… | Ejemplos |
 |---|---|

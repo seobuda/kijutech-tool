@@ -13,7 +13,7 @@ import { wireApp } from '@/lib/app-wiring';
 import { getTool } from '@/lib/core/capabilities';
 import { addMessage, getAgent, getOrCreateConversation, listAgents, recentMessages, SERVER_TOOLS } from '@/lib/agentes/store';
 import { runAgent } from '@/lib/agentes/engine';
-import { VOICES } from '@/lib/agentes/voice';
+import { DEFAULT_TONE, saveVoiceSettings, speak, VOICES } from '@/lib/agentes/voice';
 import { deleteIntegration, getIntegration, isProvider, PROVIDERS, readCredentials, saveIntegration, testDataForSeo } from '@/lib/agentes/integrations';
 
 type Res<T = object> = ({ ok: true } & T) | { ok: false; error: string };
@@ -168,6 +168,44 @@ export async function saveIntegrationAction(provider: string, fields: Record<str
     return { ok: true, message: creds.refreshToken ? 'Guardada.' : 'Guardada. Ahora pulsa «Conectar con Google» para autorizar.' };
   } catch (e) {
     return { ok: false, error: publicError(e, 'No se pudo guardar la integración') };
+  }
+}
+
+// --- Voz -------------------------------------------------------------------------------------------------
+
+const voiceSchema = z.object({
+  ttsModel: z.string().trim().regex(/^[a-z0-9.\-]{2,60}$/i, 'Modelo de voz no válido'),
+  defaultVoice: z.string().refine((v) => (VOICES as readonly string[]).includes(v), 'Voz no válida'),
+  speed: z.number().min(0.25).max(4),
+  tone: z.string().trim().max(4000),
+  sttModels: z.array(z.string().trim().regex(/^[a-z0-9.\-]{2,60}$/i)).min(1).max(4)
+});
+
+export async function saveVoiceSettingsAction(input: z.infer<typeof voiceSchema>): Promise<Res> {
+  try {
+    const user = await requirePermission('admin');
+    const parsed = voiceSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Datos no válidos' };
+    await saveVoiceSettings(user.tenantId, { ...parsed.data, tone: parsed.data.tone || DEFAULT_TONE });
+    revalidatePath(`${PATH}/voz`);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: publicError(e, 'No se pudo guardar la voz') };
+  }
+}
+
+/** Probar la voz desde la web: devuelve un MP3 corto (base64) para escucharlo en el navegador. */
+export async function previewVoiceAction(input: { text: string; settings: z.infer<typeof voiceSchema> }): Promise<Res<{ mp3: string }>> {
+  try {
+    const user = await requirePermission('admin');
+    const parsed = voiceSchema.safeParse(input.settings);
+    const text = z.string().trim().min(1).max(600).safeParse(input.text);
+    if (!parsed.success || !text.success) return { ok: false, error: 'Escribe una frase (máx. 600 caracteres)' };
+    const r = await speak(user.tenantId, text.data, parsed.data.defaultVoice, { format: 'mp3', override: { ...parsed.data, voice: parsed.data.defaultVoice }, fn: 'agt_voz_prueba' });
+    if (!r.ok) return { ok: false, error: r.error };
+    return { ok: true, mp3: Buffer.from(r.audio).toString('base64') };
+  } catch (e) {
+    return { ok: false, error: publicError(e, 'No se pudo generar la voz') };
   }
 }
 
