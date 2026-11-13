@@ -146,12 +146,21 @@ async function toAgent(tenantId: string, token: string, member: OpsTelegramMembe
   let audio: { data: ArrayBuffer; mimeType: string; seconds: number | null } | null = null;
   if (file) {
     if ((file.file_size ?? 0) > 20 * 1024 * 1024) return void (await reply(token, msg.chat.id, 'Ese audio es demasiado largo: mándalo en trozos de menos de 20 MB.'));
-    try {
-      const f = await tgDownloadFile(token, file.file_id);
-      audio = { data: f.data, mimeType: file.mime_type || f.contentType || 'audio/ogg', seconds: file.duration ?? null };
-    } catch {
-      return void (await reply(token, msg.chat.id, 'No he podido descargar el audio. Prueba otra vez.'));
+    // Hasta 3 intentos (un fallo puntual de Telegram no debe perder el audio). El motivo se registra y se enseña:
+    // los errores de tg()/tgDownloadFile ya vienen sin el token.
+    let lastError = '';
+    for (let attempt = 1; attempt <= 3 && !audio; attempt++) {
+      try {
+        const f = await tgDownloadFile(token, file.file_id);
+        // El tipo lo da Telegram en el mensaje (audio/ogg en las notas de voz); el de la descarga es para imágenes.
+        audio = { data: f.data, mimeType: file.mime_type || 'audio/ogg', seconds: file.duration ?? null };
+      } catch (e) {
+        lastError = e instanceof Error ? e.message : String(e);
+        console.error(`[agente] descarga de audio (intento ${attempt}):`, lastError);
+        if (attempt < 3) await new Promise((r) => setTimeout(r, 800 * attempt));
+      }
     }
+    if (!audio) return void (await reply(token, msg.chat.id, `No he podido descargar el audio (${escapeHtml(lastError.slice(0, 200) || 'sin detalle')}). Prueba otra vez.`));
   }
   const handled = await dispatchInbound({
     tenantId,
