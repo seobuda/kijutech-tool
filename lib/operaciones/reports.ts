@@ -233,6 +233,7 @@ export type WeeklyReport = {
   agent: { label: string; autonomy: string; decided: number; hitRate: number | null; auto: number; recommendation: string | null }[];
   system: { incidents: { title: string; severity: string; minutes: number | null }[]; downMin: number; aiUsd: number; clickupRequests: number };
   ai: { spentMonth: number; forecast: number; budget: number; account: boolean; topRecommendation: string | null } | null;
+  infra: { mtd: number; forecast: number | null; budget: number; memP95: number | null; topRecommendation: string | null } | null;
   pending: { count: number; oldest: string | null };
 };
 
@@ -398,6 +399,7 @@ export async function buildWeeklyReport(tenantId: string, monday: string): Promi
       clickupRequests: n(sys?.cu)
     },
     ai: await aiLine(tenantId),
+    infra: await infraLine(tenantId),
     pending: { count: inbox.length + emails.length, oldest: oldest ? waitLabel(oldest) : null }
   };
 }
@@ -418,6 +420,25 @@ async function aiLine(tenantId: string): Promise<WeeklyReport['ai']> {
     };
   } catch (e) {
     console.error('[informes] vigía de IA:', e instanceof Error ? e.message : e);
+    return null;
+  }
+}
+
+/** Línea de DigitalOcean para el semanal (de la caché horaria: sin llamadas extra). */
+async function infraLine(tenantId: string): Promise<WeeklyReport['infra']> {
+  try {
+    const { getInfraOverview } = await import('@/lib/operaciones/infra-watch');
+    const o = await getInfraOverview(tenantId, { cachedOnly: true });
+    if (!o.data) return null;
+    return {
+      mtd: o.data.mtdUsd,
+      forecast: o.forecast,
+      budget: o.settings.monthly,
+      memP95: o.data.capacity?.memUsedPctP95_24h ?? null,
+      topRecommendation: o.recommendations[0]?.title ?? null
+    };
+  } catch (e) {
+    console.error('[informes] servidor:', e instanceof Error ? e.message : e);
     return null;
   }
 }
@@ -458,6 +479,10 @@ export function weeklyText(r: WeeklyReport, link: string | null): string {
   if (r.ai) {
     lines.push(`• IA este mes: ${r.ai.spentMonth.toFixed(2)} $${r.ai.account ? ' (toda la cuenta)' : ''} · previsión ${r.ai.forecast.toFixed(2)} $ de ${r.ai.budget.toFixed(0)} $${r.ai.forecast > r.ai.budget ? ' ⚠️' : ''}`);
     if (r.ai.topRecommendation) lines.push(`   💡 ${escapeHtml(r.ai.topRecommendation)}`);
+  }
+  if (r.infra) {
+    lines.push(`• Servidor (DigitalOcean): ${r.infra.mtd.toFixed(2)} $ este mes${r.infra.forecast !== null ? ` · previsión ${r.infra.forecast.toFixed(2)} $ de ${r.infra.budget.toFixed(0)} $${r.infra.forecast > r.infra.budget ? ' ⚠️' : ''}` : ''}${r.infra.memP95 !== null ? ` · memoria ${r.infra.memP95} %` : ''}`);
+    if (r.infra.topRecommendation) lines.push(`   💡 ${escapeHtml(r.infra.topRecommendation)}`);
   }
   lines.push('', r.pending.count ? `🙋 <b>Te esperan ${r.pending.count}</b> (lo más antiguo, ${r.pending.oldest}).` : '🙋 Nada esperando tu decisión.');
   if (link) lines.push('', `<a href="${link}">Ver el informe completo</a>`);

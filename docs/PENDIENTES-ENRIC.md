@@ -56,6 +56,15 @@ Detalle paso a paso de la activación en `docs/PRUEBAS-EN-VIVO.md`.
 - [ ] **IA de reserva:** para que funcione hace falta una segunda clave con saldo de otro proveedor (OpenAI, Gemini o DeepSeek) en IA
   y modelos. La de Gemini no tiene créditos.
 
+## Servidor y costes (DigitalOcean)
+- [ ] **Token de DigitalOcean de solo lectura:** en DigitalOcean → API → Tokens, crear uno «Custom scopes» con solo lectura de
+  billing, droplet, snapshot, sizes y monitoring, y pegarlo en Sistema → Servidor y costes. El token que hay en el `.env` del PC
+  funciona, pero no sé qué permisos tiene: para el servidor mejor uno que solo pueda leer.
+- [ ] **Revisar el presupuesto de DigitalOcean** (45 $/mes por defecto; el coste fijo actual es ~37 $/mes) en Automatizaciones →
+  Servidor y costes.
+- [ ] (Informativo) La cuenta tiene otros dos servidores (el de 2020 de 12 $ + copias y Findersuite de 7 $) y 19 GB de snapshots
+  antiguos (~1,15 $/mes). Si alguno ya no hace falta, se ve en la pantalla; Claude no toca nada de DigitalOcean.
+
 ## Decisiones que esperan tu aprobación (Claude no las hace sin tu OK)
 - [x] **Reasignar desde el parte con un botón:** aprobada y desplegada (migración 0046).
 - [x] **IA de reserva:** aprobada y construida (falta la segunda clave, ver arriba).

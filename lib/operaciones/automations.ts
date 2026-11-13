@@ -200,6 +200,18 @@ export const AUTOMATIONS: AutomationDef[] = [
     ]
   },
   {
+    key: 'infra',
+    title: 'Servidor y costes (DigitalOcean)',
+    what: 'Lee cada hora lo que va del mes en DigitalOcean, las facturas, los servidores y la capacidad del servidor de la herramienta (memoria, disco, carga). Avisa si el mes pasa del presupuesto (una vez por semana) y abre incidencia en Salud si la memoria o la CPU van al límite, con la propuesta de ampliación y su precio.',
+    canDisable: true,
+    link: { href: '/dashboard/operaciones/servidor', label: 'Detalle y token en Sistema → Servidor y costes' },
+    fields: [
+      { key: 'monthlyUsd', label: 'Presupuesto mensual de DigitalOcean', type: 'number', unit: 'USD', min: 5, max: 1000, default: 45, help: 'Toda la cuenta (también los otros servidores)' },
+      { key: 'memPct', label: 'Memoria alta a partir de', type: 'number', unit: '%', min: 50, max: 98, default: 85, help: 'Percentil 95 de las últimas 24 h' },
+      { key: 'alerts', label: 'Aviso de presupuesto por Telegram', type: 'bool', default: true }
+    ]
+  },
+  {
     key: 'digest',
     title: 'Resúmenes de mi bandeja',
     what: 'A las horas indicadas (lunes a viernes) te manda lo completado, lo que ha resuelto el agente solo y lo que necesita de ti.',

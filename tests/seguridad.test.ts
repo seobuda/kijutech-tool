@@ -32,6 +32,7 @@ import { correctTaskTimeAction, saveBandAction, voidTaskTimeAction } from '@/lib
 import { addCalendarEntryAction, removeCalendarEntryAction } from '@/lib/operaciones/calendar-actions';
 import { applyClientProposalAction, getClientProposalsAction } from '@/lib/operaciones/client-proposal-actions';
 import { connectAnthropicAdminAction, disconnectAnthropicAdminAction, refreshOrgCostAction } from '@/lib/operaciones/ai-watch-actions';
+import { connectDoTokenAction, disconnectDoTokenAction, refreshInfraAction } from '@/lib/operaciones/infra-actions';
 import { deleteNote } from '@/lib/operaciones/note-actions';
 import { saveClickUpToken } from '@/lib/operaciones/actions';
 import { saveTelegramToken } from '@/lib/operaciones/telegram-actions';
@@ -127,7 +128,10 @@ const ACCIONES_ADMIN: [string, () => unknown][] = [
   ['removeCalendarEntryAction (calendario)', () => removeCalendarEntryAction(ZERO)],
   ['connectAnthropicAdminAction (gasto de IA)', () => connectAnthropicAdminAction('sk-ant-admin01-xxxxxxxxxxxxxxxx')],
   ['disconnectAnthropicAdminAction (gasto de IA)', () => disconnectAnthropicAdminAction()],
-  ['refreshOrgCostAction (gasto de IA)', () => refreshOrgCostAction()]
+  ['refreshOrgCostAction (gasto de IA)', () => refreshOrgCostAction()],
+  ['connectDoTokenAction (servidor)', () => connectDoTokenAction('dop_v1_xxxxxxxxxxxxxxxxxxxxxxxx')],
+  ['disconnectDoTokenAction (servidor)', () => disconnectDoTokenAction()],
+  ['refreshInfraAction (servidor)', () => refreshInfraAction()]
 ];
 const ACCIONES_EDITOR: [string, () => unknown][] = [
   ['deleteNote (Bloc)', () => deleteNote(ZERO)],

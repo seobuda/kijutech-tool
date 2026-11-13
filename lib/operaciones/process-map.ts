@@ -996,6 +996,20 @@ const OPS_AUTONOMIA: ProcessStep[] = [
     settings: [{ automation: 'ai_budget' }],
     runs: ['runAiWatch'],
   },
+  {
+    id: 'ops-au-infra',
+    lane: 'Vigía de IA',
+    name: 'Servidor y costes de DigitalOcean',
+    description: 'Sistema → Servidor y costes: lo que va del mes en DigitalOcean, previsión, facturas, servidores de la cuenta con su precio y copias, y la capacidad del servidor de la herramienta (memoria, CPU, disco) con la propuesta de ampliación y su precio real.',
+    status: 'built',
+    file: 'lib/operaciones/infra-watch.ts',
+    when: 'Cada hora desde el planificador (y al abrir la pantalla si la lectura tiene más de una hora).',
+    ai: 'Nada.',
+    code: 'API de DigitalOcean con token de solo lectura (cifrado en ops_settings): saldo del mes, facturas, servidores, snapshots, tamaños y monitorización (memoria p95 y máximo de 24 h, carga p95 por CPU, disco). Caché en ops_settings (do_cache). Salud abre incidencia por memoria o CPU altas con la ampliación propuesta; aviso semanal si la previsión pasa del presupuesto; línea en el informe semanal.',
+    tables: ['ops_settings', 'ops_notifications', 'ops_health_incidents'],
+    settings: [{ automation: 'infra' }],
+    runs: ['runInfraWatch'],
+  },
 ];
 
 const OPS_TIEMPOS: ProcessStep[] = [

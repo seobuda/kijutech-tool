@@ -8,6 +8,7 @@ import {
   CalendarCheck,
   CalendarDays,
   Coins,
+  Server,
   FileBarChart,
   ClipboardList,
   FolderKanban,
@@ -101,6 +102,7 @@ export const OPS_SECTIONS: TabSection[] = [
     tabs: [
       { href: '/dashboard/operaciones/automatizaciones', label: 'Automatizaciones', icon: Workflow, keywords: 'avisos recordatorios resúmenes', show: adminOnly },
       { href: '/dashboard/operaciones/gasto-ia', label: 'Gasto de IA', icon: Coins, keywords: 'coste ia tokens presupuesto anthropic claude previsión', show: adminOnly },
+      { href: '/dashboard/operaciones/servidor', label: 'Servidor y costes', icon: Server, keywords: 'digitalocean coste servidor memoria disco cpu factura', show: adminOnly },
       { href: '/dashboard/operaciones/salud', label: 'Salud', icon: HeartPulse, keywords: 'errores incidencias caídas colas atascadas estado', show: adminOnly },
       { href: '/dashboard/operaciones/telegram', label: 'Telegram', icon: MessageCircle, keywords: 'bot avisos', show: adminOnly },
       { href: '/dashboard/operaciones/ajustes', label: 'Ajustes ClickUp', icon: SlidersHorizontal, keywords: 'token estados listas', show: adminOnly }
