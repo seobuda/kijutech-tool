@@ -63,11 +63,180 @@ export const projects = pgTable('projects', {
   domain: varchar('domain', { length: 255 }),
   location: varchar('location', { length: 255 }),
   status: varchar('status', { length: 20 }).notNull().default('active'),
+  // Cliente del núcleo al que pertenece el proyecto (14 nov 2026).
+  clientId: uuid('client_id').references(() => clients.id, { onDelete: 'set null' }),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   createdBy: integer('created_by')
     .notNull()
     .references(() => users.id),
 });
+
+// --- Cliente (NÚCLEO, 14 nov 2026; docs/DISENO-FICHA-CLIENTE.md) ------------------------------------------------
+// La ficha completa del cliente: la ven todos los módulos. Operaciones guarda sus ajustes en ops_clients (mismo id).
+export const clients = pgTable(
+  'clients',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    name: varchar('name', { length: 255 }).notNull(),
+    aliases: jsonb('aliases').$type<string[]>().notNull().default([]),
+    // prospecto | onboarding | activo | pausado | baja
+    status: varchar('status', { length: 20 }).notNull().default('activo'),
+    sector: varchar('sector', { length: 120 }),
+    summary: text('summary'),
+    logoUrl: varchar('logo_url', { length: 500 }),
+    legalName: varchar('legal_name', { length: 255 }),
+    taxId: varchar('tax_id', { length: 30 }),
+    fiscalAddress: text('fiscal_address'),
+    business: text('business'),
+    offerings: text('offerings'),
+    area: varchar('area', { length: 255 }),
+    audience: text('audience'),
+    valueProposition: text('value_proposition'),
+    brandTone: text('brand_tone'),
+    goals: text('goals'),
+    strategy: text('strategy'),
+    notes: text('notes'),
+    // Contrato: solo lo ven y editan los administradores.
+    contractServices: text('contract_services'),
+    monthlyFee: decimal('monthly_fee', { precision: 10, scale: 2 }),
+    contractStart: date('contract_start'),
+    contractRenewal: date('contract_renewal'),
+    startedAt: date('started_at'),
+    endedAt: date('ended_at'),
+    endReason: text('end_reason'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    index('clients_tenant_idx').on(table.tenantId, table.status),
+    check('clients_status_check', sql`${table.status} IN ('prospecto', 'onboarding', 'activo', 'pausado', 'baja')`),
+  ]
+);
+export type Client = typeof clients.$inferSelect;
+
+// Personas del cliente. Sus correos sirven para reconocer de qué cliente es un email (un correo, un cliente).
+export const clientContacts = pgTable(
+  'client_contacts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    name: varchar('name', { length: 255 }).notNull(),
+    jobTitle: varchar('job_title', { length: 120 }),
+    // decisor | facturacion | tecnico | marketing | otro
+    role: varchar('role', { length: 20 }).notNull().default('otro'),
+    // Siempre en minúsculas.
+    email: varchar('email', { length: 255 }),
+    phone: varchar('phone', { length: 40 }),
+    whatsapp: varchar('whatsapp', { length: 40 }),
+    // email | telefono | whatsapp | otro
+    preferredChannel: varchar('preferred_channel', { length: 20 }),
+    isPrimary: boolean('is_primary').notNull().default(false),
+    notes: text('notes'),
+    active: boolean('active').notNull().default(true),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    index('client_contacts_client_idx').on(table.clientId),
+    uniqueIndex('client_contacts_email_unique').on(table.tenantId, table.email).where(sql`${table.email} IS NOT NULL`),
+    check('client_contacts_role_check', sql`${table.role} IN ('decisor', 'facturacion', 'tecnico', 'marketing', 'otro')`),
+    check('client_contacts_channel_check', sql`${table.preferredChannel} IS NULL OR ${table.preferredChannel} IN ('email', 'telefono', 'whatsapp', 'otro')`),
+  ]
+);
+export type ClientContact = typeof clientContacts.$inferSelect;
+
+export const clientLocations = pgTable(
+  'client_locations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    name: varchar('name', { length: 255 }),
+    address: text('address'),
+    city: varchar('city', { length: 120 }),
+    postalCode: varchar('postal_code', { length: 20 }),
+    region: varchar('region', { length: 120 }),
+    country: varchar('country', { length: 80 }),
+    phone: varchar('phone', { length: 40 }),
+    hours: text('hours'),
+    isPrimary: boolean('is_primary').notNull().default(false),
+    notes: text('notes'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [index('client_locations_client_idx').on(table.clientId)]
+);
+export type ClientLocation = typeof clientLocations.$inferSelect;
+
+// Webs, dominios y cuentas del cliente. NUNCA contraseñas: solo dónde están los accesos.
+export const clientAssets = pgTable(
+  'client_assets',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    kind: varchar('kind', { length: 30 }).notNull(),
+    label: varchar('label', { length: 255 }),
+    // URL o identificador externo (p. ej. «sc-domain:cliente.com», «properties/123»).
+    value: varchar('value', { length: 500 }),
+    // sin_revisar | si | pendiente | no | no_aplica
+    access: varchar('access', { length: 20 }).notNull().default('sin_revisar'),
+    accessNotes: text('access_notes'),
+    isPrimary: boolean('is_primary').notNull().default(false),
+    // Dominio cuyos correos son de este cliente (null = no reconoce correos). Único por cuenta.
+    emailDomain: varchar('email_domain', { length: 255 }),
+    notes: text('notes'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    index('client_assets_client_idx').on(table.clientId),
+    uniqueIndex('client_assets_email_domain_unique').on(table.tenantId, table.emailDomain).where(sql`${table.emailDomain} IS NOT NULL`),
+    check('client_assets_kind_check', sql`${table.kind} IN ('web', 'dominio', 'search_console', 'analytics', 'business_profile', 'google_ads', 'meta', 'instagram', 'tiktok', 'linkedin', 'youtube', 'tienda', 'crm', 'otro')`),
+    check('client_assets_access_check', sql`${table.access} IN ('sin_revisar', 'si', 'pendiente', 'no', 'no_aplica')`),
+  ]
+);
+export type ClientAsset = typeof clientAssets.$inferSelect;
+
+export const clientCompetitors = pgTable(
+  'client_competitors',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    name: varchar('name', { length: 255 }).notNull(),
+    domain: varchar('domain', { length: 255 }),
+    notes: text('notes'),
+    // manual | agente
+    source: varchar('source', { length: 12 }).notNull().default('manual'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    index('client_competitors_client_idx').on(table.clientId),
+    check('client_competitors_source_check', sql`${table.source} IN ('manual', 'agente')`),
+  ]
+);
+export type ClientCompetitor = typeof clientCompetitors.$inferSelect;
 
 export const aiProviderSettings = pgTable(
   'ai_provider_settings',
@@ -1487,17 +1656,18 @@ export const opsServices = pgTable(
   (table) => [unique('ops_services_tenant_key_unique').on(table.tenantId, table.key)]
 );
 
-export type OpsClientTool = { name: string; url: string; note: string };
 
+// Ajustes de Operaciones de cada cliente (desde el 14 nov 2026 la ficha está en el núcleo, tabla clients; mismo id).
+// Un cliente del núcleo puede no tener fila aquí todavía: Operaciones usa los valores por defecto.
 export const opsClients = pgTable(
   'ops_clients',
   {
-    id: uuid('id').primaryKey().defaultRandom(),
+    id: uuid('id')
+      .primaryKey()
+      .references(() => clients.id, { onDelete: 'cascade' }),
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    name: varchar('name', { length: 255 }).notNull(),
-    aliases: jsonb('aliases').$type<string[]>().notNull().default([]),
     clickupOptionId: varchar('clickup_option_id', { length: 50 }),
     clickupOptionLabel: varchar('clickup_option_label', { length: 255 }),
     usualSpaceId: varchar('usual_space_id', { length: 50 }),
@@ -1512,16 +1682,6 @@ export const opsClients = pgTable(
     monthlyHours: decimal('monthly_hours', { precision: 6, scale: 1 }),
     // Días de la semana en que se le trabaja (1 = lunes … 7 = domingo); null = lunes a viernes.
     workDays: varchar('work_days', { length: 20 }),
-    // Webs y herramientas. NUNCA contraseñas.
-    tools: jsonb('tools').$type<OpsClientTool[]>().notNull().default([]),
-    business: text('business'),
-    offerings: text('offerings'),
-    area: varchar('area', { length: 255 }),
-    audience: text('audience'),
-    goals: text('goals'),
-    strategy: text('strategy'),
-    notes: text('notes'),
-    active: boolean('active').notNull().default(true),
     createdAt: timestamp('created_at').notNull().defaultNow(),
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
   },
@@ -1539,7 +1699,7 @@ export const opsClientServices = pgTable(
     id: uuid('id').primaryKey().defaultRandom(),
     clientId: uuid('client_id')
       .notNull()
-      .references(() => opsClients.id, { onDelete: 'cascade' }),
+      .references(() => clients.id, { onDelete: 'cascade' }),
     serviceKey: varchar('service_key', { length: 40 }).notNull(),
     responsibleClickupId: varchar('responsible_clickup_id', { length: 50 }),
   },
@@ -1552,7 +1712,7 @@ export const opsClientActivity = pgTable(
   {
     clientId: uuid('client_id')
       .primaryKey()
-      .references(() => opsClients.id, { onDelete: 'cascade' }),
+      .references(() => clients.id, { onDelete: 'cascade' }),
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
@@ -1569,38 +1729,10 @@ export const opsClientActivity = pgTable(
   (table) => [index('ops_client_activity_tenant_idx').on(table.tenantId)]
 );
 
-// Quién escribe en nombre de un cliente: un correo concreto o un dominio entero. Sirve para saber de qué
-// cliente es un email recibido. Los dominios públicos (gmail.com…) no se aceptan como dominio.
-export const opsClientSenders = pgTable(
-  'ops_client_senders',
-  {
-    id: uuid('id').primaryKey().defaultRandom(),
-    tenantId: uuid('tenant_id')
-      .notNull()
-      .references(() => tenants.id, { onDelete: 'cascade' }),
-    clientId: uuid('client_id')
-      .notNull()
-      .references(() => opsClients.id, { onDelete: 'cascade' }),
-    // 'email' = una dirección exacta; 'domain' = cualquier dirección de ese dominio.
-    kind: varchar('kind', { length: 10 }).notNull(),
-    // Siempre en minúsculas y sin espacios.
-    value: varchar('value', { length: 255 }).notNull(),
-    name: varchar('name', { length: 255 }),
-    role: varchar('role', { length: 120 }),
-    active: boolean('active').notNull().default(true),
-    createdAt: timestamp('created_at').notNull().defaultNow(),
-  },
-  (table) => [
-    unique('ops_client_senders_unique').on(table.tenantId, table.kind, table.value),
-    index('ops_client_senders_client_idx').on(table.clientId),
-    check('ops_client_senders_kind_check', sql`${table.kind} IN ('email', 'domain')`),
-  ]
-);
-
-// Memoria de cada cliente: hechos con fecha y origen. La IA propone («propuesto») y una persona acepta;
+// Memoria de cada cliente (NÚCLEO desde el 14 nov 2026; antes ops_client_memory): hechos con fecha y origen. La IA propone («propuesto») y una persona acepta;
 // solo lo aceptado se usa como contexto. Nunca contraseñas.
-export const opsClientMemory = pgTable(
-  'ops_client_memory',
+export const clientMemory = pgTable(
+  'client_memory',
   {
     id: uuid('id').primaryKey().defaultRandom(),
     tenantId: uuid('tenant_id')
@@ -1608,13 +1740,13 @@ export const opsClientMemory = pgTable(
       .references(() => tenants.id, { onDelete: 'cascade' }),
     clientId: uuid('client_id')
       .notNull()
-      .references(() => opsClients.id, { onDelete: 'cascade' }),
+      .references(() => clients.id, { onDelete: 'cascade' }),
     // preferencia | promesa | decision | contexto | restriccion
     kind: varchar('kind', { length: 20 }).notNull(),
     text: text('text').notNull(),
     // propuesto | aceptado | descartado
     status: varchar('status', { length: 12 }).notNull().default('aceptado'),
-    // De dónde sale: manual | email | nota | encargo (y el id de ese origen, si lo hay).
+    // De dónde sale: manual | email | nota | encargo | agente (y el id de ese origen, si lo hay).
     sourceType: varchar('source_type', { length: 12 }).notNull().default('manual'),
     sourceId: varchar('source_id', { length: 100 }),
     createdBy: integer('created_by').references(() => users.id, { onDelete: 'set null' }),
@@ -1624,10 +1756,10 @@ export const opsClientMemory = pgTable(
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
   },
   (table) => [
-    index('ops_client_memory_client_idx').on(table.clientId, table.status),
-    check('ops_client_memory_kind_check', sql`${table.kind} IN ('preferencia', 'promesa', 'decision', 'contexto', 'restriccion')`),
-    check('ops_client_memory_status_check', sql`${table.status} IN ('propuesto', 'aceptado', 'descartado')`),
-    check('ops_client_memory_source_check', sql`${table.sourceType} IN ('manual', 'email', 'nota', 'encargo')`),
+    index('client_memory_client_idx').on(table.clientId, table.status),
+    check('client_memory_kind_check', sql`${table.kind} IN ('preferencia', 'promesa', 'decision', 'contexto', 'restriccion')`),
+    check('client_memory_status_check', sql`${table.status} IN ('propuesto', 'aceptado', 'descartado')`),
+    check('client_memory_source_check', sql`${table.sourceType} IN ('manual', 'email', 'nota', 'encargo', 'agente')`),
   ]
 );
 
@@ -1655,7 +1787,7 @@ export const opsInboundEmails = pgTable(
     sentAt: timestamp('sent_at'),
     // Resultado de la autenticación del remitente según Cloudflare: pass | fail | none (pegado o desconocido).
     authStatus: varchar('auth_status', { length: 8 }).notNull().default('none'),
-    clientId: uuid('client_id').references(() => opsClients.id, { onDelete: 'set null' }),
+    clientId: uuid('client_id').references(() => clients.id, { onDelete: 'set null' }),
     // Cómo se reconoció al cliente: email | domain | manual | ninguno | ambiguo.
     matchedBy: varchar('matched_by', { length: 10 }).notNull().default('ninguno'),
     // nuevo | ignorado | sin_cliente | informativo | interpretando | propuesto | aprobado | descartado | error
@@ -1729,8 +1861,7 @@ export const opsAgentActions = pgTable(
 );
 
 export type OpsAgentAction = typeof opsAgentActions.$inferSelect;
-export type OpsClientSender = typeof opsClientSenders.$inferSelect;
-export type OpsClientMemory = typeof opsClientMemory.$inferSelect;
+export type ClientMemory = typeof clientMemory.$inferSelect;
 export type OpsClientActivity = typeof opsClientActivity.$inferSelect;
 export type OpsClient = typeof opsClients.$inferSelect;
 export type OpsCleanupRun = typeof opsCleanupRuns.$inferSelect;

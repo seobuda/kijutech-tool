@@ -2,20 +2,26 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { eq, like } from 'drizzle-orm';
 import { NextRequest } from 'next/server';
 import { db } from '@/lib/db/drizzle';
-import { opsClientMemory, opsClientSenders, opsClients, opsInboundEmails, projects, users } from '@/lib/db/schema';
+import { clientContacts, clientMemory, clients, opsInboundEmails, projects, users } from '@/lib/db/schema';
 import { cleanupFixtures, createFixtures, emailFor, FIXTURE_PASSWORD, loginAs, PREFIX, type Fixtures } from './fixtures';
 
-import { deleteClient, setClientActive } from '@/lib/operaciones/client-actions';
+import { aiProposeClient, applyClientProposal, saveClientOps } from '@/lib/operaciones/client-actions';
 import {
-  addClientMemory,
-  addClientSender,
-  decideClientMemory,
-  deleteClientMemory,
-  deleteClientSender,
-  listClientMemory,
-  setClientSenderActive,
-  updateClientMemory
-} from '@/lib/operaciones/client-memory-actions';
+  createClientAction,
+  deleteAssetAction,
+  deleteClientAction,
+  deleteCompetitorAction,
+  deleteContactAction,
+  deleteLocationAction,
+  saveAssetAction,
+  saveClientContractAction,
+  saveClientProfileAction,
+  saveCompetitorAction,
+  saveContactAction,
+  saveLocationAction,
+  setClientStatusAction
+} from '@/lib/core/client-actions';
+import { addClientMemory, decideClientMemory, deleteClientMemory, listClientMemory, updateClientMemory } from '@/lib/core/client-memory-actions';
 import {
   assignInboundEmailClient,
   deleteInboundEmail,
@@ -108,10 +114,11 @@ const ACCIONES_ADMIN: [string, () => unknown][] = [
   ['saveTelegramToken (tokens)', () => saveTelegramToken('')],
   ['savePilotStartAction (piloto)', () => savePilotStartAction('no-es-una-fecha')],
   ['sendCleanupAction (limpieza)', () => sendCleanupAction(ZERO)],
-  ['deleteClient (borrar cliente)', () => deleteClient(ZERO)],
+  ['deleteClientAction (borrar cliente)', () => deleteClientAction(ZERO)],
+  ['saveClientContractAction (contrato del cliente)', () => saveClientContractAction(ZERO, {})],
+  ['deleteContactAction (borrar contacto)', () => deleteContactAction(ZERO, ZERO)],
   ['deleteProfile (borrar ficha)', () => deleteProfile(ZERO)],
   ['deleteClientMemory (borrar dato de memoria)', () => deleteClientMemory(ZERO)],
-  ['deleteClientSender (borrar contacto)', () => deleteClientSender(ZERO)],
   ['deleteInboundEmail (borrar correo)', () => deleteInboundEmail(ZERO)],
   ['setAgentAutonomyAction (autonomía del agente)', () => setAgentAutonomyAction('tipo-que-no-existe', 'sombra')],
   ['connectEmailAction (buzón del agente)', () => connectEmailAction('')],
@@ -148,13 +155,23 @@ const ACCIONES_EDITOR: [string, () => unknown][] = [
   ['deleteNote (Bloc)', () => deleteNote(ZERO)],
   ['getClientProposalsAction (fichas)', () => getClientProposalsAction()],
   ['applyClientProposalAction (fichas)', () => applyClientProposalAction({ clientId: ZERO, services: [], listIds: [] })],
-  ['setClientActive (fichas)', () => setClientActive(ZERO, false)],
+  ['createClientAction (fichas)', () => createClientAction({ name: '', status: 'activo' })],
+  ['saveClientProfileAction (fichas)', () => saveClientProfileAction(ZERO, {})],
+  ['setClientStatusAction (fichas)', () => setClientStatusAction(ZERO, 'pausado')],
+  ['saveClientOps (fichas)', () => saveClientOps(ZERO, { clickupOptionId: '', usualSpaceId: '', usualListIds: [], level: 'x', deliveryDays: null, inactivityDays: null, planningDays: null, alertsEnabled: true, monthlyHours: null, workDays: [], services: [] })],
+  ['aiProposeClient (fichas)', () => aiProposeClient('', null)],
+  ['applyClientProposal (fichas)', () => applyClientProposal({}, ZERO)],
+  ['saveContactAction (contactos)', () => saveContactAction(ZERO, { name: 'x' })],
+  ['saveLocationAction (locales)', () => saveLocationAction(ZERO, { name: 'x' })],
+  ['deleteLocationAction (locales)', () => deleteLocationAction(ZERO, ZERO)],
+  ['saveAssetAction (webs y cuentas)', () => saveAssetAction(ZERO, { kind: 'web', value: 'ejemplo.com' })],
+  ['deleteAssetAction (webs y cuentas)', () => deleteAssetAction(ZERO, ZERO)],
+  ['saveCompetitorAction (competencia)', () => saveCompetitorAction(ZERO, { name: 'x' })],
+  ['deleteCompetitorAction (competencia)', () => deleteCompetitorAction(ZERO, ZERO)],
   ['listClientMemory (memoria)', () => listClientMemory(ZERO)],
   ['addClientMemory (memoria)', () => addClientMemory({ clientId: ZERO, kind: 'contexto', text: 'x' })],
   ['updateClientMemory (memoria)', () => updateClientMemory({ id: ZERO, kind: 'contexto', text: 'x' })],
   ['decideClientMemory (memoria)', () => decideClientMemory(ZERO, 'aceptado')],
-  ['addClientSender (contactos)', () => addClientSender({ clientId: ZERO, kind: 'email', value: 'a@empresa.com', name: '', role: '' })],
-  ['setClientSenderActive (contactos)', () => setClientSenderActive(ZERO, false)],
   ['listInboundEmails (correos)', () => listInboundEmails()],
   ['getInboundEmail (correos)', () => getInboundEmail(ZERO)],
   ['pasteInboundEmail (correos)', () => pasteInboundEmail({ from: 'a@empresa.com', subject: 'x', body: 'x' })],
@@ -377,13 +394,13 @@ describe('memoria de cliente y contactos', () => {
   let memoryId = '';
 
   beforeAll(async () => {
-    await db.delete(opsClients).where(like(opsClients.name, `${PREFIX}%`));
-    const [c] = await db.insert(opsClients).values({ tenantId: fx.kijutechTenantId, name: `${PREFIX}cliente` }).returning({ id: opsClients.id });
+    await db.delete(clients).where(like(clients.name, `${PREFIX}%`));
+    const [c] = await db.insert(clients).values({ tenantId: fx.kijutechTenantId, name: `${PREFIX}cliente` }).returning({ id: clients.id });
     clientId = c.id;
   });
   afterAll(async () => {
     // Borrar el cliente de prueba arrastra sus contactos y su memoria (ON DELETE CASCADE).
-    await db.delete(opsClients).where(like(opsClients.name, `${PREFIX}%`));
+    await db.delete(clients).where(like(clients.name, `${PREFIX}%`));
   });
 
   it('un editor puede añadir y aceptar datos (control positivo)', async () => {
@@ -405,16 +422,34 @@ describe('memoria de cliente y contactos', () => {
     expect((await addClientMemory({ clientId, kind: 'contexto', text: 'contraseña: abc' })).ok).toBe(false);
     expect((await addClientMemory({ clientId, kind: 'inventado', text: 'x' })).ok).toBe(false);
     expect((await decideClientMemory(memoryId, 'propuesto')).ok).toBe(false);
-    expect(await db.select().from(opsClientMemory).where(eq(opsClientMemory.clientId, clientId))).toHaveLength(1);
+    expect(await db.select().from(clientMemory).where(eq(clientMemory.clientId, clientId))).toHaveLength(1);
   });
 
-  it('un contacto no puede estar en dos fichas, ni como dominio público', async () => {
+  it('un correo no puede estar en dos contactos, ni un dominio público reconocer correos; sin contraseñas', async () => {
     await loginAs(fx.users.editor);
-    const alta = { clientId, kind: 'email', value: 'Persona@Empresa.com', name: '', role: '' };
-    expect((await addClientSender(alta)).ok).toBe(true);
-    const dup = await addClientSender({ ...alta, value: 'persona@empresa.com' });
+    expect((await saveContactAction(clientId, { name: 'Persona', email: 'Persona@Empresa.com' })).ok).toBe(true);
+    const dup = await saveContactAction(clientId, { name: 'Otra', email: 'persona@empresa.com' });
     expect(dup.ok).toBe(false);
-    expect((await addClientSender({ ...alta, kind: 'domain', value: 'gmail.com' })).ok).toBe(false);
+    expect((await saveAssetAction(clientId, { kind: 'dominio', value: 'gmail.com', recognizeEmails: true })).ok).toBe(false);
+    expect((await saveAssetAction(clientId, { kind: 'web', value: 'empresa.com', accessNotes: 'password: 1234' })).ok).toBe(false);
+    expect((await saveAssetAction(clientId, { kind: 'web', value: 'empresa.com', recognizeEmails: true })).ok).toBe(true);
+    const [p] = await db.select().from(clientContacts).where(eq(clientContacts.clientId, clientId));
+    expect(p.email).toBe('persona@empresa.com');
+    expect(p.isPrimary).toBe(true); // el primero queda como principal
+    // Borrar un contacto de verdad es de administrador.
+    expect(await outcome(() => deleteContactAction(clientId, p.id))).toBe('denegado');
+  });
+
+  it('el contrato solo lo guarda un administrador', async () => {
+    await loginAs(fx.users.editor);
+    expect(await outcome(() => saveClientContractAction(clientId, { monthlyFee: 500 }))).toBe('denegado');
+    // Un editor no cuela la cuota por la ficha (la acción de perfil no la acepta).
+    expect((await saveClientProfileAction(clientId, { sector: 'Deportes', monthlyFee: 999 } as never)).ok).toBe(true);
+    const [c] = await db.select().from(clients).where(eq(clients.id, clientId));
+    expect(c.sector).toBe('Deportes');
+    expect(c.monthlyFee).toBeNull();
+    await loginAs(fx.users.admin);
+    expect((await saveClientContractAction(clientId, { monthlyFee: 500 })).ok).toBe(true);
   });
 
   it('solo un admin borra de verdad; un editor puede descartar', async () => {
@@ -424,25 +459,27 @@ describe('memoria de cliente y contactos', () => {
     const lista = await listClientMemory(clientId);
     expect(lista.ok && lista.canDelete).toBe(true);
     expect((await deleteClientMemory(memoryId)).ok).toBe(true);
-    expect(await db.select().from(opsClientMemory).where(eq(opsClientMemory.clientId, clientId))).toHaveLength(0);
+    expect(await db.select().from(clientMemory).where(eq(clientMemory.clientId, clientId))).toHaveLength(0);
   });
 
   it('otra cuenta, incluso super_admin, no ve ni toca la memoria de Kijutech', async () => {
     await loginAs(fx.users.editor);
     expect((await addClientMemory({ clientId, kind: 'contexto', text: 'Dato de Kijutech' })).ok).toBe(true);
-    const [m] = await db.select().from(opsClientMemory).where(eq(opsClientMemory.clientId, clientId));
+    const [m] = await db.select().from(clientMemory).where(eq(clientMemory.clientId, clientId));
 
     await loginAs(fx.users.otraCuenta);
     const ajeno = await listClientMemory(clientId);
     const inexistente = await listClientMemory(ZERO);
     expect(ajeno).toEqual(inexistente); // mismo error: no revela qué fichas existen
     expect((await addClientMemory({ clientId, kind: 'contexto', text: 'intruso' })).ok).toBe(false);
-    expect((await addClientSender({ clientId, kind: 'email', value: 'intruso@evil.com', name: '', role: '' })).ok).toBe(false);
+    expect((await saveContactAction(clientId, { name: 'Intruso', email: 'intruso@evil.com' })).ok).toBe(false);
+    expect((await saveClientProfileAction(clientId, { notes: 'manipulado' })).ok).toBe(false);
+    expect((await setClientStatusAction(clientId, 'baja')).ok).toBe(false);
     expect((await updateClientMemory({ id: m.id, kind: 'contexto', text: 'manipulado' })).ok).toBe(false);
     expect((await decideClientMemory(m.id, 'descartado')).ok).toBe(false);
     expect((await deleteClientMemory(m.id)).ok).toBe(false);
 
-    const [intacto] = await db.select().from(opsClientMemory).where(eq(opsClientMemory.id, m.id));
+    const [intacto] = await db.select().from(clientMemory).where(eq(clientMemory.id, m.id));
     expect(intacto.text).toBe('Dato de Kijutech');
     expect(intacto.status).toBe('aceptado');
   });
@@ -463,14 +500,14 @@ describe('correos de clientes', () => {
 
   const limpiar = async () => {
     await db.delete(opsInboundEmails).where(like(opsInboundEmails.fromAddress, `%@${DOM}`));
-    await db.delete(opsClients).where(like(opsClients.name, `${PREFIX}%`));
+    await db.delete(clients).where(like(clients.name, `${PREFIX}%`));
   };
 
   beforeAll(async () => {
     await limpiar();
-    const [c] = await db.insert(opsClients).values({ tenantId: fx.kijutechTenantId, name: `${PREFIX}cliente-correo` }).returning({ id: opsClients.id });
+    const [c] = await db.insert(clients).values({ tenantId: fx.kijutechTenantId, name: `${PREFIX}cliente-correo` }).returning({ id: clients.id });
     clientId = c.id;
-    await db.insert(opsClientSenders).values({ tenantId: fx.kijutechTenantId, clientId, kind: 'email', value: `ana@${DOM}` });
+    await db.insert(clientContacts).values({ tenantId: fx.kijutechTenantId, clientId, name: 'Ana', email: `ana@${DOM}` });
   });
   afterAll(limpiar);
 
@@ -536,7 +573,7 @@ describe('correos de clientes', () => {
     const [c1] = await db.select().from(opsInboundEmails).where(eq(opsInboundEmails.id, pegado.id));
     expect(c1.status).toBe('nuevo');
     expect(c1.matchedBy).toBe('manual');
-    expect(await db.select().from(opsClientSenders).where(eq(opsClientSenders.value, `luis@${DOM}`))).toHaveLength(1);
+    expect(await db.select().from(clientContacts).where(eq(clientContacts.email, `luis@${DOM}`))).toHaveLength(1);
 
     expect((await ignoreInboundEmail(pegado.id)).ok).toBe(true);
     expect((await reopenInboundEmail(pegado.id)).ok).toBe(true);

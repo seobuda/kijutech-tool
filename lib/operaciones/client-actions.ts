@@ -1,263 +1,109 @@
 'use server';
 
-// Acciones web de la sección «Clientes»: crear, editar, desactivar y borrar fichas, niveles y servicios,
-// y el botón «Rellenar con IA» (propone los campos; nunca guarda por su cuenta).
+// Acciones web de Operaciones sobre los clientes (14 nov 2026: la ficha está en el núcleo, lib/core/client-actions.ts):
+//   - Ajustes de Operaciones de un cliente: ClickUp, espacio y listas, nivel, plazo, servicios, alertas, horas y días.
+//   - Crear fichas para las opciones del campo «Cliente» de ClickUp que aún no la tienen.
+//   - Niveles y servicios (catálogos).
+//   - «Rellenar con IA»: texto o audio → propuesta de la ficha completa con vista previa; nada se guarda hasta «Aplicar».
 import { and, eq, inArray } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
-import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
-import {
-  opsClientLevels,
-  opsClientServices,
-  opsClients,
-  opsServices,
-  type OpsClientTool
-} from '@/lib/db/schema';
-import { getUser } from '@/lib/db/queries';
-import { getUserIfAllowed, requirePermission, type Permission } from '@/lib/auth/permissions';
+import { clients as coreClients, opsClientLevels, opsClientServices, opsClients, opsServices } from '@/lib/db/schema';
+import { checkPermission, requirePermission, type Permission } from '@/lib/auth/permissions';
 import { callAI, getPrompt } from '@/lib/ai/gateway';
 import { extractJsonFromLLMResponse } from '@/lib/ai/parsers/json-extractor';
 import { fillTemplate } from '@/lib/operaciones/format';
 import { getStructure } from '@/lib/operaciones/structure';
-import { canManageProfiles } from '@/lib/operaciones/team-profiles';
-import { getLevels, getServices, requestCountsByOption } from '@/lib/operaciones/clients';
+import { getLevels, getServices, listClients, DEFAULT_LEVEL } from '@/lib/operaciones/clients';
 import { getMonthWork, runActivityNow, type MonthWorkItem } from '@/lib/operaciones/client-activity';
+import { replaceServices, upsertOpsSettings, type OpsSettingsInput } from '@/lib/operaciones/client-ops';
+import { applyClientPlan, loadTarget, planClientChange, planLines, type AgentClientInput, type PlanLine } from '@/lib/operaciones/client-write';
+import { ClientError } from '@/lib/core/clients';
 import { publicError } from '@/lib/errors';
-import { SECRET_RE } from '@/lib/operaciones/client-write';
 
 type Ok<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 
 const fail = (e: unknown, fallback: string): { ok: false; error: string } => ({
   ok: false,
-  error: publicError(e, fallback)
+  error: e instanceof ClientError ? e.userMessage : publicError(e, fallback)
 });
 
 async function requireManager(permission: Permission = 'edit') {
   return requirePermission(permission);
 }
 
-const refresh = () => revalidatePath('/dashboard/operaciones/clientes');
+const refresh = (id?: string) => {
+  revalidatePath('/dashboard/clientes');
+  if (id) revalidatePath(`/dashboard/clientes/${id}`);
+};
 
-export type ClientInput = {
-  id: string | null;
-  name: string;
-  aliases: string[];
+// --- Ajustes de Operaciones de un cliente -------------------------------------------------------------------------
+
+export type ClientOpsInput = {
   clickupOptionId: string; // '' = sin vincular
   usualSpaceId: string;
   usualListIds: string[];
   level: string;
-  deliveryDays: number | null; // null = el del nivel
-  inactivityDays: number | null; // null = el del nivel
-  planningDays: number | null; // null = el del nivel; 0 = desactivado
+  deliveryDays: number | null;
+  inactivityDays: number | null;
+  planningDays: number | null;
   alertsEnabled: boolean;
   monthlyHours: number | null;
-  workDays: number[]; // vacío = lunes a viernes
-  tools: OpsClientTool[];
-  business: string;
-  offerings: string;
-  area: string;
-  audience: string;
-  goals: string;
-  strategy: string;
-  notes: string;
-  active: boolean;
+  workDays: number[];
   services: { key: string; responsibleClickupId: string }[];
 };
 
-// Las herramientas no pueden llevar contraseñas (decisión del usuario): se rechaza algo que lo parezca (SECRET_RE, compartido con el agente).
-
-type StructureLike = Awaited<ReturnType<typeof getStructure>>;
-
-function clientOptions(structure: StructureLike): Map<string, string> {
-  const m = new Map<string, string>();
-  for (const f of Object.values(structure.clientFields)) for (const o of f.options) m.set(o.id, o.label);
-  return m;
-}
-
-export async function saveClient(input: ClientInput): Promise<Ok<{ id: string }>> {
+export async function saveClientOps(clientId: string, input: ClientOpsInput): Promise<Ok> {
   try {
     const user = await requireManager('edit');
-    const name = input.name.trim();
-    if (!name) return { ok: false, error: 'El nombre es obligatorio' };
-
-    const [levels, services, structure] = await Promise.all([
-      getLevels(user.tenantId),
-      getServices(user.tenantId),
-      getStructure(user.tenantId)
-    ]);
-    if (!levels.some((l) => l.key === input.level)) return { ok: false, error: 'El nivel elegido no existe' };
-    if (input.deliveryDays != null && !(Number.isInteger(input.deliveryDays) && input.deliveryDays >= 0 && input.deliveryDays <= 60)) {
-      return { ok: false, error: 'El plazo debe ser un número entero de días entre 0 y 60' };
-    }
-    if (input.monthlyHours != null && !(input.monthlyHours >= 0 && input.monthlyHours <= 1000)) {
-      return { ok: false, error: 'Las horas al mes deben estar entre 0 y 1000' };
-    }
-
-    // Opción de ClickUp: tiene que existir y no estar vinculada a otra ficha.
-    let optionId: string | null = null;
-    let optionLabel: string | null = null;
-    if (input.clickupOptionId) {
-      optionLabel = clientOptions(structure).get(input.clickupOptionId) ?? null;
-      if (!optionLabel) return { ok: false, error: 'Esa opción del campo Cliente no existe (actualiza desde ClickUp en Ajustes)' };
-      optionId = input.clickupOptionId;
-      const [dup] = await db
-        .select({ id: opsClients.id, name: opsClients.name })
-        .from(opsClients)
-        .where(and(eq(opsClients.tenantId, user.tenantId), eq(opsClients.clickupOptionId, optionId)))
-        .limit(1);
-      if (dup && dup.id !== input.id) {
-        return { ok: false, error: `Esa opción de ClickUp ya está vinculada a la ficha «${dup.name}»` };
-      }
-    }
-
-    // Espacio y listas habituales: reales y de ese espacio.
-    let spaceId: string | null = null;
-    let listIds: string[] = [];
-    if (input.usualSpaceId) {
-      const space = structure.spaces.find((s) => s.id === input.usualSpaceId);
-      if (!space) return { ok: false, error: 'El espacio habitual no existe' };
-      spaceId = space.id;
-      const valid = new Set(space.lists.map((l) => l.id));
-      listIds = [...new Set(input.usualListIds.filter((id) => valid.has(id)))];
-    }
-
-    const aliases = [...new Set(input.aliases.map((a) => a.trim()).filter(Boolean))].map((a) => a.slice(0, 120)).slice(0, 30);
-    const tools = input.tools
-      .map((t) => ({ name: t.name.trim().slice(0, 100), url: t.url.trim().slice(0, 500), note: t.note.trim().slice(0, 300) }))
-      .filter((t) => t.name || t.url);
-    if (tools.some((t) => SECRET_RE.test(`${t.name} ${t.url} ${t.note}`))) {
-      return { ok: false, error: 'En webs y herramientas no se guardan contraseñas: quítalas del texto.' };
-    }
-
-    const serviceKeys = new Set(services.map((s) => s.key));
-    const memberIds = new Set(structure.members.map((m) => m.id));
-    const svc = new Map<string, string | null>();
-    for (const s of input.services) {
-      if (!serviceKeys.has(s.key)) continue;
-      svc.set(s.key, s.responsibleClickupId && memberIds.has(s.responsibleClickupId) ? s.responsibleClickupId : null);
-    }
-
-    const days = [...new Set(input.workDays.filter((d) => Number.isInteger(d) && d >= 1 && d <= 7))].sort();
-    const okDays = (n: number | null, min: number, max: number) => n === null || (Number.isInteger(n) && n >= min && n <= max);
-    if (!okDays(input.inactivityDays, 1, 90)) return { ok: false, error: 'Los días sin actividad deben estar entre 1 y 90' };
-    if (!okDays(input.planningDays, 0, 60)) return { ok: false, error: 'El horizonte de trabajo planificado debe estar entre 0 y 60 días (0 = desactivado)' };
-    const orNull = (s: string) => (s.trim() ? s.trim() : null);
-    const values = {
-      name: name.slice(0, 255),
-      aliases,
-      clickupOptionId: optionId,
-      clickupOptionLabel: optionLabel,
-      usualSpaceId: spaceId,
-      usualListIds: listIds,
+    const settings: OpsSettingsInput = {
+      clickupOptionId: input.clickupOptionId,
+      usualSpaceId: input.usualSpaceId,
+      usualListIds: input.usualListIds,
       level: input.level,
       deliveryDays: input.deliveryDays,
       inactivityDays: input.inactivityDays,
       planningDays: input.planningDays,
       alertsEnabled: input.alertsEnabled,
-      monthlyHours: input.monthlyHours != null ? String(input.monthlyHours) : null,
-      // L–V o vacío = lunes a viernes (null).
-      workDays: days.length > 0 && days.join(',') !== '1,2,3,4,5' ? days.join(',') : null,
-      tools,
-      business: orNull(input.business),
-      offerings: orNull(input.offerings),
-      area: orNull(input.area)?.slice(0, 255) ?? null,
-      audience: orNull(input.audience),
-      goals: orNull(input.goals),
-      strategy: orNull(input.strategy),
-      notes: orNull(input.notes),
-      active: input.active,
-      updatedAt: new Date()
+      monthlyHours: input.monthlyHours,
+      workDays: input.workDays
     };
-
-    const id = await db.transaction(async (tx) => {
-      let clientId = input.id;
-      if (clientId) {
-        const res = await tx
-          .update(opsClients)
-          .set(values)
-          .where(and(eq(opsClients.id, clientId), eq(opsClients.tenantId, user.tenantId)))
-          .returning({ id: opsClients.id });
-        if (res.length === 0) throw new Error('La ficha no existe');
-      } else {
-        const [row] = await tx
-          .insert(opsClients)
-          .values({ ...values, tenantId: user.tenantId })
-          .returning({ id: opsClients.id });
-        clientId = row.id;
-      }
-      await tx.delete(opsClientServices).where(eq(opsClientServices.clientId, clientId));
-      if (svc.size > 0) {
-        await tx
-          .insert(opsClientServices)
-          .values([...svc].map(([serviceKey, responsibleClickupId]) => ({ clientId: clientId!, serviceKey, responsibleClickupId })));
-      }
-      return clientId;
-    });
-    refresh();
-    return { ok: true, id };
-  } catch (e) {
-    return fail(e, 'No se pudo guardar la ficha');
-  }
-}
-
-export async function setClientActive(id: string, active: boolean): Promise<Ok> {
-  try {
-    const user = await requireManager('edit');
-    await db
-      .update(opsClients)
-      .set({ active, updatedAt: new Date() })
-      .where(and(eq(opsClients.id, id), eq(opsClients.tenantId, user.tenantId)));
-    refresh();
+    await upsertOpsSettings(user.tenantId, clientId, settings);
+    await replaceServices(user.tenantId, clientId, input.services.map((s) => ({ key: s.key, responsibleClickupId: s.responsibleClickupId || null })));
+    refresh(clientId);
     return { ok: true };
   } catch (e) {
-    return fail(e, 'No se pudo cambiar el estado');
+    return fail(e, 'No se pudieron guardar los ajustes de Operaciones');
   }
 }
 
-// Solo se borra una ficha sin encargos; si los tiene, hay que desactivarla.
-export async function deleteClient(id: string): Promise<Ok> {
-  try {
-    const user = await requireManager('admin');
-    const [c] = await db
-      .select()
-      .from(opsClients)
-      .where(and(eq(opsClients.id, id), eq(opsClients.tenantId, user.tenantId)))
-      .limit(1);
-    if (!c) return { ok: false, error: 'La ficha no existe' };
-    if (c.clickupOptionId) {
-      const n = (await requestCountsByOption(user.tenantId)).get(c.clickupOptionId) ?? 0;
-      if (n > 0) return { ok: false, error: `Tiene ${n} encargo${n === 1 ? '' : 's'}: no se puede eliminar, desactívala.` };
-    }
-    await db.delete(opsClients).where(eq(opsClients.id, id));
-    refresh();
-    return { ok: true };
-  } catch (e) {
-    return fail(e, 'No se pudo eliminar la ficha');
-  }
-}
-
-// Crea una ficha (solo nombre y vinculación) por cada opción del campo Cliente que aún no la tiene.
+// Crea una ficha (núcleo + ajustes con la vinculación) por cada opción del campo Cliente que aún no la tiene.
 export async function importMissingClients(): Promise<Ok<{ created: number }>> {
   try {
     const user = await requireManager('edit');
     const structure = await getStructure(user.tenantId);
-    const linked = new Set(
-      (
-        await db
-          .select({ o: opsClients.clickupOptionId })
-          .from(opsClients)
-          .where(eq(opsClients.tenantId, user.tenantId))
-      ).map((r) => r.o)
-    );
-    const missing = [...clientOptions(structure)].filter(([id]) => !linked.has(id));
-    if (missing.length > 0) {
-      await db
-        .insert(opsClients)
-        .values(missing.map(([id, label]) => ({ tenantId: user.tenantId, name: label, clickupOptionId: id, clickupOptionLabel: label })))
-        .onConflictDoNothing();
+    const all = await listClients(user.tenantId);
+    const linked = new Set(all.map((c) => c.clickupOptionId).filter(Boolean));
+    const names = new Set(all.map((c) => c.name.trim().toLowerCase()));
+    const options = new Map<string, string>();
+    for (const f of Object.values(structure.clientFields)) for (const o of f.options) options.set(o.id, o.label);
+    let created = 0;
+    for (const [id, label] of options) {
+      if (linked.has(id)) continue;
+      // Si ya hay una ficha con ese nombre sin vincular, se vincula en vez de duplicarla.
+      const existing = all.find((c) => !c.clickupOptionId && c.name.trim().toLowerCase() === label.trim().toLowerCase());
+      if (existing) {
+        await upsertOpsSettings(user.tenantId, existing.id, { clickupOptionId: id });
+        continue;
+      }
+      if (names.has(label.trim().toLowerCase())) continue;
+      const [row] = await db.insert(coreClients).values({ tenantId: user.tenantId, name: label.slice(0, 255), status: 'activo' }).returning({ id: coreClients.id });
+      await db.insert(opsClients).values({ id: row.id, tenantId: user.tenantId, level: DEFAULT_LEVEL, clickupOptionId: id, clickupOptionLabel: label }).onConflictDoNothing();
+      names.add(label.trim().toLowerCase());
+      created++;
     }
     refresh();
-    return { ok: true, created: missing.length };
+    return { ok: true, created };
   } catch (e) {
     return fail(e, 'No se pudieron crear las fichas');
   }
@@ -332,6 +178,7 @@ export async function deleteLevel(key: string): Promise<Ok> {
       .select({ id: opsClients.id })
       .from(opsClients)
       .where(and(eq(opsClients.tenantId, user.tenantId), eq(opsClients.level, key)));
+    // (Un cliente sin ajustes guardados usa el nivel por defecto: no bloquea el borrado de otro nivel.)
     if (used.length > 0) return { ok: false, error: `${used.length} cliente(s) tienen este nivel: cámbiales el nivel primero.` };
     const levels = await getLevels(user.tenantId);
     if (levels.length <= 1) return { ok: false, error: 'Tiene que quedar al menos un nivel' };
@@ -372,7 +219,7 @@ export async function saveService(input: { key: string | null; label: string; ac
 export async function deleteService(key: string): Promise<Ok> {
   try {
     const user = await requireManager('admin');
-    const ids = (await db.select({ id: opsClients.id }).from(opsClients).where(eq(opsClients.tenantId, user.tenantId))).map((c) => c.id);
+    const ids = (await db.select({ id: coreClients.id }).from(coreClients).where(eq(coreClients.tenantId, user.tenantId))).map((c) => c.id);
     const used =
       ids.length === 0
         ? []
@@ -389,78 +236,42 @@ export async function deleteService(key: string): Promise<Ok> {
   }
 }
 
-// --- Rellenar con IA --------------------------------------------------------------------------
+// --- Rellenar con IA (ficha completa) -----------------------------------------------------------------------------
 
 const CLIENT_PROMPT_KEY = 'ops_client_fill';
 
-const aiClientSchema = z.object({
-  nombre: z.string().default(''),
-  nombres_alternativos: z.array(z.string()).default([]),
-  nivel: z.string().default(''),
-  plazo_dias: z.coerce.number().nullable().default(null),
-  servicios: z.array(z.object({ servicio: z.string().default(''), responsable: z.string().default('') })).default([]),
-  horas_mes: z.coerce.number().default(0),
-  dias_trabajo: z.array(z.coerce.number()).default([]),
-  herramientas: z.array(z.object({ nombre: z.string().default(''), url: z.string().default(''), nota: z.string().default('') })).default([]),
-  negocio: z.string().default(''),
-  productos_servicios: z.string().default(''),
-  zona: z.string().default(''),
-  publico: z.string().default(''),
-  objetivos: z.string().default(''),
-  estrategia: z.string().default(''),
-  notas: z.string().default('')
-});
+export type ClientProposal = { mode: 'crear' | 'editar'; name: string; input: AgentClientInput; lines: PlanLine[]; warnings: string[] };
 
-// Propuesta ya validada contra datos reales. Lo que la IA no pudo deducir viene como null.
-export type ClientDraft = {
-  name: string | null;
-  aliases: string[] | null;
-  level: string | null;
-  deliveryDays: number | null;
-  services: { key: string; responsibleClickupId: string }[] | null;
-  monthlyHours: number | null;
-  workDays: number[] | null;
-  tools: OpsClientTool[] | null;
-  business: string | null;
-  offerings: string | null;
-  area: string | null;
-  audience: string | null;
-  goals: string | null;
-  strategy: string | null;
-  notes: string | null;
-};
-
-export async function aiFillClient(text: string, currentName: string): Promise<Ok<{ draft: ClientDraft }>> {
+/**
+ * Texto (o transcripción de un audio) → propuesta de la ficha completa con su vista previa. No guarda nada.
+ * `clientId` = la ficha que se está editando (null = cliente nuevo).
+ */
+export async function aiProposeClient(text: string, clientId: string | null): Promise<Ok<{ proposal: ClientProposal }>> {
   try {
     const user = await requireManager('edit');
     const clean = text.trim();
     if (clean.length < 10) return { ok: false, error: 'Escribe o graba algo más del cliente (mínimo una frase).' };
     if (clean.length > 12000) return { ok: false, error: 'El texto es demasiado largo (máximo 12.000 caracteres).' };
-
     const prompt = await getPrompt(CLIENT_PROMPT_KEY);
     if (!prompt) return { ok: false, error: `El prompt «${CLIENT_PROMPT_KEY}» no está activo (IA & Modelos).` };
+    const target = clientId ? await loadTarget(user.tenantId, clientId) : null;
+    if (clientId && !target) return { ok: false, error: 'La ficha no existe' };
 
-    const [levels, services, structure] = await Promise.all([
-      getLevels(user.tenantId),
-      getServices(user.tenantId),
-      getStructure(user.tenantId)
-    ]);
-    const activeServices = services.filter((s) => s.active);
+    const [levels, services, structure] = await Promise.all([getLevels(user.tenantId), getServices(user.tenantId), getStructure(user.tenantId)]);
     const userPrompt = fillTemplate(prompt.user_prompt_template, {
-      cliente_actual: currentName.trim() || '(sin nombre todavía)',
+      cliente_actual: target ? target.sheet.client.name : '(cliente nuevo)',
       niveles: levels.map((l) => `- ${l.key}: ${l.label} (plazo por defecto ${l.defaultDays} días)`).join('\n'),
-      servicios: activeServices.map((s) => `- ${s.key}: ${s.label}`).join('\n') || '- (ninguno)',
+      servicios: services.filter((s) => s.active).map((s) => `- ${s.key}: ${s.label}`).join('\n') || '- (ninguno)',
       miembros: structure.members.map((m) => `- ${m.username}`).join('\n') || '- (sin datos)',
       texto: clean
     });
-
     let response;
     try {
       response = await callAI({
         tenantId: user.tenantId,
         function: 'ops_client_fill',
         promptKey: CLIENT_PROMPT_KEY,
-        maxTokens: 2500,
+        maxTokens: 4000,
         messages: [
           { role: 'system', content: prompt.system_prompt },
           { role: 'user', content: userPrompt }
@@ -469,50 +280,39 @@ export async function aiFillClient(text: string, currentName: string): Promise<O
     } catch (e) {
       return { ok: false, error: `La IA falló: ${publicError(e, 'error desconocido')}` };
     }
-    let p;
+    let input: AgentClientInput;
     try {
-      p = aiClientSchema.parse(extractJsonFromLLMResponse(response.content));
+      const raw = extractJsonFromLLMResponse(response.content);
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('no es un objeto');
+      input = raw as AgentClientInput;
     } catch {
       return { ok: false, error: 'La IA no devolvió un JSON válido. Inténtalo de nuevo.' };
     }
-
-    const validServices = new Set(activeServices.map((s) => s.key));
-    const byName = new Map(structure.members.map((m) => [m.username.trim().toLowerCase(), m.id]));
-    const svc = new Map<string, string>();
-    for (const s of p.servicios) {
-      const key = s.servicio.trim();
-      if (validServices.has(key)) svc.set(key, byName.get(s.responsable.trim().toLowerCase()) ?? '');
-    }
-    const level = levels.find((l) => l.key === p.nivel.trim())?.key ?? null;
-    const days = [...new Set(p.dias_trabajo.filter((d) => Number.isInteger(d) && d >= 1 && d <= 7))].sort();
-    const tools = p.herramientas
-      .map((t) => ({ name: t.nombre.trim().slice(0, 100), url: t.url.trim().slice(0, 500), note: t.nota.trim().slice(0, 300) }))
-      .filter((t) => (t.name || t.url) && !SECRET_RE.test(`${t.name} ${t.url} ${t.note}`));
-    const orNull = (s: string) => (s.trim() ? s.trim() : null);
-    const aliases = [...new Set(p.nombres_alternativos.map((a) => a.trim()).filter(Boolean))];
-
-    return {
-      ok: true,
-      draft: {
-        name: orNull(p.nombre),
-        aliases: aliases.length ? aliases : null,
-        level,
-        deliveryDays: p.plazo_dias != null && Number.isInteger(p.plazo_dias) && p.plazo_dias >= 0 && p.plazo_dias <= 60 ? p.plazo_dias : null,
-        services: svc.size ? [...svc].map(([key, responsibleClickupId]) => ({ key, responsibleClickupId })) : null,
-        monthlyHours: p.horas_mes > 0 && p.horas_mes <= 1000 ? p.horas_mes : null,
-        workDays: days.length ? days : null,
-        tools: tools.length ? tools : null,
-        business: orNull(p.negocio),
-        offerings: orNull(p.productos_servicios),
-        area: orNull(p.zona),
-        audience: orNull(p.publico),
-        goals: orNull(p.objetivos),
-        strategy: orNull(p.estrategia),
-        notes: orNull(p.notas)
-      }
-    };
+    if (target) input.nombre = input.nombre || target.sheet.client.name;
+    const withContract = (await checkPermission('admin')).ok;
+    const res = await planClientChange(user.tenantId, target ? 'editar' : 'crear', input, target, { withContract });
+    if ('error' in res) return { ok: false, error: res.error };
+    return { ok: true, proposal: { mode: res.plan.mode, name: res.plan.name, input, lines: planLines(res.plan, levels), warnings: res.plan.warnings } };
   } catch (e) {
     return fail(e, 'No se pudo rellenar con IA');
+  }
+}
+
+/** Aplica una propuesta: se vuelve a validar en el servidor (lo que llega del navegador no se da por bueno). */
+export async function applyClientProposal(input: AgentClientInput, clientId: string | null): Promise<Ok<{ id: string; problems: string[] }>> {
+  try {
+    const user = await requireManager('edit');
+    const target = clientId ? await loadTarget(user.tenantId, clientId) : null;
+    if (clientId && !target) return { ok: false, error: 'La ficha no existe' };
+    const withContract = (await checkPermission('admin')).ok;
+    const res = await planClientChange(user.tenantId, target ? 'editar' : 'crear', input, target, { withContract });
+    if ('error' in res) return { ok: false, error: res.error };
+    const applied = await applyClientPlan(user.tenantId, res.plan, user.id);
+    if (!applied.ok) return { ok: false, error: applied.text };
+    refresh(applied.id);
+    return { ok: true, id: applied.id, problems: applied.problems };
+  } catch (e) {
+    return fail(e, 'No se pudo aplicar la propuesta');
   }
 }
 

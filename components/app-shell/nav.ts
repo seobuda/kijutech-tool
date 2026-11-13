@@ -67,13 +67,12 @@ export const OPS_SECTIONS: TabSection[] = [
     key: 'operaciones',
     label: 'Operaciones',
     icon: LayoutGrid,
-    description: 'El centro de mando del agente: entrada de trabajo, encargos, clientes y correos con datos en directo de ClickUp.',
+    description: 'El centro de mando del agente: entrada de trabajo, encargos y correos con datos en directo de ClickUp.',
     tabs: [
       { href: '/dashboard/operaciones', label: 'Bloc de notas', icon: NotebookPen, keywords: 'nota dictar audio' },
       { href: '/dashboard/operaciones/bandeja', label: 'Mi bandeja', icon: Inbox, keywords: 'revisiones bloqueos pendientes' },
       { href: '/dashboard/operaciones/encargos', label: 'Encargos', icon: ClipboardList, keywords: 'tareas clickup' },
       { href: '/dashboard/operaciones/nuevo', label: 'Nuevo encargo', icon: PlusCircle, keywords: 'crear tarea' },
-      { href: '/dashboard/operaciones/clientes', label: 'Clientes', icon: Building2, keywords: 'fichas semáforo alertas' },
       { href: '/dashboard/operaciones/correos', label: 'Correos', icon: Mail, keywords: 'email entrada' },
       { href: '/dashboard/operaciones/agente', label: 'Agente', icon: Bot, keywords: 'propuestas aprobación autonomía acierto', show: adminOnly },
       { href: '/dashboard/operaciones/informes', label: 'Informes', icon: FileBarChart, keywords: 'informe semanal mensual parte resumen', show: adminOnly },
@@ -138,6 +137,7 @@ export const NAV: NavGroup[] = [
     label: 'Trabajo',
     items: [
       { href: '/dashboard/operaciones', label: 'Operaciones', icon: LayoutGrid, section: 'operaciones', keywords: 'agente encargos clickup' },
+      { href: '/dashboard/clientes', label: 'Clientes', icon: Building2, prefix: true, keywords: 'fichas cliente contactos webs cuentas competencia semáforo alertas onboarding' },
       { href: '/dashboard/operaciones/equipo-hoy', label: 'Equipo', icon: UsersRound, section: 'equipo', keywords: 'jornada fichas personas' },
       { href: '/dashboard/projects', label: 'Proyectos SEO', icon: FolderKanban, prefix: true, keywords: 'seo keywords clusters' },
       { href: '/dashboard/agentes', label: 'Agentes', icon: Bot, prefix: true, keywords: 'agente ia telegram audio subagentes integraciones search console analytics dataforseo clarity', show: (r) => r.isAdmin }
@@ -194,6 +194,7 @@ export function isActive(item: NavItem, pathname: string): boolean {
 const SEGMENT_LABELS: Record<string, string> = {
   dashboard: 'Inicio',
   operaciones: 'Operaciones',
+  clientes: 'Clientes',
   projects: 'Proyectos SEO',
   ai: 'IA',
   settings: 'Ajustes',

@@ -13,11 +13,12 @@ import { and, desc, eq, notInArray } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { opsRequests, opsSettings, roles, userRoles, users } from '@/lib/db/schema';
 import { getPrompt } from '@/lib/ai/gateway';
-import { registerTools, setEmailOutbound, setTelegramOutbound, type AgentTool, type ToolContext, type ToolResult } from '@/lib/core/capabilities';
+import { registerClientDeleteGuard, registerTools, setEmailOutbound, setTelegramOutbound, type AgentTool, type ToolContext, type ToolResult } from '@/lib/core/capabilities';
 import { decideAction, getAction, recordAction, type Autonomy } from '@/lib/operaciones/agent-actions';
 import { getCalendar, saveCalendar, validateEntry, KIND_LABEL, type CalendarEntry } from '@/lib/operaciones/calendar';
 import { findClientInText, getLevels, listClients, normText, type ClientWithServices } from '@/lib/operaciones/clients';
-import { addClientMemory, applyClientPlan, clientSheetText, MEMORY_KINDS, planClientChange, planHtml, type AgentClientInput, type ClientPlan, type MemoryKind } from '@/lib/operaciones/client-write';
+import { applyClientPlan, loadTarget, MEMORY_KINDS, opsSheetText, planClientChange, planHtml, type AgentClientInput, type ClientPlan, type MemoryKind } from '@/lib/operaciones/client-write';
+import { addMemory, ClientError, getClientSheet, sheetText } from '@/lib/core/clients';
 import { getInbox, waitLabel } from '@/lib/operaciones/inbox';
 import { getCurrentDays, todayIn } from '@/lib/operaciones/jornada';
 import { enqueueNotification } from '@/lib/operaciones/notifications';
@@ -227,13 +228,17 @@ const fichaCliente: AgentTool = {
   name: 'ficha_cliente',
   module: 'operaciones',
   title: 'Ficha de un cliente',
-  description: 'Ficha completa de un cliente: nivel, ClickUp, servicios con responsable, webs y herramientas, negocio, oferta, zona, público, objetivos, estrategia, notas (con su contacto), correos que se reconocen y su memoria aceptada. Léela antes de editar una ficha.',
+  description:
+    'Ficha completa de un cliente: estado, empresa, negocio, objetivos y estrategia, contactos (con rol y canal preferido), locales, webs y cuentas (con su acceso), competencia, memoria, nivel, servicios con responsable y ClickUp, y qué le falta a la ficha. Léela antes de editar una ficha o de trabajar para un cliente.',
   risk: 'lectura',
   inputSchema: { type: 'object', properties: { cliente: { type: 'string' } }, required: ['cliente'], additionalProperties: false },
   async run(ctx, input) {
     const { client, options } = await findClient(ctx.tenantId, str(input.cliente));
     if (!client) return fail(options.length ? `Hay varios clientes posibles: ${options.join(' | ')}. Pregunta cuál.` : 'No encuentro ese cliente.');
-    return ok(await clientSheetText(ctx.tenantId, client));
+    const sheet = await getClientSheet(ctx.tenantId, client.id);
+    if (!sheet) return fail('No encuentro ese cliente.');
+    // El contrato (cuota) solo para el dueño.
+    return ok(`${sheetText(sheet, { withContract: ctx.actor.isOwner })}\n${await opsSheetText(ctx.tenantId, client)}`);
   }
 };
 
@@ -493,42 +498,96 @@ EXECUTORS.apuntar_ausencia = async (tenantId, data, by) => {
   return ok(`Apuntado en el calendario: ${e.name} (${e.from}${e.to !== e.from ? ` a ${e.to}` : ''}).`);
 };
 
-// --- Fichas de cliente (14 nov 2026) ----------------------------------------------------------------
-// El agente redacta los campos (de lo que le cuenta Enric y, si hay web, de lo que lee en ella); el código valida contra
-// niveles, servicios, personas y opciones de ClickUp, enseña la ficha en Telegram y la guarda solo con ✅ (o en autónomo).
+// --- Fichas de cliente (14 nov 2026, sobre la ficha del núcleo) ------------------------------------------------------
+// El agente redacta (de lo que cuenta Enric y, si hay web, de lo que lee en ella); client-write.ts valida contra los datos
+// reales y arma el plan; se enseña en Telegram y se guarda solo con ✅ (o en autónomo). Contactos, locales, webs y
+// cuentas, competencia y memoria van cada uno a su sitio.
+
+const CLIENT_PROPS = {
+  nombre: { type: 'string', description: 'Nombre comercial' },
+  alias: { type: 'array', items: { type: 'string' }, description: 'Otras formas de llamarlo (marca, dominio, abreviaturas)' },
+  estado: { type: 'string', enum: ['prospecto', 'onboarding', 'activo', 'pausado', 'baja'], description: 'Un cliente que empieza: onboarding' },
+  sector: { type: 'string' },
+  descripcion: { type: 'string', description: 'Resumen de una o dos frases' },
+  razon_social: { type: 'string' },
+  cif: { type: 'string' },
+  direccion_fiscal: { type: 'string' },
+  negocio: { type: 'string', description: 'A qué se dedica, en 2-4 frases profesionales' },
+  productos_servicios: { type: 'string', description: 'Qué vende u ofrece' },
+  zona: { type: 'string' },
+  publico: { type: 'string' },
+  propuesta_valor: { type: 'string' },
+  tono_marca: { type: 'string', description: 'Cómo habla la marca y cómo hay que tratar al cliente' },
+  objetivos: { type: 'string', description: 'Lo que quiere conseguir, concreto y medible si se puede' },
+  estrategia: { type: 'string' },
+  notas: { type: 'string' },
+  nivel: { type: 'string', description: 'Nivel del cliente si se dijo' },
+  servicios: { type: 'array', items: { type: 'object', properties: { servicio: { type: 'string' }, responsable: { type: 'string' } }, required: ['servicio'], additionalProperties: false } },
+  horas_mes: { type: 'number' },
+  web: { type: 'string', description: 'Web principal (dominio o URL)' },
+  contactos: {
+    type: 'array',
+    items: {
+      type: 'object',
+      properties: {
+        nombre: { type: 'string' },
+        cargo: { type: 'string' },
+        rol: { type: 'string', enum: ['decisor', 'facturacion', 'tecnico', 'marketing', 'otro'] },
+        email: { type: 'string' },
+        telefono: { type: 'string' },
+        whatsapp: { type: 'string' },
+        canal_preferido: { type: 'string', enum: ['email', 'telefono', 'whatsapp', 'otro'] },
+        principal: { type: 'boolean' }
+      },
+      additionalProperties: false
+    }
+  },
+  locales: {
+    type: 'array',
+    items: {
+      type: 'object',
+      properties: { nombre: { type: 'string' }, direccion: { type: 'string' }, ciudad: { type: 'string' }, codigo_postal: { type: 'string' }, provincia: { type: 'string' }, pais: { type: 'string' }, telefono: { type: 'string' }, horario: { type: 'string' }, principal: { type: 'boolean' } },
+      additionalProperties: false
+    },
+    description: 'Tiendas, oficinas o sedes. El teléfono general del negocio va en el local principal.'
+  },
+  activos: {
+    type: 'array',
+    items: {
+      type: 'object',
+      properties: {
+        tipo: { type: 'string', enum: ['web', 'dominio', 'search_console', 'analytics', 'business_profile', 'google_ads', 'meta', 'instagram', 'tiktok', 'linkedin', 'youtube', 'tienda', 'crm', 'otro'] },
+        nombre: { type: 'string' },
+        url: { type: 'string', description: 'URL o identificador (p. ej. sc-domain:cliente.com)' },
+        acceso: { type: 'string', enum: ['si', 'pendiente', 'no', 'no_aplica'] },
+        donde_accesos: { type: 'string', description: 'Dónde están los accesos. NUNCA la contraseña.' },
+        principal: { type: 'boolean' },
+        nota: { type: 'string' }
+      },
+      additionalProperties: false
+    },
+    description: 'Webs y cuentas del cliente (Search Console, Analytics, ficha de Google, Ads, redes, tienda, CRM).'
+  },
+  competidores: { type: 'array', items: { type: 'object', properties: { nombre: { type: 'string' }, dominio: { type: 'string' }, nota: { type: 'string' } }, additionalProperties: false } },
+  memoria: { type: 'array', items: { type: 'object', properties: { tipo: { type: 'string', enum: ['preferencia', 'promesa', 'decision', 'contexto', 'restriccion'] }, texto: { type: 'string' } }, required: ['tipo', 'texto'], additionalProperties: false } },
+  contrato_servicios: { type: 'string' },
+  cuota_mensual: { type: 'number', description: 'Euros al mes, solo si Enric la dice' },
+  contrato_inicio: { type: 'string', description: 'AAAA-MM-DD' },
+  contrato_renovacion: { type: 'string', description: 'AAAA-MM-DD' }
+};
 
 const crearCliente: AgentTool = {
   name: 'crear_cliente',
   module: 'operaciones',
   title: 'Crear una ficha de cliente',
   description:
-    'Crea la ficha de un cliente nuevo. Redacta cada campo de forma profesional y completa a partir de lo que cuenta Enric (y de su web si la has leído), sin inventar datos de contacto, cifras ni servicios que no se hayan dicho. Lo que deduces de la web, escríbelo como tal («según su web…»). Se enseña a Enric con ✅ / ✖️ antes de guardarse.',
+    'Crea la ficha de un cliente nuevo con todo lo que se sepa: empresa, negocio, objetivos, contactos, locales, webs y cuentas, competencia y memoria. Redacta de forma profesional y completa a partir de lo que cuenta Enric (y de su web si la has leído), sin inventar teléfonos, correos, cifras ni servicios contratados. Lo que deduces de la web, dilo («según su web…»). Se enseña a Enric con ✅ / ✖️ antes de guardarse.',
   risk: 'cambio',
-  inputSchema: { type: 'object', properties: {
-      nombre: { type: 'string', description: 'Nombre comercial del cliente' },
-      alias: { type: 'array', items: { type: 'string' }, description: 'Otras formas de llamarlo (marca, dominio, abreviaturas)' },
-      nivel: { type: 'string', description: 'Nivel del cliente si se dijo (clave o nombre del nivel)' },
-      servicios: { type: 'array', items: { type: 'object', properties: { servicio: { type: 'string' }, responsable: { type: 'string', description: 'Persona del equipo que lo lleva, si se dijo' } }, required: ['servicio'], additionalProperties: false } },
-      web: { type: 'string', description: 'Web principal (dominio o URL)' },
-      telefono: { type: 'string' },
-      direccion: { type: 'string' },
-      contactos: { type: 'array', items: { type: 'object', properties: { nombre: { type: 'string' }, cargo: { type: 'string' }, email: { type: 'string' }, telefono: { type: 'string' } }, additionalProperties: false }, description: 'Personas de contacto del cliente' },
-      herramientas: { type: 'array', items: { type: 'object', properties: { nombre: { type: 'string' }, url: { type: 'string' }, nota: { type: 'string' } }, additionalProperties: false }, description: 'Otras webs y herramientas (tienda, GA4, CRM…). NUNCA contraseñas.' },
-      negocio: { type: 'string', description: 'A qué se dedica, en 2-4 frases profesionales' },
-      productos_servicios: { type: 'string', description: 'Qué vende u ofrece' },
-      zona: { type: 'string', description: 'Zona geográfica en la que trabaja' },
-      publico: { type: 'string', description: 'Público objetivo' },
-      objetivos: { type: 'string', description: 'Lo que quiere conseguir, concreto y medible si se puede' },
-      estrategia: { type: 'string', description: 'Qué se va a hacer o se está haciendo para conseguirlo' },
-      notas: { type: 'string', description: 'Peculiaridades y datos útiles que no encajan arriba' },
-      horas_mes: { type: 'number' },
-      memoria: { type: 'array', items: { type: 'object', properties: { tipo: { type: 'string', enum: ['preferencia', 'promesa', 'decision', 'contexto', 'restriccion'] }, texto: { type: 'string' } }, required: ['tipo', 'texto'], additionalProperties: false }, description: 'Preferencias, promesas, decisiones o restricciones que haya dicho Enric' }
-    }, required: ['nombre'], additionalProperties: false },
+  inputSchema: { type: 'object', properties: CLIENT_PROPS, required: ['nombre'], additionalProperties: false },
   async run(ctx, input) {
-    const res = await planClientChange(ctx.tenantId, 'crear', input as AgentClientInput, null);
+    const res = await planClientChange(ctx.tenantId, 'crear', input as AgentClientInput, null, { withContract: ctx.actor.isOwner });
     if ('error' in res) return fail(res.error);
-    const levels = await getLevels(ctx.tenantId);
-    return proposeOrRun(ctx, 'crear_cliente', planHtml(res.plan, levels, null), { plan: res.plan });
+    return proposeOrRun(ctx, 'crear_cliente', planHtml(res.plan, await getLevels(ctx.tenantId)), { plan: res.plan });
   }
 };
 
@@ -537,34 +596,20 @@ const actualizarCliente: AgentTool = {
   module: 'operaciones',
   title: 'Editar una ficha de cliente',
   description:
-    'Completa o corrige la ficha de un cliente que ya existe. Lee antes la ficha con ficha_cliente. Pasa SOLO los campos que cambian: los textos (negocio, objetivos, estrategia, notas…) se REEMPLAZAN, así que para añadir algo pasa el texto completo nuevo (el anterior más lo nuevo, bien redactado). Alias, servicios, webs, contactos y memoria se SUMAN a lo que ya hay; para quitar un servicio usa servicios_quitar. Se enseña a Enric con ✅ / ✖️.',
+    'Completa o corrige la ficha de un cliente que ya existe. Lee antes la ficha con ficha_cliente. Pasa SOLO lo que cambia: los textos (negocio, objetivos, estrategia, notas…) se REEMPLAZAN, así que para añadir algo pasa el texto completo nuevo. Contactos, locales, webs y cuentas, competidores, servicios y memoria se SUMAN (si ya existe uno con el mismo correo, nombre o dominio, se completa). Para quitar algo usa servicios_quitar o quitar. Para dar de baja un cliente: estado «baja». Se enseña a Enric con ✅ / ✖️.',
   risk: 'cambio',
   inputSchema: {
     type: 'object',
     properties: {
       cliente: { type: 'string', description: 'Nombre actual (o alias) del cliente' },
-      ...{
-      nombre: { type: 'string', description: 'Nombre comercial del cliente' },
-      alias: { type: 'array', items: { type: 'string' }, description: 'Otras formas de llamarlo (marca, dominio, abreviaturas)' },
-      nivel: { type: 'string', description: 'Nivel del cliente si se dijo (clave o nombre del nivel)' },
-      servicios: { type: 'array', items: { type: 'object', properties: { servicio: { type: 'string' }, responsable: { type: 'string', description: 'Persona del equipo que lo lleva, si se dijo' } }, required: ['servicio'], additionalProperties: false } },
-      web: { type: 'string', description: 'Web principal (dominio o URL)' },
-      telefono: { type: 'string' },
-      direccion: { type: 'string' },
-      contactos: { type: 'array', items: { type: 'object', properties: { nombre: { type: 'string' }, cargo: { type: 'string' }, email: { type: 'string' }, telefono: { type: 'string' } }, additionalProperties: false }, description: 'Personas de contacto del cliente' },
-      herramientas: { type: 'array', items: { type: 'object', properties: { nombre: { type: 'string' }, url: { type: 'string' }, nota: { type: 'string' } }, additionalProperties: false }, description: 'Otras webs y herramientas (tienda, GA4, CRM…). NUNCA contraseñas.' },
-      negocio: { type: 'string', description: 'A qué se dedica, en 2-4 frases profesionales' },
-      productos_servicios: { type: 'string', description: 'Qué vende u ofrece' },
-      zona: { type: 'string', description: 'Zona geográfica en la que trabaja' },
-      publico: { type: 'string', description: 'Público objetivo' },
-      objetivos: { type: 'string', description: 'Lo que quiere conseguir, concreto y medible si se puede' },
-      estrategia: { type: 'string', description: 'Qué se va a hacer o se está haciendo para conseguirlo' },
-      notas: { type: 'string', description: 'Peculiaridades y datos útiles que no encajan arriba' },
-      horas_mes: { type: 'number' },
-      memoria: { type: 'array', items: { type: 'object', properties: { tipo: { type: 'string', enum: ['preferencia', 'promesa', 'decision', 'contexto', 'restriccion'] }, texto: { type: 'string' } }, required: ['tipo', 'texto'], additionalProperties: false }, description: 'Preferencias, promesas, decisiones o restricciones que haya dicho Enric' }
-    },
+      ...CLIENT_PROPS,
       servicios_quitar: { type: 'array', items: { type: 'string' } },
-      activo: { type: 'boolean', description: 'false para desactivar la ficha (cliente que se va)' }
+      quitar: {
+        type: 'object',
+        properties: { contactos: { type: 'array', items: { type: 'string' } }, locales: { type: 'array', items: { type: 'string' } }, activos: { type: 'array', items: { type: 'string' } }, competidores: { type: 'array', items: { type: 'string' } } },
+        additionalProperties: false,
+        description: 'Lo que hay que quitar, por nombre, correo, dominio o URL'
+      }
     },
     required: ['cliente'],
     additionalProperties: false
@@ -572,10 +617,11 @@ const actualizarCliente: AgentTool = {
   async run(ctx, input) {
     const { client, options } = await findClient(ctx.tenantId, str(input.cliente));
     if (!client) return fail(options.length ? `Hay varios clientes posibles: ${options.join(' | ')}. Pregunta cuál.` : 'No encuentro ese cliente: si es nuevo, usa crear_cliente.');
-    const res = await planClientChange(ctx.tenantId, 'editar', input as AgentClientInput, client);
+    const target = await loadTarget(ctx.tenantId, client.id);
+    if (!target) return fail('No encuentro ese cliente.');
+    const res = await planClientChange(ctx.tenantId, 'editar', input as AgentClientInput, target, { withContract: ctx.actor.isOwner });
     if ('error' in res) return fail(res.error);
-    const levels = await getLevels(ctx.tenantId);
-    return proposeOrRun(ctx, 'actualizar_cliente', planHtml(res.plan, levels, client), { plan: res.plan });
+    return proposeOrRun(ctx, 'actualizar_cliente', planHtml(res.plan, await getLevels(ctx.tenantId)), { plan: res.plan });
   }
 };
 
@@ -613,8 +659,12 @@ const anotarMemoria: AgentTool = {
   }
 };
 EXECUTORS.anotar_memoria_cliente = async (tenantId, data) => {
-  await addClientMemory(tenantId, String(data.clientId), data.tipo as MemoryKind, String(data.texto), await ownerUserId(tenantId));
-  return ok(`Anotado en la memoria de ${String(data.clientName)}.`);
+  try {
+    await addMemory(tenantId, String(data.clientId), { kind: String(data.tipo), text: String(data.texto), status: 'aceptado', sourceType: 'agente', by: await ownerUserId(tenantId) });
+    return ok(`Anotado en la memoria de ${String(data.clientName)}.`);
+  } catch (e) {
+    return fail(e instanceof ClientError ? e.userMessage : 'No se pudo anotar.');
+  }
 };
 
 export const OPS_AGENT_TOOLS: AgentTool[] = [estadoEquipo, tareasPersona, pendientesDueno, fichaCliente, encargosRecientes, costes, informeSemana, calendario, crearEncargo, reasignar, moverFecha, comentar, ausencia, crearCliente, actualizarCliente, anotarMemoria];
@@ -631,6 +681,14 @@ export function registerOperacionesCapabilities(): void {
   if (registered) return;
   registered = true;
   registerTools(OPS_AGENT_TOOLS);
+  // Un cliente con encargos no se borra (se le da de baja): así no se pierde el historial.
+  registerClientDeleteGuard('operaciones', async (tenantId, clientId) => {
+    const c = (await listClients(tenantId)).find((x) => x.id === clientId);
+    if (!c?.clickupOptionId) return null;
+    const { requestCountsByOption } = await import('@/lib/operaciones/clients');
+    const n = (await requestCountsByOption(tenantId)).get(c.clickupOptionId) ?? 0;
+    return n > 0 ? `Tiene ${n} encargo${n === 1 ? '' : 's'} en Operaciones.` : null;
+  });
   setEmailOutbound({
     async reply(tenantId, input) {
       try {

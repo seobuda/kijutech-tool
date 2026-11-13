@@ -6,7 +6,7 @@ import { revalidatePath } from 'next/cache';
 import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
-import { opsClientServices, opsClients } from '@/lib/db/schema';
+import { opsClientServices, clients, opsClients } from '@/lib/db/schema';
 import { requirePermission } from '@/lib/auth/permissions';
 import { publicError } from '@/lib/errors';
 import { logEvent } from '@/lib/operaciones/events';
@@ -43,6 +43,7 @@ export async function applyClientProposalAction(input: z.infer<typeof applySchem
     const d = parsed.data;
     const [client] = await db.select().from(opsClients).where(and(eq(opsClients.id, d.clientId), eq(opsClients.tenantId, user.tenantId))).limit(1);
     if (!client) return { ok: false, error: 'Ese cliente no existe' };
+    const [core] = await db.select({ name: clients.name }).from(clients).where(eq(clients.id, client.id)).limit(1);
 
     const valid = new Set((await getServices(user.tenantId)).filter((s) => s.active).map((s) => s.key));
     const structure = await getStructure(user.tenantId);
@@ -68,10 +69,10 @@ export async function applyClientProposalAction(input: z.infer<typeof applySchem
     await logEvent(user.tenantId, {
       actor: { clickupUserId: null, name: user.name || user.email },
       type: 'ficha_cliente',
-      payload: { client: client.name, servicesAdded: added, lists: listsSet ? listIds.length : 0, via: 'historial' }
+      payload: { client: core?.name ?? '', servicesAdded: added, lists: listsSet ? listIds.length : 0, via: 'historial' }
     });
     clearProposalCache(user.tenantId);
-    revalidatePath('/dashboard/operaciones/clientes');
+    revalidatePath('/dashboard/clientes');
     return { ok: true, added };
   } catch (e) {
     return { ok: false, error: publicError(e, 'No se pudo aplicar la propuesta') };

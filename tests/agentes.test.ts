@@ -35,9 +35,9 @@ vi.mock('@/lib/ai/gateway', async (orig) => {
 });
 
 import { db } from '@/lib/db/drizzle';
-import { agtAgents, agtIntegrations, agtJobs, aiJobs, opsAgentActions, opsClientLevels, opsClientMemory, opsClients, opsClientSenders, opsClientServices, opsServices, tenants } from '@/lib/db/schema';
+import { agtAgents, agtIntegrations, agtJobs, aiJobs, clientAssets, clientCompetitors, clientContacts, clientLocations, clientMemory, clients, opsAgentActions, opsClientLevels, opsClients, opsClientServices, opsServices, tenants } from '@/lib/db/schema';
 import { and } from 'drizzle-orm';
-import { domainOf, normalizeUrl, withContactLine } from '@/lib/operaciones/client-write';
+import { completeness, domainOf, normalizeUrl, recognizableDomain } from '@/lib/core/client-rules';
 import { availableTools, dispatchInbound, getTool, registerTools, setInboundHandler, setTelegramOutbound, type AgentTool } from '@/lib/core/capabilities';
 import { runAgent, systemPrompt, toMessages } from '@/lib/agentes/engine';
 import { isOgg, speakableText } from '@/lib/agentes/voice';
@@ -102,13 +102,25 @@ describe('motor (puro)', () => {
 });
 
 describe('fichas de cliente (puro)', () => {
-  it('dominio, URL y línea de contacto', () => {
+  it('dominio, URL, dominios que reconocen correos y completitud', () => {
     expect(domainOf('https://www.JosePerez.com/tienda?x=1')).toBe('joseperez.com');
+    expect(domainOf('sc-domain:joseperez.com')).toBe('joseperez.com');
     expect(domainOf('no es una web')).toBeNull();
     expect(normalizeUrl('joseperez.com')).toBe('https://joseperez.com');
-    expect(withContactLine('Le gusta el trato directo.', '600 000 000', 'C/ Mayor 1, Valencia')).toBe('Contacto: Teléfono: 600 000 000 · Dirección: C/ Mayor 1, Valencia\nLe gusta el trato directo.');
-    // Actualiza la línea sin perder el dato que no cambia.
-    expect(withContactLine('Contacto: Teléfono: 1 · Dirección: Calle A\nOtra', '2', '')).toBe('Contacto: Teléfono: 2 · Dirección: Calle A\nOtra');
+    expect(normalizeUrl('properties/123')).toBe('properties/123');
+    expect(recognizableDomain('https://gmail.com')).toBeNull();
+    expect(recognizableDomain('joseperez.com')).toBe('joseperez.com');
+    const vacia = completeness({ client: { business: null, offerings: null, area: null, audience: null, goals: null, strategy: null }, contacts: [], locations: [], assets: [], competitors: [] });
+    expect(vacia.pct).toBe(0);
+    expect(vacia.missing.map((m) => m.key)).toContain('web');
+    const llena = completeness({
+      client: { business: 'x', offerings: 'x', area: 'x', audience: 'x', goals: 'x', strategy: 'x' },
+      contacts: [{ isPrimary: true, email: 'a@b.com', phone: null, active: true }],
+      locations: [{ address: 'C/ Mayor 1' }],
+      assets: [{ kind: 'web', access: 'si' }, { kind: 'search_console', access: 'si' }, { kind: 'analytics', access: 'pendiente' }],
+      competitors: [{}]
+    });
+    expect(llena.pct).toBe(100);
   });
 });
 
@@ -230,7 +242,7 @@ describe('agentes con la base de datos', () => {
     expect(all.some((a) => a.status === 'auto')).toBe(true);
   });
 
-  it('fichas de cliente: crea con vista previa y aprobación, edita sumando y anota en la memoria', async () => {
+  it('fichas de cliente: crea con vista previa y aprobación, cada dato en su sitio, edita sumando y anota en la memoria', async () => {
     await db.insert(opsClientLevels).values([
       { tenantId, key: 'vip', label: 'VIP', defaultDays: 2, sortOrder: 0 },
       { tenantId, key: 'standard', label: 'Normal', defaultDays: 5, sortOrder: 1 }
@@ -244,66 +256,89 @@ describe('agentes con la base de datos', () => {
     expect(crear.risk).toBe('cambio');
 
     // Contraseñas: rechazadas antes de proponer nada.
-    expect((await crear.run(ctx, { nombre: 'X', notas: 'contraseña: 1234' })).ok).toBe(false);
+    expect((await crear.run(ctx, { nombre: 'X', activos: [{ tipo: 'web', url: 'x.com', donde_accesos: 'contraseña: 1234' }] })).ok).toBe(false);
 
-    sent.length = 0;
     const r = await crear.run(ctx, {
       nombre: 'José Pérez',
+      sector: 'Tienda de deportes',
       web: 'joseperez.com',
-      telefono: '600 000 000',
-      direccion: 'C/ Mayor 1, Valencia',
       servicios: [{ servicio: 'seo' }, { servicio: 'Diseño de logos' }],
-      contactos: [{ nombre: 'José', cargo: 'Dueño', email: 'Jose@JosePerez.com' }],
+      contactos: [{ nombre: 'José', cargo: 'Dueño', rol: 'decisor', email: 'Jose@JosePerez.com', telefono: '600 000 000', canal_preferido: 'whatsapp', principal: true }],
+      locales: [{ nombre: 'Tienda', direccion: 'C/ Mayor 1', ciudad: 'Valencia', telefono: '960 000 000', principal: true }],
+      activos: [{ tipo: 'search_console', url: 'sc-domain:joseperez.com', acceso: 'pendiente' }],
+      competidores: [{ nombre: 'Deportes García', dominio: 'deportesgarcia.es' }],
       negocio: 'Tienda de deportes en Valencia.',
       objetivos: 'Conseguir más clientes vía leads.',
-      memoria: [{ tipo: 'preferencia', texto: 'Prefiere que le escriban por WhatsApp.' }]
+      memoria: [{ tipo: 'preferencia', texto: 'Prefiere que le escriban por WhatsApp.' }],
+      cuota_mensual: 450
     });
     expect(r.proposed).toBe(true);
-    expect((await db.select().from(opsClients).where(eq(opsClients.tenantId, tenantId))).length).toBe(0);
-    const [action] = (await db.select().from(opsAgentActions).where(eq(opsAgentActions.tenantId, tenantId))).filter((a) => (a.proposal as { tool: string }).tool === 'crear_cliente');
+    expect((await db.select().from(clients).where(eq(clients.tenantId, tenantId))).length).toBe(0);
+    const [action] = (await db.select().from(opsAgentActions).where(eq(opsAgentActions.tenantId, tenantId))).filter((x) => (x.proposal as { tool: string }).tool === 'crear_cliente');
     expect(action.summary).toContain('Nueva ficha: José Pérez');
-    expect((action.proposal as { data: { plan: { warnings: string[] } } }).data.plan.warnings.join(' ')).toContain('Diseño de logos'); // aviso de servicio desconocido
+    expect((action.proposal as { data: { plan: { warnings: string[] } } }).data.plan.warnings.join(' ')).toContain('Diseño de logos');
     expect((await decideAgentTool(tenantId, action.id, true, 'Enric')).line).toContain('¿Empezamos su onboarding?');
 
-    const [c] = await db.select().from(opsClients).where(eq(opsClients.tenantId, tenantId));
+    const [c] = await db.select().from(clients).where(eq(clients.tenantId, tenantId));
     expect(c.name).toBe('José Pérez');
-    expect(c.level).toBe('standard'); // por defecto, el «Normal»
+    expect(c.status).toBe('onboarding');
+    expect(c.sector).toBe('Tienda de deportes');
     expect(c.aliases).toContain('joseperez.com');
-    expect(c.tools).toEqual([{ name: 'Web', url: 'https://joseperez.com', note: '' }]);
-    expect(c.notes).toContain('Contacto: Teléfono: 600 000 000 · Dirección: C/ Mayor 1, Valencia');
-    expect(c.notes).toContain('José · Dueño');
+    expect(c.monthlyFee).toBe('450.00'); // el dueño puede poner el contrato
+    const [o] = await db.select().from(opsClients).where(eq(opsClients.id, c.id));
+    expect(o.level).toBe('standard');
+    const contacts = await db.select().from(clientContacts).where(eq(clientContacts.clientId, c.id));
+    expect(contacts.map((x) => [x.email, x.role, x.preferredChannel, x.isPrimary])).toEqual([['jose@joseperez.com', 'decisor', 'whatsapp', true]]);
+    expect((await db.select().from(clientLocations).where(eq(clientLocations.clientId, c.id))).map((x) => x.city)).toEqual(['Valencia']);
+    const assets = await db.select().from(clientAssets).where(eq(clientAssets.clientId, c.id));
+    expect(assets.map((x) => [x.kind, x.value, x.emailDomain ?? ''].join(':')).sort()).toEqual(['search_console:sc-domain:joseperez.com:', 'web:https://joseperez.com:joseperez.com']);
+    expect((await db.select().from(clientCompetitors).where(eq(clientCompetitors.clientId, c.id))).map((x) => [x.domain, x.source])).toEqual([['deportesgarcia.es', 'agente']]);
     expect((await db.select().from(opsClientServices).where(eq(opsClientServices.clientId, c.id))).map((x) => x.serviceKey)).toEqual(['seo']);
-    expect((await db.select().from(opsClientSenders).where(eq(opsClientSenders.clientId, c.id))).map((x) => `${x.kind}:${x.value}`).sort()).toEqual(['domain:joseperez.com', 'email:jose@joseperez.com']);
-    expect((await db.select().from(opsClientMemory).where(eq(opsClientMemory.clientId, c.id))).map((m) => m.status)).toEqual(['aceptado']);
+    const mem = await db.select().from(clientMemory).where(eq(clientMemory.clientId, c.id));
+    expect(mem.map((m) => [m.status, m.sourceType])).toEqual([['aceptado', 'agente']]);
 
     // Duplicado: no deja crear otra ficha con el mismo nombre.
     expect((await crear.run(ctx, { nombre: 'jose perez' })).content).toContain('Ya existe');
 
-    // Editar en autónomo: suma servicio y webs, reemplaza el texto y conserva lo demás.
+    // Editar en autónomo: completa el contacto existente (mismo correo), suma servicio y local, reemplaza el texto.
     await setToolAutonomy(tenantId, 'actualizar_cliente', 'autonomo');
-    const e = await getTool('actualizar_cliente')!.run(ctx, { cliente: 'José Pérez', nivel: 'VIP', servicios: [{ servicio: 'Google Ads' }], herramientas: [{ nombre: 'Tienda', url: 'tienda.joseperez.com' }], objetivos: '30 leads al mes.' });
+    const e = await getTool('actualizar_cliente')!.run(ctx, {
+      cliente: 'José Pérez',
+      nivel: 'VIP',
+      servicios: [{ servicio: 'Google Ads' }],
+      contactos: [{ email: 'jose@joseperez.com', whatsapp: '600 111 111' }, { nombre: 'Marta', rol: 'facturacion', email: 'facturas@joseperez.com' }],
+      objetivos: '30 leads al mes.',
+      quitar: { competidores: ['deportesgarcia.es'] }
+    });
     expect(e.ok).toBe(true);
-    const [c2] = await db.select().from(opsClients).where(eq(opsClients.id, c.id));
-    expect(c2.level).toBe('vip');
+    const [c2] = await db.select().from(clients).where(eq(clients.id, c.id));
     expect(c2.goals).toBe('30 leads al mes.');
     expect(c2.business).toBe('Tienda de deportes en Valencia.');
-    expect(c2.tools.map((t) => t.name)).toEqual(['Web', 'Tienda']);
+    expect((await db.select().from(opsClients).where(eq(opsClients.id, c.id)))[0].level).toBe('vip');
+    const contacts2 = await db.select().from(clientContacts).where(eq(clientContacts.clientId, c.id));
+    expect(contacts2).toHaveLength(2);
+    expect(contacts2.find((x) => x.email === 'jose@joseperez.com')?.whatsapp).toBe('600 111 111');
     expect((await db.select().from(opsClientServices).where(eq(opsClientServices.clientId, c.id))).map((x) => x.serviceKey).sort()).toEqual(['ads', 'seo']);
+    expect(await db.select().from(clientCompetitors).where(eq(clientCompetitors.clientId, c.id))).toHaveLength(0);
     expect((await getTool('actualizar_cliente')!.run(ctx, { cliente: 'José Pérez' })).content).toContain('nada que cambiar');
     expect((await getTool('actualizar_cliente')!.run(ctx, { cliente: 'Nadie' })).content).toContain('crear_cliente');
 
-    // La ficha completa para el agente.
+    // La ficha completa para el agente (con la cuota, porque habla el dueño).
     const ficha = await getTool('ficha_cliente')!.run(ctx, { cliente: 'joseperez.com' });
     expect(ficha.content).toContain('Google Ads');
     expect(ficha.content).toContain('Prefiere que le escriban por WhatsApp.');
-    expect(ficha.content).toContain('@joseperez.com');
+    expect(ficha.content).toContain('reconoce correos @joseperez.com');
+    expect(ficha.content).toContain('450.00 €/mes');
+    expect(ficha.content).toMatch(/Ficha completa al \d+ %/);
+    const otro = await getTool('ficha_cliente')!.run({ ...ctx, actor: { ...ctx.actor, isOwner: false } }, { cliente: 'José Pérez' });
+    expect(otro.content).not.toContain('€/mes');
 
     // Memoria con aprobación.
     const m = await getTool('anotar_memoria_cliente')!.run(ctx, { cliente: 'José', tipo: 'promesa', texto: 'Le enviamos la auditoría antes del viernes.' });
     expect(m.proposed).toBe(true);
-    const [ma] = (await db.select().from(opsAgentActions).where(eq(opsAgentActions.tenantId, tenantId))).filter((a) => (a.proposal as { tool: string }).tool === 'anotar_memoria_cliente');
+    const [ma] = (await db.select().from(opsAgentActions).where(eq(opsAgentActions.tenantId, tenantId))).filter((x) => (x.proposal as { tool: string }).tool === 'anotar_memoria_cliente');
     await decideAgentTool(tenantId, ma.id, true, 'Enric');
-    expect((await db.select().from(opsClientMemory).where(and(eq(opsClientMemory.clientId, c.id), eq(opsClientMemory.kind, 'promesa')))).length).toBe(1);
+    expect((await db.select().from(clientMemory).where(and(eq(clientMemory.clientId, c.id), eq(clientMemory.kind, 'promesa')))).length).toBe(1);
   });
 
   it('actualiza el agente principal ya creado con las herramientas nuevas, una vez y respetando instrucciones propias', async () => {

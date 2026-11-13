@@ -337,6 +337,13 @@
       "when": 1794448800000,
       "tag": "0047_agt_agentes",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1794452400000,
+      "tag": "0048_clientes_nucleo",
+      "breakpoints": true
     }
   ]
 }
