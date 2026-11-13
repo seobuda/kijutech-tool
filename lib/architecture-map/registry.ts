@@ -3,6 +3,7 @@ import { CLUSTERING_PROCESS_MAP, type ProcessStep, type TechnicalDetail } from '
 import { COMPETITOR_ANALYSIS_PROCESS_MAP } from '@/lib/seo/competitor-analysis-builder';
 import { OPS_MAPS } from '@/lib/operaciones/process-map';
 import { SECURITY_PROCESS_MAP } from '@/lib/auth/security-process-map';
+import { AGENTES_PROCESS_MAP } from '@/lib/agentes/process-map';
 
 export interface SystemNode {
   id: string;
@@ -106,7 +107,10 @@ const CORE_NODES: SystemNode[] = [
     icon: 'FolderKanban',
     detailMapId: 'ops',
     group: 'infrastructure',
-    edgesTo: [{ id: 'future-subagentes', label: 'revisor intercambiable (reviewers.ts)' }],
+    edgesTo: [
+      { id: 'future-subagentes', label: 'revisor intercambiable (reviewers.ts)' },
+      { id: 'agentes', label: 'herramientas y canales por el registro del núcleo' }
+    ],
     technicalDetail: {
       summary:
         'Módulo aparte del SEO. Un bloc de notas (texto o audio) que la IA convierte en encargos con cliente, responsable, fecha y lista; el envío a ClickUp es fiable (sin duplicados); el equipo trabaja desde botones de Telegram; el sistema vigila ClickUp, manda recordatorios y resúmenes y avisa de clientes sin actividad. Todo se ajusta desde el panel de Automatizaciones.',
@@ -118,6 +122,27 @@ const CORE_NODES: SystemNode[] = [
         'Un solo proceso escucha el bot (candado de PostgreSQL)',
       ],
     },
+  },
+  {
+    id: 'agentes',
+    name: 'Agentes',
+    description:
+      'Agentes con rol con los que se habla por Telegram (texto y audio) o correo: consultan, proponen acciones con botones y encargan trabajos a subagentes (Revisor web). Integraciones: DataForSEO, Clarity y Google.',
+    status: 'built',
+    icon: 'Bot',
+    detailMapId: 'agentes',
+    group: 'infrastructure',
+    technicalDetail: {
+      summary:
+        'Módulo propio (tablas agt_*). No importa otros módulos: usa el registro de capacidades del núcleo (lib/core/capabilities.ts), donde cada módulo publica sus herramientas y sus canales; lib/app-wiring.ts los conecta al arrancar.',
+      stack: ['SDK oficial de Anthropic (@anthropic-ai/sdk) con uso de herramientas', 'Lectura web y búsqueda de Anthropic (herramientas de servidor)', 'OpenAI para la voz (transcripción y voz)', 'Integraciones por API (DataForSEO, Clarity, Google OAuth)'],
+      keyDecisions: [
+        'Las acciones que cambian algo se proponen con botones (motor de acciones) y la autonomía sube por herramienta con datos',
+        'Contexto corto: resumen + últimos mensajes, para que cada mensaje cueste poco',
+        'El webhook de Telegram responde al momento y el agente trabaja en segundo plano (sin respuestas duplicadas)',
+        'Credenciales cifradas; lo que llega de webs y correos es dato, nunca instrucción'
+      ]
+    }
   },
   {
     id: 'integraciones',
@@ -138,9 +163,9 @@ const FUTURE_NODES: SystemNode[] = [
   { id: 'future-tiempos', name: 'Tiempos por tarea', status: 'built', icon: 'Circle', group: 'future', description: 'Construido (paso 5B): una tarea activa a la vez (las pausas no cuentan), estimación propia de un toque con feedback de precisión, margen editable por tipo con propuesta a partir de lo real, motivo y URL si se pasa, pestaña Equipo → Tiempos y Mi panel. Detalle en el mapa de Operaciones → Tiempos de tarea.' },
   { id: 'future-juego', name: 'Temporadas, niveles y misiones', status: 'planned', icon: 'Circle', group: 'future', description: 'Paso 5C: puntos por resultado (a tiempo, calidad, precisión, jornada), niveles por especialidad, rachas con comodines, misión semanal, objetivo de equipo, sin ranking, y bonus progresivo por temporadas trimestrales. Diseño en docs/DISENO-RENDIMIENTO-EQUIPO.md.' },
   { id: 'future-niveles', name: 'Niveles y recompensas', status: 'planned', icon: 'Circle', group: 'future', description: 'Progreso visible, carreras con formaciones desbloqueables y bonos mensuales que se pueden perder, con un salario base que solo sube.' },
-  { id: 'future-subagentes', name: 'Subagentes por área', status: 'planned', icon: 'Circle', group: 'future', description: 'Agentes de IA por área o por cliente que revisan el trabajo antes que tú, con su ficha y su criterio (por ejemplo, redacción con el tono de cada cliente o diseño web con tu criterio). Se enchufan como revisor intercambiable.' },
+  { id: 'future-subagentes', name: 'Subagentes por área', status: 'built', icon: 'Circle', group: 'future', description: 'Agentes de IA por área o por cliente que revisan el trabajo antes que tú, con su ficha y su criterio (por ejemplo, redacción con el tono de cada cliente o diseño web con tu criterio). Se enchufan como revisor intercambiable.' },
   { id: 'future-diccionario', name: 'Diccionario de la agencia', status: 'planned', icon: 'Circle', group: 'future', description: 'Herramientas, clientes y personas, más los errores de tu dictado por voz. En parte ya lo cubren los nombres alternativos de las fichas de clientes.' },
-  { id: 'future-audio-telegram', name: 'Audios al bot de Telegram', status: 'planned', icon: 'Circle', group: 'future', description: 'Crear notas mandando un audio al bot desde el móvil, sin abrir la herramienta.' },
+  { id: 'future-audio-telegram', name: 'Audios al bot de Telegram', status: 'built', icon: 'Circle', group: 'future', description: 'Construido (13 nov): se habla con el agente principal por audio y contesta también con voz. Ver el módulo Agentes.' },
   { id: 'future-email', name: 'Entrada de trabajo por email', status: 'planned', icon: 'Circle', group: 'future', description: 'Reenviar un email a una dirección propia para que se convierta en una nota y, de ahí, en encargos.' },
   { id: 'future-reglas', name: 'Reglas que aprenden de mis respuestas', status: 'planned', icon: 'Circle', group: 'future', description: 'Reglas de decisión que se aprenden de cómo respondes a bloqueos y revisiones, para que el agente resuelva más solo.' },
   { id: 'future-seo-auto', name: 'SEO automatizado', status: 'planned', icon: 'Circle', group: 'future', description: 'Auditoría por API, competidores desde la SERP y volúmenes de búsqueda con DataForSEO, sin cargas manuales.' },
@@ -222,7 +247,7 @@ export function getSystemMap(): SystemNode[] {
 }
 
 // Todos los mapas de detalle conocidos (el Server Component los resuelve y los pasa al cliente).
-export const PROCESS_MAP_IDS = ['clustering', 'competitor_analysis', 'security', ...Object.keys(OPS_MAPS)];
+export const PROCESS_MAP_IDS = ['clustering', 'competitor_analysis', 'security', 'agentes', ...Object.keys(OPS_MAPS)];
 
 export function getProcessMap(detailMapId: string): ProcessStep[] {
   switch (detailMapId) {
@@ -232,6 +257,8 @@ export function getProcessMap(detailMapId: string): ProcessStep[] {
       return COMPETITOR_ANALYSIS_PROCESS_MAP;
     case 'security':
       return SECURITY_PROCESS_MAP;
+    case 'agentes':
+      return AGENTES_PROCESS_MAP;
     default:
       return OPS_MAPS[detailMapId] ?? [];
   }

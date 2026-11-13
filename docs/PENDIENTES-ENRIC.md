@@ -3,7 +3,7 @@
 Lista viva de lo que solo puede hacer Enric (accesos, decisiones, el equipo). Claude la actualiza al terminar cada bloque.
 Detalle paso a paso de la activación en `docs/PRUEBAS-EN-VIVO.md`.
 
-**Última actualización:** 13 nov 2026, de madrugada. En producción: `main` `9cc5e08d` (autonomía e informes + fichas desde el historial), sin migraciones nuevas.
+**Última actualización:** 13 nov 2026, de madrugada. En producción: `main` `132ad035` (autonomía, informes, fichas desde el historial, vigía de IA, reserva y reasignar), 47 migraciones.
 
 ## Viernes 13 — antes de activar al equipo (unos 45 min)
 - [ ] **Revisar con tu cuenta de admin** lo que Claude no puede ver (no hay usuario de pruebas en producción):
@@ -56,8 +56,30 @@ Detalle paso a paso de la activación en `docs/PRUEBAS-EN-VIVO.md`.
 - [ ] **IA de reserva:** para que funcione hace falta una segunda clave con saldo de otro proveedor (OpenAI, Gemini o DeepSeek) en IA
   y modelos. La de Gemini no tiene créditos.
 
+## Servidor y costes (DigitalOcean)
+- [ ] **Token de DigitalOcean de solo lectura:** en DigitalOcean → API → Tokens, crear uno «Custom scopes» con solo lectura de
+  billing, droplet, snapshot, sizes y monitoring, y pegarlo en Sistema → Servidor y costes. El token que hay en el `.env` del PC
+  funciona, pero no sé qué permisos tiene: para el servidor mejor uno que solo pueda leer.
+- [ ] **Revisar el presupuesto de DigitalOcean** (45 $/mes por defecto; el coste fijo actual es ~37 $/mes) en Automatizaciones →
+  Servidor y costes.
+- [ ] (Informativo) La cuenta tiene otros dos servidores (el de 2020 de 12 $ + copias y Findersuite de 7 $) y 19 GB de snapshots
+  antiguos (~1,15 $/mes). Si alguno ya no hace falta, se ve en la pantalla; Claude no toca nada de DigitalOcean.
+
+## Agentes (cuando puedas)
+- [ ] **Probar el agente por Telegram:** escríbele «¿cómo va el equipo hoy?» y mándale un audio. Comprueba que entiende el audio (verás
+  🎙 «…») y que te contesta también con nota de voz. Guía: `docs/GUIA-AGENTES.md`.
+- [ ] **Precios de voz:** en IA y modelos, revisa los precios de OpenAI (gpt-4o-mini y la voz). El coste de la voz se anota con un
+  precio aproximado.
+- [ ] **Integraciones** (Agentes → Integraciones):
+  - DataForSEO: usuario y contraseña de la API;
+  - Clarity: token de exportación;
+  - Google: crear el cliente OAuth en Google Cloud con la URI que indica la pantalla, y pedir a Google el acceso a la API de
+    Business Profile si lo quieres.
+- [ ] **Revisar la ficha del Operations manager y del Revisor web** (Agentes → Editar) y crear los subagentes que quieras
+  (redactor, auditor…).
+
 ## Decisiones que esperan tu aprobación (Claude no las hace sin tu OK)
-- [x] **Reasignar desde el parte con un botón:** aprobada (migración 0046). Se despliega con `--migrate`.
+- [x] **Reasignar desde el parte con un botón:** aprobada y desplegada (migración 0046).
 - [x] **IA de reserva:** aprobada y construida (falta la segunda clave, ver arriba).
 - [ ] **5C: temporadas, niveles y misiones.** El diseño está aprobado; falta aprobar su esquema de base de datos. Mejor después de
   1–2 semanas de jornada real.

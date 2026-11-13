@@ -1,6 +1,9 @@
 import { timingSafeEqual } from 'crypto';
 import { getTelegramConfig, decodeBotToken, webhookSecret } from '@/lib/operaciones/telegram-config';
 import { handleUpdate } from '@/lib/operaciones/telegram-handler';
+import { wireApp } from '@/lib/app-wiring';
+
+wireApp(); // los mensajes libres y audios van al agente por el núcleo
 import type { TgUpdate } from '@/lib/operaciones/telegram';
 
 // Recepción por webhook: para cuando la aplicación esté en un servidor con URL pública.

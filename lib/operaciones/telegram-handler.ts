@@ -22,7 +22,7 @@ import {
   type OpsTelegramMember
 } from '@/lib/db/schema';
 import { handleCleanupCallback, handleCleanupDateReply } from '@/lib/operaciones/cleanup';
-import { clampMessage, escapeHtml, tg, type TgCallbackQuery, type TgMessage, type TgUpdate } from '@/lib/operaciones/telegram';
+import { clampMessage, escapeHtml, tg, tgDownloadFile, type TgCallbackQuery, type TgMessage, type TgUpdate } from '@/lib/operaciones/telegram';
 import {
   getMemberByChat,
   getMemberByUser,
@@ -46,6 +46,8 @@ import { teamLoad } from '@/lib/operaciones/email-pm';
 import { handleJornadaCallback, handleJornadaCommand, handleJornadaPending, JORNADA_COMMAND_RE } from '@/lib/operaciones/jornada-bot';
 import { handleTiemposCallback, handleTiemposPending } from '@/lib/operaciones/tiempos-bot';
 import { handleAutopilotCallback } from '@/lib/operaciones/autopilot';
+import { AGENT_TOOL_CALLBACK_RE, decideAgentTool } from '@/lib/operaciones/agent-capabilities';
+import { dispatchInbound } from '@/lib/core/capabilities';
 
 // Botones del motor de acciones del agente: ag:<id de la acción>:ok (aprobar) | no (descartar) | ed (corregir).
 export const AGENT_CALLBACK_RE = /^ag:([0-9a-f-]{36}):(ok|no|ed|re|pa|as:(\d{1,20}))$/;
@@ -66,7 +68,7 @@ async function reply(token: string, chatId: number, html: string) {
 
 async function handleMessage(tenantId: string, token: string, msg: TgMessage): Promise<void> {
   // Solo chats privados con el bot; grupos y canales se ignoran.
-  if (msg.chat.type !== 'private' || (!msg.text && !msg.photo)) return;
+  if (msg.chat.type !== 'private' || (!msg.text && !msg.photo && !msg.voice && !msg.audio)) return;
   const chatId = msg.chat.id;
   const text = (msg.text ?? msg.caption ?? '').trim();
   const start = (msg.text ?? '').trim().match(/^\/start(?:@\w+)?(?:\s+(\S+))?$/);
@@ -128,8 +130,40 @@ async function handleMessage(tenantId: string, token: string, msg: TgMessage): P
     await setPending(tenantId, chatId, 'suggestion', {});
     return void (await reply(token, chatId, '💡 Cuéntame tu sugerencia: escríbela o manda una captura con su texto (o /cancelar).'));
   }
-  // ¿El bot esperaba una respuesta de esta persona? Si no, el mensaje se ignora.
+  // Audios: van al agente (los transcribe él); no consumen lo que el bot estuviera esperando por escrito.
+  if (msg.voice || msg.audio) return void (await toAgent(tenantId, token, linked, msg, text));
+  // ¿El bot esperaba una respuesta de esta persona? Si no, el mensaje libre va al agente (si lo hay).
   await handlePending(tenantId, token, linked, msg, text);
+}
+
+/**
+ * Mensaje libre o audio → al agente, por el registro del núcleo (el módulo Agentes lo atiende; Operaciones no lo importa).
+ * Si nadie lo atiende (no es el dueño o no hay agente), se ignora como antes.
+ */
+async function toAgent(tenantId: string, token: string, member: OpsTelegramMember, msg: TgMessage, text: string): Promise<void> {
+  const owner = await getOwnerMember(tenantId);
+  const file = msg.voice ?? msg.audio ?? null;
+  let audio: { data: ArrayBuffer; mimeType: string; seconds: number | null } | null = null;
+  if (file) {
+    if ((file.file_size ?? 0) > 20 * 1024 * 1024) return void (await reply(token, msg.chat.id, 'Ese audio es demasiado largo: mándalo en trozos de menos de 20 MB.'));
+    try {
+      const f = await tgDownloadFile(token, file.file_id);
+      audio = { data: f.data, mimeType: file.mime_type || f.contentType || 'audio/ogg', seconds: file.duration ?? null };
+    } catch {
+      return void (await reply(token, msg.chat.id, 'No he podido descargar el audio. Prueba otra vez.'));
+    }
+  }
+  const handled = await dispatchInbound({
+    tenantId,
+    channel: 'telegram',
+    peer: String(msg.chat.id),
+    peerName: member.username,
+    isOwner: owner?.id === member.id,
+    clickupUserId: member.clickupUserId,
+    text,
+    audio
+  });
+  if (!handled && file) await reply(token, msg.chat.id, 'Por ahora solo entiendo audios de quien lleva las operaciones.');
 }
 
 // ---------------------------------------------------------------------------
@@ -223,7 +257,7 @@ async function handlePending(
     .delete(opsTelegramPending)
     .where(and(eq(opsTelegramPending.chatId, chatId), eq(opsTelegramPending.tenantId, tenantId)))
     .returning();
-  if (!p || p.expiresAt.getTime() < Date.now()) return; // nada esperado (o ya caducó)
+  if (!p || p.expiresAt.getTime() < Date.now()) return void (await toAgent(tenantId, token, member, msg, text)); // nada esperado: al agente
   if (/^\/cancelar/i.test(text)) return void (await reply(token, chatId, 'Cancelado.'));
 
   // Jornada real: motivo de salida o ausencia, con qué empieza, hora real de salida.
@@ -500,6 +534,17 @@ async function handleCallback(tenantId: string, token: string, cb: TgCallbackQue
   if (cb.data?.startsWith('tt:')) return handleTiemposCallback(tenantId, token, cb, presser, chatId, messageId, answer);
   // Piloto automático (ap:…): «Mover a mañana» del parte y «Pasar a autónomo» (solo el dueño).
   if (cb.data?.startsWith('ap:')) return handleAutopilotCallback(tenantId, cb, presser, answer);
+  // Propuestas de un agente desde la conversación (at:ok / at:no): solo el dueño.
+  const at = cb.data?.match(AGENT_TOOL_CALLBACK_RE);
+  if (at) {
+    const owner = await getOwnerMember(tenantId);
+    if (!owner || owner.id !== presser.id) return void (await answer('Este botón es solo de quien lleva las operaciones.', true));
+    const r = await decideAgentTool(tenantId, at[2], at[1] === 'ok', presser.username);
+    await tg(token, 'editMessageReplyMarkup', { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [] } }).catch(() => undefined);
+    if (r.line) await reply(token, chatId, escapeHtml(r.line));
+    await logEvent(tenantId, { actor: { clickupUserId: presser.clickupUserId, name: presser.username }, type: 'autonomia', payload: { kind: 'agent_tool', decision: at[1], actionId: at[2] } });
+    return void (await answer(r.answer));
+  }
 
   // Motor de acciones del agente: «✅ Enviar la propuesta» / «✖️ Descartar propuesta» (solo el dueño).
   const ag = cb.data?.match(AGENT_CALLBACK_RE);

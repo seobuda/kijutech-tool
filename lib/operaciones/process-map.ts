@@ -996,6 +996,33 @@ const OPS_AUTONOMIA: ProcessStep[] = [
     settings: [{ automation: 'ai_budget' }],
     runs: ['runAiWatch'],
   },
+  {
+    id: 'ops-au-infra',
+    lane: 'Vigía de IA',
+    name: 'Servidor y costes de DigitalOcean',
+    description: 'Sistema → Servidor y costes: lo que va del mes en DigitalOcean, previsión, facturas, servidores de la cuenta con su precio y copias, y la capacidad del servidor de la herramienta (memoria, CPU, disco) con la propuesta de ampliación y su precio real.',
+    status: 'built',
+    file: 'lib/operaciones/infra-watch.ts',
+    when: 'Cada hora desde el planificador (y al abrir la pantalla si la lectura tiene más de una hora).',
+    ai: 'Nada.',
+    code: 'API de DigitalOcean con token de solo lectura (cifrado en ops_settings): saldo del mes, facturas, servidores, snapshots, tamaños y monitorización (memoria p95 y máximo de 24 h, carga p95 por CPU, disco). Caché en ops_settings (do_cache). Salud abre incidencia por memoria o CPU altas con la ampliación propuesta; aviso semanal si la previsión pasa del presupuesto; línea en el informe semanal.',
+    tables: ['ops_settings', 'ops_notifications', 'ops_health_incidents'],
+    settings: [{ automation: 'infra' }],
+    runs: ['runInfraWatch'],
+  },
+  {
+    id: 'ops-au-agentes',
+    lane: 'Vigía de IA',
+    name: 'Conexión con el módulo Agentes',
+    description: 'Operaciones publica en el registro del núcleo sus herramientas para los agentes (consultas del equipo, tareas, clientes, costes e informes; crear encargos, reasignar, mover fechas, comentar y apuntar ausencias con aprobación) y su salida por Telegram y correo. El bot entrega al núcleo los mensajes libres y audios del dueño, y el planificador ejecuta las tareas que otros módulos registran.',
+    status: 'built',
+    file: 'lib/operaciones/agent-capabilities.ts',
+    when: 'Al arrancar (registro) y en cada mensaje libre, botón at:ok/at:no y vuelta del planificador.',
+    ai: 'Nada aquí (la IA está en el módulo Agentes; crear encargo usa la conversión del Bloc).',
+    code: 'Las herramientas de cambio pasan por el motor de acciones (tipo agent_tool) con autonomía por herramienta: con aprobación (botones), autónomo o en sombra. Ejecutar la acción aprobada reutiliza el envío fiable a ClickUp y la bandeja de salida.',
+    tables: ['ops_agent_actions', 'ops_requests', 'ops_clickup_outbox', 'ops_settings', 'ops_notifications'],
+    runs: ['runScheduled'],
+  },
 ];
 
 const OPS_TIEMPOS: ProcessStep[] = [

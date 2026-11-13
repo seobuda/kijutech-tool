@@ -10,7 +10,7 @@ import { and, desc, eq, gte, inArray, isNull, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { opsAgentActions, opsSettings, type OpsAgentAction } from '@/lib/db/schema';
 
-export type AgentKind = 'blocker_answer' | 'note_conversion' | 'email_reply';
+export type AgentKind = 'blocker_answer' | 'note_conversion' | 'email_reply' | 'agent_tool';
 export type Autonomy = 'sombra' | 'aprobacion' | 'autonomo';
 export type ActionStatus = 'propuesto' | 'aprobado' | 'corregido' | 'rechazado' | 'auto' | 'sombra';
 
@@ -45,6 +45,14 @@ export const AGENT_KINDS: Record<
     defaultAutonomy: 'aprobacion',
     // Responder a clientes solo, sin aprobación, queda fuera hasta validarlo mucho (decisión de Enric).
     allowed: ['sombra', 'aprobacion']
+  },
+  agent_tool: {
+    label: 'Acciones desde la conversación',
+    description:
+      'Lo que un agente propone cuando le hablas por Telegram o correo (crear encargos, reasignar, mover fechas, comentar, apuntar ausencias). La autonomía se ajusta por herramienta en la pantalla Agentes; aquí se mide el conjunto.',
+    defaultAutonomy: 'aprobacion',
+    // La autonomía real va por herramienta (agent_autonomy:tool:<nombre>); este tipo solo agrupa la medición.
+    allowed: ['aprobacion']
   }
 };
 

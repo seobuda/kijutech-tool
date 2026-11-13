@@ -64,6 +64,9 @@ export type Snapshot = {
   backupAgeH?: number | null;
   restoreTest?: { ageD: number; ok: boolean; detail: string } | null;
   emailsToday?: number | null; // correos del buzón del agente hoy (entrada + salida, aproximado); plan gratuito: 100/día
+  // Servidor (DigitalOcean, de la caché horaria de infra-watch): memoria p95 de 24 h y carga p95 por CPU.
+  serverMem?: { p95: number; max: number; limit: number; upgrade: string | null } | null;
+  serverLoadPerCpu?: number | null;
 };
 
 export const EMAIL_DAILY_LIMIT = 100;
@@ -194,6 +197,19 @@ export function evaluate(s: Snapshot): Check[] {
     else add('correo_cuota', 'Cuota de correo', 'ok', detail);
   }
 
+  if (s.serverMem) {
+    const m = s.serverMem;
+    const detail = `Memoria del servidor: ${m.p95} % la mayor parte del día (máx. ${m.max} %).`;
+    const rec = `Si se llena, la app se ralentiza o se reinicia.${m.upgrade ? ` ${m.upgrade}` : ''} Detalle en Sistema → Servidor y costes.`;
+    if (m.max >= 97) add('servidor_memoria', 'Memoria del servidor', 'critico', detail, rec);
+    else if (m.p95 >= m.limit) add('servidor_memoria', 'Memoria del servidor', 'aviso', detail, rec);
+    else add('servidor_memoria', 'Memoria del servidor', 'ok', detail);
+  }
+  if (s.serverLoadPerCpu != null) {
+    if (s.serverLoadPerCpu >= 1.5) add('servidor_cpu', 'CPU del servidor', 'aviso', `Carga de ${s.serverLoadPerCpu} por CPU en los momentos altos (1 = al completo).`, 'Las tareas esperan turno. Si se repite, conviene ampliar el servidor (Sistema → Servidor y costes).');
+    else add('servidor_cpu', 'CPU del servidor', 'ok', `Carga de ${s.serverLoadPerCpu} por CPU en los momentos altos.`);
+  }
+
   if (s.restoreTest) {
     const r = s.restoreTest;
     if (!r.ok) add('restauracion', 'Prueba de restauración', 'critico', `La última prueba falló: ${r.detail}`, 'La copia podría no servir. Revisa /opt/kijutech/backups/restore-test.log y vuelve a lanzar scripts/restore-test.sh.');
@@ -202,6 +218,27 @@ export function evaluate(s: Snapshot): Check[] {
   }
 
   return checks;
+}
+
+/** Memoria y carga del servidor desde la caché horaria de DigitalOcean (sin llamadas; si la lectura tiene más de 3 h, nada). */
+async function serverFromCache(tenantId: string): Promise<Pick<Snapshot, 'serverMem' | 'serverLoadPerCpu'>> {
+  try {
+    const { cachedInfra, infraSettings, nextSize } = await import('@/lib/operaciones/infra-watch');
+    const [d, cfg] = await Promise.all([cachedInfra(tenantId), infraSettings(tenantId)]);
+    if (!cfg.enabled || !d?.capacity || Date.now() - Date.parse(d.fetchedAt) > 3 * 3_600_000) return {};
+    const c = d.capacity;
+    const app = d.droplets.find((x) => x.name === c.dropletName);
+    const up = app ? nextSize(app, d.sizes) : null;
+    return {
+      serverMem:
+        c.memUsedPctP95_24h !== null && c.memUsedPctMax24h !== null
+          ? { p95: c.memUsedPctP95_24h, max: c.memUsedPctMax24h, limit: cfg.memPct, upgrade: up && app ? `Ampliar a ${up.slug} cuesta ${up.priceMonthly} $/mes (${up.priceMonthly - app.priceMonthly} $ más).` : null }
+          : null,
+      serverLoadPerCpu: c.loadP95PerCpu
+    };
+  } catch {
+    return {};
+  }
 }
 
 /** Fecha ISO de la última copia diaria: la escribe scripts/backup.sh en el servidor al terminar bien. */
@@ -298,6 +335,7 @@ export async function collectSnapshot(tenantId: string): Promise<Snapshot> {
     diskUsedPct: await diskUsedPct(),
     backupAgeH: Number.isFinite(backupMs) ? (Date.now() - backupMs) / 3_600_000 : null,
     emailsToday: Number(mail?.n ?? 0),
+    ...(await serverFromCache(tenantId)),
     restoreTest: Number.isFinite(restoreAt) ? { ageD: (Date.now() - restoreAt) / 86_400_000, ok: restoreStatus === 'ok', detail: restoreDetail.join('|') } : null,
     heartbeatAgeS: await heartbeatAgeS(tenantId),
     notificationsFailed,

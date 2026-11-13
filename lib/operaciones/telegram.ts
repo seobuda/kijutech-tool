@@ -21,6 +21,8 @@ export type TgMessage = {
   text?: string;
   caption?: string;
   photo?: { file_id: string; width: number; height: number }[];
+  voice?: { file_id: string; duration?: number; mime_type?: string; file_size?: number };
+  audio?: { file_id: string; duration?: number; mime_type?: string; file_size?: number };
 };
 export type TgCallbackQuery = { id: string; from: TgUser; message?: TgMessage; data?: string };
 export type TgUpdate = { update_id: number; message?: TgMessage; callback_query?: TgCallbackQuery };
@@ -125,4 +127,22 @@ export async function tgDownloadFile(token: string, fileId: string): Promise<{ d
   const ext = info.file_path.split('.').pop()?.toLowerCase();
   const contentType = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
   return { data: await res.arrayBuffer(), contentType };
+}
+
+/** Nota de voz (OGG/Opus) con subida de archivo. Devuelve false si Telegram la rechaza (formato u otro error). */
+export async function tgSendVoice(token: string, chatId: string | number, ogg: Uint8Array, caption?: string): Promise<boolean> {
+  try {
+    const form = new FormData();
+    form.append('chat_id', String(chatId));
+    if (caption) {
+      form.append('caption', caption.slice(0, 1000));
+      form.append('parse_mode', 'HTML');
+    }
+    form.append('voice', new Blob([ogg], { type: 'audio/ogg' }), 'respuesta.ogg');
+    const res = await fetch(`${API}/bot${token}/sendVoice`, { method: 'POST', body: form, signal: AbortSignal.timeout(30_000), cache: 'no-store' });
+    const json = (await res.json().catch(() => null)) as { ok?: boolean } | null;
+    return Boolean(json?.ok);
+  } catch {
+    return false;
+  }
 }
