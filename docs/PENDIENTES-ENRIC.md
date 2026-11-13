@@ -65,6 +65,19 @@ Detalle paso a paso de la activación en `docs/PRUEBAS-EN-VIVO.md`.
 - [ ] (Informativo) La cuenta tiene otros dos servidores (el de 2020 de 12 $ + copias y Findersuite de 7 $) y 19 GB de snapshots
   antiguos (~1,15 $/mes). Si alguno ya no hace falta, se ve en la pantalla; Claude no toca nada de DigitalOcean.
 
+## Agentes (cuando puedas)
+- [ ] **Probar el agente por Telegram:** escríbele «¿cómo va el equipo hoy?» y mándale un audio. Comprueba que entiende el audio (verás
+  🎙 «…») y que te contesta también con nota de voz. Guía: `docs/GUIA-AGENTES.md`.
+- [ ] **Precios de voz:** en IA y modelos, revisa los precios de OpenAI (gpt-4o-mini y la voz). El coste de la voz se anota con un
+  precio aproximado.
+- [ ] **Integraciones** (Agentes → Integraciones):
+  - DataForSEO: usuario y contraseña de la API;
+  - Clarity: token de exportación;
+  - Google: crear el cliente OAuth en Google Cloud con la URI que indica la pantalla, y pedir a Google el acceso a la API de
+    Business Profile si lo quieres.
+- [ ] **Revisar la ficha del Operations manager y del Revisor web** (Agentes → Editar) y crear los subagentes que quieras
+  (redactor, auditor…).
+
 ## Decisiones que esperan tu aprobación (Claude no las hace sin tu OK)
 - [x] **Reasignar desde el parte con un botón:** aprobada y desplegada (migración 0046).
 - [x] **IA de reserva:** aprobada y construida (falta la segunda clave, ver arriba).

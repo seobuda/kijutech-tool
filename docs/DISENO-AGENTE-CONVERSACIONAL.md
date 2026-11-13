@@ -1,6 +1,14 @@
 # El agente de operaciones por Telegram (conversación, audios y equipo de subagentes)
 
-**Fecha:** 13 nov 2026 · **Estado:** propuesta, pendiente de aprobación de Enric
+**Fecha:** 13 nov 2026 · **Estado:** aprobado por Enric («sí a las tres… te apruebo todo») y **construido las fases 1–3 y parte de
+la 4** en `feature/agentes`:
+- conversación por Telegram con texto y audio en los dos sentidos;
+- correo y prueba desde la web;
+- acciones con aprobación y autonomía por herramienta;
+- agentes con rol editables y subagentes con trabajos (Revisor web);
+- integraciones DataForSEO, Clarity y Google.
+
+Pendiente: que el equipo hable con agentes, más subagentes y revisor intercambiable con agentes.
 **Pedido:** «poder comunicarme con él por Telegram de forma natural, con audios, y que él también me pueda enviar audios…
 escribirle tareas para asignar… y más adelante que tenga sub-agentes que hagan trabajos (revisar la web del cliente X, analizar el
 último artículo y darnos un informe)… todo esto tiene que tener su propio módulo».

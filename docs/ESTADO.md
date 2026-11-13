@@ -72,7 +72,7 @@ Todo corre **dentro de Docker**. **Nunca** se ejecuta `pnpm`/`npm` en el host Wi
 - **`.dockerignore`** (arreglado en el paso 8: tenía comillas invertidas y no excluía nada): deja fuera `.env`, `.git`, `backups/`, `node_modules` y `.next` de la imagen.
 - **Para cambiar dependencias sin tocar Windows** (patrón usado en el paso 8): `docker run --rm -v "C:\dev\kijutech-tool:/work" -v /work/node_modules -w /work node:24-alpine sh -c "corepack enable && pnpm …"` (el volumen anónimo evita que `node_modules` aterrice en el host).
 - **Nunca** `docker compose down -v` ni nada que borre el volumen de la base de datos.
-- **Migraciones:** `lib/db/migrations/0000`…`0046` (47; la 0046, `set_assignee` en la bandeja de salida, aplicada en local y pendiente del despliegue con `--migrate`). Desde la 0029 se escriben a mano con su entrada en `meta/_journal.json`: **no usar `pnpm db:generate`** (sin snapshots genera SQL para tablas que ya existen). Hay scripts SQL sueltos de prompts en `scripts/` (ver §8).
+- **Migraciones:** `lib/db/migrations/0000`…`0047` (48). La 0046 (`set_assignee`) ya está en producción; la 0047 (módulo Agentes) está en local y se aplica con `--migrate`. Desde la 0029 se escriben a mano con su entrada en `meta/_journal.json`: **no usar `pnpm db:generate`** (sin snapshots genera SQL para tablas que ya existen). Hay scripts SQL sueltos de prompts en `scripts/` (ver §8).
 
 ## 3. Stack y versiones
 
@@ -269,6 +269,52 @@ Envío sin duplicados (marca `[kiju:]` + índice único); copia local del Bloc y
 - **Reasignar desde el parte** (migración 0046): botón «👤 A <persona>» junto a «📅 Mañana»; la bandeja de salida hace `set_assignee` en ClickUp (quita a quien falta y pone a la sugerida) y la vigilancia avisa a la nueva.
 - **Pruebas:** `tests/vigia-ia.test.ts` (previsión, picos y su porqué, recomendaciones, cuándo se usa la reserva y los botones del parte) y `tests/autonomia.test.ts` (calendario, días libres en el horario y en los plazos, plazos del dueño, semanas, a quién sugerir, primer día laborable, autonomía, salud ampliada, y con la base de datos: vacaciones en el horario, parte de la mañana y entregas a tiempo en el semanal) y las dos acciones del calendario en `tests/seguridad.test.ts`.
 
+### 6.21 Módulo Agentes (13 nov)
+- **Qué es:** agentes con rol con los que se habla por **Telegram (texto y audio, y contestan también con voz)**, por **correo** (`agente@equipo.kijutech.com`, solo remitente autenticado del dueño) o desde la web.
+  - Consultan al momento y proponen acciones con botones.
+  - Encargan trabajos a **subagentes** (el «Revisor web» lee y analiza páginas con la lectura web de Anthropic).
+  - Usan **integraciones** (DataForSEO, Microsoft Clarity, Google Search Console / Analytics 4 / Business Profile por OAuth).
+  - Diseño en `docs/DISENO-AGENTE-CONVERSACIONAL.md`; guía de uso en `docs/GUIA-AGENTES.md`.
+- **Arquitectura:** módulo propio (`lib/agentes/`, tablas `agt_*`). No importa otros módulos: usa el **registro de capacidades del núcleo** (`lib/core/capabilities.ts`).
+  - El registro tiene herramientas, canales de entrada (Telegram, correo), salida (Telegram, correo) y tareas programadas.
+  - **Operaciones** publica allí sus herramientas y su salida (`lib/operaciones/agent-capabilities.ts`).
+  - `lib/app-wiring.ts` (capa de aplicación) los conecta al arrancar, en `instrumentation.ts` y en la ruta del webhook.
+- **Motor** (`lib/agentes/engine.ts`): Claude con uso de herramientas (SDK oficial `@anthropic-ai/sdk`) en un bucle de hasta 8 vueltas.
+  - Herramientas de servidor `web_fetch`/`web_search`.
+  - Contexto corto: resumen de la conversación + últimos 16 mensajes, con resumen nuevo cada 20.
+  - Caché de prompt.
+  - Coste en `ai_jobs` (función `agt_<clave>`, con la caché valorada a su precio) y presupuesto mensual por agente.
+  - Formato por canal: HTML de Telegram o texto plano.
+- **Conversación** (`lib/agentes/inbound.ts`):
+  - El bot entrega al núcleo los mensajes libres (sin nada pendiente) y los audios del dueño; el webhook responde al momento y el agente trabaja en segundo plano, sin duplicados.
+  - Un mensaje cada vez por conversación.
+  - Fase 1: solo el dueño.
+- **Voz** (`lib/agentes/voice.ts`): OpenAI con la clave guardada en IA y modelos.
+  - Transcripción con `gpt-transcribe` en español (reserva: `gpt-4o-mini-transcribe`).
+  - Voz con `gpt-4o-mini-tts` (voz `marin`, OGG/Opus para nota de voz; se retira en enero de 2027, configurable con `AGT_TTS_MODEL`).
+  - Coste aproximado en `ai_jobs`.
+- **Acciones con aprobación:** las herramientas de cambio pasan por el motor de acciones (tipo `agent_tool`) con **autonomía por herramienta** (`agent_autonomy:tool:<nombre>`, pantalla Agentes).
+  - Herramientas: crear encargo con la conversión del Bloc y el envío fiable, reasignar, mover fecha, comentar y apuntar ausencias.
+  - Botones `at:ok`/`at:no`, solo el dueño.
+- **Trabajos** (`lib/agentes/jobs.ts`): `encargar_a_agente` → `agt_jobs`.
+  - Tarea del núcleo cada vuelta, con reclamo atómico y reintento a los 15 min (máx. 3).
+  - Informe a Telegram y a la conversación.
+- **Integraciones** (`lib/agentes/integrations.ts`): credenciales cifradas en `agt_integrations`; cada integración publica sus herramientas, que solo se ofrecen si está conectada.
+  - Google: OAuth con estado firmado (`/api/agentes/google/conectar` y `/callback`).
+  - Clarity: caché del día (10 consultas al día).
+- **Pantallas** (`/dashboard/agentes`, admin):
+  - Agentes: fichas, nuevo agente, probar y autonomía por herramienta.
+  - Conversaciones (con herramientas usadas y coste).
+  - Trabajos (con informe y reintentar).
+  - Integraciones.
+- **Migración 0047:** `agt_agents`, `agt_conversations`, `agt_messages`, `agt_jobs`, `agt_integrations` y el tipo `agent_tool` en `ops_agent_actions`. **Dependencia nueva:** `@anthropic-ai/sdk` 1.8.0.
+- **Probado con la IA real** (base local): el principal usó la herramienta correcta y respondió en lenguaje natural (~0,02 $); el Revisor web leyó una página con `web_fetch` y redactó el informe (~0,10 $).
+- **No probado de extremo a extremo:**
+  - la voz (la clave de OpenAI está solo en producción);
+  - las integraciones con cuentas reales;
+  - el canal de correo en producción.
+- **Pruebas:** `tests/agentes.test.ts`: registro, motor con la IA simulada, presupuesto, conversación, trabajo de subagente, aprobación y autonomía, formato y limpieza. Además, 7 acciones nuevas en `tests/seguridad.test.ts`.
+
 ## 7. Panel de Automatizaciones: todos los valores
 
 Los valores por defecto viven en el código (`lib/operaciones/automations.ts`); la tabla `ops_automations` solo guarda lo que se cambia (restaurar = borrar la fila). Caché de 10 s. Textos en formato de Telegram (`<b>`, `<i>`, `<u>`, `<code>`, `<a href>`) con huecos validados; una línea con un hueco opcional vacío desaparece.
@@ -330,7 +376,7 @@ Construido en agosto de 2026 (Fases A–D). Detalle y auditoría completa en `do
 
 ## 10. Base de datos
 
-**Total: 74 tablas** (12 núcleo, 15 SEO, 7 IA y **40 `ops_*`**, que cuenta `node scripts/check-architecture-map.js`). Las últimas: `ops_agent_actions` (0040), `ops_health_incidents` (0043), `ops_work_events` (0044, jornada real; ver §6.18) y `ops_task_times` (0045, tiempos de tarea; ver §6.19). La revisión de autonomía no añade tablas: el calendario y la última copia diaria van en `ops_settings` (claves `calendar` y `backup_last_at`). Los conteos de filas de abajo son de la base local del 30 oct (orientativos).
+**Total: 79 tablas** (12 núcleo, 15 SEO, 7 IA, **40 `ops_*`** y 5 `agt_*` del módulo Agentes, que cuenta `node scripts/check-architecture-map.js`). Las últimas: `ops_agent_actions` (0040), `ops_health_incidents` (0043), `ops_work_events` (0044, jornada real; ver §6.18) y `ops_task_times` (0045, tiempos de tarea; ver §6.19). La revisión de autonomía no añade tablas: el calendario y la última copia diaria van en `ops_settings` (claves `calendar` y `backup_last_at`). Los conteos de filas de abajo son de la base local del 30 oct (orientativos).
 
 **Núcleo / plantilla:** `tenants` 1 · `users` 2 · `roles` 4 · `user_roles` 1 · `projects` 1 · `modules` 1 · `project_modules` 0 · `teams` 2 · `team_members` 2 · `invitations` 0 · `activity_logs` 10 (`teams`, `team_members` e `invitations` son restos de la plantilla pendientes de limpieza).
 
@@ -549,6 +595,7 @@ Cada uno con su nodo en el nivel 1 del Mapa Visual:
 - **`tests/`** — Vitest (`seguridad`, `permisos`, `auditoria`, `http`, `client-memoria`), `setup.ts` (simula solo cookies/cabeceras/redirecciones de Next), `fixtures.ts`.
 - **Jornada real (5A):** `lib/operaciones/jornada-core.ts` (cálculo puro del día), `jornada.ts` (base de datos, avisos retenidos, resumen), `jornada-bot.ts` (comandos y botones `jw:`), `jornada-worker.ts` (planificador), `jornada-overview.ts` y `jornada-actions.ts` (pestaña y correcciones), `app/(dashboard)/dashboard/operaciones/jornada/`.
 - **Tiempos de tarea (5B):** `lib/operaciones/tiempos-core.ts` (cálculo puro), `tiempos.ts` (base de datos y mensajes, enganchado a `startWork`/`finishWork` y a la vigilancia), `tiempos-bot.ts` (botones `tt:` y URL), `tiempos-overview.ts` y `tiempos-actions.ts` (pestaña, Mi panel y correcciones), `app/(dashboard)/dashboard/operaciones/tiempos/` y `mi-panel/`.
+- **Agentes:** `lib/core/capabilities.ts` (registro del núcleo), `lib/app-wiring.ts`, `lib/agentes/` (`store`, `engine`, `inbound`, `voice`, `jobs`, `integrations`, `register`, `actions`, `process-map`), `lib/operaciones/agent-capabilities.ts` y `agent-capabilities-actions.ts`, `app/(dashboard)/dashboard/agentes/`, `app/api/agentes/google/`.
 - **Servidor y costes:** `lib/operaciones/infra-watch.ts` / `infra-actions.ts`, `app/(dashboard)/dashboard/operaciones/servidor/`.
 - **Vigía de IA:** `lib/operaciones/ai-watch.ts` / `ai-watch-actions.ts`, `app/(dashboard)/dashboard/operaciones/gasto-ia/`, reserva en `lib/ai/gateway.ts`.
 - **Autonomía e informes:** `lib/operaciones/calendar.ts` / `calendar-actions.ts` (calendario), `owner-queue.ts` (lo que espera del dueño y plazos), `reports.ts` (parte, semanal y mensual), `autopilot.ts` (botones `ap:`, limpieza semanal, autonomía), `app/(dashboard)/dashboard/operaciones/calendario/` e `informes/`, `scripts/backup.sh` (copia diaria del servidor).
