@@ -30,6 +30,7 @@ import { runReports } from '@/lib/operaciones/reports';
 import { runAutopilot } from '@/lib/operaciones/autopilot';
 import { runAiWatch } from '@/lib/operaciones/ai-watch';
 import { runInfraWatch } from '@/lib/operaciones/infra-watch';
+import { runScheduled } from '@/lib/core/capabilities';
 
 const LOCK_KEY = 74200126; // identifica "oyente de Telegram de Kijutech"
 const POLL_TIMEOUT_S = 50;
@@ -246,6 +247,7 @@ async function schedulerLoop(state: WorkerState) {
         await step('piloto automático', () => runAutopilot(t)); // limpieza semanal y autonomía del agente
         await step('vigía de IA', () => runAiWatch(t)); // cada 15 min: picos, previsión y umbrales del presupuesto de IA
         await step('servidor y costes', () => runInfraWatch(t)); // cada hora: DigitalOcean (coste del mes y capacidad del servidor)
+        await step('tareas de módulos', () => runScheduled(t)); // las que registran otros módulos en el núcleo (trabajos de subagentes)
         await step('actividad de clientes', () => runActivityDaily(t)); // una vez al día, de madrugada
       }
     } catch (e) {

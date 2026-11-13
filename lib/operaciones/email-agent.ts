@@ -24,6 +24,7 @@ import { fillTemplate } from '@/lib/operaciones/format';
 import { escapeHtml } from '@/lib/operaciones/telegram';
 import { enqueueNotification } from '@/lib/operaciones/notifications';
 import { getOwnerMember } from '@/lib/operaciones/telegram-config';
+import { dispatchInbound } from '@/lib/core/capabilities';
 import { strictBool } from '@/lib/operaciones/blockers';
 import { decideAction, getAction, getAutonomy, recordAction } from '@/lib/operaciones/agent-actions';
 import { getEmailConfig, sendReply } from '@/lib/operaciones/resend';
@@ -131,6 +132,20 @@ async function clientContext(tenantId: string, clientId: string | null): Promise
   return { who: client ? `Cliente: ${client.name}` : 'Cliente', memory: lines.length ? lines.join('\n') : '(sin datos)' };
 }
 
+/** ¿La dirección es del dueño (super_admin de la cuenta o su correo de ClickUp)? */
+async function isOwnerAddress(tenantId: string, address: string): Promise<boolean> {
+  const a = address.trim().toLowerCase();
+  const rows = (await db.execute(sql`
+    SELECT 1 FROM users u JOIN user_roles ur ON ur.user_id = u.id JOIN roles r ON r.id = ur.role_id
+    WHERE u.tenant_id = ${tenantId} AND r.name = 'super_admin' AND lower(u.email) = ${a}
+    LIMIT 1`)) as unknown as unknown[];
+  if (rows.length) return true;
+  const owner = await getOwnerMember(tenantId);
+  if (!owner) return false;
+  const m = (await db.execute(sql`SELECT email FROM ops_clickup_members WHERE tenant_id = ${tenantId} AND clickup_user_id = ${owner.clickupUserId} LIMIT 1`)) as unknown as { email: string | null }[];
+  return Boolean(m[0]?.email && m[0].email.toLowerCase() === a);
+}
+
 export async function interpretEmail(tenantId: string, emailId: string): Promise<void> {
   const [email] = await db
     .select()
@@ -138,6 +153,25 @@ export async function interpretEmail(tenantId: string, emailId: string): Promise
     .where(and(eq(opsInboundEmails.id, emailId), eq(opsInboundEmails.tenantId, tenantId)))
     .limit(1);
   if (!email || email.status !== 'interpretando') return;
+
+  // Enric escribe al agente por correo: es una conversación (módulo Agentes, por el registro del núcleo), no el flujo de
+  // clientes. Solo con remitente autenticado (SPF/DKIM/DMARC) y que sea el dueño: un correo falsificado no da órdenes.
+  if (email.authStatus === 'pass' && (await isOwnerAddress(tenantId, email.fromAddress))) {
+    const handled = await dispatchInbound({
+      tenantId,
+      channel: 'email',
+      peer: email.fromAddress.toLowerCase(),
+      peerName: email.fromName || email.fromAddress,
+      isOwner: true,
+      clickupUserId: null,
+      text: `${email.subject ? `Asunto: ${email.subject}\n\n` : ''}${clamp(stripQuoted(email.bodyText) || email.bodyText, 8000)}`,
+      email: { subject: email.subject, messageId: email.messageId, references: email.inReplyTo }
+    });
+    if (handled) {
+      await db.update(opsInboundEmails).set({ status: 'informativo', statusNote: 'Conversación con el agente', updatedAt: new Date() }).where(eq(opsInboundEmails.id, email.id));
+      return;
+    }
+  }
 
   const prompt = await getPrompt(EMAIL_PROMPT_KEY);
   if (!prompt) throw new Error(`El prompt «${EMAIL_PROMPT_KEY}» no está activo`);

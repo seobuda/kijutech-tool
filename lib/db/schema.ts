@@ -1718,7 +1718,7 @@ export const opsAgentActions = pgTable(
   (table) => [
     unique('ops_agent_actions_dedupe_unique').on(table.tenantId, table.dedupeKey),
     index('ops_agent_actions_kind_idx').on(table.tenantId, table.kind, table.createdAt),
-    check('ops_agent_actions_kind_check', sql`${table.kind} IN ('blocker_answer', 'note_conversion', 'email_reply')`),
+    check('ops_agent_actions_kind_check', sql`${table.kind} IN ('blocker_answer', 'note_conversion', 'email_reply', 'agent_tool')`),
     check(
       'ops_agent_actions_status_check',
       sql`${table.status} IN ('propuesto', 'aprobado', 'corregido', 'rechazado', 'auto', 'sombra')`
@@ -2016,3 +2016,134 @@ export const opsTaskTimes = pgTable(
 );
 
 export type OpsTaskTime = typeof opsTaskTimes.$inferSelect;
+
+// --- Módulo Agentes (0047): agentes con rol, conversaciones, trabajos de subagentes e integraciones ----------------
+
+export const agtAgents = pgTable(
+  'agt_agents',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    key: varchar('key', { length: 40 }).notNull(),
+    name: varchar('name', { length: 120 }).notNull(),
+    kind: varchar('kind', { length: 20 }).notNull().default('subagente'),
+    role: text('role').notNull().default(''),
+    instructions: text('instructions').notNull().default(''),
+    tools: jsonb('tools').$type<string[]>().notNull().default([]),
+    model: varchar('model', { length: 80 }),
+    voice: varchar('voice', { length: 30 }),
+    monthlyBudgetUsd: decimal('monthly_budget_usd', { precision: 10, scale: 2 }),
+    active: boolean('active').notNull().default(true),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    unique('agt_agents_tenant_key_unique').on(table.tenantId, table.key),
+    check('agt_agents_kind_check', sql`${table.kind} IN ('principal', 'subagente')`),
+  ]
+);
+export type AgtAgent = typeof agtAgents.$inferSelect;
+
+export const agtConversations = pgTable(
+  'agt_conversations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    agentId: uuid('agent_id')
+      .notNull()
+      .references(() => agtAgents.id, { onDelete: 'cascade' }),
+    channel: varchar('channel', { length: 20 }).notNull(),
+    peer: varchar('peer', { length: 200 }).notNull(),
+    peerName: varchar('peer_name', { length: 255 }),
+    summary: text('summary'),
+    lastMessageAt: timestamp('last_message_at').notNull().defaultNow(),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    unique('agt_conversations_peer_unique').on(table.tenantId, table.agentId, table.channel, table.peer),
+    check('agt_conversations_channel_check', sql`${table.channel} IN ('telegram', 'email', 'web')`),
+  ]
+);
+export type AgtConversation = typeof agtConversations.$inferSelect;
+
+export const agtMessages = pgTable(
+  'agt_messages',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    conversationId: uuid('conversation_id')
+      .notNull()
+      .references(() => agtConversations.id, { onDelete: 'cascade' }),
+    role: varchar('role', { length: 12 }).notNull(),
+    content: text('content').notNull().default(''),
+    audio: jsonb('audio'),
+    toolCalls: jsonb('tool_calls'),
+    costUsd: decimal('cost_usd', { precision: 10, scale: 6 }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    index('agt_messages_conversation_idx').on(table.conversationId, table.createdAt),
+    check('agt_messages_role_check', sql`${table.role} IN ('user', 'assistant')`),
+  ]
+);
+export type AgtMessage = typeof agtMessages.$inferSelect;
+
+export const agtJobs = pgTable(
+  'agt_jobs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    agentId: uuid('agent_id')
+      .notNull()
+      .references(() => agtAgents.id, { onDelete: 'cascade' }),
+    conversationId: uuid('conversation_id').references(() => agtConversations.id, { onDelete: 'set null' }),
+    requestedBy: varchar('requested_by', { length: 255 }).notNull(),
+    title: varchar('title', { length: 300 }).notNull(),
+    instruction: text('instruction').notNull(),
+    input: jsonb('input').notNull().default({}),
+    status: varchar('status', { length: 20 }).notNull().default('en_cola'),
+    result: text('result'),
+    error: text('error'),
+    costUsd: decimal('cost_usd', { precision: 10, scale: 6 }),
+    attempts: integer('attempts').notNull().default(0),
+    claimedAt: timestamp('claimed_at'),
+    finishedAt: timestamp('finished_at'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    index('agt_jobs_status_idx').on(table.tenantId, table.status, table.createdAt),
+    check('agt_jobs_status_check', sql`${table.status} IN ('en_cola', 'trabajando', 'hecho', 'fallido', 'cancelado')`),
+  ]
+);
+export type AgtJob = typeof agtJobs.$inferSelect;
+
+export const agtIntegrations = pgTable(
+  'agt_integrations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    provider: varchar('provider', { length: 40 }).notNull(),
+    status: varchar('status', { length: 20 }).notNull().default('conectada'),
+    credentials: text('credentials'),
+    config: jsonb('config').notNull().default({}),
+    lastOkAt: timestamp('last_ok_at'),
+    lastError: text('last_error'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    unique('agt_integrations_provider_unique').on(table.tenantId, table.provider),
+    check('agt_integrations_status_check', sql`${table.status} IN ('conectada', 'error', 'pendiente')`),
+  ]
+);
+export type AgtIntegration = typeof agtIntegrations.$inferSelect;

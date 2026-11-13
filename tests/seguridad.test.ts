@@ -33,6 +33,8 @@ import { addCalendarEntryAction, removeCalendarEntryAction } from '@/lib/operaci
 import { applyClientProposalAction, getClientProposalsAction } from '@/lib/operaciones/client-proposal-actions';
 import { connectAnthropicAdminAction, disconnectAnthropicAdminAction, refreshOrgCostAction } from '@/lib/operaciones/ai-watch-actions';
 import { connectDoTokenAction, disconnectDoTokenAction, refreshInfraAction } from '@/lib/operaciones/infra-actions';
+import { chatWithAgentAction, deleteAgentAction, deleteIntegrationAction, retryJobAction, saveAgentAction, saveIntegrationAction } from '@/lib/agentes/actions';
+import { setToolAutonomyAction } from '@/lib/operaciones/agent-capabilities-actions';
 import { deleteNote } from '@/lib/operaciones/note-actions';
 import { saveClickUpToken } from '@/lib/operaciones/actions';
 import { saveTelegramToken } from '@/lib/operaciones/telegram-actions';
@@ -131,7 +133,14 @@ const ACCIONES_ADMIN: [string, () => unknown][] = [
   ['refreshOrgCostAction (gasto de IA)', () => refreshOrgCostAction()],
   ['connectDoTokenAction (servidor)', () => connectDoTokenAction('dop_v1_xxxxxxxxxxxxxxxxxxxxxxxx')],
   ['disconnectDoTokenAction (servidor)', () => disconnectDoTokenAction()],
-  ['refreshInfraAction (servidor)', () => refreshInfraAction()]
+  ['refreshInfraAction (servidor)', () => refreshInfraAction()],
+  ['saveAgentAction (agentes)', () => saveAgentAction({ id: null, key: 'prueba_seg', name: 'Prueba', kind: 'subagente', role: 'x', instructions: '', tools: [], model: null, voice: null, monthlyBudgetUsd: null, active: true })],
+  ['deleteAgentAction (agentes)', () => deleteAgentAction(ZERO)],
+  ['chatWithAgentAction (agentes)', () => chatWithAgentAction(ZERO, 'hola')],
+  ['retryJobAction (agentes)', () => retryJobAction(ZERO)],
+  ['saveIntegrationAction (agentes)', () => saveIntegrationAction('clarity', { token: 'x' })],
+  ['deleteIntegrationAction (agentes)', () => deleteIntegrationAction('clarity')],
+  ['setToolAutonomyAction (agentes)', () => setToolAutonomyAction('crear_encargo', 'autonomo')]
 ];
 const ACCIONES_EDITOR: [string, () => unknown][] = [
   ['deleteNote (Bloc)', () => deleteNote(ZERO)],

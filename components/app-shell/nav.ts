@@ -139,7 +139,8 @@ export const NAV: NavGroup[] = [
     items: [
       { href: '/dashboard/operaciones', label: 'Operaciones', icon: LayoutGrid, section: 'operaciones', keywords: 'agente encargos clickup' },
       { href: '/dashboard/operaciones/equipo-hoy', label: 'Equipo', icon: UsersRound, section: 'equipo', keywords: 'jornada fichas personas' },
-      { href: '/dashboard/projects', label: 'Proyectos SEO', icon: FolderKanban, prefix: true, keywords: 'seo keywords clusters' }
+      { href: '/dashboard/projects', label: 'Proyectos SEO', icon: FolderKanban, prefix: true, keywords: 'seo keywords clusters' },
+      { href: '/dashboard/agentes', label: 'Agentes', icon: Bot, prefix: true, keywords: 'agente ia telegram audio subagentes integraciones search console analytics dataforseo clarity', show: (r) => r.isAdmin }
     ]
   },
   {

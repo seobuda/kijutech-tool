@@ -77,9 +77,18 @@ const securitySrc = read('lib/auth/security-process-map.ts');
 for (const f of uniq(all(/file: '([^']+)'/g, securitySrc))) if (!fs.existsSync(path.join(root, f))) fail(`El mapa de Seguridad cita un archivo que no existe: ${f}`);
 if (all(/^ {4}id: '([\w-]+)',/gm, securitySrc).length < 5) fail('El mapa de Seguridad parece vacío o roto (menos de 5 pasos).');
 
+// 5c. Mapa del módulo Agentes (lib/agentes/process-map.ts): sus archivos y tablas deben existir
+const agentesSrc = read('lib/agentes/process-map.ts');
+for (const f of uniq(all(/file: '([^']+)'/g, agentesSrc))) if (!fs.existsSync(path.join(root, f))) fail(`El mapa de Agentes cita un archivo que no existe: ${f}`);
+const agtTables = uniq(all(/pgTable\(\s*'(agt_\w+)'/g, schemaSrcForAgt()));
+for (const t of agtTables) if (!agentesSrc.includes(`'${t}'`)) fail(`La tabla «${t}» (módulo Agentes) no aparece en el mapa de Agentes.`);
+function schemaSrcForAgt() {
+  return read('lib/db/schema.ts');
+}
+
 // 6. Enlaces entre mapas
 const mapIds = all(/^ {2}(\w+): [A-Z_]+,$/gm, mapSrc.slice(mapSrc.indexOf('export const OPS_MAPS')));
-const known = new Set([...mapIds, 'clustering', 'competitor_analysis', 'security']);
+const known = new Set([...mapIds, 'clustering', 'competitor_analysis', 'security', 'agentes']);
 for (const id of uniq([...all(/detailMapId: '(\w+)'/g, mapSrc), ...all(/detailMapId: '(\w+)'/g, registrySrc)])) {
   if (!known.has(id)) fail(`detailMapId «${id}» no corresponde a ningún mapa registrado en OPS_MAPS.`);
 }

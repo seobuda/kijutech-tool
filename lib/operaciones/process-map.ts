@@ -1010,6 +1010,19 @@ const OPS_AUTONOMIA: ProcessStep[] = [
     settings: [{ automation: 'infra' }],
     runs: ['runInfraWatch'],
   },
+  {
+    id: 'ops-au-agentes',
+    lane: 'Vigía de IA',
+    name: 'Conexión con el módulo Agentes',
+    description: 'Operaciones publica en el registro del núcleo sus herramientas para los agentes (consultas del equipo, tareas, clientes, costes e informes; crear encargos, reasignar, mover fechas, comentar y apuntar ausencias con aprobación) y su salida por Telegram y correo. El bot entrega al núcleo los mensajes libres y audios del dueño, y el planificador ejecuta las tareas que otros módulos registran.',
+    status: 'built',
+    file: 'lib/operaciones/agent-capabilities.ts',
+    when: 'Al arrancar (registro) y en cada mensaje libre, botón at:ok/at:no y vuelta del planificador.',
+    ai: 'Nada aquí (la IA está en el módulo Agentes; crear encargo usa la conversión del Bloc).',
+    code: 'Las herramientas de cambio pasan por el motor de acciones (tipo agent_tool) con autonomía por herramienta: con aprobación (botones), autónomo o en sombra. Ejecutar la acción aprobada reutiliza el envío fiable a ClickUp y la bandeja de salida.',
+    tables: ['ops_agent_actions', 'ops_requests', 'ops_clickup_outbox', 'ops_settings', 'ops_notifications'],
+    runs: ['runScheduled'],
+  },
 ];
 
 const OPS_TIEMPOS: ProcessStep[] = [
