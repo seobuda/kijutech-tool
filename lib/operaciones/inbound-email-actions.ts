@@ -6,10 +6,10 @@ import { randomUUID } from 'crypto';
 import { and, desc, eq, inArray, notInArray, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/lib/db/drizzle';
-import { opsClients, opsInboundEmails } from '@/lib/db/schema';
+import { clients, opsInboundEmails } from '@/lib/db/schema';
 import { checkPermission, requirePermission } from '@/lib/auth/permissions';
 import { publicError } from '@/lib/errors';
-import { addClientSender } from '@/lib/operaciones/client-memory-actions';
+import { ClientError, saveContact } from '@/lib/core/clients';
 import { ingestInboundEmail, recognizeSender } from '@/lib/operaciones/inbound-email';
 import { INBOUND_STATUSES, validateInboundPayload } from '@/lib/operaciones/inbound-email-rules';
 import { pendingEmailProposal } from '@/lib/operaciones/email-agent';
@@ -61,7 +61,7 @@ const rowSelect = {
   status: opsInboundEmails.status,
   statusNote: opsInboundEmails.statusNote,
   clientId: opsInboundEmails.clientId,
-  clientName: opsClients.name,
+  clientName: clients.name,
   matchedBy: opsInboundEmails.matchedBy,
   authStatus: opsInboundEmails.authStatus,
   source: opsInboundEmails.source,
@@ -112,7 +112,7 @@ export async function listInboundEmails(
       db
         .select(rowSelect)
         .from(opsInboundEmails)
-        .leftJoin(opsClients, eq(opsClients.id, opsInboundEmails.clientId))
+        .leftJoin(clients, eq(clients.id, opsInboundEmails.clientId))
         .where(filter)
         .orderBy(desc(opsInboundEmails.createdAt))
         .limit(200),
@@ -143,7 +143,7 @@ export async function getInboundEmail(id: string): Promise<Ok<{ email: InboundEm
         proposal: opsInboundEmails.proposal
       })
       .from(opsInboundEmails)
-      .leftJoin(opsClients, eq(opsClients.id, opsInboundEmails.clientId))
+      .leftJoin(clients, eq(clients.id, opsInboundEmails.clientId))
       .where(and(eq(opsInboundEmails.id, id), eq(opsInboundEmails.tenantId, user.tenantId)))
       .limit(1);
     if (!r) return { ok: false, error: 'El correo no existe' };
@@ -216,22 +216,21 @@ export async function assignInboundEmailClient(input: {
       return { ok: false, error: 'Este correo ya se ha tramitado y no se puede reasignar' };
     }
     const [client] = await db
-      .select({ id: opsClients.id })
-      .from(opsClients)
-      .where(and(eq(opsClients.id, input.clientId), eq(opsClients.tenantId, user.tenantId)))
+      .select({ id: clients.id })
+      .from(clients)
+      .where(and(eq(clients.id, input.clientId), eq(clients.tenantId, user.tenantId)))
       .limit(1);
     if (!client) return { ok: false, error: 'La ficha no existe' };
 
     if (input.saveSender) {
-      const saved = await addClientSender({
-        clientId: input.clientId,
-        kind: 'email',
-        value: mail.fromAddress,
-        name: mail.fromName ?? '',
-        role: ''
-      });
-      // Si ya era contacto de esta misma ficha no es un problema; si es de otra, se avisa y no se asigna.
-      if (!saved.ok && !saved.error.includes('ya está en esta ficha')) return saved;
+      // El remitente pasa a ser un contacto de la ficha (así sus correos se reconocen solos).
+      try {
+        await saveContact(user.tenantId, input.clientId, { name: mail.fromName ?? '', email: mail.fromAddress });
+      } catch (e) {
+        // Si ya era contacto de esta misma ficha no es un problema; si es de otra, se avisa y no se asigna.
+        if (!(e instanceof ClientError)) throw e;
+        if (!e.userMessage.includes('ya está en esta ficha')) return { ok: false, error: e.userMessage };
+      }
     }
 
     await db

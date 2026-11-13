@@ -12,8 +12,8 @@ import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
 import {
   opsAgentActions,
-  opsClientMemory,
-  opsClients,
+  clientMemory,
+  clients,
   opsInboundEmails,
   opsRequests,
   type OpsInboundEmail
@@ -108,25 +108,26 @@ export async function runEmailInterpretations(tenantId: string): Promise<void> {
 async function clientContext(tenantId: string, clientId: string | null): Promise<{ who: string; memory: string }> {
   if (!clientId) return { who: '', memory: '(sin datos)' };
   const [client] = await db
-    .select({ name: opsClients.name, business: opsClients.business, strategy: opsClients.strategy })
-    .from(opsClients)
-    .where(and(eq(opsClients.id, clientId), eq(opsClients.tenantId, tenantId)))
+    .select({ name: clients.name, business: clients.business, strategy: clients.strategy, brandTone: clients.brandTone })
+    .from(clients)
+    .where(and(eq(clients.id, clientId), eq(clients.tenantId, tenantId)))
     .limit(1);
   const facts = await db
-    .select({ kind: opsClientMemory.kind, text: opsClientMemory.text })
-    .from(opsClientMemory)
+    .select({ kind: clientMemory.kind, text: clientMemory.text })
+    .from(clientMemory)
     .where(
       and(
-        eq(opsClientMemory.tenantId, tenantId),
-        eq(opsClientMemory.clientId, clientId),
-        eq(opsClientMemory.status, 'aceptado')
+        eq(clientMemory.tenantId, tenantId),
+        eq(clientMemory.clientId, clientId),
+        eq(clientMemory.status, 'aceptado')
       )
     )
-    .orderBy(desc(opsClientMemory.createdAt))
+    .orderBy(desc(clientMemory.createdAt))
     .limit(15);
   const lines = [
     client?.business ? `Negocio: ${clamp(client.business, 800)}` : '',
     client?.strategy ? `Estrategia: ${clamp(client.strategy, 800)}` : '',
+    client?.brandTone ? `Tono y trato: ${clamp(client.brandTone, 500)}` : '',
     ...facts.map((f) => `- (${f.kind}) ${clamp(f.text, 300)}`)
   ].filter(Boolean);
   return { who: client ? `Cliente: ${client.name}` : 'Cliente', memory: lines.length ? lines.join('\n') : '(sin datos)' };

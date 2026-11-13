@@ -53,7 +53,9 @@ for (const t of mappedRuns) if (!schedulerTasks.includes(t)) fail(`El mapa cita 
 const tables = uniq(all(/pgTable\(\s*'(ops_[a-z_]+)'/g, schemaSrc));
 const mappedTables = new Set(listOf(/tables: \[([^\]]*)\]/g, mapSrc));
 for (const t of tables) if (!mappedTables.has(t)) fail(`Tabla «${t}» sin entrada en el mapa: añádela a tables: [...] del paso que la usa.`);
-for (const t of mappedTables) if (!tables.includes(t)) fail(`El mapa cita la tabla «${t}», que no existe en el esquema.`);
+// Operaciones también puede citar las tablas del cliente del núcleo (clients, client_*), si existen.
+const coreClientTables = uniq(all(/pgTable\(\s*'(clients|client_[a-z_]+)'/g, schemaSrc));
+for (const t of mappedTables) if (!tables.includes(t) && !coreClientTables.includes(t)) fail(`El mapa cita la tabla «${t}», que no existe en el esquema.`);
 
 // 4. Prompts de IA usados en lib/operaciones (cadenas 'ops_...' que no son tablas)
 const opsFiles = fs.readdirSync(path.join(root, 'lib/operaciones')).filter((f) => f.endsWith('.ts') && f !== 'process-map.ts');
@@ -82,13 +84,18 @@ const agentesSrc = read('lib/agentes/process-map.ts');
 for (const f of uniq(all(/file: '([^']+)'/g, agentesSrc))) if (!fs.existsSync(path.join(root, f))) fail(`El mapa de Agentes cita un archivo que no existe: ${f}`);
 const agtTables = uniq(all(/pgTable\(\s*'(agt_\w+)'/g, schemaSrcForAgt()));
 for (const t of agtTables) if (!agentesSrc.includes(`'${t}'`)) fail(`La tabla «${t}» (módulo Agentes) no aparece en el mapa de Agentes.`);
+// 5d. Mapa de la ficha del cliente (núcleo, lib/core/clients-process-map.ts): archivos, y todas sus tablas citadas.
+const clientesSrc = read('lib/core/clients-process-map.ts');
+for (const f of uniq(all(/file: '([^']+)'/g, clientesSrc))) if (!fs.existsSync(path.join(root, f))) fail(`El mapa de Clientes cita un archivo que no existe: ${f}`);
+for (const t of coreClientTables) if (!clientesSrc.includes(`'${t}'`)) fail(`La tabla «${t}» (cliente del núcleo) no aparece en el mapa de Clientes.`);
+for (const t of listOf(/tables: \[([^\]]*)\]/g, clientesSrc)) if (!coreClientTables.includes(t) && !tables.includes(t)) fail(`El mapa de Clientes cita la tabla «${t}», que no existe en el esquema.`);
 function schemaSrcForAgt() {
   return read('lib/db/schema.ts');
 }
 
 // 6. Enlaces entre mapas
 const mapIds = all(/^ {2}(\w+): [A-Z_]+,$/gm, mapSrc.slice(mapSrc.indexOf('export const OPS_MAPS')));
-const known = new Set([...mapIds, 'clustering', 'competitor_analysis', 'security', 'agentes']);
+const known = new Set([...mapIds, 'clustering', 'competitor_analysis', 'security', 'agentes', 'clientes']);
 for (const id of uniq([...all(/detailMapId: '(\w+)'/g, mapSrc), ...all(/detailMapId: '(\w+)'/g, registrySrc)])) {
   if (!known.has(id)) fail(`detailMapId «${id}» no corresponde a ningún mapa registrado en OPS_MAPS.`);
 }

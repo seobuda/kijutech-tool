@@ -4,6 +4,7 @@ import { COMPETITOR_ANALYSIS_PROCESS_MAP } from '@/lib/seo/competitor-analysis-b
 import { OPS_MAPS } from '@/lib/operaciones/process-map';
 import { SECURITY_PROCESS_MAP } from '@/lib/auth/security-process-map';
 import { AGENTES_PROCESS_MAP } from '@/lib/agentes/process-map';
+import { CLIENTES_PROCESS_MAP } from '@/lib/core/clients-process-map';
 
 export interface SystemNode {
   id: string;
@@ -49,6 +50,22 @@ const CORE_NODES: SystemNode[] = [
     status: 'built',
     icon: 'FolderKanban',
     group: 'infrastructure',
+  },
+  {
+    id: 'core-clientes',
+    name: 'Clientes',
+    description:
+      'La ficha completa de cada cliente (núcleo): empresa y negocio, contactos y locales, webs y cuentas con su acceso, competencia, memoria y estado. La usan Operaciones, los agentes y SEO.',
+    status: 'built',
+    icon: 'Building2',
+    detailMapId: 'clientes',
+    group: 'infrastructure',
+    technicalDetail: {
+      summary:
+        'Tablas del núcleo clients, client_contacts, client_locations, client_assets, client_competitors y client_memory (14 nov 2026, migración 0048). Operaciones guarda sus ajustes en ops_clients con el mismo id. Sección propia /dashboard/clientes con pestañas.',
+      stack: ['lib/core/clients.ts (datos)', 'lib/core/client-rules.ts (reglas puras y completitud)', 'lib/core/client-actions.ts (acciones con permisos)'],
+      keyDecisions: ['Cliente ≠ activo ≠ integración (patrón Semrush/AgencyAnalytics)', 'Mismo id que ops_clients: ninguna referencia se reescribió', 'Nunca contraseñas; contrato solo para administradores']
+    },
   },
   {
     id: 'ai-gateway',
@@ -247,7 +264,7 @@ export function getSystemMap(): SystemNode[] {
 }
 
 // Todos los mapas de detalle conocidos (el Server Component los resuelve y los pasa al cliente).
-export const PROCESS_MAP_IDS = ['clustering', 'competitor_analysis', 'security', 'agentes', ...Object.keys(OPS_MAPS)];
+export const PROCESS_MAP_IDS = ['clustering', 'competitor_analysis', 'security', 'agentes', 'clientes', ...Object.keys(OPS_MAPS)];
 
 export function getProcessMap(detailMapId: string): ProcessStep[] {
   switch (detailMapId) {
@@ -259,6 +276,8 @@ export function getProcessMap(detailMapId: string): ProcessStep[] {
       return SECURITY_PROCESS_MAP;
     case 'agentes':
       return AGENTES_PROCESS_MAP;
+    case 'clientes':
+      return CLIENTES_PROCESS_MAP;
     default:
       return OPS_MAPS[detailMapId] ?? [];
   }

@@ -6,7 +6,7 @@ import 'server-only';
 // y los plazos: pasado el de cada tipo, UN recordatorio con sus botones (clave única por elemento).
 import { and, asc, eq, inArray } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { opsAgentActions, opsClients, opsInboundEmails } from '@/lib/db/schema';
+import { clients as coreClients, opsAgentActions, opsClients, opsInboundEmails } from '@/lib/db/schema';
 import { getAuto, num } from '@/lib/operaciones/automations';
 import { getInbox, waitLabel, type InboxItem } from '@/lib/operaciones/inbox';
 import { enqueueNotification, localParts } from '@/lib/operaciones/notifications';
@@ -42,10 +42,10 @@ export async function getPendingEmailProposals(tenantId: string): Promise<Pendin
     .where(and(eq(opsAgentActions.tenantId, tenantId), eq(opsAgentActions.kind, 'email_reply'), eq(opsAgentActions.status, 'propuesto')))
     .orderBy(asc(opsAgentActions.createdAt));
   const clientIds = [...new Set(rows.map((r) => r.clientId).filter((x): x is string => Boolean(x)))];
-  const clients = clientIds.length
-    ? await db.select({ id: opsClients.id, name: opsClients.name, level: opsClients.level }).from(opsClients).where(inArray(opsClients.id, clientIds))
+  const found = clientIds.length
+    ? await db.select({ id: coreClients.id, name: coreClients.name, level: opsClients.level }).from(coreClients).leftJoin(opsClients, eq(opsClients.id, coreClients.id)).where(inArray(coreClients.id, clientIds))
     : [];
-  const byId = new Map(clients.map((c) => [c.id, c]));
+  const byId = new Map(found.map((c) => [c.id, c]));
   return rows.map((r) => {
     const c = r.clientId ? byId.get(r.clientId) : undefined;
     return {

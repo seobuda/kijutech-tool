@@ -239,7 +239,7 @@ export const AUTOMATIONS: AutomationDef[] = [
     title: 'Alertas de clientes',
     what: 'En el último resumen del día añade «Clientes en alerta» (sin actividad o sin trabajo planificado); si siguen, lo recuerda cada cierto tiempo.',
     canDisable: true,
-    link: { href: '/dashboard/operaciones/clientes', label: 'Los umbrales por nivel y por cliente se editan en Clientes' },
+    link: { href: '/dashboard/clientes', label: 'Los umbrales por nivel y por cliente se editan en Clientes' },
     fields: [{ key: 'remindDays', label: 'Recordar mientras sigan en alerta', type: 'number', unit: 'días', min: 1, max: 30, default: 7 }],
     template: {
       default: '📉 <b>Clientes en alerta ({total})</b>\n{lista}',

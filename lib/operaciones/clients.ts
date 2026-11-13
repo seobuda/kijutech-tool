@@ -1,20 +1,47 @@
-// Fichas de clientes («Clientes» en Operaciones): consultas y reglas compartidas. Las acciones de la
-// web están en client-actions.ts. Aquí vive también la lógica determinista que usa el agente al
-// convertir notas (reconocer el cliente, plazo en días laborables): la IA identifica, el código decide.
+// Clientes vistos desde Operaciones: la ficha del NÚCLEO (clients) más los ajustes del módulo (ops_clients, mismo id)
+// y sus servicios. Desde el 14 nov 2026 nombre, alias, estado y negocio vienen del núcleo; aquí solo nivel, plazo,
+// ClickUp, alertas, horas y días. Un cliente sin fila en ops_clients usa los valores por defecto.
+// Aquí vive también la lógica determinista que usa el agente al convertir notas (reconocer el cliente, plazo en días
+// laborables): la IA identifica, el código decide.
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import {
-  opsClientLevels,
-  opsClientServices,
-  opsClients,
-  opsRequests,
-  opsServices,
-  type OpsClient
-} from '@/lib/db/schema';
+import { clients as coreClients, opsClientLevels, opsClientServices, opsClients, opsRequests, opsServices } from '@/lib/db/schema';
+import { isWorkingStatus } from '@/lib/core/client-rules';
 import { parseWorkDays } from '@/lib/operaciones/team-profiles';
 
 export type ClientService = { serviceKey: string; responsibleClickupId: string | null };
+/** Cliente con lo que Operaciones necesita. «active» = en onboarding o activo (estado del núcleo). */
+export type OpsClient = {
+  id: string;
+  tenantId: string;
+  name: string;
+  aliases: string[];
+  status: string;
+  active: boolean;
+  business: string | null;
+  offerings: string | null;
+  area: string | null;
+  audience: string | null;
+  goals: string | null;
+  strategy: string | null;
+  notes: string | null;
+  hasOpsSettings: boolean;
+  clickupOptionId: string | null;
+  clickupOptionLabel: string | null;
+  usualSpaceId: string | null;
+  usualListIds: string[];
+  level: string;
+  deliveryDays: number | null;
+  inactivityDays: number | null;
+  planningDays: number | null;
+  alertsEnabled: boolean;
+  monthlyHours: string | null;
+  workDays: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
 export type ClientWithServices = OpsClient & { services: ClientService[] };
+export const DEFAULT_LEVEL = 'standard';
 export type LevelRow = { key: string; label: string; defaultDays: number; inactivityDays: number; planningDays: number };
 export type ServiceRow = { key: string; label: string; active: boolean };
 
@@ -41,8 +68,41 @@ export async function getServices(tenantId: string): Promise<ServiceRow[]> {
 }
 
 export async function listClients(tenantId: string): Promise<ClientWithServices[]> {
-  const clients = await db.select().from(opsClients).where(eq(opsClients.tenantId, tenantId));
-  if (clients.length === 0) return [];
+  const rows = await db
+    .select({ c: coreClients, o: opsClients })
+    .from(coreClients)
+    .leftJoin(opsClients, eq(opsClients.id, coreClients.id))
+    .where(eq(coreClients.tenantId, tenantId));
+  if (rows.length === 0) return [];
+  const clients: OpsClient[] = rows.map(({ c, o }) => ({
+    id: c.id,
+    tenantId: c.tenantId,
+    name: c.name,
+    aliases: c.aliases,
+    status: c.status,
+    active: isWorkingStatus(c.status),
+    business: c.business,
+    offerings: c.offerings,
+    area: c.area,
+    audience: c.audience,
+    goals: c.goals,
+    strategy: c.strategy,
+    notes: c.notes,
+    hasOpsSettings: Boolean(o),
+    clickupOptionId: o?.clickupOptionId ?? null,
+    clickupOptionLabel: o?.clickupOptionLabel ?? null,
+    usualSpaceId: o?.usualSpaceId ?? null,
+    usualListIds: o?.usualListIds ?? [],
+    level: o?.level ?? DEFAULT_LEVEL,
+    deliveryDays: o?.deliveryDays ?? null,
+    inactivityDays: o?.inactivityDays ?? null,
+    planningDays: o?.planningDays ?? null,
+    alertsEnabled: o?.alertsEnabled ?? true,
+    monthlyHours: o?.monthlyHours ?? null,
+    workDays: o?.workDays ?? null,
+    createdAt: c.createdAt,
+    updatedAt: o && o.updatedAt > c.updatedAt ? o.updatedAt : c.updatedAt
+  }));
   const services = await db
     .select()
     .from(opsClientServices)
@@ -84,7 +144,8 @@ function baseName(s: string): string {
 }
 
 // Todas las formas con las que se puede llamar a un cliente (nombre, opción de ClickUp, alias).
-function clientKeys(c: Pick<OpsClient, 'name' | 'aliases' | 'clickupOptionLabel'>): string[] {
+type NamedClient = Pick<OpsClient, 'name' | 'aliases' | 'clickupOptionLabel'>;
+function clientKeys(c: NamedClient): string[] {
   const raw = [c.name, c.clickupOptionLabel ?? '', ...(c.aliases ?? [])];
   const keys = new Set<string>();
   for (const r of raw) {
@@ -97,7 +158,7 @@ function clientKeys(c: Pick<OpsClient, 'name' | 'aliases' | 'clickupOptionLabel'
 }
 
 // Cliente cuyo nombre, opción de ClickUp o alias coincide EXACTAMENTE con el texto (sin tildes ni mayúsculas).
-export function findClientByName<T extends OpsClient>(clients: T[], text: string): T | null {
+export function findClientByName<T extends NamedClient>(clients: T[], text: string): T | null {
   const t = normText(text);
   if (!t) return null;
   const hits = clients.filter((c) => clientKeys(c).includes(t) || clientKeys(c).includes(baseName(text)));
@@ -105,7 +166,7 @@ export function findClientByName<T extends OpsClient>(clients: T[], text: string
 }
 
 // Busca nombres o alias dentro de un texto libre. Solo vale si sale UN cliente (si hay dudas, ninguno).
-export function findClientInText<T extends OpsClient>(clients: T[], text: string): T | null {
+export function findClientInText<T extends NamedClient>(clients: T[], text: string): T | null {
   const t = normText(text);
   if (!t) return null;
   const hits = clients.filter((c) =>

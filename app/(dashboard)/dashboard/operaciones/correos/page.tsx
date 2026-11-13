@@ -1,6 +1,6 @@
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, inArray } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { opsClients } from '@/lib/db/schema';
+import { clients } from '@/lib/db/schema';
 import { requirePagePermission } from '@/lib/auth/permissions';
 import { CorreosView } from './correos-view';
 
@@ -8,10 +8,11 @@ export const dynamic = 'force-dynamic';
 
 export default async function CorreosPage() {
   const user = await requirePagePermission('edit');
-  const clients = await db
-    .select({ id: opsClients.id, name: opsClients.name })
-    .from(opsClients)
-    .where(and(eq(opsClients.tenantId, user.tenantId), eq(opsClients.active, true)))
-    .orderBy(asc(opsClients.name));
-  return <CorreosView clients={clients} />;
+  // Clientes a los que se puede asignar un correo: todos menos los dados de baja.
+  const list = await db
+    .select({ id: clients.id, name: clients.name })
+    .from(clients)
+    .where(and(eq(clients.tenantId, user.tenantId), inArray(clients.status, ['prospecto', 'onboarding', 'activo', 'pausado'])))
+    .orderBy(asc(clients.name));
+  return <CorreosView clients={list} />;
 }

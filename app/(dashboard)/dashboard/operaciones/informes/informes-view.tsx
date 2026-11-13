@@ -96,7 +96,7 @@ export function WeeklyView({ report: r, weeks }: { report: WeeklyReport; weeks: 
             <li>En alerta ahora: {r.clients.inactive} sin actividad · {r.clients.unplanned} sin trabajo planificado</li>
             <li>Correos recibidos: {r.clients.emailsIn} · respuestas enviadas: {r.clients.emailsAnswered}</li>
             <li>
-              <Link className="text-primary underline-offset-2 hover:underline" href="/dashboard/operaciones/clientes">
+              <Link className="text-primary underline-offset-2 hover:underline" href="/dashboard/clientes">
                 Ver el semáforo de clientes
               </Link>
             </li>

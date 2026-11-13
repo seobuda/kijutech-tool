@@ -1,9 +1,9 @@
 'use client';
 
-// «Contactos y memoria» de una ficha de cliente. Todo se guarda al momento (no depende de «Guardar
-// ficha»): cada cambio llama a su acción del servidor, que comprueba los permisos.
+// «Memoria» de la ficha de un cliente (núcleo). Todo se guarda al momento: cada cambio llama a su acción del servidor,
+// que comprueba los permisos. (Los contactos, que antes estaban aquí, tienen su pestaña en la ficha.)
 import { useCallback, useEffect, useState, useTransition } from 'react';
-import { AlertTriangle, AtSign, Brain, Check, Globe, Pause, Pencil, Play, Plus, RotateCcw, Sparkles, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Brain, Check, Pencil, Plus, RotateCcw, Sparkles, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,17 +11,13 @@ import { Badge, Skeleton } from '@/components/ui/page';
 import { cn } from '@/lib/utils';
 import {
   addClientMemory,
-  addClientSender,
   decideClientMemory,
   deleteClientMemory,
-  deleteClientSender,
   listClientMemory,
-  setClientSenderActive,
   updateClientMemory,
-  type ClientMemoryView,
-  type ClientSenderView
-} from '@/lib/operaciones/client-memory-actions';
-import { MEMORY_KINDS, MEMORY_KIND_LABELS, MEMORY_MAX_CHARS } from '@/lib/operaciones/client-memory-rules';
+  type ClientMemoryView
+} from '@/lib/core/client-memory-actions';
+import { MEMORY_KINDS, MEMORY_KIND_LABELS, MEMORY_MAX_CHARS } from '@/lib/core/client-rules';
 
 const focusRing = 'focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-brand/40 focus-visible:border-brand';
 const fieldClass = cn(
@@ -76,7 +72,7 @@ function ConfirmDelete({ what, disabled, onConfirm }: { what: string; disabled: 
   );
 }
 
-function SubHeading({ icon: Icon, title, hint, count }: { icon: typeof AtSign; title: string; hint: string; count?: number }) {
+function SubHeading({ icon: Icon, title, hint, count }: { icon: typeof Brain; title: string; hint: string; count?: number }) {
   return (
     <div className="flex items-start gap-2.5">
       <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-brand-soft text-brand">
@@ -94,8 +90,7 @@ function SubHeading({ icon: Icon, title, hint, count }: { icon: typeof AtSign; t
 }
 
 export function ClientMemoria({ clientId }: { clientId: string }) {
-  const [senders, setSenders] = useState<ClientSenderView[] | null>(null);
-  const [memory, setMemory] = useState<ClientMemoryView[]>([]);
+  const [memory, setMemory] = useState<ClientMemoryView[] | null>(null);
   const [canDelete, setCanDelete] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [msg, setMsg] = useState<Msg>(null);
@@ -108,7 +103,6 @@ export function ClientMemoria({ clientId }: { clientId: string }) {
       return;
     }
     setLoadError(null);
-    setSenders(res.senders);
     setMemory(res.memory);
     setCanDelete(res.canDelete);
   }, [clientId]);
@@ -132,23 +126,6 @@ export function ClientMemoria({ clientId }: { clientId: string }) {
     });
   };
 
-  // --- Contactos ---
-  const [sKind, setSKind] = useState<'email' | 'domain'>('email');
-  const [sValue, setSValue] = useState('');
-  const [sName, setSName] = useState('');
-  const [sRole, setSRole] = useState('');
-
-  const addSender = () =>
-    run(
-      () => addClientSender({ clientId, kind: sKind, value: sValue, name: sName, role: sRole }),
-      'Contacto añadido',
-      () => {
-        setSValue('');
-        setSName('');
-        setSRole('');
-      }
-    );
-
   // --- Memoria ---
   const [mKind, setMKind] = useState<string>('preferencia');
   const [mText, setMText] = useState('');
@@ -156,22 +133,23 @@ export function ClientMemoria({ clientId }: { clientId: string }) {
 
   const addMemory = () => run(() => addClientMemory({ clientId, kind: mKind, text: mText }), 'Dato guardado', () => setMText(''));
 
-  const proposed = memory.filter((m) => m.status === 'propuesto');
-  const accepted = memory.filter((m) => m.status === 'aceptado');
-  const discarded = memory.filter((m) => m.status === 'descartado');
+  const all = memory ?? [];
+  const proposed = all.filter((m) => m.status === 'propuesto');
+  const accepted = all.filter((m) => m.status === 'aceptado');
+  const discarded = all.filter((m) => m.status === 'descartado');
 
   if (loadError) {
     return (
       <p role="alert" className="flex items-center gap-2 rounded-lg bg-destructive-soft px-3 py-2 text-sm text-destructive">
         <AlertTriangle className="size-4 shrink-0" aria-hidden />
-        No se pudo cargar contactos y memoria: {loadError}
+        No se pudo cargar la memoria: {loadError}
       </p>
     );
   }
-  if (senders === null) {
+  if (memory === null) {
     return (
       <div className="space-y-2" aria-busy="true">
-        <p className="text-sm text-muted-foreground">Cargando contactos y memoria…</p>
+        <p className="text-sm text-muted-foreground">Cargando la memoria…</p>
         <Skeleton className="h-10 w-full" />
         <Skeleton className="h-10 w-3/4" />
       </div>
@@ -283,77 +261,9 @@ export function ClientMemoria({ clientId }: { clientId: string }) {
   return (
     <div className="space-y-6">
       <p className="rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
-        Se guardan al momento, sin pulsar «Guardar ficha». Sin contraseñas ni accesos. Solo los datos <strong>aceptados</strong> se usan como contexto.
+        Se guarda al momento. Sin contraseñas ni accesos. Solo los datos <strong>aceptados</strong> se usan como contexto.
       </p>
 
-      {/* Contactos */}
-      <section className="space-y-3" aria-label="Contactos del cliente">
-        <SubHeading icon={AtSign} title="Contactos" hint="De quién son los correos." count={senders.length} />
-        {senders.length === 0 ? (
-          <p className="rounded-lg border border-dashed px-3 py-4 text-center text-sm text-muted-foreground">
-            Aún no hay contactos. Añade los correos o el dominio del cliente para que el sistema reconozca sus emails.
-          </p>
-        ) : (
-          <ul className="grid gap-2 md:grid-cols-2">
-            {senders.map((s) => (
-              <li
-                key={s.id}
-                className={cn('flex flex-col gap-2 rounded-lg border bg-card p-3 text-sm shadow-xs', !s.active && 'bg-muted/40')}
-              >
-                <div className="flex min-w-0 items-start gap-2.5">
-                  <span className="grid size-8 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground">
-                    {s.kind === 'email' ? <AtSign className="size-4" aria-hidden /> : <Globe className="size-4" aria-hidden />}
-                  </span>
-                  <div className={cn('min-w-0 flex-1', !s.active && 'text-muted-foreground')}>
-                    <p className={cn('truncate font-medium', !s.active && 'line-through')} title={s.value}>
-                      {s.value}
-                    </p>
-                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                      <Badge tone="outline">{s.kind === 'email' ? 'Correo' : 'Dominio'}</Badge>
-                      {!s.active && <Badge tone="neutral">Pausado</Badge>}
-                      {(s.name || s.role) && <span className="text-xs text-muted-foreground">{[s.name, s.role].filter(Boolean).join(' · ')}</span>}
-                    </div>
-                  </div>
-                </div>
-                <div className="flex flex-wrap items-center justify-end gap-1">
-                  <Button size="sm" variant="ghost" disabled={pending} onClick={() => run(() => setClientSenderActive(s.id, !s.active), s.active ? 'Contacto pausado' : 'Contacto activado')}>
-                    {s.active ? <Pause aria-hidden /> : <Play aria-hidden />}
-                    {s.active ? 'Pausar' : 'Activar'}
-                  </Button>
-                  {canDelete && <ConfirmDelete what="este contacto" disabled={pending} onConfirm={() => run(() => deleteClientSender(s.id), 'Contacto eliminado')} />}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-        <div className="grid gap-3 rounded-lg border border-dashed bg-muted/20 p-3 sm:grid-cols-2 lg:grid-cols-[auto_minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-end">
-          <div className="space-y-1.5">
-            <Label className="text-xs" htmlFor={`s-kind-${clientId}`}>Tipo</Label>
-            <select id={`s-kind-${clientId}`} className={cn(selectClass, 'w-full')} value={sKind} onChange={(e) => setSKind(e.target.value as 'email' | 'domain')}>
-              <option value="email">Correo concreto</option>
-              <option value="domain">Todo un dominio</option>
-            </select>
-          </div>
-          <div className="space-y-1.5">
-            <Label className="gap-1 text-xs" htmlFor={`s-value-${clientId}`}>
-              {sKind === 'email' ? 'Correo' : 'Dominio'} <span className="text-destructive">*</span>
-            </Label>
-            <Input id={`s-value-${clientId}`} aria-required placeholder={sKind === 'email' ? 'persona@empresa.com' : 'empresa.com'} value={sValue} onChange={(e) => setSValue(e.target.value)} />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs" htmlFor={`s-name-${clientId}`}>Nombre</Label>
-            <Input id={`s-name-${clientId}`} placeholder="Opcional" value={sName} onChange={(e) => setSName(e.target.value)} />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs" htmlFor={`s-role-${clientId}`}>Cargo o rol</Label>
-            <Input id={`s-role-${clientId}`} placeholder="Opcional" value={sRole} onChange={(e) => setSRole(e.target.value)} />
-          </div>
-          <Button size="sm" variant="outline" className="h-9 sm:col-span-2 lg:col-span-1" disabled={pending || !sValue.trim()} onClick={addSender}>
-            <Plus aria-hidden />
-            Añadir contacto
-          </Button>
-        </div>
-      </section>
 
       {/* Memoria */}
       <section className="space-y-3" aria-label="Memoria del cliente">

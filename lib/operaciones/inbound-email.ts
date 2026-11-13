@@ -5,7 +5,8 @@ import 'server-only';
 // función exportada de uno de esos archivos sería un endpoint público.
 import { and, count, eq, gte } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { opsClientSenders, opsInboundEmails, users } from '@/lib/db/schema';
+import { opsInboundEmails, users } from '@/lib/db/schema';
+import { emailMatchRules } from '@/lib/core/clients';
 
 // Nota que marca un correo del equipo (no de un cliente): el agente también le propone respuesta.
 export const TEAM_NOTE = 'Del equipo';
@@ -20,16 +21,8 @@ export type Recognition = {
 
 /** ¿De qué cliente es este remitente? Dirección exacta > dominio; si hay duda, no adivina. */
 export async function recognizeSender(tenantId: string, fromAddress: string): Promise<Recognition> {
-  const senders = await db
-    .select({
-      clientId: opsClientSenders.clientId,
-      kind: opsClientSenders.kind,
-      value: opsClientSenders.value,
-      active: opsClientSenders.active
-    })
-    .from(opsClientSenders)
-    .where(eq(opsClientSenders.tenantId, tenantId));
-  const m = matchSender(senders, fromAddress);
+  // Correos de los contactos de las fichas y dominios de sus webs que reconocen correos (núcleo).
+  const m = matchSender(await emailMatchRules(tenantId), fromAddress);
   if (!m) return { clientId: null, matchedBy: 'ninguno', status: 'sin_cliente' };
   if ('ambiguous' in m) return { clientId: null, matchedBy: 'ambiguo', status: 'sin_cliente' };
   return { clientId: m.clientId, matchedBy: m.by, status: 'nuevo' };

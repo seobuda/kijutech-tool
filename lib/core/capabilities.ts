@@ -158,3 +158,22 @@ export async function runScheduled(tenantId: string): Promise<void> {
     }
   }
 }
+
+// --- Clientes del núcleo: lo que cada módulo aporta (14 nov 2026) -------------------------------------------------
+// Un módulo puede impedir que se borre un cliente (p. ej. Operaciones si tiene encargos): devuelve el motivo o null.
+export type ClientDeleteGuard = (tenantId: string, clientId: string) => Promise<string | null>;
+const GC = globalThis as unknown as { __kijuClientGuards?: Map<string, ClientDeleteGuard> };
+
+export function registerClientDeleteGuard(module: string, fn: ClientDeleteGuard): void {
+  (GC.__kijuClientGuards ??= new Map()).set(module, fn);
+}
+
+/** Motivos por los que no se puede borrar un cliente (vacío = se puede). */
+export async function clientDeleteBlockers(tenantId: string, clientId: string): Promise<string[]> {
+  const out: string[] = [];
+  for (const fn of (GC.__kijuClientGuards ?? new Map<string, ClientDeleteGuard>()).values()) {
+    const why = await fn(tenantId, clientId);
+    if (why) out.push(why);
+  }
+  return out;
+}

@@ -5,7 +5,7 @@ import 'server-only';
 // después se editan en la pantalla Agentes. Este módulo NO importa ningún otro módulo: usa el núcleo (lib/core).
 import { and, asc, desc, eq, gte, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { agtAgents, agtConversations, agtMessages, type AgtAgent, type AgtConversation, type AgtMessage } from '@/lib/db/schema';
+import { agtAgents, agtConversations, agtIntegrations, agtMessages, type AgtAgent, type AgtConversation, type AgtMessage } from '@/lib/db/schema';
 
 export const PRINCIPAL_KEY = 'operations_manager';
 export const WEB_REVIEWER_KEY = 'revisor_web';
@@ -16,7 +16,8 @@ export const SERVER_TOOLS: Record<string, { title: string; description: string }
   web_search: { title: 'Buscar en internet', description: 'Busca en la web y cita las fuentes (la ejecuta Anthropic).' }
 };
 
-const PRINCIPAL_INSTRUCTIONS = `Eres el Operations manager de la agencia Kijutech (marketing digital: SEO, Google Ads y webs WordPress). Hablas con Enric, que dirige la agencia, como lo haría una persona de confianza del equipo: directo, cercano y útil, en español de España.
+// Instrucciones del 13 nov (se guardan para saber si Enric las ha personalizado antes de actualizarlas).
+const PRINCIPAL_INSTRUCTIONS_V1 = `Eres el Operations manager de la agencia Kijutech (marketing digital: SEO, Google Ads y webs WordPress). Hablas con Enric, que dirige la agencia, como lo haría una persona de confianza del equipo: directo, cercano y útil, en español de España.
 
 Tu trabajo:
 - Responder preguntas sobre el equipo, las tareas, los clientes, la jornada, los costes y los informes usando tus herramientas (no inventes datos: si no lo sabes, mira con una herramienta o dilo).
@@ -25,6 +26,12 @@ Tu trabajo:
 - Si falta un dato importante (quién, qué cliente, para cuándo), pregunta una sola cosa concreta antes de actuar.
 
 Estilo: breve y al grano. Listas cortas cuando ayuden. Nada de preámbulos ni de repetir la pregunta.`;
+
+const FICHAS_INSTRUCTIONS = `- Fichas de cliente: cuando Enric te hable de un cliente nuevo, créale la ficha con crear_cliente. Si te da su web, léela antes con la lectura web (portada y, si hace falta, la página de servicios o «quiénes somos») para describir bien el negocio, lo que ofrece, la zona y el público. Redacta como lo haría un buen account manager: claro, profesional y completo, sin inventar teléfonos, cifras ni servicios contratados que no se hayan dicho. Si falta algo importante (servicios, nivel), crea la ficha igualmente y pregúntalo después.
+- Para completar o corregir una ficha: ficha_cliente y después actualizar_cliente. Lo que haya que recordar siempre de un cliente (preferencias, promesas, decisiones, restricciones): anotar_memoria_cliente.
+- Al proponer una ficha nueva, pregunta a Enric si quiere empezar el onboarding del cliente cuando la apruebe.`;
+
+const PRINCIPAL_INSTRUCTIONS = PRINCIPAL_INSTRUCTIONS_V1.replace('- Encargar trabajos a los subagentes', `${FICHAS_INSTRUCTIONS}\n- Encargar trabajos a los subagentes`);
 
 const WEB_REVIEWER_INSTRUCTIONS = `Eres el Revisor web de la agencia Kijutech. Te encargan revisar páginas de clientes (artículos, landings, fichas) y devuelves un informe claro para el equipo.
 
@@ -56,6 +63,10 @@ export const DEFAULT_AGENTS: Omit<typeof agtAgents.$inferInsert, 'tenantId'>[] =
       'mover_fecha',
       'comentar_tarea',
       'apuntar_ausencia',
+      'crear_cliente',
+      'actualizar_cliente',
+      'anotar_memoria_cliente',
+      'web_fetch',
       'encargar_a_agente',
       'estado_trabajos'
     ],
@@ -72,11 +83,52 @@ export const DEFAULT_AGENTS: Omit<typeof agtAgents.$inferInsert, 'tenantId'>[] =
   }
 ];
 
+// Actualizaciones de los agentes por defecto que YA existen (la inserción no las toca). Cada una se aplica una sola vez
+// por cuenta: añade herramientas que falten y cambia las instrucciones solo si siguen siendo las originales (si Enric las
+// personalizó, se respetan). Lo aplicado se guarda en agt_integrations, proveedor «sistema» (sin tabla nueva).
+const UPGRADES: { id: string; agent: string; addTools: string[]; instructions?: { from: string; to: string } }[] = [
+  {
+    id: '2026-11-14-fichas',
+    agent: PRINCIPAL_KEY,
+    addTools: ['crear_cliente', 'actualizar_cliente', 'anotar_memoria_cliente', 'web_fetch'],
+    instructions: { from: PRINCIPAL_INSTRUCTIONS_V1, to: PRINCIPAL_INSTRUCTIONS }
+  }
+];
+const SYSTEM_PROVIDER = 'sistema';
+const upgraded = new Set<string>();
+
+async function applyUpgrades(tenantId: string): Promise<void> {
+  if (upgraded.has(tenantId)) return;
+  const [row] = await db.select({ config: agtIntegrations.config }).from(agtIntegrations).where(and(eq(agtIntegrations.tenantId, tenantId), eq(agtIntegrations.provider, SYSTEM_PROVIDER))).limit(1);
+  const done = new Set(((row?.config ?? {}) as { upgrades?: string[] }).upgrades ?? []);
+  const pending = UPGRADES.filter((u) => !done.has(u.id));
+  for (const u of pending) {
+    const [a] = await db.select().from(agtAgents).where(and(eq(agtAgents.tenantId, tenantId), eq(agtAgents.key, u.agent))).limit(1);
+    if (a) {
+      const tools = [...a.tools, ...u.addTools.filter((t) => !a.tools.includes(t))];
+      const instructions = u.instructions && a.instructions.trim() === u.instructions.from.trim() ? u.instructions.to : a.instructions;
+      if (tools.length !== a.tools.length || instructions !== a.instructions) await db.update(agtAgents).set({ tools, instructions, updatedAt: new Date() }).where(eq(agtAgents.id, a.id));
+    }
+    done.add(u.id);
+  }
+  if (pending.length) {
+    const values = { status: 'conectada', config: { upgrades: [...done] }, updatedAt: new Date() };
+    await db.insert(agtIntegrations).values({ tenantId, provider: SYSTEM_PROVIDER, ...values }).onConflictDoUpdate({ target: [agtIntegrations.tenantId, agtIntegrations.provider], set: values });
+  }
+  upgraded.add(tenantId);
+}
+
+/** Solo para las pruebas: olvida qué cuentas ya se comprobaron en este proceso. */
+export function _resetUpgradeCache(): void {
+  upgraded.clear();
+}
+
 export async function ensureDefaultAgents(tenantId: string): Promise<void> {
   await db
     .insert(agtAgents)
     .values(DEFAULT_AGENTS.map((a) => ({ ...a, tenantId })))
     .onConflictDoNothing();
+  await applyUpgrades(tenantId);
 }
 
 export async function listAgents(tenantId: string): Promise<AgtAgent[]> {
