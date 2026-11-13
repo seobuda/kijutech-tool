@@ -12,14 +12,14 @@ import Anthropic from '@anthropic-ai/sdk';
 import { db } from '@/lib/db/drizzle';
 import { aiJobs, type AgtAgent } from '@/lib/db/schema';
 import { getModelPricing, resolveActiveProvider } from '@/lib/ai/gateway';
-import { availableTools, getTool, type ToolContext } from '@/lib/core/capabilities';
+import { availableTools, getTool, type ToolContext, type ToolResult } from '@/lib/core/capabilities';
 import { agentMonthSpend, SERVER_TOOLS } from '@/lib/agentes/store';
 
 const TZ = 'Europe/Madrid';
 export const MAX_ITERATIONS = 8;
 
 export type ToolCallLog = { name: string; input: unknown; ok: boolean; proposed?: boolean; preview?: string };
-export type AgentRun = { text: string; toolCalls: ToolCallLog[]; costUsd: number; inputTokens: number; outputTokens: number; error: string | null };
+export type AgentRun = { text: string; toolCalls: ToolCallLog[]; costUsd: number; inputTokens: number; outputTokens: number; error: string | null; cards: NonNullable<ToolResult['card']>[] };
 export type HistoryItem = { role: 'user' | 'assistant'; content: string };
 
 function nowText(): string {
@@ -105,7 +105,7 @@ export async function runAgent(params: {
   maxTokens?: number;
 }): Promise<AgentRun> {
   const { tenantId, agent, ctx } = params;
-  const run: AgentRun = { text: '', toolCalls: [], costUsd: 0, inputTokens: 0, outputTokens: 0, error: null };
+  const run: AgentRun = { text: '', toolCalls: [], costUsd: 0, inputTokens: 0, outputTokens: 0, error: null, cards: [] };
 
   if (agent.monthlyBudgetUsd && (await agentMonthSpend(tenantId, agent.key)) >= Number(agent.monthlyBudgetUsd)) {
     run.text = `He llegado a mi presupuesto del mes (${Number(agent.monthlyBudgetUsd).toFixed(2)} $). Enric puede subirlo en Agentes.`;
@@ -193,6 +193,7 @@ export async function runAgent(params: {
           const r = await tool.run(ctx, (block.input ?? {}) as Record<string, unknown>);
           results.push({ type: 'tool_result', tool_use_id: block.id, content: r.content.slice(0, 30_000), is_error: !r.ok });
           run.toolCalls.push({ name: block.name, input: block.input, ok: r.ok, proposed: r.proposed, preview: r.content.slice(0, 300) });
+          if (r.card) run.cards.push(r.card);
         } catch (e) {
           console.error(`[agente] herramienta ${block.name}:`, e instanceof Error ? e.message : e);
           results.push({ type: 'tool_result', tool_use_id: block.id, content: 'La herramienta falló. Dilo y sigue con lo que puedas.', is_error: true });

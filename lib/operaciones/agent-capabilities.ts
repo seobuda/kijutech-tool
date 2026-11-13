@@ -130,6 +130,17 @@ async function proposeOrRun(ctx: ToolContext, tool: string, summaryHtml: string,
   });
   if (!action) return fail('No se pudo registrar la propuesta.');
   if (autonomy === 'sombra') return ok('Modo sombra: la acción queda anotada para medir, pero no se ejecuta ni se pide aprobación. Díselo a quien te habla.');
+  const buttons = [[{ text: '✅ Hacerlo', data: `at:ok:${action.id}` }, { text: '✖️ Descartar', data: `at:no:${action.id}` }]];
+  // Conversación por Telegram con el dueño: la propuesta va dentro de la respuesta del agente (un solo mensaje).
+  if (ctx.channel === 'telegram' && ctx.actor.isOwner) {
+    return {
+      ok: true,
+      proposed: true,
+      card: { html: clampMessage(summaryHtml), buttons },
+      content:
+        'Propuesta preparada: se enseña a Enric justo debajo de tu respuesta, con los botones ✅ Hacerlo / ✖️ Descartar. No está hecha todavía. No repitas su contenido: di en una o dos frases qué le propones y, si falta algo importante, pregúntalo.'
+    };
+  }
   const owner = await getOwnerMember(ctx.tenantId);
   if (!owner) return fail('No hay dueño con Telegram vinculado para aprobar.');
   await enqueueNotification({
@@ -141,7 +152,7 @@ async function proposeOrRun(ctx: ToolContext, tool: string, summaryHtml: string,
     payload: {
       text: clampMessage(`🤖 <b>Propuesta del agente</b>\n${summaryHtml}`),
       toOwner: true,
-      buttons: [[{ text: '✅ Hacerlo', data: `at:ok:${action.id}` }, { text: '✖️ Descartar', data: `at:no:${action.id}` }]]
+      buttons
     }
   });
   return { ok: true, proposed: true, content: `Propuesta enviada a ${owner.username} con los botones ✅ Hacerlo / ✖️ Descartar. No está hecha todavía: dilo así.` };
