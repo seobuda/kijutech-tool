@@ -3,7 +3,7 @@
 Lista viva de lo que solo puede hacer Enric (accesos, decisiones, el equipo). Claude la actualiza al terminar cada bloque.
 Detalle paso a paso de la activación en `docs/PRUEBAS-EN-VIVO.md`.
 
-**Última actualización:** 13 nov 2026, de madrugada. En producción: `main` `9cc5e08d` (autonomía e informes + fichas desde el historial), sin migraciones nuevas.
+**Última actualización:** 13 nov 2026, de madrugada. En producción: `main` `132ad035` (autonomía, informes, fichas desde el historial, vigía de IA, reserva y reasignar), 47 migraciones.
 
 ## Viernes 13 — antes de activar al equipo (unos 45 min)
 - [ ] **Revisar con tu cuenta de admin** lo que Claude no puede ver (no hay usuario de pruebas en producción):
@@ -57,7 +57,7 @@ Detalle paso a paso de la activación en `docs/PRUEBAS-EN-VIVO.md`.
   y modelos. La de Gemini no tiene créditos.
 
 ## Decisiones que esperan tu aprobación (Claude no las hace sin tu OK)
-- [x] **Reasignar desde el parte con un botón:** aprobada (migración 0046). Se despliega con `--migrate`.
+- [x] **Reasignar desde el parte con un botón:** aprobada y desplegada (migración 0046).
 - [x] **IA de reserva:** aprobada y construida (falta la segunda clave, ver arriba).
 - [ ] **5C: temporadas, niveles y misiones.** El diseño está aprobado; falta aprobar su esquema de base de datos. Mejor después de
   1–2 semanas de jornada real.
