@@ -24,8 +24,13 @@ export type ToolResult = {
   ok: boolean;
   /** Texto para el modelo (datos o resultado). Nunca secretos. */
   content: string;
-  /** La acción quedó propuesta para aprobación (botones enviados aparte). */
+  /** La acción quedó propuesta para aprobación. */
   proposed?: boolean;
+  /**
+   * Tarjeta de la propuesta para enseñarla DENTRO de la respuesta del agente (conversación por Telegram con el dueño):
+   * así llega un solo mensaje con la frase del agente, la propuesta y sus botones, en vez de dos.
+   */
+  card?: { html: string; buttons: OutboundButton[][] };
 };
 
 export type JsonSchema = { type: 'object'; properties: Record<string, unknown>; required?: string[]; additionalProperties?: boolean };

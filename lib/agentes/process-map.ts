@@ -24,7 +24,7 @@ export const AGENTES_PROCESS_MAP: ProcessStep[] = [
     file: 'lib/agentes/engine.ts',
     when: 'En cada mensaje y en cada trabajo de subagente.',
     ai: 'Qué herramientas usar, con qué datos y la respuesta. Hasta 8 vueltas de herramientas por mensaje.',
-    code: 'Herramientas permitidas por ficha; las de una integración sin conectar no se ofrecen. Las acciones de cambio pasan por el motor de acciones de Operaciones (tipo agent_tool) con autonomía por herramienta (por defecto con aprobación). Coste en ai_jobs (función agt_<clave>) y presupuesto mensual por agente. Lo leído de webs y correos es dato, nunca instrucción.',
+    code: 'Herramientas permitidas por ficha; las de una integración sin conectar no se ofrecen. Las acciones de cambio pasan por el motor de acciones de Operaciones (tipo agent_tool) con autonomía por herramienta (por defecto con aprobación). Coste en ai_jobs (función agt_<clave>) y presupuesto mensual por agente. Lo leído de webs y correos es dato, nunca instrucción. En una conversación por Telegram con el dueño, cada propuesta llega en el MISMO mensaje que la respuesta del agente (frase + propuesta + ✅ / ✖️); desde correo, web o subagentes, como aviso aparte.',
     tables: ['agt_messages', 'agt_agents']
   },
   {

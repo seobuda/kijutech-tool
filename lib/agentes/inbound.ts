@@ -73,7 +73,17 @@ async function converse(m: InboundMessage, agent: NonNullable<Awaited<ReturnType
     }
   } else if (tgOut) {
     const heard = transcript ? `<i>🎙 «${escape(transcript.length > 220 ? `${transcript.slice(0, 220)}…` : transcript)}»</i>\n\n` : '';
-    await tgOut.sendText(m.tenantId, m.peer, `${heard}${run.text}`);
+    // Las propuestas (con sus botones) van en el mismo mensaje que la respuesta: un solo mensaje por cosa.
+    // Si son varias o no caben (límite de Telegram), la respuesta va primero y cada propuesta en su mensaje.
+    const [first, ...rest] = run.cards;
+    const joined = first ? `${heard}${run.text}\n\n${first.html}` : '';
+    if (first && joined.length <= 3900) {
+      await tgOut.sendText(m.tenantId, m.peer, joined, first.buttons);
+    } else {
+      await tgOut.sendText(m.tenantId, m.peer, `${heard}${run.text}`);
+      if (first) await tgOut.sendText(m.tenantId, m.peer, first.html, first.buttons);
+    }
+    for (const c of rest) await tgOut.sendText(m.tenantId, m.peer, c.html, c.buttons);
     if (wantsVoice && !run.error) {
       await tgOut.sendTyping(m.tenantId, m.peer, 'record_voice');
       const v = await speak(m.tenantId, speakableText(run.text), agent.voice);

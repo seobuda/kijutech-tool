@@ -49,9 +49,9 @@ import { AGENT_TOOL_CALLBACK_RE, decideAgentTool, OPS_AGENT_TOOLS, setToolAutono
 import { getCalendar } from '@/lib/operaciones/calendar';
 import { AGENTES_TOOLS } from '@/lib/agentes/register';
 
-const sent: { kind: string; chat: string; text?: string }[] = [];
+const sent: { kind: string; chat: string; text?: string; buttons?: { text: string; data: string }[][] }[] = [];
 setTelegramOutbound({
-  sendText: async (_t, chat, html) => void sent.push({ kind: 'text', chat, text: html }),
+  sendText: async (_t, chat, html, buttons) => void sent.push({ kind: 'text', chat, text: html, buttons }),
   sendVoice: async (_t, chat) => (sent.push({ kind: 'voice', chat }), true),
   sendTyping: async () => undefined,
   notifyOwner: async (_t, _k, html) => void sent.push({ kind: 'notify', chat: 'owner', text: html })
@@ -200,6 +200,22 @@ describe('agentes con la base de datos', () => {
     await waitIdle();
     expect(sent.filter((s) => s.kind === 'text').map((s) => s.text)).toContain('Todo en orden por aquí.');
     expect(sent.some((s) => s.kind === 'voice')).toBe(false); // no habló en audio ni lo pidió
+  });
+
+  it('una propuesta en la conversación llega en el MISMO mensaje que la respuesta, con sus botones', async () => {
+    sent.length = 0;
+    h.script.push(
+      { content: [{ type: 'tool_use', id: 'tu-aus', name: 'apuntar_ausencia', input: { tipo: 'festivo', desde: '2026-12-08', hasta: '2026-12-08', motivo: 'Inmaculada' } }], stop_reason: 'tool_use', usage: { input_tokens: 50, output_tokens: 10 } },
+      { content: [{ type: 'text', text: 'Te propongo apuntar el festivo del 8.' }], stop_reason: 'end_turn', usage: { input_tokens: 60, output_tokens: 10 } }
+    );
+    expect(await handleInbound({ tenantId, channel: 'telegram', peer: '777', peerName: 'Enric', isOwner: true, clickupUserId: null, text: 'apunta el festivo del 8 de diciembre' })).toBe(true);
+    await waitIdle();
+    const texts = sent.filter((x) => x.kind === 'text');
+    expect(texts).toHaveLength(1);
+    expect(texts[0].text).toContain('Te propongo apuntar el festivo del 8.');
+    expect(texts[0].text).toContain('Inmaculada');
+    expect(texts[0].buttons?.[0].map((b) => b.text)).toEqual(['✅ Hacerlo', '✖️ Descartar']);
+    expect(sent.some((x) => x.kind === 'notify')).toBe(false); // ya no llega un aviso aparte
   });
 
   it('trabajo de subagente: se hace, guarda el informe y avisa a Enric', async () => {
