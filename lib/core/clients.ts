@@ -5,7 +5,7 @@ import 'server-only';
 // Este archivo no conoce a ningún módulo. Operaciones guarda sus ajustes en ops_clients (mismo id) y aporta lo suyo
 // por el registro del núcleo (p. ej. impedir borrar un cliente con encargos).
 // Las funciones lanzan ClientError con un mensaje apto para el usuario cuando algo no es válido.
-import { and, asc, desc, eq, isNotNull, ne, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, ne, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import {
   clientAssets,
@@ -40,6 +40,7 @@ import {
   isMemoryKind,
   normEmail,
   normalizeUrl,
+  pickClient,
   recognizableDomain,
   validateMemoryText,
   type AccessLevel,
@@ -83,6 +84,11 @@ export type ClientSheet = {
 
 export async function listCoreClients(tenantId: string): Promise<Client[]> {
   return db.select().from(clients).where(eq(clients.tenantId, tenantId)).orderBy(asc(clients.name));
+}
+
+/** Cliente nombrado en un texto (nombre o alias; exacto o el único que lo contenga). Si hay dudas, opciones para preguntar. */
+export async function findCoreClient(tenantId: string, text: string): Promise<{ client: Client | null; options: string[] }> {
+  return pickClient(await listCoreClients(tenantId), text);
 }
 
 export async function getClient(tenantId: string, id: string): Promise<Client | null> {
@@ -474,6 +480,29 @@ export async function primaryAsset(tenantId: string, clientId: string, kind: Ass
     .orderBy(desc(clientAssets.isPrimary), asc(clientAssets.createdAt))
     .limit(1);
   return rows[0] ?? null;
+}
+
+/**
+ * Cuenta principal de cada tipo pedido para todos los clientes que no están de baja (misma regla que primaryAsset),
+ * en una sola consulta. La usa el módulo Rendimiento para saber qué propiedades descargar.
+ */
+export async function listPrimaryAssets(tenantId: string, kinds: string[]): Promise<{ clientId: string; clientName: string; clientStatus: string; kind: string; value: string; access: string }[]> {
+  if (!kinds.length) return [];
+  const rows = await db
+    .select({ clientId: clients.id, clientName: clients.name, clientStatus: clients.status, kind: clientAssets.kind, value: clientAssets.value, access: clientAssets.access })
+    .from(clientAssets)
+    .innerJoin(clients, eq(clients.id, clientAssets.clientId))
+    .where(and(eq(clientAssets.tenantId, tenantId), ne(clients.status, 'baja'), inArray(clientAssets.kind, kinds)))
+    .orderBy(asc(clients.id), asc(clientAssets.kind), desc(clientAssets.isPrimary), asc(clientAssets.createdAt));
+  const seen = new Set<string>();
+  const out: { clientId: string; clientName: string; clientStatus: string; kind: string; value: string; access: string }[] = [];
+  for (const r of rows) {
+    const k = `${r.clientId}:${r.kind}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    if (r.value?.trim()) out.push({ ...r, value: r.value.trim() });
+  }
+  return out;
 }
 
 // --- Competencia --------------------------------------------------------------------------------------------------

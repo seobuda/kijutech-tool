@@ -13,7 +13,7 @@ import { and, desc, eq, notInArray } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { opsRequests, opsSettings, roles, userRoles, users } from '@/lib/db/schema';
 import { getPrompt } from '@/lib/ai/gateway';
-import { registerClientDeleteGuard, registerTools, setEmailOutbound, setTelegramOutbound, type AgentTool, type ToolContext, type ToolResult } from '@/lib/core/capabilities';
+import { changeExecutor, registerClientDeleteGuard, registerTools, setChangeProposer, setEmailOutbound, setTelegramOutbound, type AgentTool, type ToolContext, type ToolResult } from '@/lib/core/capabilities';
 import { decideAction, getAction, recordAction, type Autonomy } from '@/lib/operaciones/agent-actions';
 import { getCalendar, saveCalendar, validateEntry, KIND_LABEL, type CalendarEntry } from '@/lib/operaciones/calendar';
 import { findClientInText, getLevels, listClients, normText, type ClientWithServices } from '@/lib/operaciones/clients';
@@ -103,7 +103,8 @@ const EXECUTORS: Record<string, Executor> = {};
 /** Herramienta de cambio: prepara la propuesta (texto legible + datos ya resueltos) y la ejecuta o la manda a aprobar. */
 async function proposeOrRun(ctx: ToolContext, tool: string, summaryHtml: string, data: Record<string, unknown>): Promise<ToolResult> {
   const autonomy = await getToolAutonomy(ctx.tenantId, tool);
-  const exec = EXECUTORS[tool];
+  const exec = EXECUTORS[tool] ?? changeExecutor(tool);
+  if (!exec) return fail('Esa acción no está disponible.');
   if (autonomy === 'autonomo') {
     const res = await exec(ctx.tenantId, data, `Agente (${ctx.agentKey})`);
     await recordAction({
@@ -170,7 +171,7 @@ export async function decideAgentTool(tenantId: string, actionId: string, approv
     await decideAction(tenantId, actionId, { status: 'rechazado', via: 'telegram', byName });
     return { answer: 'Descartada.', line: '✖️ Descartada' };
   }
-  const exec = EXECUTORS[p.tool];
+  const exec = EXECUTORS[p.tool] ?? changeExecutor(p.tool);
   if (!exec) return { answer: 'Esa acción ya no está disponible.', line: '' };
   const decided = await decideAction(tenantId, actionId, { status: 'aprobado', via: 'telegram', byName });
   if (!decided) return { answer: 'Esta propuesta ya estaba decidida.', line: '' };
@@ -692,6 +693,8 @@ export function registerOperacionesCapabilities(): void {
   if (registered) return;
   registered = true;
   registerTools(OPS_AGENT_TOOLS);
+  // El motor de propuestas queda disponible para las herramientas de cambio de otros módulos (núcleo: proposeChange).
+  setChangeProposer(proposeOrRun);
   // Un cliente con encargos no se borra (se le da de baja): así no se pierde el historial.
   registerClientDeleteGuard('operaciones', async (tenantId, clientId) => {
     const c = (await listClients(tenantId)).find((x) => x.id === clientId);

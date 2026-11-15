@@ -3,10 +3,21 @@
 Lista viva de lo que solo puede hacer Enric (accesos, decisiones, el equipo). Claude la actualiza al terminar cada bloque.
 Detalle paso a paso de la activación en `docs/PRUEBAS-EN-VIVO.md`.
 
-**Última actualización:** 14 nov 2026. En producción: `main` `c7cd65ec` (todo lo anterior + módulo Agentes y panel de voz), 48 migraciones.
+**Última actualización:** 15 nov 2026. En producción: `main` `d7aa3091` (todo lo anterior + ficha del cliente en el núcleo y propuesta del agente en un solo mensaje), 49 migraciones.
 
-## Ficha del cliente en el núcleo (rama `feature/ficha-cliente-nucleo`, migración 0048)
-- [ ] **Desplegar con migración** (hace backup antes): `! git checkout main && git merge --no-ff feature/ficha-cliente-nucleo && git push origin main && bash scripts/deploy.sh --migrate`
+## Rendimiento del cliente + propiedades de Google (rama `feature/rendimiento-cliente`, migración 0049)
+Incluye el paso A (propiedades de Google por cliente) y los pasos B1, B2 y B3 (sección Rendimiento). Informe por correo del 15 nov.
+- [ ] **Desplegar con migración** (hace backup antes): `! git checkout main && git merge --no-ff feature/rendimiento-cliente && git push origin main && bash scripts/deploy.sh --migrate`
+- [ ] **Comprobar que Google está conectado** en Agentes → Integraciones (si no, ni el panel de Google de las fichas ni la descarga funcionan).
+- [ ] **En cada cliente:** Clientes → cliente → Webs y cuentas → «Buscar en Google» → marcar las suyas → «Añadir a la ficha». Después «Comprobar accesos». En unos minutos empieza a descargarse su histórico.
+- [ ] **Poner la fecha de inicio del servicio** en las fichas (Empresa y negocio): sale como hito en las gráficas y permite comparar «antes del servicio».
+- [ ] **Mirar la pestaña Rendimiento** de 2-3 clientes y el panel **Rendimiento** del menú (Claude no ha podido verlas en el navegador: el permiso para levantar un servidor de vista previa se denegó). Revisa en móvil y en oscuro.
+- [ ] **Business Profile:** si su estado sale en «Error» con un 403, Google aún no ha aprobado la API para el proyecto: solicitarlo en la consola de Google Cloud.
+- [ ] **Probar por Telegram:** «¿cómo va [cliente]?» (debe usar rendimiento_cliente, sin gastar llamadas a Google), «prepárame el informe del mes de [cliente]» y «apunta que hoy publicamos la web nueva de [cliente]» (llega con ✅ / ✖️).
+- [ ] **Ajustes de avisos** en Rendimiento → «Avisos e informes» (por defecto: caídas y subidas del 30 %, mínimo 20 por semana, resumen el día 5 y apartado en el informe semanal).
+
+## Ficha del cliente en el núcleo (desplegada el 14 nov, `d7aa3091`)
+- [x] Desplegada con migración 0048.
 - [ ] **Revisar con tu cuenta** en brain.kijutech.com → **Clientes** (nueva sección en el menú): la lista, abrir una ficha y pasar por sus 7 pestañas;
   probar «Rellenar con IA» con un audio en un cliente real y «Aplicar»; comprobar que el contrato solo aparece con tu cuenta de admin.
 - [ ] **Telegram:** «Nos ha entrado un cliente nuevo…» con web, contacto, dirección y competidor → ✅ → comprobar que cada dato está en su pestaña. Borrar la ficha de prueba.

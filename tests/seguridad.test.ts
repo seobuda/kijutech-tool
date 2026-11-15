@@ -6,9 +6,14 @@ import { clientContacts, clientMemory, clients, opsInboundEmails, projects, user
 import { cleanupFixtures, createFixtures, emailFor, FIXTURE_PASSWORD, loginAs, PREFIX, type Fixtures } from './fixtures';
 
 import { aiProposeClient, applyClientProposal, saveClientOps } from '@/lib/operaciones/client-actions';
+import { deleteAnnotationAction, getClientPerformanceAction, getMonthlyReportAction, resyncClientAction, saveAnnotationAction, savePerfSettingsAction } from '@/lib/rendimiento/actions';
 import {
   createClientAction,
+  addDirectoryAssetsAction,
+  checkClientAccessAction,
   deleteAssetAction,
+  listDirectoryAssetsAction,
+  suggestClientAssetsAction,
   deleteClientAction,
   deleteCompetitorAction,
   deleteContactAction,
@@ -111,6 +116,7 @@ const form = (data: Record<string, string>) => {
 // una regresión en un guard hace fallar la prueba sin tocar datos reales.
 const ACCIONES_ADMIN: [string, () => unknown][] = [
   ['saveClickUpToken (tokens)', () => saveClickUpToken('')],
+  ['savePerfSettingsAction (avisos de rendimiento)', () => savePerfSettingsAction({ alertPct: 50 })],
   ['saveTelegramToken (tokens)', () => saveTelegramToken('')],
   ['savePilotStartAction (piloto)', () => savePilotStartAction('no-es-una-fecha')],
   ['sendCleanupAction (limpieza)', () => sendCleanupAction(ZERO)],
@@ -166,6 +172,15 @@ const ACCIONES_EDITOR: [string, () => unknown][] = [
   ['deleteLocationAction (locales)', () => deleteLocationAction(ZERO, ZERO)],
   ['saveAssetAction (webs y cuentas)', () => saveAssetAction(ZERO, { kind: 'web', value: 'ejemplo.com' })],
   ['deleteAssetAction (webs y cuentas)', () => deleteAssetAction(ZERO, ZERO)],
+  ['listDirectoryAssetsAction (propiedades de Google)', () => listDirectoryAssetsAction()],
+  ['suggestClientAssetsAction (propiedades de Google)', () => suggestClientAssetsAction(ZERO)],
+  ['addDirectoryAssetsAction (propiedades de Google)', () => addDirectoryAssetsAction(ZERO, [])],
+  ['checkClientAccessAction (propiedades de Google)', () => checkClientAccessAction(ZERO)],
+  ['getClientPerformanceAction (rendimiento)', () => getClientPerformanceAction(ZERO, {})],
+  ['getMonthlyReportAction (rendimiento)', () => getMonthlyReportAction(ZERO, '2026-10-01')],
+  ['saveAnnotationAction (hitos)', () => saveAnnotationAction(ZERO, { date: '2026-11-01', kind: 'web', title: 'x' })],
+  ['deleteAnnotationAction (hitos)', () => deleteAnnotationAction(ZERO)],
+  ['resyncClientAction (rendimiento)', () => resyncClientAction(ZERO)],
   ['saveCompetitorAction (competencia)', () => saveCompetitorAction(ZERO, { name: 'x' })],
   ['deleteCompetitorAction (competencia)', () => deleteCompetitorAction(ZERO, ZERO)],
   ['listClientMemory (memoria)', () => listClientMemory(ZERO)],

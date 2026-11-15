@@ -251,6 +251,9 @@ async function gapi<T>(tenantId: string, url: string, body?: unknown): Promise<T
   return res.json() as Promise<T>;
 }
 
+/** Llamada autenticada a una API de Google (para la fuente de métricas de lib/agentes/metrics.ts). */
+export const gapiFetch = gapi;
+
 const ymd = (d: Date) => d.toISOString().slice(0, 10);
 
 export async function gscSites(tenantId: string): Promise<string> {
@@ -290,4 +293,124 @@ export async function gbpLocations(tenantId: string): Promise<string> {
     for (const l of loc.locations ?? []) out.push(`- ${l.title}${l.storefrontAddress?.locality ? ` (${l.storefrontAddress.locality})` : ''}: ${a.name}/${l.name}`);
   }
   return out.join('\n') || 'Sin fichas de Business Profile (o la cuenta no tiene acceso a la API).';
+}
+
+// --- Directorio para asignar propiedades a las fichas de cliente (15 nov 2026) ----------------------------------
+// Devuelven datos estructurados (no texto) para lib/core/client-directory.ts, registrados en register.ts.
+
+export type GoogleAsset = { kind: 'search_console' | 'analytics' | 'business_profile'; value: string; label: string; domain: string | null; detail?: string };
+
+const hostOf = (url: string | null | undefined): string | null => {
+  const m = String(url ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/^sc-domain:/, '')
+    .replace(/^[a-z]+:\/\//, '')
+    .replace(/^www\./, '')
+    .split(/[/?#:\s]/)[0];
+  return /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(m) ? m : null;
+};
+
+/** Webs de Search Console con permiso real (las «sin verificar» no dan datos). */
+export async function gscSiteList(tenantId: string): Promise<GoogleAsset[]> {
+  const r = await gapi<{ siteEntry?: { siteUrl: string; permissionLevel: string }[] }>(tenantId, 'https://www.googleapis.com/webmasters/v3/sites');
+  return (r.siteEntry ?? [])
+    .filter((s) => s.permissionLevel !== 'siteUnverifiedUser')
+    .map((s) => ({ kind: 'search_console' as const, value: s.siteUrl, label: s.siteUrl.replace(/^sc-domain:/, '').replace(/^https?:\/\//, '').replace(/\/$/, ''), domain: hostOf(s.siteUrl), detail: s.siteUrl.startsWith('sc-domain:') ? 'Propiedad de dominio' : 'Prefijo de URL' }));
+}
+
+/** Todas las páginas de un listado de Google (pageToken), con tope de seguridad. */
+async function allPages<T>(tenantId: string, url: (token: string) => string, pick: (r: T & { nextPageToken?: string }) => unknown[], maxPages = 20): Promise<unknown[]> {
+  const out: unknown[] = [];
+  let token = '';
+  for (let i = 0; i < maxPages; i++) {
+    const r = await gapi<T & { nextPageToken?: string }>(tenantId, url(token));
+    out.push(...pick(r));
+    if (!r.nextPageToken) break;
+    token = r.nextPageToken;
+  }
+  return out;
+}
+
+/**
+ * Propiedades de Analytics 4 con la web de su flujo de datos (para emparejarlas por dominio). Se listan TODAS (así
+ * «Comprobar accesos» no marca «Sin acceso» a una propiedad que quedó fuera); la web del flujo se pide para las 60
+ * primeras (una petición por propiedad).
+ */
+export async function ga4PropertyList(tenantId: string): Promise<GoogleAsset[]> {
+  type Summ = { accountSummaries?: { displayName: string; propertySummaries?: { property: string; displayName: string }[] }[] };
+  const accounts = (await allPages<Summ>(tenantId, (t) => `https://analyticsadmin.googleapis.com/v1beta/accountSummaries?pageSize=200${t ? `&pageToken=${encodeURIComponent(t)}` : ''}`, (r) => r.accountSummaries ?? [])) as NonNullable<Summ['accountSummaries']>;
+  const props = accounts.flatMap((a) => (a.propertySummaries ?? []).map((p) => ({ ...p, account: a.displayName })));
+  const out: GoogleAsset[] = [];
+  for (let i = 0; i < props.length; i += 5) {
+    const batch = await Promise.all(
+      props.slice(i, i + 5).map(async (p, j) => {
+        const withStream = i + j < 60;
+        const s = withStream ? await gapi<{ dataStreams?: { type?: string; webStreamData?: { defaultUri?: string } }[] }>(tenantId, `https://analyticsadmin.googleapis.com/v1beta/${p.property}/dataStreams`).catch(() => ({ dataStreams: [] })) : { dataStreams: [] };
+        const uri = (s.dataStreams ?? []).find((d) => d.webStreamData?.defaultUri)?.webStreamData?.defaultUri ?? null;
+        return { kind: 'analytics' as const, value: p.property, label: p.displayName, domain: hostOf(uri), detail: `${p.account} · ${p.property.replace('properties/', '')}${uri ? ` · ${hostOf(uri)}` : ''}` };
+      })
+    );
+    out.push(...batch);
+  }
+  return out;
+}
+
+/** Fichas de Business Profile con su web (para emparejarlas por dominio), de todas las cuentas. El identificador es «locations/…». */
+export async function gbpLocationList(tenantId: string): Promise<GoogleAsset[]> {
+  type Acc = { accounts?: { name: string; accountName: string }[] };
+  type Loc = { locations?: { name: string; title: string; websiteUri?: string; storefrontAddress?: { locality?: string } }[] };
+  const accounts = (await allPages<Acc>(tenantId, (t) => `https://mybusinessaccountmanagement.googleapis.com/v1/accounts?pageSize=20${t ? `&pageToken=${encodeURIComponent(t)}` : ''}`, (r) => r.accounts ?? [])) as NonNullable<Acc['accounts']>;
+  const out: GoogleAsset[] = [];
+  for (const a of accounts) {
+    const locs = (await allPages<Loc>(tenantId, (t) => `https://mybusinessbusinessinformation.googleapis.com/v1/${a.name}/locations?readMask=name,title,storefrontAddress,websiteUri&pageSize=100${t ? `&pageToken=${encodeURIComponent(t)}` : ''}`, (r) => r.locations ?? [])) as NonNullable<Loc['locations']>;
+    for (const l of locs) out.push({ kind: 'business_profile', value: l.name, label: l.title, domain: hostOf(l.websiteUri), detail: [l.storefrontAddress?.locality, a.accountName].filter(Boolean).join(' · ') });
+  }
+  return out;
+}
+
+const GBP_METRICS: Record<string, string> = {
+  BUSINESS_IMPRESSIONS_MOBILE_SEARCH: 'vistas en Búsqueda (móvil)',
+  BUSINESS_IMPRESSIONS_DESKTOP_SEARCH: 'vistas en Búsqueda (ordenador)',
+  BUSINESS_IMPRESSIONS_MOBILE_MAPS: 'vistas en Maps (móvil)',
+  BUSINESS_IMPRESSIONS_DESKTOP_MAPS: 'vistas en Maps (ordenador)',
+  CALL_CLICKS: 'llamadas',
+  WEBSITE_CLICKS: 'clics a la web',
+  BUSINESS_DIRECTION_REQUESTS: 'cómo llegar',
+  BUSINESS_CONVERSATIONS: 'mensajes',
+  BUSINESS_BOOKINGS: 'reservas'
+};
+
+type GbpSeries = { multiDailyMetricTimeSeries?: { dailyMetricTimeSeries?: { dailyMetric: string; timeSeries?: { datedValues?: { date: { year: number; month: number; day: number }; value?: string }[] } }[] }[] };
+
+/** Suma por métrica de una respuesta de fetchMultiDailyMetricsTimeSeries (un valor ausente es 0, según Google). */
+export function sumGbpSeries(r: GbpSeries): Record<string, number> {
+  const tot: Record<string, number> = {};
+  for (const m of r.multiDailyMetricTimeSeries ?? [])
+    for (const s of m.dailyMetricTimeSeries ?? []) tot[s.dailyMetric] = (tot[s.dailyMetric] ?? 0) + (s.timeSeries?.datedValues ?? []).reduce((n, v) => n + (Number(v.value) || 0), 0);
+  return tot;
+}
+
+/** Rendimiento de una ficha de Google: vistas, llamadas, clics a la web, cómo llegar… de los últimos N días (con 3 de retraso). */
+export async function gbpPerformance(tenantId: string, location: string, days: number): Promise<string> {
+  const loc = (location.match(/locations\/\d+/) ?? [])[0];
+  if (!loc) throw new Error('El identificador de la ficha debe ser «locations/…» (míralo con gbp_fichas o en la ficha del cliente).');
+  const end = new Date(Date.now() - 3 * 86_400_000);
+  const start = new Date(end.getTime() - (days - 1) * 86_400_000);
+  const q = new URLSearchParams();
+  for (const m of Object.keys(GBP_METRICS)) q.append('dailyMetrics', m);
+  const put = (k: string, d: Date) => {
+    q.set(`dailyRange.${k}.year`, String(d.getUTCFullYear()));
+    q.set(`dailyRange.${k}.month`, String(d.getUTCMonth() + 1));
+    q.set(`dailyRange.${k}.day`, String(d.getUTCDate()));
+  };
+  put('start_date', start);
+  put('end_date', end);
+  const tot = sumGbpSeries(await gapi<GbpSeries>(tenantId, `https://businessprofileperformance.googleapis.com/v1/${loc}:fetchMultiDailyMetricsTimeSeries?${q}`));
+  const views = ['BUSINESS_IMPRESSIONS_MOBILE_SEARCH', 'BUSINESS_IMPRESSIONS_DESKTOP_SEARCH', 'BUSINESS_IMPRESSIONS_MOBILE_MAPS', 'BUSINESS_IMPRESSIONS_DESKTOP_MAPS'].reduce((n, k) => n + (tot[k] ?? 0), 0);
+  return [
+    `Business Profile ${loc} · ${ymd(start)} a ${ymd(end)}`,
+    `- vistas totales del perfil: ${views}`,
+    ...Object.entries(GBP_METRICS).map(([k, label]) => `- ${label}: ${tot[k] ?? 0}`)
+  ].join('\n');
 }

@@ -173,6 +173,27 @@ export function registerClientDeleteGuard(module: string, fn: ClientDeleteGuard)
   (GC.__kijuClientGuards ??= new Map()).set(module, fn);
 }
 
+// Un módulo con una integración conectada (p. ej. Agentes con Google) ofrece las propiedades que ve (webs de Search
+// Console, propiedades de Analytics, fichas de Business Profile) para asignarlas a las fichas de cliente (15 nov 2026).
+// El núcleo no sabe de Google: solo pregunta a quien se haya registrado.
+export type DirectoryAsset = { kind: string; value: string; label: string; domain: string | null; detail?: string };
+export type AssetDirectory = {
+  provider: string;
+  kinds: string[];
+  isConnected: (tenantId: string) => Promise<boolean>;
+  /** Lo que ve la integración, por tipo; un tipo que falla va en «errors» (y no se toca el acceso de sus cuentas). */
+  list: (tenantId: string) => Promise<{ assets: DirectoryAsset[]; okKinds: string[]; errors: string[] }>;
+};
+const GD = globalThis as unknown as { __kijuAssetDirs?: Map<string, AssetDirectory> };
+
+export function registerAssetDirectory(d: AssetDirectory): void {
+  (GD.__kijuAssetDirs ??= new Map()).set(d.provider, d);
+}
+
+export function assetDirectories(): AssetDirectory[] {
+  return [...(GD.__kijuAssetDirs ?? new Map<string, AssetDirectory>()).values()];
+}
+
 /** Motivos por los que no se puede borrar un cliente (vacío = se puede). */
 export async function clientDeleteBlockers(tenantId: string, clientId: string): Promise<string[]> {
   const out: string[] = [];
@@ -181,4 +202,103 @@ export async function clientDeleteBlockers(tenantId: string, clientId: string): 
     if (why) out.push(why);
   }
   return out;
+}
+
+// --- Rendimiento del cliente (15 nov 2026) -------------------------------------------------------------------------
+// Un módulo con una integración (Agentes con Google) registra una FUENTE DE MÉTRICAS: da filas diarias ya normalizadas
+// de una propiedad (Search Console, Analytics, Business Profile). El módulo Rendimiento las guarda sin saber de Google.
+export type MetricRow = { date: string; metric: string; dimType?: string; dimValue?: string; value: number };
+export type MetricTopRow = { kind: 'query' | 'page'; key: string; clicks: number; impressions: number; ctr: number; position: number };
+export type MetricSourceKind = {
+  /** Tipo de cuenta en la ficha del cliente (client_assets.kind). */
+  assetKind: string;
+  /** Clave corta con la que se guarda (perf_daily.source). */
+  source: 'gsc' | 'ga4' | 'gbp';
+  label: string;
+  /** Hasta cuántos días atrás deja pedir la fuente (se para antes si se acaban los datos). */
+  historyDays: number;
+  /** Días de retraso con que llegan los datos. */
+  lagDays: number;
+  /** Tamaño de cada tramo de la descarga del histórico. */
+  chunkDays: number;
+  /** Ofrece las consultas y páginas de cada mes. */
+  monthlyTop: boolean;
+};
+export type MetricSource = {
+  provider: string;
+  kinds: MetricSourceKind[];
+  isConnected: (tenantId: string) => Promise<boolean>;
+  /** Identificador estable de la propiedad a partir del valor de la ficha (o null si no vale). */
+  normalize: (source: string, value: string) => string | null;
+  fetchDaily: (tenantId: string, source: string, property: string, from: string, to: string) => Promise<MetricRow[]>;
+  fetchTop?: (tenantId: string, source: string, property: string, from: string, to: string, kind: 'query' | 'page', limit: number) => Promise<MetricTopRow[]>;
+};
+const GM = globalThis as unknown as { __kijuMetricSources?: Map<string, MetricSource>; __kijuReportSections?: Map<string, ReportSection>; __kijuHealthChecks?: Map<string, ModuleHealthCheck> };
+
+export function registerMetricSource(s: MetricSource): void {
+  (GM.__kijuMetricSources ??= new Map()).set(s.provider, s);
+}
+export function metricSources(): MetricSource[] {
+  return [...(GM.__kijuMetricSources ?? new Map<string, MetricSource>()).values()];
+}
+
+// Un módulo añade un apartado al informe semanal de Operaciones (p. ej. Rendimiento: cómo van los clientes en Google).
+// Devuelve líneas en HTML de Telegram (ya escapado) o null si no hay nada que contar.
+export type ReportSection = { title: string; order: number; weekly: (tenantId: string, from: string, to: string) => Promise<string[] | null> };
+export function registerReportSection(key: string, s: ReportSection): void {
+  (GM.__kijuReportSections ??= new Map()).set(key, s);
+}
+/** Apartados de los módulos para el informe semanal (cada uno aislado: un fallo no rompe el informe). */
+export async function weeklyReportSections(tenantId: string, from: string, to: string): Promise<{ title: string; lines: string[] }[]> {
+  const out: { title: string; order: number; lines: string[] }[] = [];
+  for (const [key, s] of GM.__kijuReportSections ?? new Map<string, ReportSection>()) {
+    try {
+      const lines = await s.weekly(tenantId, from, to);
+      if (lines?.length) out.push({ title: s.title, order: s.order, lines });
+    } catch (e) {
+      console.error(`[núcleo] informe semanal ${key}:`, e instanceof Error ? e.message : e);
+    }
+  }
+  return out.sort((a, b) => a.order - b.order).map(({ title, lines }) => ({ title, lines }));
+}
+
+// Un módulo añade comprobaciones a Salud del sistema (p. ej. Rendimiento: propiedades que no se pueden descargar).
+export type ModuleCheck = { key: string; label: string; status: 'ok' | 'aviso' | 'critico'; detail: string; recommendation: string };
+export type ModuleHealthCheck = (tenantId: string) => Promise<ModuleCheck[]>;
+export function registerHealthCheck(key: string, fn: ModuleHealthCheck): void {
+  (GM.__kijuHealthChecks ??= new Map()).set(key, fn);
+}
+export async function moduleHealthChecks(tenantId: string): Promise<ModuleCheck[]> {
+  const out: ModuleCheck[] = [];
+  for (const [key, fn] of GM.__kijuHealthChecks ?? new Map<string, ModuleHealthCheck>()) {
+    try {
+      out.push(...(await fn(tenantId)));
+    } catch (e) {
+      console.error(`[núcleo] salud ${key}:`, e instanceof Error ? e.message : e);
+    }
+  }
+  return out;
+}
+
+// --- Cambios propuestos por los agentes (15 nov 2026) ---------------------------------------------------------------
+// El motor de propuestas (✅ Hacerlo / ✖️ Descartar, autonomía por herramienta) es de Operaciones. Otro módulo que tenga
+// una herramienta de cambio (p. ej. Rendimiento: anotar un hito) registra aquí cómo se ejecuta y la propone con
+// proposeChange; Operaciones registra el motor. Sin motor registrado, el cambio se hace directamente.
+export type ChangeExecutor = (tenantId: string, data: Record<string, unknown>, by: string) => Promise<ToolResult>;
+type ChangeProposer = (ctx: ToolContext, tool: string, summaryHtml: string, data: Record<string, unknown>) => Promise<ToolResult>;
+const GP = globalThis as unknown as { __kijuChangeExecutors?: Map<string, ChangeExecutor>; __kijuChangeProposer?: ChangeProposer | null };
+
+export function registerChangeExecutor(tool: string, fn: ChangeExecutor): void {
+  (GP.__kijuChangeExecutors ??= new Map()).set(tool, fn);
+}
+export function changeExecutor(tool: string): ChangeExecutor | null {
+  return GP.__kijuChangeExecutors?.get(tool) ?? null;
+}
+export function setChangeProposer(fn: ChangeProposer): void {
+  GP.__kijuChangeProposer = fn;
+}
+export async function proposeChange(ctx: ToolContext, tool: string, summaryHtml: string, data: Record<string, unknown>): Promise<ToolResult> {
+  if (GP.__kijuChangeProposer) return GP.__kijuChangeProposer(ctx, tool, summaryHtml, data);
+  const exec = changeExecutor(tool);
+  return exec ? exec(ctx.tenantId, data, `Agente (${ctx.agentKey})`) : { ok: false, content: 'Esa acción no está disponible.' };
 }

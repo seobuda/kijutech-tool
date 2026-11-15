@@ -49,7 +49,7 @@ export const AGENTES_PROCESS_MAP: ProcessStep[] = [
     file: 'lib/agentes/integrations.ts',
     when: 'Cuando un agente usa una de sus herramientas.',
     ai: 'Nada (el agente interpreta los datos).',
-    code: 'Credenciales cifradas en agt_integrations (nunca vuelven al navegador). Google: OAuth con estado firmado y token de refresco cifrado. Clarity: caché del día (10 consultas al día).',
+    code: 'Credenciales cifradas en agt_integrations (nunca vuelven al navegador). Google: OAuth con estado firmado y token de refresco cifrado. Clarity: caché del día (10 consultas al día). Desde el 15 nov: gsc_rendimiento, ga4_informe y gbp_rendimiento (vistas, llamadas, clics a la web y cómo llegar de la ficha de Google) aceptan «cliente» y usan la propiedad principal de su ficha (si falta, lo dicen en vez de adivinar). Agentes registra en el núcleo el directorio de Google (webs de Search Console, propiedades de Analytics con la web de su flujo, fichas de Business Profile con su web) para asignarlas a las fichas.',
     tables: ['agt_integrations']
   }
 ];

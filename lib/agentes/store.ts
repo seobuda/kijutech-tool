@@ -67,6 +67,11 @@ export const DEFAULT_AGENTS: Omit<typeof agtAgents.$inferInsert, 'tenantId'>[] =
       'actualizar_cliente',
       'anotar_memoria_cliente',
       'web_fetch',
+      'gsc_rendimiento',
+      'ga4_informe',
+      'gbp_rendimiento',
+      'rendimiento_cliente',
+      'anotar_hito',
       'encargar_a_agente',
       'estado_trabajos'
     ],
@@ -92,6 +97,19 @@ const UPGRADES: { id: string; agent: string; addTools: string[]; instructions?: 
     agent: PRINCIPAL_KEY,
     addTools: ['crear_cliente', 'actualizar_cliente', 'anotar_memoria_cliente', 'web_fetch'],
     instructions: { from: PRINCIPAL_INSTRUCTIONS_V1, to: PRINCIPAL_INSTRUCTIONS }
+  },
+  {
+    // 15 nov 2026: las propiedades de Google van en la ficha del cliente; el agente las usa diciendo solo el cliente.
+    // (Solo aparecen si Google está conectado: availableTools filtra por «available».)
+    id: '2026-11-15-google-por-cliente',
+    agent: PRINCIPAL_KEY,
+    addTools: ['gsc_rendimiento', 'ga4_informe', 'gbp_rendimiento']
+  },
+  {
+    // 15 nov 2026: módulo Rendimiento. Histórico guardado de cada cliente (sin gastar llamadas a Google) e hitos.
+    id: '2026-11-15-rendimiento',
+    agent: PRINCIPAL_KEY,
+    addTools: ['rendimiento_cliente', 'anotar_hito']
   }
 ];
 const SYSTEM_PROVIDER = 'sistema';

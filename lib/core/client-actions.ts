@@ -28,7 +28,8 @@ import {
   type ContactInput,
   type LocationInput
 } from '@/lib/core/clients';
-import { isClientStatus } from '@/lib/core/client-rules';
+import { isClientStatus, type ExternalAsset } from '@/lib/core/client-rules';
+import { addDirectoryAssets, checkAccess, directoryAssets, suggestAssets } from '@/lib/core/client-directory';
 
 type Ok<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 
@@ -171,6 +172,53 @@ export async function deleteAssetAction(clientId: string, assetId: string): Prom
     return { ok: true };
   } catch (e) {
     return fail(e, 'No se pudo eliminar');
+  }
+}
+
+// --- Propiedades de las integraciones (Google) para asignarlas a la ficha (15 nov 2026) ----------------------------
+
+/** Lo que ve la cuenta de Google conectada, para elegir en el formulario (sin escribir identificadores a mano). */
+export async function listDirectoryAssetsAction(): Promise<Ok<{ connected: boolean; assets: ExternalAsset[]; errors: string[] }>> {
+  try {
+    const user = await requirePermission('edit');
+    const r = await directoryAssets(user.tenantId);
+    return { ok: true, connected: r.connected, assets: r.assets, errors: r.errors };
+  } catch (e) {
+    return fail(e, 'No se pudo consultar Google');
+  }
+}
+
+/** Propiedades cuyo dominio coincide con las webs del cliente y aún no están en su ficha. */
+export async function suggestClientAssetsAction(clientId: string): Promise<Ok<{ connected: boolean; suggestions: ExternalAsset[]; domains: string[]; errors: string[] }>> {
+  try {
+    const user = await requirePermission('edit');
+    const r = await suggestAssets(user.tenantId, clientId);
+    return { ok: true, connected: r.connected, suggestions: r.suggestions, domains: r.domains, errors: r.errors };
+  } catch (e) {
+    return fail(e, 'No se pudo buscar en Google');
+  }
+}
+
+export async function addDirectoryAssetsAction(clientId: string, picks: { kind: string; value: string }[]): Promise<Ok<{ added: string[]; skipped: number }>> {
+  try {
+    const user = await requirePermission('edit');
+    if (!Array.isArray(picks)) return { ok: false, error: 'Nada que añadir' };
+    const r = await addDirectoryAssets(user.tenantId, clientId, picks.map((p) => ({ kind: String(p?.kind ?? ''), value: String(p?.value ?? '') })));
+    refresh(clientId);
+    return { ok: true, ...r };
+  } catch (e) {
+    return fail(e, 'No se pudieron añadir');
+  }
+}
+
+export async function checkClientAccessAction(clientId: string): Promise<Ok<{ yes: string[]; no: string[]; unchanged: number; errors: string[]; connected: boolean }>> {
+  try {
+    const user = await requirePermission('edit');
+    const r = await checkAccess(user.tenantId, clientId);
+    refresh(clientId);
+    return { ok: true, ...r };
+  } catch (e) {
+    return fail(e, 'No se pudieron comprobar los accesos');
   }
 }
 

@@ -6,7 +6,7 @@
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { clients as coreClients, opsClientLevels, opsClientServices, opsClients, opsRequests, opsServices } from '@/lib/db/schema';
-import { isWorkingStatus } from '@/lib/core/client-rules';
+import { baseName, isWorkingStatus } from '@/lib/core/client-rules';
 import { parseWorkDays } from '@/lib/operaciones/team-profiles';
 
 export type ClientService = { serviceKey: string; responsibleClickupId: string | null };
@@ -128,52 +128,8 @@ export async function requestCountsByOption(tenantId: string): Promise<Map<strin
 }
 
 // --- Texto y nombres --------------------------------------------------------------------------
-
-export function normText(s: string): string {
-  return s
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-// «Rfserveis.com» → «rfserveis»: la parte del dominio sin extensión.
-function baseName(s: string): string {
-  return normText(s).replace(/\.(com|es|net|org|ai|cat|eu|info|io)$/, '');
-}
-
-// Todas las formas con las que se puede llamar a un cliente (nombre, opción de ClickUp, alias).
-type NamedClient = Pick<OpsClient, 'name' | 'aliases' | 'clickupOptionLabel'>;
-function clientKeys(c: NamedClient): string[] {
-  const raw = [c.name, c.clickupOptionLabel ?? '', ...(c.aliases ?? [])];
-  const keys = new Set<string>();
-  for (const r of raw) {
-    const n = normText(r);
-    if (n.length >= 3) keys.add(n);
-    const b = baseName(r);
-    if (b.length >= 3) keys.add(b);
-  }
-  return [...keys];
-}
-
-// Cliente cuyo nombre, opción de ClickUp o alias coincide EXACTAMENTE con el texto (sin tildes ni mayúsculas).
-export function findClientByName<T extends NamedClient>(clients: T[], text: string): T | null {
-  const t = normText(text);
-  if (!t) return null;
-  const hits = clients.filter((c) => clientKeys(c).includes(t) || clientKeys(c).includes(baseName(text)));
-  return hits.length === 1 ? hits[0] : null;
-}
-
-// Busca nombres o alias dentro de un texto libre. Solo vale si sale UN cliente (si hay dudas, ninguno).
-export function findClientInText<T extends NamedClient>(clients: T[], text: string): T | null {
-  const t = normText(text);
-  if (!t) return null;
-  const hits = clients.filter((c) =>
-    clientKeys(c).some((k) => new RegExp(`(^|[^a-z0-9])${k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^a-z0-9]|$)`).test(t))
-  );
-  return hits.length === 1 ? hits[0] : null;
-}
+// Viven en el núcleo (lib/core/client-rules.ts) porque también los usan otros módulos (p. ej. Agentes).
+export { normText, findClientByName, findClientInText } from '@/lib/core/client-rules';
 
 // Pares de fichas que parecen el mismo cliente (una forma es el principio de la otra, p. ej. «sih» y «Sihbou.com»).
 export function possibleDuplicates(clients: { name: string }[]): [string, string][] {

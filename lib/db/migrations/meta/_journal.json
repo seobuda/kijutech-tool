@@ -344,6 +344,13 @@
       "when": 1794452400000,
       "tag": "0048_clientes_nucleo",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1794456000000,
+      "tag": "0049_perf_rendimiento",
+      "breakpoints": true
     }
   ]
 }

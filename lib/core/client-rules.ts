@@ -150,7 +150,7 @@ export const ASSET_INTEGRATION: Partial<Record<AssetKind, { provider: string | n
   web: { provider: null, label: 'Lectura y auditoría de la web por los agentes' },
   search_console: { provider: 'google', label: 'Clics, impresiones y posiciones (Search Console)' },
   analytics: { provider: 'google', label: 'Visitas y conversiones (Analytics 4)' },
-  business_profile: { provider: 'google', label: 'Ficha de Google (Business Profile)' }
+  business_profile: { provider: 'google', label: 'Vistas, llamadas y clics de su ficha de Google (Business Profile)' }
 };
 export const ACCESS_LEVELS = ['sin_revisar', 'si', 'pendiente', 'no', 'no_aplica'] as const;
 export type AccessLevel = (typeof ACCESS_LEVELS)[number];
@@ -194,6 +194,99 @@ export function normEmail(raw: string | null | undefined): string | null {
 export function recognizableDomain(url: string | null | undefined): string | null {
   const d = domainOf(url);
   return d && !PUBLIC_EMAIL_DOMAINS.has(d) ? d : null;
+}
+
+// --- Cuentas externas (Google…) que se pueden asignar a una ficha (15 nov 2026) -----------------------------------
+
+/** Una propiedad que ofrece una integración conectada (p. ej. una web de Search Console) para asignarla a un cliente. */
+export type ExternalAsset = { kind: AssetKind; value: string; label: string; domain: string | null; detail?: string };
+
+/** Mismo sitio: dominios iguales o uno es subdominio del otro («tienda.cliente.com» y «cliente.com»). */
+export function sameSite(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (!a || !b) return false;
+  return a === b || a.endsWith(`.${b}`) || b.endsWith(`.${a}`);
+}
+
+/** Identificador comparable («properties/123» = «123» en Analytics; las URL sin la barra final). */
+export function assetKey(kind: string, value: string | null | undefined): string {
+  const v = String(value ?? '').trim().toLowerCase();
+  if (kind === 'analytics') return v.replace(/\D/g, '');
+  if (kind === 'business_profile') return (v.match(/locations\/\d+/) ?? [v])[0];
+  return v.replace(/\/+$/, '');
+}
+
+/**
+ * Propiedades externas que parecen de este cliente (su dominio coincide con el de alguna de sus webs) y que aún no
+ * están en la ficha. Sin IA: comparación de dominios. Ordenadas por tipo.
+ */
+export function matchExternalAssets(clientDomains: (string | null)[], external: ExternalAsset[], existing: { kind: string; value: string | null }[]): ExternalAsset[] {
+  const domains = clientDomains.filter((d): d is string => Boolean(d));
+  const have = new Set(existing.map((e) => `${e.kind}|${assetKey(e.kind, e.value)}`));
+  return external.filter((x) => !have.has(`${x.kind}|${assetKey(x.kind, x.value)}`) && domains.some((d) => sameSite(d, x.domain)));
+}
+
+/** Acceso de una cuenta de la ficha según lo que la integración ve: «si» si aparece en la lista; si no, «no». */
+export function accessFromDirectory(kind: string, value: string | null, external: ExternalAsset[]): 'si' | 'no' {
+  const k = assetKey(kind, value);
+  return k && external.some((x) => x.kind === kind && assetKey(kind, x.value) === k) ? 'si' : 'no';
+}
+
+// --- Nombres de cliente en texto libre (antes en lib/operaciones/clients.ts; ahora los usan varios módulos) --------
+
+export function normText(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// «Rfserveis.com» → «rfserveis»: la parte del dominio sin extensión.
+export function baseName(s: string): string {
+  return normText(s).replace(/\.(com|es|net|org|ai|cat|eu|info|io)$/, '');
+}
+
+// Todas las formas con las que se puede llamar a un cliente (nombre, opción de ClickUp, alias).
+export type NamedClient = { name: string; aliases: string[] | null; clickupOptionLabel?: string | null };
+function clientKeys(c: NamedClient): string[] {
+  const raw = [c.name, c.clickupOptionLabel ?? '', ...(c.aliases ?? [])];
+  const keys = new Set<string>();
+  for (const r of raw) {
+    const n = normText(r);
+    if (n.length >= 3) keys.add(n);
+    const b = baseName(r);
+    if (b.length >= 3) keys.add(b);
+  }
+  return [...keys];
+}
+
+// Cliente cuyo nombre, opción de ClickUp o alias coincide EXACTAMENTE con el texto (sin tildes ni mayúsculas).
+export function findClientByName<T extends NamedClient>(clients: T[], text: string): T | null {
+  const t = normText(text);
+  if (!t) return null;
+  const hits = clients.filter((c) => clientKeys(c).includes(t) || clientKeys(c).includes(baseName(text)));
+  return hits.length === 1 ? hits[0] : null;
+}
+
+// Busca nombres o alias dentro de un texto libre. Solo vale si sale UN cliente (si hay dudas, ninguno).
+export function findClientInText<T extends NamedClient>(clients: T[], text: string): T | null {
+  const t = normText(text);
+  if (!t) return null;
+  const hits = clients.filter((c) =>
+    clientKeys(c).some((k) => new RegExp(`(^|[^a-z0-9])${k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^a-z0-9]|$)`).test(t))
+  );
+  return hits.length === 1 ? hits[0] : null;
+}
+
+/** Cliente nombrado en un texto: exacto o, si no, el único que lo contenga. Si hay varios, sus nombres para preguntar. */
+export function pickClient<T extends NamedClient>(clients: T[], text: string): { client: T | null; options: string[] } {
+  const q = normText(text);
+  if (!q) return { client: null, options: [] };
+  const hit = findClientInText(clients, text);
+  if (hit) return { client: hit, options: [] };
+  const partial = clients.filter((c) => normText(c.name).includes(q) || (c.aliases ?? []).some((a) => normText(a).includes(q)));
+  return partial.length === 1 ? { client: partial[0], options: [] } : { client: null, options: partial.slice(0, 8).map((c) => c.name) };
 }
 
 // --- Completitud de la ficha --------------------------------------------------------------------------------------

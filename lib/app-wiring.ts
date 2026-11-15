@@ -6,6 +6,7 @@ import 'server-only';
 // Telegram y las pantallas de Agentes; es idempotente.
 import { registerOperacionesCapabilities } from '@/lib/operaciones/agent-capabilities';
 import { registerAgentesCapabilities } from '@/lib/agentes/register';
+import { registerRendimientoCapabilities } from '@/lib/rendimiento/register';
 
 let wired = false;
 export function wireApp(): void {
@@ -13,4 +14,5 @@ export function wireApp(): void {
   wired = true;
   registerOperacionesCapabilities();
   registerAgentesCapabilities();
+  registerRendimientoCapabilities();
 }

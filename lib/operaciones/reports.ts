@@ -12,6 +12,7 @@ import 'server-only';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { opsHealthIncidents, opsNotifications } from '@/lib/db/schema';
+import { weeklyReportSections } from '@/lib/core/capabilities';
 import { getAuto } from '@/lib/operaciones/automations';
 import { getAgentStats, AUTONOMY_LABEL } from '@/lib/operaciones/agent-actions';
 import { agencyHolidays, getCalendar, KIND_LABEL, offEntry } from '@/lib/operaciones/calendar';
@@ -235,6 +236,8 @@ export type WeeklyReport = {
   ai: { spentMonth: number; forecast: number; budget: number; account: boolean; topRecommendation: string | null } | null;
   infra: { mtd: number; forecast: number | null; budget: number; memP95: number | null; topRecommendation: string | null } | null;
   pending: { count: number; oldest: string | null };
+  /** Apartados de otros módulos (p. ej. Rendimiento de los clientes), por el registro del núcleo. */
+  modules?: { title: string; lines: string[] }[];
 };
 
 type Row = Record<string, unknown>;
@@ -400,7 +403,8 @@ export async function buildWeeklyReport(tenantId: string, monday: string): Promi
     },
     ai: await aiLine(tenantId),
     infra: await infraLine(tenantId),
-    pending: { count: inbox.length + emails.length, oldest: oldest ? waitLabel(oldest) : null }
+    pending: { count: inbox.length + emails.length, oldest: oldest ? waitLabel(oldest) : null },
+    modules: await weeklyReportSections(tenantId, monday, shiftDate(monday, 6))
   };
 }
 
@@ -484,6 +488,7 @@ export function weeklyText(r: WeeklyReport, link: string | null): string {
     lines.push(`• Servidor (DigitalOcean): ${r.infra.mtd.toFixed(2)} $ este mes${r.infra.forecast !== null ? ` · previsión ${r.infra.forecast.toFixed(2)} $ de ${r.infra.budget.toFixed(0)} $${r.infra.forecast > r.infra.budget ? ' ⚠️' : ''}` : ''}${r.infra.memP95 !== null ? ` · memoria ${r.infra.memP95} %` : ''}`);
     if (r.infra.topRecommendation) lines.push(`   💡 ${escapeHtml(r.infra.topRecommendation)}`);
   }
+  for (const m of r.modules ?? []) lines.push('', `<b>${m.title}</b>`, ...m.lines);
   lines.push('', r.pending.count ? `🙋 <b>Te esperan ${r.pending.count}</b> (lo más antiguo, ${r.pending.oldest}).` : '🙋 Nada esperando tu decisión.');
   if (link) lines.push('', `<a href="${link}">Ver el informe completo</a>`);
   return clampMessage(lines.join('\n'));
