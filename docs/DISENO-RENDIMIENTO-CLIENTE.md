@@ -1,6 +1,6 @@
 # Diseño — Rendimiento del cliente (paso B de las métricas de cliente)
 
-**Estado:** propuesta, pendiente de aprobación de Enric (lleva tablas nuevas).
+**Estado:** aprobado por Enric el 15 nov («encárgate de terminar B1, B2, B3») y construido en la rama `feature/rendimiento-cliente` (migración 0049). Elecciones: consultas y páginas por mes (top 1.000) y eventos clave como conversiones. Diferencias con lo propuesto: una quinta tabla `perf_settings` para los avisos, el hito «Inicio del servicio» se calcula de la ficha en vez de guardarse, y los ajustes de avisos están en el panel Rendimiento (no en Automatizaciones, que es de Operaciones).
 **Fecha:** 15 nov 2026. **Parte de:** paso A (propiedades de Google asignadas a cada ficha, rama `feature/cliente-propiedades-google`).
 
 ## 1. Objetivo

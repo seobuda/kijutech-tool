@@ -5,12 +5,16 @@ Detalle paso a paso de la activación en `docs/PRUEBAS-EN-VIVO.md`.
 
 **Última actualización:** 15 nov 2026. En producción: `main` `d7aa3091` (todo lo anterior + ficha del cliente en el núcleo y propuesta del agente en un solo mensaje), 49 migraciones.
 
-## Propiedades de Google por cliente (rama `feature/cliente-propiedades-google`, sin migración)
-- [ ] **Desplegar** (sin `--migrate`): `! git checkout main && git merge --no-ff feature/cliente-propiedades-google && git push origin main && bash scripts/deploy.sh`
-- [ ] **Comprobar que Google está conectado** en Agentes → Integraciones (si no, el panel de Google no aparece en las fichas).
-- [ ] **En cada cliente:** Clientes → cliente → Webs y cuentas → «Buscar en Google» → marcar las suyas → «Añadir a la ficha». Después «Comprobar accesos».
-- [ ] **Probar por Telegram:** «¿cómo va [cliente] en Google este mes?» y «¿cuántas llamadas ha tenido [cliente] desde su ficha de Google?». Si Business Profile da error, Google aún no ha aprobado el acceso a su API: hay que solicitarlo en la consola de Google Cloud del proyecto.
-- [ ] **Revisar el diseño del paso B** (sección «Rendimiento» con histórico) cuando Claude lo traiga: necesita tablas nuevas, así que espera tu aprobación.
+## Rendimiento del cliente + propiedades de Google (rama `feature/rendimiento-cliente`, migración 0049)
+Incluye el paso A (propiedades de Google por cliente) y los pasos B1, B2 y B3 (sección Rendimiento). Informe por correo del 15 nov.
+- [ ] **Desplegar con migración** (hace backup antes): `! git checkout main && git merge --no-ff feature/rendimiento-cliente && git push origin main && bash scripts/deploy.sh --migrate`
+- [ ] **Comprobar que Google está conectado** en Agentes → Integraciones (si no, ni el panel de Google de las fichas ni la descarga funcionan).
+- [ ] **En cada cliente:** Clientes → cliente → Webs y cuentas → «Buscar en Google» → marcar las suyas → «Añadir a la ficha». Después «Comprobar accesos». En unos minutos empieza a descargarse su histórico.
+- [ ] **Poner la fecha de inicio del servicio** en las fichas (Empresa y negocio): sale como hito en las gráficas y permite comparar «antes del servicio».
+- [ ] **Mirar la pestaña Rendimiento** de 2-3 clientes y el panel **Rendimiento** del menú (Claude no ha podido verlas en el navegador: el permiso para levantar un servidor de vista previa se denegó). Revisa en móvil y en oscuro.
+- [ ] **Business Profile:** si su estado sale en «Error» con un 403, Google aún no ha aprobado la API para el proyecto: solicitarlo en la consola de Google Cloud.
+- [ ] **Probar por Telegram:** «¿cómo va [cliente]?» (debe usar rendimiento_cliente, sin gastar llamadas a Google), «prepárame el informe del mes de [cliente]» y «apunta que hoy publicamos la web nueva de [cliente]» (llega con ✅ / ✖️).
+- [ ] **Ajustes de avisos** en Rendimiento → «Avisos e informes» (por defecto: caídas y subidas del 30 %, mínimo 20 por semana, resumen el día 5 y apartado en el informe semanal).
 
 ## Ficha del cliente en el núcleo (desplegada el 14 nov, `d7aa3091`)
 - [x] Desplegada con migración 0048.
