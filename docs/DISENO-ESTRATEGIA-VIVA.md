@@ -1,6 +1,6 @@
 # Diseño — Estrategia viva: seguimiento y estratega IA por cliente (paso 6, versión 4)
 
-**Estado:** propuesta v4, **pendiente de aprobación de Enric**. Necesita la migración 0050, así que no se construye nada sin su OK.
+**Estado:** v4 **aprobada por Enric** el 15 nov («ok a todo, adelante con la fase 1»; posiciones solo con Search Console de momento). **Fase 1 construida** el 15-16 nov (migración 0050, ver docs/ESTADO.md §6.24). Diferencias con lo propuesto: las tablas de las fases 2 y 3 (análisis, propuestas, aprendizajes, revisiones e iniciativas) se crearán con su fase, no ahora; el estado de URL «no hace falta» y «no aplica» se unifican en «no_aplica».
 **Fecha:** 15 nov 2026. **Rama:** `feature/estrategia-viva`.
 **Investigación que la respalda:** `docs/INVESTIGACION-ESTRATEGIA-VIVA.md` (unas 70 fuentes de agencias, expertos, Google y el mercado de herramientas).
 
