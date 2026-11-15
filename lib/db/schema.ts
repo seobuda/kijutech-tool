@@ -18,6 +18,7 @@ import {
   bigint,
   doublePrecision,
   primaryKey,
+  smallint,
   vector,
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
@@ -2413,3 +2414,348 @@ export const perfSettings = pgTable('perf_settings', {
   updatedAt: timestamp('updated_at').notNull().defaultNow()
 });
 export type PerfSettings = typeof perfSettings.$inferSelect;
+
+// --- Módulo Estrategia (15 nov 2026, fase 1; migración 0050; diseño en docs/DISENO-ESTRATEGIA-VIVA.md) -------------------
+// Seguimiento por cliente según su plan: procesos con frecuencia editable (por plan y por cliente), objetivos medibles,
+// palabras clave, salud de la web, señales, trabajo hecho y URLs trabajadas día a día.
+
+export type EstProcessConfig = Record<string, { on: boolean; every: number }>;
+export type EstSettingsState = { lastExtractAt?: string; notified?: Record<string, string> };
+
+export const estSettings = pgTable(
+  'est_settings',
+  {
+    tenantId: uuid('tenant_id')
+      .primaryKey()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    onTrackPct: integer('on_track_pct').notNull().default(90),
+    atRiskPct: integer('at_risk_pct').notNull().default(60),
+    graceDays: integer('grace_days').notNull().default(90),
+    strikingFrom: integer('striking_from').notNull().default(4),
+    strikingTo: integer('striking_to').notNull().default(15),
+    minImpressions: integer('min_impressions').notNull().default(100),
+    alertsEnabled: boolean('alerts_enabled').notNull().default(true),
+    askUrl: boolean('ask_url').notNull().default(true),
+    trackDays: integer('track_days').notNull().default(180),
+    aiMonthlyCapUsd: decimal('ai_monthly_cap_usd', { precision: 8, scale: 2 }).notNull().default('30'),
+    state: jsonb('state').$type<EstSettingsState>().notNull().default({}),
+    updatedAt: timestamp('updated_at').notNull().defaultNow()
+  },
+  (table) => [
+    check('est_settings_pct_check', sql`${table.onTrackPct} BETWEEN 50 AND 100 AND ${table.atRiskPct} BETWEEN 10 AND 95 AND ${table.atRiskPct} < ${table.onTrackPct}`),
+    check('est_settings_striking_check', sql`${table.strikingFrom} BETWEEN 1 AND 50 AND ${table.strikingTo} BETWEEN 2 AND 100 AND ${table.strikingFrom} < ${table.strikingTo}`)
+  ]
+);
+export type EstSettings = typeof estSettings.$inferSelect;
+
+export const estPlans = pgTable(
+  'est_plans',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    key: varchar('key', { length: 40 }).notNull(),
+    name: varchar('name', { length: 80 }).notNull(),
+    description: text('description').notNull().default(''),
+    processes: jsonb('processes').$type<EstProcessConfig>().notNull().default({}),
+    sort: integer('sort').notNull().default(0),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow()
+  },
+  (table) => [unique('est_plans_tenant_key_unique').on(table.tenantId, table.key)]
+);
+export type EstPlan = typeof estPlans.$inferSelect;
+
+export const estClientSettings = pgTable(
+  'est_client_settings',
+  {
+    clientId: uuid('client_id')
+      .primaryKey()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    planId: uuid('plan_id')
+      .notNull()
+      .references(() => estPlans.id, { onDelete: 'restrict' }),
+    overrides: jsonb('overrides').$type<EstProcessConfig>().notNull().default({}),
+    pausedUntil: date('paused_until'),
+    notes: text('notes'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow()
+  },
+  (table) => [index('est_client_settings_tenant_idx').on(table.tenantId)]
+);
+export type EstClientSettings = typeof estClientSettings.$inferSelect;
+
+export const estProcessRuns = pgTable(
+  'est_process_runs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    process: varchar('process', { length: 30 }).notNull(),
+    lastRunAt: timestamp('last_run_at'),
+    nextRunAt: timestamp('next_run_at').notNull().defaultNow(),
+    status: varchar('status', { length: 12 }).notNull().default('pendiente'),
+    summary: text('summary'),
+    lastError: text('last_error'),
+    errorCount: integer('error_count').notNull().default(0),
+    durationMs: integer('duration_ms')
+  },
+  (table) => [
+    unique('est_process_runs_unique').on(table.clientId, table.process),
+    index('est_process_runs_due_idx').on(table.tenantId, table.nextRunAt),
+    check('est_process_runs_status_check', sql`${table.status} IN ('pendiente', 'ok', 'aviso', 'error', 'omitido')`)
+  ]
+);
+export type EstProcessRun = typeof estProcessRuns.$inferSelect;
+
+export const estObjectives = pgTable(
+  'est_objectives',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    title: varchar('title', { length: 200 }).notNull(),
+    kind: varchar('kind', { length: 10 }).notNull().default('kpi'),
+    kpiKey: varchar('kpi_key', { length: 40 }),
+    baselineValue: doublePrecision('baseline_value'),
+    baselineYoy: doublePrecision('baseline_yoy'),
+    targetValue: doublePrecision('target_value'),
+    targetLow: doublePrecision('target_low'),
+    targetHigh: doublePrecision('target_high'),
+    curve: varchar('curve', { length: 10 }).notNull().default('s'),
+    startDate: date('start_date').notNull(),
+    dueDate: date('due_date').notNull(),
+    status: varchar('status', { length: 12 }).notNull().default('activo'),
+    lastHealth: varchar('last_health', { length: 12 }),
+    lastHealthAt: timestamp('last_health_at'),
+    lastValue: doublePrecision('last_value'),
+    finalValue: doublePrecision('final_value'),
+    closedAt: timestamp('closed_at'),
+    priority: smallint('priority').notNull().default(2),
+    notes: text('notes'),
+    source: varchar('source', { length: 10 }).notNull().default('manual'),
+    createdBy: integer('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow()
+  },
+  (table) => [
+    index('est_objectives_client_idx').on(table.clientId, table.status),
+    check('est_objectives_kind_check', sql`${table.kind} IN ('kpi', 'hito')`),
+    check('est_objectives_curve_check', sql`${table.curve} IN ('s', 'lineal')`),
+    check('est_objectives_status_check', sql`${table.status} IN ('activo', 'logrado', 'no_logrado', 'descartado')`),
+    check('est_objectives_source_check', sql`${table.source} IN ('manual', 'agente', 'sistema')`),
+    check('est_objectives_dates_check', sql`${table.dueDate} > ${table.startDate}`),
+    check('est_objectives_kpi_check', sql`${table.kind} = 'hito' OR (${table.kpiKey} IS NOT NULL AND ${table.targetValue} IS NOT NULL)`)
+  ]
+);
+export type EstObjective = typeof estObjectives.$inferSelect;
+
+export const estKeywords = pgTable(
+  'est_keywords',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    keyword: varchar('keyword', { length: 200 }).notNull(),
+    targetUrl: text('target_url'),
+    critical: boolean('critical').notNull().default(false),
+    active: boolean('active').notNull().default(true),
+    lastPosition: doublePrecision('last_position'),
+    prevPosition: doublePrecision('prev_position'),
+    lastClicks: integer('last_clicks'),
+    lastImpressions: integer('last_impressions'),
+    lastCheckedOn: date('last_checked_on'),
+    createdAt: timestamp('created_at').notNull().defaultNow()
+  },
+  (table) => [unique('est_keywords_unique').on(table.clientId, table.keyword)]
+);
+export type EstKeyword = typeof estKeywords.$inferSelect;
+
+export const estKeywordHistory = pgTable(
+  'est_keyword_history',
+  {
+    keywordId: uuid('keyword_id')
+      .notNull()
+      .references(() => estKeywords.id, { onDelete: 'cascade' }),
+    date: date('date').notNull(),
+    position: doublePrecision('position').notNull(),
+    clicks: integer('clicks').notNull().default(0),
+    impressions: integer('impressions').notNull().default(0)
+  },
+  (table) => [primaryKey({ name: 'est_keyword_history_pk', columns: [table.keywordId, table.date] })]
+);
+
+export type EstIssue = { code: string; severity: 'info' | 'aviso' | 'critico'; url?: string; detail: string };
+
+export const estHealthChecks = pgTable(
+  'est_health_checks',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    kind: varchar('kind', { length: 12 }).notNull(),
+    checkedAt: timestamp('checked_at').notNull().defaultNow(),
+    status: varchar('status', { length: 10 }).notNull(),
+    metrics: jsonb('metrics').$type<Record<string, unknown>>().notNull().default({}),
+    issues: jsonb('issues').$type<EstIssue[]>().notNull().default([])
+  },
+  (table) => [
+    index('est_health_checks_client_idx').on(table.clientId, table.kind, table.checkedAt),
+    check('est_health_checks_kind_check', sql`${table.kind} IN ('critico', 'salud', 'velocidad')`),
+    check('est_health_checks_status_check', sql`${table.status} IN ('ok', 'aviso', 'critico')`)
+  ]
+);
+export type EstHealthCheck = typeof estHealthChecks.$inferSelect;
+
+export const estSignals = pgTable(
+  'est_signals',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    kind: varchar('kind', { length: 30 }).notNull(),
+    dedupeKey: varchar('dedupe_key', { length: 300 }).notNull(),
+    severity: varchar('severity', { length: 10 }).notNull().default('info'),
+    title: varchar('title', { length: 300 }).notNull(),
+    detail: text('detail'),
+    evidence: jsonb('evidence').$type<Record<string, unknown>>().notNull().default({}),
+    status: varchar('status', { length: 12 }).notNull().default('abierta'),
+    firstSeenAt: timestamp('first_seen_at').notNull().defaultNow(),
+    lastSeenAt: timestamp('last_seen_at').notNull().defaultNow(),
+    resolvedAt: timestamp('resolved_at'),
+    notifiedAt: timestamp('notified_at')
+  },
+  (table) => [
+    unique('est_signals_unique').on(table.clientId, table.dedupeKey),
+    index('est_signals_tenant_idx').on(table.tenantId, table.status, table.severity),
+    check('est_signals_severity_check', sql`${table.severity} IN ('info', 'aviso', 'critico')`),
+    check('est_signals_status_check', sql`${table.status} IN ('abierta', 'atendida', 'descartada', 'resuelta')`)
+  ]
+);
+export type EstSignal = typeof estSignals.$inferSelect;
+
+export const estWorkFacts = pgTable(
+  'est_work_facts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    taskId: varchar('task_id', { length: 60 }).notNull(),
+    title: varchar('title', { length: 500 }).notNull(),
+    category: varchar('category', { length: 20 }).notNull().default('otro'),
+    urls: jsonb('urls').$type<string[]>().notNull().default([]),
+    keywords: jsonb('keywords').$type<string[]>().notNull().default([]),
+    kpis: jsonb('kpis').$type<string[]>().notNull().default([]),
+    hours: decimal('hours', { precision: 6, scale: 2 }),
+    doneOn: date('done_on').notNull(),
+    needsUrl: boolean('needs_url').notNull().default(false),
+    urlStatus: varchar('url_status', { length: 12 }).notNull().default('no_aplica'),
+    urlAskedAt: timestamp('url_asked_at'),
+    extraction: varchar('extraction', { length: 10 }).notNull().default('ia'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow()
+  },
+  (table) => [
+    unique('est_work_facts_unique').on(table.tenantId, table.taskId),
+    index('est_work_facts_client_idx').on(table.clientId, table.doneOn),
+    check('est_work_facts_category_check', sql`${table.category} IN ('contenido', 'onpage', 'tecnico', 'enlaces', 'gbp', 'web', 'campana', 'informe', 'otro')`),
+    check('est_work_facts_url_check', sql`${table.urlStatus} IN ('no_aplica', 'falta', 'preguntada', 'respondida')`),
+    check('est_work_facts_extraction_check', sql`${table.extraction} IN ('ia', 'reglas', 'manual')`)
+  ]
+);
+export type EstWorkFact = typeof estWorkFacts.$inferSelect;
+
+export const estTrackedUrls = pgTable(
+  'est_tracked_urls',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    url: text('url').notNull(),
+    property: varchar('property', { length: 300 }).notNull(),
+    reason: varchar('reason', { length: 300 }),
+    workFactId: uuid('work_fact_id').references(() => estWorkFacts.id, { onDelete: 'set null' }),
+    changedOn: date('changed_on').notNull(),
+    crawledOn: date('crawled_on'),
+    lastInspectedAt: timestamp('last_inspected_at'),
+    indexState: varchar('index_state', { length: 60 }),
+    backfilled: boolean('backfilled').notNull().default(false),
+    lastSyncedOn: date('last_synced_on'),
+    activeUntil: date('active_until').notNull(),
+    createdAt: timestamp('created_at').notNull().defaultNow()
+  },
+  (table) => [unique('est_tracked_urls_unique').on(table.clientId, table.url)]
+);
+export type EstTrackedUrl = typeof estTrackedUrls.$inferSelect;
+
+export const estUrlDaily = pgTable(
+  'est_url_daily',
+  {
+    trackedUrlId: uuid('tracked_url_id')
+      .notNull()
+      .references(() => estTrackedUrls.id, { onDelete: 'cascade' }),
+    date: date('date').notNull(),
+    clicks: integer('clicks').notNull().default(0),
+    impressions: integer('impressions').notNull().default(0),
+    ctr: doublePrecision('ctr').notNull().default(0),
+    position: doublePrecision('position').notNull().default(0)
+  },
+  (table) => [primaryKey({ name: 'est_url_daily_pk', columns: [table.trackedUrlId, table.date] })]
+);
+
+export const estEvents = pgTable(
+  'est_events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    date: date('date').notNull(),
+    endDate: date('end_date'),
+    kind: varchar('kind', { length: 10 }).notNull(),
+    title: varchar('title', { length: 200 }).notNull(),
+    notes: text('notes'),
+    source: varchar('source', { length: 10 }).notNull().default('manual'),
+    createdBy: integer('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at').notNull().defaultNow()
+  },
+  (table) => [
+    index('est_events_tenant_idx').on(table.tenantId, table.date),
+    check('est_events_kind_check', sql`${table.kind} IN ('google', 'festivo', 'datos', 'otro')`),
+    check('est_events_source_check', sql`${table.source} IN ('manual', 'sistema')`),
+    check('est_events_dates_check', sql`${table.endDate} IS NULL OR ${table.endDate} >= ${table.date}`)
+  ]
+);
+export type EstEvent = typeof estEvents.$inferSelect;

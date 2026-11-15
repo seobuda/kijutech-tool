@@ -7,6 +7,7 @@ import { cleanupFixtures, createFixtures, emailFor, FIXTURE_PASSWORD, loginAs, P
 
 import { aiProposeClient, applyClientProposal, saveClientOps } from '@/lib/operaciones/client-actions';
 import { deleteAnnotationAction, getClientPerformanceAction, getMonthlyReportAction, resyncClientAction, saveAnnotationAction, savePerfSettingsAction } from '@/lib/rendimiento/actions';
+import { addKeywordsAction, backfillWorkAction, closeObjectiveAction, deleteEventAction, deleteKeywordAction, deleteObjectiveAction, deletePlanAction, deleteTrackedUrlAction, getClientStrategyAction, objectiveBaselineAction, pauseClientAction, runProcessNowAction, saveClientOverrideAction, saveEstSettingsAction, saveEventAction, saveObjectiveAction, savePlanAction, setClientPlanAction, setSignalStatusAction, setWorkUrlAction, suggestKeywordsAction, updateKeywordAction } from '@/lib/estrategia/actions';
 import {
   createClientAction,
   addDirectoryAssetsAction,
@@ -117,6 +118,15 @@ const form = (data: Record<string, string>) => {
 const ACCIONES_ADMIN: [string, () => unknown][] = [
   ['saveClickUpToken (tokens)', () => saveClickUpToken('')],
   ['savePerfSettingsAction (avisos de rendimiento)', () => savePerfSettingsAction({ alertPct: 50 })],
+  ['setClientPlanAction (estrategia: plan del cliente)', () => setClientPlanAction(ZERO, null)],
+  ['saveClientOverrideAction (estrategia: frecuencias del cliente)', () => saveClientOverrideAction(ZERO, 'salud', null)],
+  ['pauseClientAction (estrategia: pausa)', () => pauseClientAction(ZERO, null)],
+  ['savePlanAction (estrategia: planes)', () => savePlanAction({ name: '', processes: {} })],
+  ['deletePlanAction (estrategia: planes)', () => deletePlanAction(ZERO)],
+  ['saveEstSettingsAction (estrategia: ajustes)', () => saveEstSettingsAction({})],
+  ['saveEventAction (estrategia: calendario)', () => saveEventAction({ date: 'x', kind: 'otro', title: '' })],
+  ['deleteEventAction (estrategia: calendario)', () => deleteEventAction(ZERO)],
+  ['deleteObjectiveAction (estrategia: borrar objetivo)', () => deleteObjectiveAction(ZERO)],
   ['saveTelegramToken (tokens)', () => saveTelegramToken('')],
   ['savePilotStartAction (piloto)', () => savePilotStartAction('no-es-una-fecha')],
   ['sendCleanupAction (limpieza)', () => sendCleanupAction(ZERO)],
@@ -181,6 +191,19 @@ const ACCIONES_EDITOR: [string, () => unknown][] = [
   ['saveAnnotationAction (hitos)', () => saveAnnotationAction(ZERO, { date: '2026-11-01', kind: 'web', title: 'x' })],
   ['deleteAnnotationAction (hitos)', () => deleteAnnotationAction(ZERO)],
   ['resyncClientAction (rendimiento)', () => resyncClientAction(ZERO)],
+  ['getClientStrategyAction (estrategia)', () => getClientStrategyAction(ZERO)],
+  ['runProcessNowAction (estrategia)', () => runProcessNowAction(ZERO, 'salud')],
+  ['saveObjectiveAction (estrategia: objetivos)', () => saveObjectiveAction(ZERO, { title: '', kind: 'kpi', startDate: 'x', dueDate: 'x' })],
+  ['closeObjectiveAction (estrategia: objetivos)', () => closeObjectiveAction(ZERO, 'logrado')],
+  ['objectiveBaselineAction (estrategia: objetivos)', () => objectiveBaselineAction(ZERO, 'gsc_clicks', 6)],
+  ['addKeywordsAction (estrategia: palabras)', () => addKeywordsAction(ZERO, [])],
+  ['updateKeywordAction (estrategia: palabras)', () => updateKeywordAction(ZERO, {})],
+  ['deleteKeywordAction (estrategia: palabras)', () => deleteKeywordAction(ZERO)],
+  ['suggestKeywordsAction (estrategia: palabras)', () => suggestKeywordsAction(ZERO)],
+  ['setSignalStatusAction (estrategia: señales)', () => setSignalStatusAction(ZERO, 'atendida')],
+  ['setWorkUrlAction (estrategia: trabajo)', () => setWorkUrlAction(ZERO, 'x', '')],
+  ['backfillWorkAction (estrategia: trabajo)', () => backfillWorkAction(ZERO)],
+  ['deleteTrackedUrlAction (estrategia: URLs)', () => deleteTrackedUrlAction(ZERO)],
   ['saveCompetitorAction (competencia)', () => saveCompetitorAction(ZERO, { name: 'x' })],
   ['deleteCompetitorAction (competencia)', () => deleteCompetitorAction(ZERO, ZERO)],
   ['listClientMemory (memoria)', () => listClientMemory(ZERO)],

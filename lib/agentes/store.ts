@@ -72,6 +72,7 @@ export const DEFAULT_AGENTS: Omit<typeof agtAgents.$inferInsert, 'tenantId'>[] =
       'gbp_rendimiento',
       'rendimiento_cliente',
       'anotar_hito',
+      'estrategia_cliente',
       'encargar_a_agente',
       'estado_trabajos'
     ],
@@ -110,6 +111,12 @@ const UPGRADES: { id: string; agent: string; addTools: string[]; instructions?: 
     id: '2026-11-15-rendimiento',
     agent: PRINCIPAL_KEY,
     addTools: ['rendimiento_cliente', 'anotar_hito']
+  },
+  {
+    // 15 nov 2026: módulo Estrategia (fase 1). Objetivos, señales, salud de la web y trabajo de cada cliente.
+    id: '2026-11-15-estrategia',
+    agent: PRINCIPAL_KEY,
+    addTools: ['estrategia_cliente']
   }
 ];
 const SYSTEM_PROVIDER = 'sistema';

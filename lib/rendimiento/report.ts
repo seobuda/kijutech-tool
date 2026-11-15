@@ -7,7 +7,7 @@ import 'server-only';
 //   - monthlyClientText   informe del mes de un cliente (texto para copiar o para el agente)
 //   - runPerformanceAlerts / runMonthlySummary  avisos de caídas y subidas, y resumen del mes por Telegram
 import { getClient, listCoreClients } from '@/lib/core/clients';
-import { telegramOutbound } from '@/lib/core/capabilities';
+import { externalEvents, telegramOutbound } from '@/lib/core/capabilities';
 import {
   ANNOTATION_KIND_LABEL,
   CHART_KPIS,
@@ -194,6 +194,13 @@ export async function clientPerformance(
     effects: effectsFor(a.date)
   }));
   if (serviceStart) annotations.push({ id: null, date: serviceStart, kind: 'servicio', kindLabel: 'Servicio', title: 'Inicio del servicio con Kijutech', notes: 'De la ficha del cliente.', source: 'sistema', virtual: true, effects: effectsFor(serviceStart) });
+  // Calendario de la agencia (módulo Estrategia, por el núcleo): actualizaciones de Google e incidencias de datos.
+  if (loadFrom && loadTo) {
+    for (const ev of await externalEvents(tenantId, loadFrom, loadTo)) {
+      if (ev.kind !== 'google' && ev.kind !== 'datos') continue;
+      annotations.push({ id: null, date: ev.date, kind: ev.kind === 'google' ? 'google' : 'otro', kindLabel: ev.kind === 'google' ? 'Google' : 'Datos', title: ev.title, notes: `Calendario de la agencia${ev.endDate ? ` (hasta el ${fmtDayYear(ev.endDate)})` : ''}.`, source: 'sistema', virtual: true, effects: effectsFor(ev.date) });
+    }
+  }
   annotations.sort((a, b) => b.date.localeCompare(a.date));
 
   let moversView: MoversView | null = null;
@@ -425,6 +432,17 @@ export async function monthlyClientText(tenantId: string, clientId: string, mont
 
 const ALERT_HOUR = 9;
 
+/**
+ * Avisos confirmados: la caída (o subida) tiene que verse también con el día anterior como último día, para no
+ * avisar por un solo día raro ni por un día con datos aún incompletos (recomendación de la investigación del 15 nov).
+ */
+export function confirmedAlerts(dm: DayMap, lastBy: Partial<Record<Source, string | null>>, cfg: { pct: number; rises: boolean; minVolume: number }) {
+  const prevBy: Partial<Record<Source, string | null>> = {};
+  for (const [k, v] of Object.entries(lastBy)) prevBy[k as Source] = v ? addDays(v, -1) : v;
+  const before = new Set(detectAlerts(dm, prevBy, cfg).map((f) => `${f.kpi}:${f.direction}`));
+  return detectAlerts(dm, lastBy, cfg).filter((f) => before.has(`${f.kpi}:${f.direction}`));
+}
+
 /** Una vez al día (desde las 9:00, cuando la descarga diaria ya ha pasado): caídas y subidas fuertes por cliente. */
 export async function runPerformanceAlerts(tenantId: string, now = new Date()): Promise<number> {
   const cfg = await getSettings(tenantId);
@@ -457,14 +475,18 @@ export async function runPerformanceAlerts(tenantId: string, now = new Date()): 
   const sent = { ...(cfg.state.sentAlerts ?? {}) };
   for (const [k, d] of Object.entries(sent)) if (d < addDays(t.date, -30)) delete sent[k];
   const lines: string[] = [];
+  // Actualizaciones de Google o incidencias de datos en los últimos 10 días: el aviso lo dice (puede no ser culpa del cliente).
+  const events = (await externalEvents(tenantId, addDays(t.date, -10), t.date)).filter((e) => e.kind === 'google' || e.kind === 'datos');
+  const eventNote = events.length ? ` · coincide con ${events.map((e) => `«${esc(e.title)}»`).join(', ')}` : '';
+  const alertCfg = { pct: cfg.alertPct, rises: cfg.alertRises, minVolume: cfg.alertMinVolume };
   for (const [clientId, dm] of all) {
     const c = clients.get(clientId);
     if (!c) continue;
-    for (const f of detectAlerts(dm, lastBy.get(clientId) ?? {}, { pct: cfg.alertPct, rises: cfg.alertRises, minVolume: cfg.alertMinVolume })) {
+    for (const f of confirmedAlerts(dm, lastBy.get(clientId) ?? {}, alertCfg)) {
       const key = `${clientId}:${f.kpi}:${f.direction}`;
       if (sent[key] && sent[key] > addDays(t.date, -7)) continue; // como mucho un aviso por cifra y semana
       sent[key] = t.date;
-      lines.push(`${f.direction === 'baja' ? '🔻' : '🔺'} <b>${esc(c.name)}</b>: ${esc(f.label.toLowerCase())} ${formatDelta(f.pct)} (${formatValue(f.last7, 'int')} en 7 días; lo normal, ${formatValue(f.baseline, 'int')})`);
+      lines.push(`${f.direction === 'baja' ? '🔻' : '🔺'} <b>${esc(c.name)}</b>: ${esc(f.label.toLowerCase())} ${formatDelta(f.pct)} (${formatValue(f.last7, 'int')} en 7 días; lo normal, ${formatValue(f.baseline, 'int')})${eventNote}`);
     }
   }
   await saveSettingsState(tenantId, { ...cfg.state, sentAlerts: sent, lastAlertsOn: t.date });

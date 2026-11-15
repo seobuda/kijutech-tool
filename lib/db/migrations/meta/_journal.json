@@ -351,6 +351,13 @@
       "when": 1794456000000,
       "tag": "0049_perf_rendimiento",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1794470000000,
+      "tag": "0050_est_estrategia",
+      "breakpoints": true
     }
   ]
 }
