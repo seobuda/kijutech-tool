@@ -4,7 +4,8 @@ import 'server-only';
 //   - atiende los mensajes libres de Telegram y correo del dueño (agente principal);
 //   - publica sus herramientas: trabajos de subagentes e integraciones (DataForSEO, Clarity, Google);
 //   - programa los trabajos de los subagentes en el planificador.
-import { registerScheduled, registerTools, setInboundHandler, type AgentTool } from '@/lib/core/capabilities';
+import { registerAssetDirectory, registerScheduled, registerTools, setInboundHandler, type AgentTool, type ToolContext } from '@/lib/core/capabilities';
+import { findCoreClient, primaryAsset } from '@/lib/core/clients';
 import { handleInbound } from '@/lib/agentes/inbound';
 import { encargarAgente, estadoTrabajos, runAgentJobs } from '@/lib/agentes/jobs';
 import {
@@ -12,11 +13,16 @@ import {
   dataForSeoSerp,
   dataForSeoVolume,
   ga4Properties,
+  ga4PropertyList,
   ga4Report,
+  gbpLocationList,
   gbpLocations,
+  gbpPerformance,
   gscPerformance,
+  gscSiteList,
   gscSites,
-  isConnected
+  isConnected,
+  type GoogleAsset
 } from '@/lib/agentes/integrations';
 
 const s = (v: unknown, max = 300) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
@@ -31,6 +37,35 @@ const guard = async (fn: () => Promise<string>) => {
     return { ok: false, content: e instanceof Error ? e.message : 'La integración falló.' };
   }
 };
+
+type AssetKindG = 'search_console' | 'analytics' | 'business_profile';
+const KIND_TEXT: Record<AssetKindG, { name: string; list: string }> = {
+  search_console: { name: 'propiedad de Search Console', list: 'gsc_propiedades' },
+  analytics: { name: 'propiedad de Analytics', list: 'ga4_propiedades' },
+  business_profile: { name: 'ficha de Business Profile', list: 'gbp_fichas' }
+};
+
+/**
+ * Identificador a consultar: el que se pase explícito o, si se nombra un cliente, su cuenta PRINCIPAL de ese tipo en
+ * la ficha (Clientes → Webs y cuentas). Así el agente no tiene que adivinar qué propiedad es de quién.
+ */
+export async function resolveGoogleId(ctx: ToolContext, kind: AssetKindG, explicit: string, cliente: string): Promise<{ id: string; who: string } | { error: string }> {
+  if (explicit) return { id: explicit, who: '' };
+  if (!cliente) return { error: `Di de qué cliente (cliente) o pasa la ${KIND_TEXT[kind].name} exacta (mírala con ${KIND_TEXT[kind].list}).` };
+  const { client, options } = await findCoreClient(ctx.tenantId, cliente);
+  if (!client) return { error: options.length ? `Hay varios clientes posibles: ${options.join(' | ')}. Pregunta cuál.` : `No encuentro el cliente «${cliente}».` };
+  const a = await primaryAsset(ctx.tenantId, client.id, kind);
+  if (!a?.value)
+    return { error: `${client.name} no tiene ${KIND_TEXT[kind].name} en su ficha. Díselo a Enric: se asigna en Clientes → ${client.name} → Webs y cuentas → «Buscar en Google». No adivines cuál es.` };
+  return { id: a.value, who: `${client.name}${a.access === 'no' ? ' (en la ficha consta «Sin acceso»)' : ''}: ` };
+}
+
+const withClient = (ctx: ToolContext, kind: AssetKindG, explicit: string, cliente: string, fn: (id: string) => Promise<string>) =>
+  guard(async () => {
+    const r = await resolveGoogleId(ctx, kind, explicit, cliente);
+    if ('error' in r) throw new Error(r.error);
+    return `${r.who}${await fn(r.id)}`;
+  });
 
 export const INTEGRATION_TOOLS: AgentTool[] = [
   {
@@ -77,16 +112,15 @@ export const INTEGRATION_TOOLS: AgentTool[] = [
     name: 'gsc_rendimiento',
     module: 'agentes',
     title: 'Search Console: rendimiento',
-    description: 'Clics, impresiones, CTR y posición en Google de una web, por consulta, página, país, dispositivo o fecha. «sitio» debe ser exactamente como sale en gsc_propiedades (p. ej. sc-domain:cliente.com o https://cliente.com/).',
+    description: 'Clics, impresiones, CTR y posición en Google de una web, por consulta, página, país, dispositivo o fecha. Lo normal es pasar «cliente» (nombre): se usa la propiedad de Search Console de su ficha. Solo si te dan otra web, «sitio» exactamente como sale en gsc_propiedades (p. ej. sc-domain:cliente.com).',
     risk: 'lectura',
     inputSchema: {
       type: 'object',
-      properties: { sitio: { type: 'string' }, dias: { type: 'number', description: '7 a 480, por defecto 28' }, dimension: { type: 'string', enum: ['query', 'page', 'country', 'device', 'date'] }, pagina_contiene: { type: 'string' }, limite: { type: 'number' } },
-      required: ['sitio'],
+      properties: { cliente: { type: 'string', description: 'Nombre del cliente' }, sitio: { type: 'string' }, dias: { type: 'number', description: '7 a 480, por defecto 28' }, dimension: { type: 'string', enum: ['query', 'page', 'country', 'device', 'date'] }, pagina_contiene: { type: 'string' }, limite: { type: 'number' } },
       additionalProperties: false
     },
     available: (t) => isConnected(t, 'google'),
-    run: (ctx, i) => guard(() => gscPerformance(ctx.tenantId, s(i.sitio, 200), n(i.dias, 28, 7, 480), s(i.dimension, 10) || 'query', s(i.pagina_contiene, 200) || null, n(i.limite, 25, 5, 100)))
+    run: (ctx, i) => withClient(ctx, 'search_console', s(i.sitio, 200), s(i.cliente, 120), (site) => gscPerformance(ctx.tenantId, site, n(i.dias, 28, 7, 480), s(i.dimension, 10) || 'query', s(i.pagina_contiene, 200) || null, n(i.limite, 25, 5, 100)))
   },
   {
     name: 'ga4_propiedades',
@@ -102,20 +136,19 @@ export const INTEGRATION_TOOLS: AgentTool[] = [
     name: 'ga4_informe',
     module: 'agentes',
     title: 'Analytics: informe',
-    description: 'Informe de Google Analytics 4: métricas (sessions, totalUsers, newUsers, conversions, engagementRate, screenPageViews…) de los últimos N días, opcionalmente por una dimensión (sessionDefaultChannelGroup, pagePath, deviceCategory, country, date…).',
+    description: 'Informe de Google Analytics 4: métricas (sessions, totalUsers, newUsers, conversions, engagementRate, screenPageViews…) de los últimos N días, opcionalmente por una dimensión (sessionDefaultChannelGroup, pagePath, deviceCategory, country, date…). Lo normal es pasar «cliente»: se usa la propiedad de Analytics de su ficha.',
     risk: 'lectura',
     inputSchema: {
       type: 'object',
-      properties: { propiedad: { type: 'string', description: 'Número de la propiedad' }, dias: { type: 'number' }, metricas: { type: 'array', items: { type: 'string' } }, dimension: { type: 'string' } },
-      required: ['propiedad'],
+      properties: { cliente: { type: 'string', description: 'Nombre del cliente' }, propiedad: { type: 'string', description: 'Número de la propiedad (solo si no es la de la ficha del cliente)' }, dias: { type: 'number' }, metricas: { type: 'array', items: { type: 'string' } }, dimension: { type: 'string' } },
       additionalProperties: false
     },
     available: (t) => isConnected(t, 'google'),
     run: (ctx, i) =>
-      guard(() =>
+      withClient(ctx, 'analytics', s(i.propiedad, 40), s(i.cliente, 120), (prop) =>
         ga4Report(
           ctx.tenantId,
-          s(i.propiedad, 40),
+          prop,
           n(i.dias, 28, 1, 365),
           (Array.isArray(i.metricas) && i.metricas.length ? i.metricas : ['sessions', 'totalUsers', 'conversions']).map((m) => s(m, 60)).filter(Boolean),
           s(i.dimension, 60) || 'sessionDefaultChannelGroup'
@@ -131,16 +164,49 @@ export const INTEGRATION_TOOLS: AgentTool[] = [
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
     available: (t) => isConnected(t, 'google'),
     run: (ctx) => guard(() => gbpLocations(ctx.tenantId))
+  },
+  {
+    name: 'gbp_rendimiento',
+    module: 'agentes',
+    title: 'Business Profile: rendimiento',
+    description: 'Rendimiento de la ficha de Google (Maps) de un cliente en los últimos N días: vistas en Búsqueda y Maps, llamadas, clics a la web, cómo llegar, mensajes y reservas. Pasa «cliente»: se usa la ficha de Business Profile de su ficha de cliente. Los datos llegan con unos 3 días de retraso.',
+    risk: 'lectura',
+    inputSchema: { type: 'object', properties: { cliente: { type: 'string', description: 'Nombre del cliente' }, ficha: { type: 'string', description: '«locations/…», solo si no es la de la ficha del cliente' }, dias: { type: 'number', description: '7 a 540, por defecto 28' } }, additionalProperties: false },
+    available: (t) => isConnected(t, 'google'),
+    run: (ctx, i) => withClient(ctx, 'business_profile', s(i.ficha, 80), s(i.cliente, 120), (loc) => gbpPerformance(ctx.tenantId, loc, n(i.dias, 28, 7, 540)))
   }
 ];
 
 export const AGENTES_TOOLS: AgentTool[] = [encargarAgente, estadoTrabajos, ...INTEGRATION_TOOLS];
 
 let done = false;
+// Lo que ve la cuenta de Google conectada, para asignarlo a las fichas de cliente (lib/core/client-directory.ts).
+async function listGoogleDirectory(tenantId: string): Promise<{ assets: GoogleAsset[]; okKinds: string[]; errors: string[] }> {
+  const parts: [AssetKindG, string, (t: string) => Promise<GoogleAsset[]>][] = [
+    ['search_console', 'Search Console', gscSiteList],
+    ['analytics', 'Analytics', ga4PropertyList],
+    ['business_profile', 'Business Profile', gbpLocationList]
+  ];
+  const out = { assets: [] as GoogleAsset[], okKinds: [] as string[], errors: [] as string[] };
+  const settled = await Promise.allSettled(parts.map(([, , fn]) => fn(tenantId)));
+  for (const [idx, r] of settled.entries()) {
+    const [kind, label] = parts[idx];
+    if (r.status === 'fulfilled') {
+      out.assets.push(...r.value);
+      out.okKinds.push(kind);
+    } else {
+      console.error(`[agentes] directorio Google ${label}:`, r.reason instanceof Error ? r.reason.message : r.reason);
+      out.errors.push(`${label}: Google no dejó consultarlo`);
+    }
+  }
+  return out;
+}
+
 export function registerAgentesCapabilities(): void {
   if (done) return;
   done = true;
   registerTools(AGENTES_TOOLS);
   setInboundHandler('agentes', handleInbound);
   registerScheduled('trabajos de subagentes', runAgentJobs);
+  registerAssetDirectory({ provider: 'google', kinds: ['search_console', 'analytics', 'business_profile'], isConnected: (t) => isConnected(t, 'google'), list: listGoogleDirectory });
 }

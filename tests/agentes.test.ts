@@ -37,17 +37,19 @@ vi.mock('@/lib/ai/gateway', async (orig) => {
 import { db } from '@/lib/db/drizzle';
 import { agtAgents, agtIntegrations, agtJobs, aiJobs, clientAssets, clientCompetitors, clientContacts, clientLocations, clientMemory, clients, opsAgentActions, opsClientLevels, opsClients, opsClientServices, opsServices, tenants } from '@/lib/db/schema';
 import { and } from 'drizzle-orm';
-import { completeness, domainOf, normalizeUrl, recognizableDomain } from '@/lib/core/client-rules';
-import { availableTools, dispatchInbound, getTool, registerTools, setInboundHandler, setTelegramOutbound, type AgentTool } from '@/lib/core/capabilities';
+import { accessFromDirectory, assetKey, completeness, domainOf, matchExternalAssets, normalizeUrl, pickClient, recognizableDomain, sameSite, type ExternalAsset } from '@/lib/core/client-rules';
+import { _resetDirectoryCache, addDirectoryAssets, checkAccess, suggestAssets } from '@/lib/core/client-directory';
+import { createCoreClient, saveAsset } from '@/lib/core/clients';
+import { availableTools, dispatchInbound, getTool, registerAssetDirectory, registerTools, setInboundHandler, setTelegramOutbound, type AgentTool } from '@/lib/core/capabilities';
 import { runAgent, systemPrompt, toMessages } from '@/lib/agentes/engine';
 import { isOgg, speakableText } from '@/lib/agentes/voice';
-import { signState, verifyState } from '@/lib/agentes/integrations';
+import { signState, sumGbpSeries, verifyState } from '@/lib/agentes/integrations';
 import { _resetUpgradeCache, ensureDefaultAgents, getAgent, listAgents, PRINCIPAL_KEY, WEB_REVIEWER_KEY } from '@/lib/agentes/store';
 import { createJob, processJob } from '@/lib/agentes/jobs';
 import { handleInbound, waitIdle } from '@/lib/agentes/inbound';
 import { AGENT_TOOL_CALLBACK_RE, decideAgentTool, OPS_AGENT_TOOLS, setToolAutonomy } from '@/lib/operaciones/agent-capabilities';
 import { getCalendar } from '@/lib/operaciones/calendar';
-import { AGENTES_TOOLS } from '@/lib/agentes/register';
+import { AGENTES_TOOLS, resolveGoogleId } from '@/lib/agentes/register';
 
 const sent: { kind: string; chat: string; text?: string; buttons?: { text: string; data: string }[][] }[] = [];
 setTelegramOutbound({
@@ -364,7 +366,7 @@ describe('agentes con la base de datos', () => {
     _resetUpgradeCache();
     await ensureDefaultAgents(tenantId);
     const [after] = await db.select().from(agtAgents).where(eq(agtAgents.id, p.id));
-    expect(after.tools).toEqual(['estado_equipo', 'crear_cliente', 'actualizar_cliente', 'anotar_memoria_cliente', 'web_fetch']);
+    expect(after.tools).toEqual(['estado_equipo', 'crear_cliente', 'actualizar_cliente', 'anotar_memoria_cliente', 'web_fetch', 'gsc_rendimiento', 'ga4_informe', 'gbp_rendimiento']);
     expect(after.instructions).toBe('Mis instrucciones');
     // Si Enric quita una herramienta después, no vuelve a aparecer.
     await db.update(agtAgents).set({ tools: ['estado_equipo'] }).where(eq(agtAgents.id, p.id));
@@ -398,5 +400,101 @@ describe('limpieza del informe', () => {
 describe('texto hablado', () => {
   it('sin emojis, viñetas ni guiones largos', () => {
     expect(speakableText('Resumen 😄\n\n— <b>Enric</b>: 2 tareas ⚠️\n— Eury: todo al día ✅')).toBe('Resumen. Enric: 2 tareas. Eury: todo al día');
+  });
+});
+
+// --- Propiedades de Google en la ficha del cliente (15 nov 2026) -----------------------------------------------
+
+describe('propiedades de Google (puro)', () => {
+  it('mismo sitio, identificador comparable, sugerencias y acceso', () => {
+    expect(sameSite('tienda.cliente.com', 'cliente.com')).toBe(true);
+    expect(sameSite('cliente.com', 'otrocliente.com')).toBe(false);
+    expect(assetKey('analytics', 'properties/123')).toBe(assetKey('analytics', '123'));
+    expect(assetKey('search_console', 'https://cliente.com/')).toBe('https://cliente.com');
+    expect(assetKey('business_profile', 'accounts/9/locations/55')).toBe('locations/55');
+    const ext: ExternalAsset[] = [
+      { kind: 'search_console', value: 'sc-domain:cliente.com', label: 'cliente.com', domain: 'cliente.com' },
+      { kind: 'analytics', value: 'properties/1', label: 'Cliente', domain: 'www2.cliente.com' },
+      { kind: 'analytics', value: 'properties/2', label: 'Otro', domain: 'otro.es' },
+      { kind: 'business_profile', value: 'locations/5', label: 'Cliente Maps', domain: null }
+    ];
+    const s = matchExternalAssets(['cliente.com'], ext, [{ kind: 'analytics', value: '1' }]);
+    expect(s.map((x) => x.value)).toEqual(['sc-domain:cliente.com']);
+    expect(accessFromDirectory('analytics', 'properties/2', ext)).toBe('si');
+    expect(accessFromDirectory('analytics', 'properties/3', ext)).toBe('no');
+  });
+  it('cliente nombrado en un texto: exacto, parcial único o varias opciones', () => {
+    const cs = [{ name: 'Zapatos López', aliases: ['zapateria lopez'] }, { name: 'Clínica Dental Sol', aliases: [] }, { name: 'Clínica Vet Luna', aliases: [] }];
+    expect(pickClient(cs, 'zapatos lopez').client?.name).toBe('Zapatos López');
+    expect(pickClient(cs, 'dental').client?.name).toBe('Clínica Dental Sol');
+    expect(pickClient(cs, 'clinica').options).toHaveLength(2);
+  });
+  it('suma las series de Business Profile (un valor ausente es 0)', () => {
+    const tot = sumGbpSeries({
+      multiDailyMetricTimeSeries: [
+        { dailyMetricTimeSeries: [{ dailyMetric: 'CALL_CLICKS', timeSeries: { datedValues: [{ date: { year: 2026, month: 11, day: 1 }, value: '3' }, { date: { year: 2026, month: 11, day: 2 } }] } }] },
+        { dailyMetricTimeSeries: [{ dailyMetric: 'WEBSITE_CLICKS', timeSeries: { datedValues: [{ date: { year: 2026, month: 11, day: 1 }, value: '10' }] } }] }
+      ]
+    });
+    expect(tot).toEqual({ CALL_CLICKS: 3, WEBSITE_CLICKS: 10 });
+  });
+});
+
+const SLUG_G = 'seg-test-google-cliente';
+async function cleanupG() {
+  const [t] = await db.select({ id: tenants.id }).from(tenants).where(eq(tenants.slug, SLUG_G));
+  if (t) await db.delete(tenants).where(eq(tenants.id, t.id));
+}
+
+describe('propiedades de Google con la base de datos', () => {
+  let tid = '';
+  let clientId = '';
+  const visto: ExternalAsset[] = [
+    { kind: 'search_console', value: 'sc-domain:pruebagoogle.com', label: 'pruebagoogle.com', domain: 'pruebagoogle.com' },
+    { kind: 'analytics', value: 'properties/777', label: 'Prueba Google', domain: 'pruebagoogle.com' },
+    { kind: 'analytics', value: 'properties/888', label: 'Otra empresa', domain: 'otra.es' }
+  ];
+  beforeAll(async () => {
+    await cleanupG();
+    const [t] = await db.insert(tenants).values({ name: 'Prueba Google', slug: SLUG_G }).returning();
+    tid = t.id;
+    registerAssetDirectory({
+      provider: 'google',
+      kinds: ['search_console', 'analytics', 'business_profile'],
+      isConnected: async (x) => x === tid,
+      list: async () => ({ assets: visto, okKinds: ['search_console', 'analytics'], errors: ['Business Profile: Google no dejó consultarlo'] })
+    });
+    _resetDirectoryCache();
+    clientId = await createCoreClient(tid, { name: 'Prueba Google SL', status: 'activo' });
+    await saveAsset(tid, clientId, { kind: 'web', value: 'https://www.pruebagoogle.com', recognizeEmails: false });
+  });
+  afterAll(cleanupG);
+
+  it('sugiere por dominio, añade solo lo que Google ve y comprueba accesos', async () => {
+    const s = await suggestAssets(tid, clientId);
+    expect(s.suggestions.map((x) => x.value).sort()).toEqual(['properties/777', 'sc-domain:pruebagoogle.com']);
+    expect(s.errors).toHaveLength(1);
+    const r = await addDirectoryAssets(tid, clientId, [{ kind: 'analytics', value: '777' }, { kind: 'analytics', value: 'properties/999' }]);
+    expect(r.added).toHaveLength(1);
+    expect(r.skipped).toBe(1); // 999 no está en Google: no se fía del navegador
+    await saveAsset(tid, clientId, { kind: 'search_console', value: 'https://www.pruebagoogle.com/' });
+    await saveAsset(tid, clientId, { kind: 'business_profile', value: 'locations/1' });
+    const c = await checkAccess(tid, clientId);
+    expect(c.yes).toHaveLength(1);
+    expect(c.no).toHaveLength(1); // el prefijo de URL no está; Business Profile no se toca (falló su consulta)
+    const assets = await db.select().from(clientAssets).where(eq(clientAssets.clientId, clientId));
+    expect(assets.find((a) => a.kind === 'search_console')?.access).toBe('no');
+    expect(assets.find((a) => a.kind === 'business_profile')?.access).toBe('sin_revisar');
+    expect(assets.find((a) => a.kind === 'analytics')?.access).toBe('si');
+  });
+
+  it('el agente usa la propiedad de la ficha diciendo solo el cliente, y no adivina si falta', async () => {
+    const ctx = { tenantId: tid, agentKey: PRINCIPAL_KEY, channel: 'web' as const, conversationId: null, actor: { name: 'Enric', isOwner: true, clickupUserId: null } };
+    expect(await resolveGoogleId(ctx, 'analytics', '', 'prueba google')).toEqual({ id: 'properties/777', who: 'Prueba Google SL: ' });
+    expect(await resolveGoogleId(ctx, 'search_console', 'sc-domain:x.com', '')).toEqual({ id: 'sc-domain:x.com', who: '' });
+    await db.delete(clientAssets).where(and(eq(clientAssets.clientId, clientId), eq(clientAssets.kind, 'business_profile')));
+    const r = await resolveGoogleId(ctx, 'business_profile', '', 'Prueba Google SL');
+    expect('error' in r && r.error).toContain('No adivines');
+    expect('error' in (await resolveGoogleId(ctx, 'analytics', '', 'no existe'))).toBe(true);
   });
 });

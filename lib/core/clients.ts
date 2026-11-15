@@ -40,6 +40,7 @@ import {
   isMemoryKind,
   normEmail,
   normalizeUrl,
+  pickClient,
   recognizableDomain,
   validateMemoryText,
   type AccessLevel,
@@ -83,6 +84,11 @@ export type ClientSheet = {
 
 export async function listCoreClients(tenantId: string): Promise<Client[]> {
   return db.select().from(clients).where(eq(clients.tenantId, tenantId)).orderBy(asc(clients.name));
+}
+
+/** Cliente nombrado en un texto (nombre o alias; exacto o el único que lo contenga). Si hay dudas, opciones para preguntar. */
+export async function findCoreClient(tenantId: string, text: string): Promise<{ client: Client | null; options: string[] }> {
+  return pickClient(await listCoreClients(tenantId), text);
 }
 
 export async function getClient(tenantId: string, id: string): Promise<Client | null> {

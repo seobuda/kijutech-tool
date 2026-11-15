@@ -35,9 +35,21 @@ export const CLIENTES_PROCESS_MAP: ProcessStep[] = [
     description: 'Webs, dominios y cuentas del cliente (Search Console, Analytics, ficha de Google, Ads, redes, tienda, CRM) con si tenemos acceso y dónde están los accesos, y qué pueden hacer los agentes con ellas.',
     status: 'built',
     file: 'lib/core/clients.ts',
-    when: 'Desde la pestaña «Webs y cuentas» y al aprobar una propuesta. Las integraciones de los agentes usarán la cuenta principal de cada tipo (primaryAsset).',
+    when: 'Desde la pestaña «Webs y cuentas» y al aprobar una propuesta. Las herramientas de Google de los agentes (gsc_rendimiento, ga4_informe, gbp_rendimiento) usan la cuenta principal de cada tipo (primaryAsset) cuando se les dice solo el cliente.',
     ai: 'Nada aquí.',
     code: 'Nunca contraseñas (se rechaza cualquier texto que lo parezca). Una web o dominio puede «reconocer correos» de su dominio (email_domain, único por cuenta; nunca gmail.com y similares). La primera de cada tipo queda como principal. La ficha muestra qué integraciones están disponibles para el cliente según sus cuentas y lo conectado en Agentes → Integraciones.',
+    tables: ['client_assets']
+  },
+  {
+    id: 'cli-propiedades-google',
+    lane: 'La ficha',
+    name: 'Propiedades de Google por cliente',
+    description: 'Asignar a cada cliente su propiedad de Search Console, Analytics 4 y ficha de Business Profile tomándolas de la cuenta de Google conectada: elegir de una lista en el formulario, «Buscar en Google» (las que coinciden con el dominio de sus webs) y «Comprobar accesos».',
+    status: 'built',
+    file: 'lib/core/client-directory.ts',
+    when: 'Al pulsar «Buscar en Google» o «Comprobar accesos» en la pestaña «Webs y cuentas», o al elegir en el desplegable del formulario.',
+    ai: 'Nada: emparejar por dominio es una comparación (matchExternalAssets).',
+    code: 'El núcleo no sabe de Google: pregunta a los directorios que registran los módulos (registerAssetDirectory; Agentes registra el de Google). Caché de 5 minutos por cuenta. Solo se añade lo que Google ve de verdad (no se fía del navegador). Comprobar accesos: «Tenemos acceso» si aparece, «Sin acceso» si no; «Pedido, pendiente» se mantiene hasta que aparezca y «No hace falta» no se toca; un tipo cuya consulta falla no se toca.',
     tables: ['client_assets']
   },
   {

@@ -173,6 +173,27 @@ export function registerClientDeleteGuard(module: string, fn: ClientDeleteGuard)
   (GC.__kijuClientGuards ??= new Map()).set(module, fn);
 }
 
+// Un módulo con una integración conectada (p. ej. Agentes con Google) ofrece las propiedades que ve (webs de Search
+// Console, propiedades de Analytics, fichas de Business Profile) para asignarlas a las fichas de cliente (15 nov 2026).
+// El núcleo no sabe de Google: solo pregunta a quien se haya registrado.
+export type DirectoryAsset = { kind: string; value: string; label: string; domain: string | null; detail?: string };
+export type AssetDirectory = {
+  provider: string;
+  kinds: string[];
+  isConnected: (tenantId: string) => Promise<boolean>;
+  /** Lo que ve la integración, por tipo; un tipo que falla va en «errors» (y no se toca el acceso de sus cuentas). */
+  list: (tenantId: string) => Promise<{ assets: DirectoryAsset[]; okKinds: string[]; errors: string[] }>;
+};
+const GD = globalThis as unknown as { __kijuAssetDirs?: Map<string, AssetDirectory> };
+
+export function registerAssetDirectory(d: AssetDirectory): void {
+  (GD.__kijuAssetDirs ??= new Map()).set(d.provider, d);
+}
+
+export function assetDirectories(): AssetDirectory[] {
+  return [...(GD.__kijuAssetDirs ?? new Map<string, AssetDirectory>()).values()];
+}
+
 /** Motivos por los que no se puede borrar un cliente (vacío = se puede). */
 export async function clientDeleteBlockers(tenantId: string, clientId: string): Promise<string[]> {
   const out: string[] = [];

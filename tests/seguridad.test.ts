@@ -8,7 +8,11 @@ import { cleanupFixtures, createFixtures, emailFor, FIXTURE_PASSWORD, loginAs, P
 import { aiProposeClient, applyClientProposal, saveClientOps } from '@/lib/operaciones/client-actions';
 import {
   createClientAction,
+  addDirectoryAssetsAction,
+  checkClientAccessAction,
   deleteAssetAction,
+  listDirectoryAssetsAction,
+  suggestClientAssetsAction,
   deleteClientAction,
   deleteCompetitorAction,
   deleteContactAction,
@@ -166,6 +170,10 @@ const ACCIONES_EDITOR: [string, () => unknown][] = [
   ['deleteLocationAction (locales)', () => deleteLocationAction(ZERO, ZERO)],
   ['saveAssetAction (webs y cuentas)', () => saveAssetAction(ZERO, { kind: 'web', value: 'ejemplo.com' })],
   ['deleteAssetAction (webs y cuentas)', () => deleteAssetAction(ZERO, ZERO)],
+  ['listDirectoryAssetsAction (propiedades de Google)', () => listDirectoryAssetsAction()],
+  ['suggestClientAssetsAction (propiedades de Google)', () => suggestClientAssetsAction(ZERO)],
+  ['addDirectoryAssetsAction (propiedades de Google)', () => addDirectoryAssetsAction(ZERO, [])],
+  ['checkClientAccessAction (propiedades de Google)', () => checkClientAccessAction(ZERO)],
   ['saveCompetitorAction (competencia)', () => saveCompetitorAction(ZERO, { name: 'x' })],
   ['deleteCompetitorAction (competencia)', () => deleteCompetitorAction(ZERO, ZERO)],
   ['listClientMemory (memoria)', () => listClientMemory(ZERO)],

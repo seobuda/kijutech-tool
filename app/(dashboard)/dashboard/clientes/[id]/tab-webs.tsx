@@ -14,6 +14,7 @@ import { ACCESS_LABEL, ACCESS_LEVELS, ASSET_INTEGRATION, ASSET_KIND_LABEL, ASSET
 import { deleteAssetAction, saveAssetAction } from '@/lib/core/client-actions';
 import { areaClass, brandBtn, checkClass, ConfirmDelete, MsgLine, selectClass, useRun } from '../ui';
 import { Field } from './tab-contactos';
+import { GOOGLE_KINDS, GooglePanel, GooglePicker } from './google-props';
 import type { AssetView } from './ficha-view';
 
 const empty: AssetView = { id: '', kind: 'web', label: '', value: '', access: 'sin_revisar', accessNotes: '', isPrimary: false, recognizeEmails: true, emailDomain: '', notes: '' };
@@ -23,7 +24,7 @@ const PLACEHOLDER: Partial<Record<AssetKind, string>> = {
   dominio: 'cliente.com',
   search_console: 'sc-domain:cliente.com o https://cliente.com/',
   analytics: 'properties/123456789',
-  business_profile: 'Enlace o nombre de la ficha',
+  business_profile: 'locations/123456789',
   google_ads: 'ID de cuenta (123-456-7890)',
   instagram: 'https://instagram.com/cliente'
 };
@@ -72,6 +73,8 @@ export function WebsTab({ clientId, assets, integrations }: { clientId: string; 
         )}
       </section>
 
+      {integrations.google && <GooglePanel clientId={clientId} hasWeb={assets.some((a) => ['web', 'dominio', 'tienda', 'search_console'].includes(a.kind) && Boolean(a.value))} />}
+
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="flex items-center gap-1.5 text-xs text-warning-strong">
           <AlertTriangle className="size-3.5 shrink-0" aria-hidden />
@@ -84,7 +87,7 @@ export function WebsTab({ clientId, assets, integrations }: { clientId: string; 
       </div>
       <MsgLine msg={msg} />
 
-      {edit === 'new' && <AssetForm initial={empty} pending={pending} onCancel={() => setEdit(null)} onSave={(v) => run(() => saveAssetAction(clientId, toInput(v, null)), 'Añadido.', () => setEdit(null))} />}
+      {edit === 'new' && <AssetForm initial={empty} google={integrations.google} pending={pending} onCancel={() => setEdit(null)} onSave={(v) => run(() => saveAssetAction(clientId, toInput(v, null)), 'Añadido.', () => setEdit(null))} />}
 
       {assets.length === 0 && edit !== 'new' ? (
         <p className="rounded-lg border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">Todavía no hay webs ni cuentas. Empieza por su web: con ella los agentes pueden auditarla y reconocer sus correos.</p>
@@ -93,7 +96,7 @@ export function WebsTab({ clientId, assets, integrations }: { clientId: string; 
           {assets.map((a) =>
             edit === a.id ? (
               <li key={a.id}>
-                <AssetForm initial={a} pending={pending} onCancel={() => setEdit(null)} onSave={(v) => run(() => saveAssetAction(clientId, toInput(v, a.id)), 'Guardado.', () => setEdit(null))} />
+                <AssetForm initial={a} google={integrations.google} pending={pending} onCancel={() => setEdit(null)} onSave={(v) => run(() => saveAssetAction(clientId, toInput(v, a.id)), 'Guardado.', () => setEdit(null))} />
               </li>
             ) : (
               <li key={a.id} className="flex flex-col gap-2 rounded-lg border bg-card p-3 text-sm shadow-xs sm:flex-row sm:items-start sm:justify-between">
@@ -152,7 +155,7 @@ const toInput = (v: AssetView, id: string | null) => ({
   notes: v.notes
 });
 
-function AssetForm({ initial, pending, onSave, onCancel }: { initial: AssetView; pending: boolean; onSave: (v: AssetView) => void; onCancel: () => void }) {
+function AssetForm({ initial, google, pending, onSave, onCancel }: { initial: AssetView; google: boolean; pending: boolean; onSave: (v: AssetView) => void; onCancel: () => void }) {
   const [f, setF] = useState(initial);
   const set = (p: Partial<AssetView>) => setF((c) => ({ ...c, ...p }));
   const canRecognize = f.kind === 'web' || f.kind === 'dominio';
@@ -169,7 +172,12 @@ function AssetForm({ initial, pending, onSave, onCancel }: { initial: AssetView;
           </select>
         </Field>
         <Field label="Dirección o identificador" wide>
-          <Input value={f.value} onChange={(e) => set({ value: e.target.value })} placeholder={PLACEHOLDER[f.kind as AssetKind] ?? 'https://…'} />
+          <div className="space-y-1.5">
+            {google && GOOGLE_KINDS.includes(f.kind as AssetKind) && (
+              <GooglePicker kind={f.kind as AssetKind} value={f.value} onPick={(x) => set({ value: x.value, label: f.label || x.label, access: 'si' })} />
+            )}
+            <Input value={f.value} onChange={(e) => set({ value: e.target.value })} placeholder={PLACEHOLDER[f.kind as AssetKind] ?? 'https://…'} />
+          </div>
         </Field>
         <Field label="Nombre (opcional)">
           <Input value={f.label} onChange={(e) => set({ label: e.target.value })} placeholder="Ej.: tienda online" />
