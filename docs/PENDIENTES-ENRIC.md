@@ -3,10 +3,17 @@
 Lista viva de lo que solo puede hacer Enric (accesos, decisiones, el equipo). Claude la actualiza al terminar cada bloque.
 Detalle paso a paso de la activación en `docs/PRUEBAS-EN-VIVO.md`.
 
-**Última actualización:** 14 nov 2026. En producción: `main` `c7cd65ec` (todo lo anterior + módulo Agentes y panel de voz), 48 migraciones.
+**Última actualización:** 15 nov 2026. En producción: `main` `d7aa3091` (todo lo anterior + ficha del cliente en el núcleo y propuesta del agente en un solo mensaje), 49 migraciones.
 
-## Ficha del cliente en el núcleo (rama `feature/ficha-cliente-nucleo`, migración 0048)
-- [ ] **Desplegar con migración** (hace backup antes): `! git checkout main && git merge --no-ff feature/ficha-cliente-nucleo && git push origin main && bash scripts/deploy.sh --migrate`
+## Propiedades de Google por cliente (rama `feature/cliente-propiedades-google`, sin migración)
+- [ ] **Desplegar** (sin `--migrate`): `! git checkout main && git merge --no-ff feature/cliente-propiedades-google && git push origin main && bash scripts/deploy.sh`
+- [ ] **Comprobar que Google está conectado** en Agentes → Integraciones (si no, el panel de Google no aparece en las fichas).
+- [ ] **En cada cliente:** Clientes → cliente → Webs y cuentas → «Buscar en Google» → marcar las suyas → «Añadir a la ficha». Después «Comprobar accesos».
+- [ ] **Probar por Telegram:** «¿cómo va [cliente] en Google este mes?» y «¿cuántas llamadas ha tenido [cliente] desde su ficha de Google?». Si Business Profile da error, Google aún no ha aprobado el acceso a su API: hay que solicitarlo en la consola de Google Cloud del proyecto.
+- [ ] **Revisar el diseño del paso B** (sección «Rendimiento» con histórico) cuando Claude lo traiga: necesita tablas nuevas, así que espera tu aprobación.
+
+## Ficha del cliente en el núcleo (desplegada el 14 nov, `d7aa3091`)
+- [x] Desplegada con migración 0048.
 - [ ] **Revisar con tu cuenta** en brain.kijutech.com → **Clientes** (nueva sección en el menú): la lista, abrir una ficha y pasar por sus 7 pestañas;
   probar «Rellenar con IA» con un audio en un cliente real y «Aplicar»; comprobar que el contrato solo aparece con tu cuenta de admin.
 - [ ] **Telegram:** «Nos ha entrado un cliente nuevo…» con web, contacto, dirección y competidor → ✅ → comprobar que cada dato está en su pestaña. Borrar la ficha de prueba.
