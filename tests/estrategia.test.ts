@@ -327,7 +327,7 @@ describe('estrategia con la base de datos', () => {
     registerMetricSource(fakeGoogle);
     registerKpiProvider(fakeKpis);
     registerWorkSource({
-      completedSince: async () => completed,
+      completedSince: async () => ({ items: completed, cursor: completed.length ? completed[completed.length - 1].doneAt : null }),
       clientCompleted: async () => completed,
       workload: async () => workload,
       askAboutTask: async (_t, ref, kind, html) => {
@@ -445,6 +445,18 @@ describe('estrategia con la base de datos', () => {
     expect(f2b.urls).toEqual(['https://prueba-est.invalid/blog/despidos']);
     expect(f2b.urlStatus).toBe('respondida');
     expect(await answerUrlQuestion(tid, 'cu-1', null)).toContain('no aplica');
+    // Otro dominio o «//otro» no valen: se pide de nuevo y no se guarda nada.
+    expect(await handler(tid, 'cu-2', 'https://otro.com/x //malo.com/y', 'Ana')).toContain('Pulsa otra vez');
+  });
+
+  it('el cursor de la extracción avanza aunque los encargos leídos no sean de ningún cliente con plan', async () => {
+    const before = (await getSettings(tid)).state.lastExtractAt;
+    const later = new Date(Date.now() + 5_000);
+    completed = [{ taskId: 'cu-9', ref: '00000000-0000-4000-8000-000000000009', clientId: other, title: 'Otro', description: '', doneNote: '', workType: null, doneAt: later.toISOString(), minutes: null, assigneeName: null }];
+    expect(await runExtraction(tid, later)).toBe(0);
+    const after = (await getSettings(tid)).state.lastExtractAt!;
+    expect(after > (before ?? '')).toBe(true);
+    completed = [];
   });
 
   it('URLs trabajadas: 90 días de «antes», datos diarios y fecha de rastreo', async () => {
@@ -471,6 +483,15 @@ describe('estrategia con la base de datos', () => {
     await runCritico(ctx);
     expect(sent.some((m) => m.html.includes('problema en la web (confirmado)'))).toBe(true);
   }, 60_000);
+
+  it('la agenda no pisa un reintento de confirmación (la web caída se vuelve a mirar a los 30 min)', async () => {
+    const { syncRuns } = await import('@/lib/estrategia/store');
+    const soon = new Date(Date.now() + 30 * 60_000);
+    await db.update(estProcessRuns).set({ lastRunAt: new Date(), nextRunAt: soon, errorCount: 0 }).where(and(eq(estProcessRuns.clientId, clientId), eq(estProcessRuns.process, 'critico')));
+    await syncRuns(tid, clientId);
+    const run = (await listRuns(tid, clientId)).find((r) => r.process === 'critico')!;
+    expect(Math.abs(run.nextRunAt.getTime() - soon.getTime())).toBeLessThan(2000);
+  });
 
   it('guardián: sin trabajo planificado y pocas horas', async () => {
     const ctx = (await loadCtx(tid, clientId))!;

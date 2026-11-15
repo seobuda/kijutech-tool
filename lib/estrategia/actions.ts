@@ -35,7 +35,7 @@ import {
   type SettingsInput
 } from '@/lib/estrategia/store';
 import { clientStrategy, objectiveBaseline, suggestKeywords, type ClientStrategy } from '@/lib/estrategia/report';
-import { answerUrlQuestion, backfillClientWork } from '@/lib/estrategia/processes';
+import { answerUrl, backfillClientWork } from '@/lib/estrategia/processes';
 import { runProcess } from '@/lib/estrategia/scheduler';
 import { isProcessKey, isRunnable } from '@/lib/estrategia/rules';
 
@@ -212,8 +212,8 @@ export async function setWorkUrlAction(clientId: string, taskId: string, url: st
     wireApp();
     const fact = await getWorkFact(user.tenantId, id(taskId));
     if (!fact || fact.clientId !== id(clientId)) return { ok: false, error: 'Ese encargo no está en la estrategia de este cliente.' };
-    const message = await answerUrlQuestion(user.tenantId, fact.taskId, url ? String(url).slice(0, 2000) : null);
-    return { ok: true, message };
+    const r = await answerUrl(user.tenantId, fact.taskId, url ? String(url).slice(0, 2000) : null);
+    return r.ok ? { ok: true, message: r.message } : { ok: false, error: r.message };
   } catch (e) {
     return fail(e, 'No se pudo guardar la URL');
   }

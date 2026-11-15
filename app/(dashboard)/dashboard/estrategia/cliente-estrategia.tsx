@@ -138,10 +138,12 @@ export function ClienteEstrategia({ clientId, isAdmin }: { clientId: string; isA
 function useAct(onDone: () => void) {
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const run = (fn: () => Promise<{ ok: boolean; error?: string }>, okText?: string) =>
+  // Si la acción devuelve «message», se enseña (gana a okText).
+  const run = (fn: () => Promise<{ ok: boolean; error?: string; message?: string }>, okText?: string) =>
     start(async () => {
       const r = await fn();
-      setMsg(r.ok ? (okText ? { ok: true, text: okText } : null) : { ok: false, text: r.error ?? 'Error' });
+      const text = r.message ?? okText;
+      setMsg(r.ok ? (text ? { ok: true, text } : null) : { ok: false, text: r.error ?? 'Error' });
       if (r.ok) onDone();
     });
   const Msg = () => (msg ? <span role={msg.ok ? 'status' : 'alert'} className={cn('text-sm', msg.ok ? 'text-success' : 'text-destructive')}>{msg.text}</span> : null);
@@ -572,13 +574,11 @@ function Palabras({ data, onChange }: { data: ClientStrategy; onChange: () => vo
   const add = (words: string[], crit: boolean) =>
     run(async () => {
       const r = await addKeywordsAction(data.clientId, words, crit);
-      if (r.ok) {
-        setText('');
-        setPicked(new Set());
-        setSugg(null);
-        setMsg({ ok: true, text: `${r.added} palabra(s) añadida(s). Se revisan con la frecuencia de su plan (o pulsa «Ejecutar ahora» en Plan y frecuencias).` });
-      }
-      return r;
+      if (!r.ok) return r;
+      setText('');
+      setPicked(new Set());
+      setSugg(null);
+      return { ok: true, message: `${r.added} palabra(s) añadida(s). Se revisan con la frecuencia de su plan (o pulsa «Ejecutar ahora» en Plan y frecuencias).` };
     });
   const suggest = () =>
     startS(async () => {
@@ -796,7 +796,7 @@ function RunNow({ clientId, process, onDone }: { clientId: string; process: stri
 // --- Trabajo e impacto ----------------------------------------------------------------------------------------------
 
 function Trabajo({ data, onChange }: { data: ClientStrategy; onChange: () => void }) {
-  const { pending, run, Msg, setMsg } = useAct(onChange);
+  const { pending, run, Msg } = useAct(onChange);
   const [urlFor, setUrlFor] = useState<string | null>(null);
   const [url, setUrl] = useState('');
   return (
@@ -865,7 +865,7 @@ function Trabajo({ data, onChange }: { data: ClientStrategy; onChange: () => voi
             <p className="text-xs text-muted-foreground">Al cerrarse un encargo se guarda qué se hizo y sobre qué URL. Si falta la URL, se pregunta por Telegram a quien lo hizo; también puedes ponerla aquí.</p>
           </div>
           {data.pendingWork.length > 0 && (
-            <Button size="sm" variant="outline" disabled={pending} onClick={() => run(async () => { const r = await backfillWorkAction(data.clientId); if (r.ok) setMsg({ ok: true, text: `${r.processed} encargo(s) procesado(s).` }); return r; })}>
+            <Button size="sm" variant="outline" disabled={pending} onClick={() => run(async () => { const r = await backfillWorkAction(data.clientId); return r.ok ? { ok: true, message: `${r.processed} encargo(s) procesado(s).` } : r; })}>
               Procesar {data.pendingWork.length} encargo(s) anterior(es)
             </Button>
           )}
@@ -901,7 +901,7 @@ function Trabajo({ data, onChange }: { data: ClientStrategy; onChange: () => voi
                 {urlFor === w.taskId && (
                   <div className="mt-2 flex flex-wrap gap-2">
                     <input className={cn(selectCls, 'min-w-0 flex-1')} placeholder="https://… o /ruta" value={url} onChange={(e) => setUrl(e.target.value)} aria-label="URL trabajada" />
-                    <Button size="sm" disabled={pending || !url.trim()} onClick={() => run(async () => { const r = await setWorkUrlAction(data.clientId, w.taskId, url); if (r.ok) { setUrlFor(null); setMsg({ ok: true, text: r.message }); } return r; })}>
+                    <Button size="sm" disabled={pending || !url.trim()} onClick={() => run(async () => { const r = await setWorkUrlAction(data.clientId, w.taskId, url); if (r.ok) setUrlFor(null); return r; })}>
                       Guardar
                     </Button>
                     <Button size="sm" variant="ghost" onClick={() => setUrlFor(null)}>

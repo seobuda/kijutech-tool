@@ -228,11 +228,13 @@ export function objectiveHealth(o: ObjectiveInput, actual: number | null, today:
   let adjusted = actual;
   let note = '';
   if (season) {
-    const s0 = season[Number(o.start.slice(5, 7))];
+    // La partida es la media de los 3 meses completos anteriores al inicio: su índice es la media de esos meses.
+    const prevIdx = [1, 2, 3].map((k) => season[((Number(o.start.slice(5, 7)) - 1 - k + 12) % 12) + 1]).filter((x): x is number => typeof x === 'number');
+    const s0 = prevIdx.length ? prevIdx.reduce((x, y) => x + y, 0) / prevIdx.length : undefined;
     const s1 = season[Number(today.slice(5, 7))];
     if (s0 && s1 && s1 > 0.05) {
       adjusted = actual * (s0 / s1);
-      if (Math.abs(s0 / s1 - 1) >= 0.1) note = `Corregido por temporada (este mes suele ir ${s1 > s0 ? 'más alto' : 'más bajo'} que el de inicio).`;
+      if (Math.abs(s0 / s1 - 1) >= 0.1) note = `Corregido por temporada (este mes suele ir ${s1 > s0 ? 'más alto' : 'más bajo'} que los meses de la partida).`;
     }
   }
   if ((adjusted - o.target) * dir >= 0) return { health: 'logrado', expected: o.target, progressPct: 100, adjusted, note };

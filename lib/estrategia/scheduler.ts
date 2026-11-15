@@ -20,7 +20,7 @@ const RUNNERS: Partial<Record<ProcessKey, (ctx: Ctx) => Promise<ProcessOutcome>>
   guardian: runGuardian
 };
 
-const G = globalThis as unknown as { __kijuEstBusy?: Set<string>; __kijuEstTick?: Map<string, { sync: number; extract: number; urgent: string }> };
+const G = globalThis as unknown as { __kijuEstBusy?: Set<string>; __kijuEstTick?: Map<string, { sync: number; extract: number; urgentDay: string; urgentDone: Set<string> }> };
 const busy = () => (G.__kijuEstBusy ??= new Set());
 const ticks = () => (G.__kijuEstTick ??= new Map());
 
@@ -77,7 +77,7 @@ export async function runProcess(tenantId: string, run: { id: string; clientId: 
 export async function runEstrategia(tenantId: string, opts: { budgetMs?: number; now?: Date } = {}): Promise<{ ran: number; errors: number }> {
   const now = opts.now ?? new Date();
   const deadline = Date.now() + (opts.budgetMs ?? 20_000);
-  const t = ticks().get(tenantId) ?? { sync: 0, extract: 0, urgent: '' };
+  const t = ticks().get(tenantId) ?? { sync: 0, extract: 0, urgentDay: '', urgentDone: new Set<string>() };
   ticks().set(tenantId, t);
   const clients = await listClientSettings(tenantId);
   if (!clients.length) return { ran: 0, errors: 0 };
@@ -90,10 +90,16 @@ export async function runEstrategia(tenantId: string, opts: { budgetMs?: number;
     await runExtraction(tenantId, now).catch((e) => console.error('[estrategia] extracción:', e instanceof Error ? e.message : e));
   }
   const today = madridNow(now).date;
-  if (t.urgent !== today && madridNow(now).hour >= 8) {
-    t.urgent = today;
+  // Palabras urgentes una vez al día por cliente (si se acaba el tiempo, los que faltan siguen en la próxima vuelta).
+  if (t.urgentDay !== today) {
+    t.urgentDay = today;
+    t.urgentDone = new Set();
+  }
+  if (madridNow(now).hour >= 8) {
     for (const c of clients) {
       if (Date.now() > deadline) break;
+      if (t.urgentDone.has(c.clientId)) continue;
+      t.urgentDone.add(c.clientId);
       if ((await listKeywords(tenantId, c.clientId)).some((k) => k.active)) {
         const ctx = await loadCtx(tenantId, c.clientId, now);
         const kw = ctx?.processes.find((p) => p.key === 'keywords');

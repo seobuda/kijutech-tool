@@ -61,7 +61,8 @@ export function PanelView(props: { initialTab: Tab; isAdmin: boolean; rows: Over
           ))}
       </nav>
       {tab === 'clientes' && <Clientes {...props} />}
-      {tab === 'planes' && <Planes plans={props.plans} processes={props.processes} isAdmin={props.isAdmin} />}
+      {/* La clave cambia al guardar o crear planes: el borrador se rehace con lo que hay en el servidor. */}
+      {tab === 'planes' && <Planes key={props.plans.map((p) => `${p.id}:${p.name}:${JSON.stringify(p.processes)}`).join('|')} plans={props.plans} processes={props.processes} isAdmin={props.isAdmin} />}
       {tab === 'calendario' && <Calendario events={props.events} isAdmin={props.isAdmin} />}
       {tab === 'ajustes' && props.isAdmin && <Ajustes initial={props.settings} />}
     </div>
@@ -222,7 +223,7 @@ function Planes({ plans, processes, isAdmin }: { plans: PlanV[]; processes: Proc
   const dirty = (id: string) => JSON.stringify(drafts[id]) !== JSON.stringify(plans.find((p) => p.id === id));
   const setCell = (planId: string, key: string, value: string) =>
     setDrafts((d) => {
-      const p = d[planId];
+      const p = d[planId] ?? plans.find((x) => x.id === planId)!;
       const procs = { ...p.processes };
       const def = processes.find((x) => x.key === key)!;
       procs[key] = value === 'off' ? { on: false, every: procs[key]?.every ?? def.frequencies[0] } : { on: true, every: Number(value) };

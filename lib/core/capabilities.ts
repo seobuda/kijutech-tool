@@ -353,7 +353,7 @@ export type WorkItem = {
 export type ClientWorkload = { hoursMonth: number | null; monthlyHours: number | null; upcoming: number | null; horizonDays: number | null; openTasks: number };
 export type WorkSource = {
   /** Encargos de clientes terminados desde una fecha (los más antiguos primero, como mucho «limit»). */
-  completedSince: (tenantId: string, since: Date, limit: number) => Promise<WorkItem[]>;
+  completedSince: (tenantId: string, since: Date, limit: number) => Promise<{ items: WorkItem[]; cursor: string | null }>;
   /** Encargos de un cliente terminados en un periodo (para la pestaña). */
   clientCompleted: (tenantId: string, clientId: string, sinceDays: number) => Promise<WorkItem[]>;
   workload: (tenantId: string, clientId: string) => Promise<ClientWorkload | null>;

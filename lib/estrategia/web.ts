@@ -5,6 +5,7 @@ import 'server-only';
 // Solo se piden URLs públicas: nunca direcciones internas (localhost, redes privadas, nombres sin dominio).
 import tls from 'node:tls';
 import { isIP } from 'node:net';
+import { lookup } from 'node:dns/promises';
 import { parseHtml, type PageFacts } from '@/lib/estrategia/rules';
 
 const UA = 'Mozilla/5.0 (compatible; KijutechMonitor/1.0)';
@@ -22,12 +23,34 @@ export function isPublicUrl(u: string): boolean {
   if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
   const h = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
   if (!h.includes('.') || h === 'localhost' || h.endsWith('.local') || h.endsWith('.internal') || h.endsWith('.localhost')) return false;
-  if (isIP(h)) {
-    if (isIP(h) === 6) return false;
-    const [a, b] = h.split('.').map(Number);
-    if (a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || a >= 224) return false;
-  }
+  if (isIP(h)) return isIP(h) === 4 && !privateV4(h);
   return true;
+}
+
+function privateV4(ip: string): boolean {
+  const [a, b] = ip.split('.').map(Number);
+  return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127) || a >= 224;
+}
+
+function privateIp(ip: string): boolean {
+  if (isIP(ip) === 4) return privateV4(ip);
+  const v = ip.toLowerCase();
+  const mapped = v.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+  if (mapped) return privateV4(mapped[1]);
+  return v === '::1' || v === '::' || v.startsWith('fc') || v.startsWith('fd') || v.startsWith('fe8') || v.startsWith('fe9') || v.startsWith('fea') || v.startsWith('feb');
+}
+
+/** El nombre resuelve solo a direcciones públicas (evita dominios que apuntan a la red interna). */
+async function resolvesPublic(u: string): Promise<boolean> {
+  if (!isPublicUrl(u)) return false;
+  const host = new URL(u).hostname.replace(/^\[|\]$/g, '');
+  if (isIP(host)) return true; // ya comprobada arriba
+  try {
+    const addrs = await lookup(host, { all: true });
+    return addrs.length > 0 && addrs.every((a) => !privateIp(a.address));
+  } catch {
+    return false;
+  }
 }
 
 async function readText(res: Response): Promise<string> {
@@ -49,7 +72,7 @@ async function readText(res: Response): Promise<string> {
 export async function fetchPage(url: string): Promise<PageFacts | { error: string }> {
   let current = url;
   for (let hop = 0; hop <= 5; hop++) {
-    if (!isPublicUrl(current)) return { error: 'URL no pública' };
+    if (!(await resolvesPublic(current))) return { error: isPublicUrl(current) ? 'el dominio no resuelve a una dirección pública' : 'URL no pública' };
     let res: Response;
     try {
       res = await fetch(current, { redirect: 'manual', headers: { 'User-Agent': UA, Accept: 'text/html,application/xhtml+xml' }, signal: AbortSignal.timeout(TIMEOUT) });
@@ -72,22 +95,32 @@ export async function fetchPage(url: string): Promise<PageFacts | { error: strin
 
 /** Texto de un archivo público pequeño (robots.txt, sitemap). null si no existe o falla. */
 export async function fetchText(url: string): Promise<string | null> {
-  if (!isPublicUrl(url)) return null;
+  let current = url;
   try {
-    const res = await fetch(url, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(TIMEOUT) });
-    if (!res.ok) {
-      void res.body?.cancel().catch(() => undefined);
-      return null;
+    // Redirecciones a mano, comprobando cada destino (un robots.txt público no puede llevar a la red interna).
+    for (let hop = 0; hop <= 5; hop++) {
+      if (!(await resolvesPublic(current))) return null;
+      const res = await fetch(current, { redirect: 'manual', headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(TIMEOUT) });
+      if (res.status >= 300 && res.status < 400 && res.headers.get('location')) {
+        void res.body?.cancel().catch(() => undefined);
+        current = new URL(res.headers.get('location')!, current).toString();
+        continue;
+      }
+      if (!res.ok) {
+        void res.body?.cancel().catch(() => undefined);
+        return null;
+      }
+      return await readText(res);
     }
-    return await readText(res);
+    return null;
   } catch {
     return null;
   }
 }
 
 /** Días que le quedan al certificado SSL (negativo = caducado). null si no se pudo comprobar. */
-export function sslDaysLeft(host: string): Promise<number | null> {
-  if (!isPublicUrl(`https://${host}/`)) return Promise.resolve(null);
+export async function sslDaysLeft(host: string): Promise<number | null> {
+  if (!(await resolvesPublic(`https://${host}/`))) return null;
   return new Promise((resolve) => {
     const socket = tls.connect({ host, port: 443, servername: host, timeout: 10_000, rejectUnauthorized: false }, () => {
       const cert = socket.getPeerCertificate();

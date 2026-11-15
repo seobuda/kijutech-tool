@@ -126,10 +126,17 @@ async function notifySignals(ctx: Ctx, process: string, fresh: Signal[], minSeve
   const rank = { info: 0, aviso: 1, critico: 2 };
   const list = fresh.filter((s) => rank[s.severity] >= rank[minSeverity]);
   if (!list.length) return;
-  await notify(ctx, `est:${process}:${ctx.clientId}:${ctx.today}`, `${list.some((s) => s.severity === 'critico') ? '🚨' : '⚠️'} <b>${esc(ctx.clientName)}</b>\n${list.map((s) => `• ${esc(s.title)}`).join('\n')}`);
+  await notify(ctx, `est:${process}:${ctx.clientId}:${ctx.today}:${keyHash(list.map((s) => s.key))}`, `${list.some((s) => s.severity === 'critico') ? '🚨' : '⚠️'} <b>${esc(ctx.clientName)}</b>\n${list.map((s) => `• ${esc(s.title)}`).join('\n')}`);
   const rows = await db.select({ id: estSignals.id, key: estSignals.dedupeKey }).from(estSignals).where(eq(estSignals.clientId, ctx.clientId));
   const keys = new Set(list.map((s) => s.key));
   await markSignalsNotified(rows.filter((r) => keys.has(r.key)).map((r) => r.id));
+}
+
+/** Huella corta de un conjunto de claves: dos lotes distintos el mismo día no chocan en la cola de avisos. */
+function keyHash(keys: string[]): string {
+  let h = 0;
+  for (const c of [...keys].sort().join('|')) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return h.toString(36);
 }
 
 const toQP = (rows: SearchRow[]): QP[] => rows.map((r) => ({ query: r.keys[0] ?? '', page: r.keys[1] ?? '', clicks: r.clicks, impressions: r.impressions, position: r.position }));
@@ -332,7 +339,8 @@ export async function runKeywords(ctx: Ctx, opts: { onlyUrgent?: boolean } = {})
       fresh.push({ kind: 'palabra_cae', key: `palabra_cae:${w.keyword}`, severity: 'aviso', title: `«${w.keyword}» baja de la posición ${prev.pos.toFixed(1)} a la ${last.pos.toFixed(1)}`, detail: 'Palabra marcada como crítica. Posición media de Search Console (últimos 7 días frente a los 7 anteriores).', evidence: { keyword: w.keyword, position: last.pos, prevPosition: prev.pos } });
     }
   }
-  const news = await upsertSignals(ctx.tenantId, ctx.clientId, opts.onlyUrgent ? [] : ['palabra_cae'], fresh);
+  // En la pasada urgente (solo algunas palabras) no se dan por resueltas las que no se miraron.
+  const news = await upsertSignals(ctx.tenantId, ctx.clientId, ['palabra_cae'], fresh, { resolveMissing: !opts.onlyUrgent });
   await notifySignals(ctx, 'keywords', news);
   const ranked = words.filter((w) => hist.some((x) => x.keywordId === w.id)).length;
   return { status: fresh.length ? 'aviso' : 'ok', summary: `${words.length} palabra(s) revisada(s); ${ranked} con datos en Search Console${fresh.length ? `; ${fresh.length} crítica(s) bajando` : ''}.` };
@@ -457,7 +465,8 @@ export async function runDetectores(ctx: Ctx): Promise<ProcessOutcome> {
     if (f) signals.push(f);
   }
   if (!ctx.gsc && !s) return { status: 'omitido', summary: 'Sin Search Console ni Analytics asignados: no hay datos que analizar.' };
-  const fresh = await upsertSignals(ctx.tenantId, ctx.clientId, DETECTOR_KINDS, signals);
+  // Sin Search Console (o Google desconectado un momento) no se tocan sus señales: solo el embudo de Analytics.
+  const fresh = await upsertSignals(ctx.tenantId, ctx.clientId, ctx.gsc ? DETECTOR_KINDS : ['embudo'], signals);
   await notifySignals(ctx, 'detectores', fresh);
   const count = (kind: string) => signals.filter((x) => x.kind === kind).length;
   return {
@@ -552,13 +561,15 @@ async function extract(ctx: { tenantId: string; clientName: string; domains: str
     const prompt = await getPrompt(EXTRACT_PROMPT);
     if (prompt) {
       try {
-        const fill = (t: string) =>
-          t
-            .replace('{cliente}', ctx.clientName)
-            .replace('{dominios}', ctx.domains.join(', ') || '(sin web en la ficha)')
-            .replace('{titulo}', item.title.slice(0, 500))
-            .replace('{descripcion}', `<<<DATO NO FIABLE\n${item.description.slice(0, 4000)}\nFIN>>>`)
-            .replace('{nota}', `<<<DATO NO FIABLE\n${item.doneNote.slice(0, 2000)}\nFIN>>>`);
+        const vals: Record<string, string> = {
+          cliente: ctx.clientName,
+          dominios: ctx.domains.join(', ') || '(sin web en la ficha)',
+          titulo: `<<<DATO NO FIABLE ${item.title.slice(0, 500)} FIN>>>`,
+          descripcion: `<<<DATO NO FIABLE\n${item.description.slice(0, 4000)}\nFIN>>>`,
+          nota: `<<<DATO NO FIABLE\n${item.doneNote.slice(0, 2000)}\nFIN>>>`
+        };
+        // Una sola pasada y sin patrones «$»: un texto del encargo no puede colarse en otro hueco de la plantilla.
+        const fill = (t: string) => t.replace(/\{(cliente|dominios|titulo|descripcion|nota)\}/g, (_m, k: string) => vals[k] ?? '');
         const res = await callAI({ tenantId: ctx.tenantId, function: 'est_task_extract', promptKey: EXTRACT_PROMPT, model: EXTRACT_MODEL, maxTokens: 400, messages: [{ role: 'system', content: prompt.system_prompt }, { role: 'user', content: fill(prompt.user_prompt_template) }] });
         const parsed = cleanExtraction(extractJsonFromLLMResponse(res.content), ctx.domains);
         // Las URLs escritas en el encargo cuentan aunque la IA no las devuelva.
@@ -583,8 +594,8 @@ export async function runExtraction(tenantId: string, now = new Date()): Promise
   if (!ws) return 0;
   const settings = await getSettings(tenantId);
   const since = settings.state.lastExtractAt ? new Date(settings.state.lastExtractAt) : new Date(now.getTime() - 14 * 86_400_000);
-  const items = await ws.completedSince(tenantId, since, 40);
-  if (!items.length) return 0;
+  const { items, cursor } = await ws.completedSince(tenantId, since, 40);
+  if (!cursor) return 0;
   const aiAllowed = (await aiSpentThisMonth(tenantId, now)) < Number(settings.aiMonthlyCapUsd);
   const ctxCache = new Map<string, Ctx | null>();
   let done = 0;
@@ -625,8 +636,8 @@ export async function runExtraction(tenantId: string, now = new Date()): Promise
       if (!ok) await updateWorkFact(id, { urlStatus: 'falta', urlAskedAt: null });
     }
   }
-  const lastAt = items[items.length - 1].doneAt;
-  await saveSettingsState(tenantId, { ...settings.state, lastExtractAt: new Date(Date.parse(lastAt) + 1).toISOString() });
+  // El cursor avanza con la última fila leída aunque fuese de un cliente sin ficha: así nunca se atasca.
+  await saveSettingsState(tenantId, { ...settings.state, lastExtractAt: new Date(Date.parse(cursor) + 1).toISOString() });
   return done;
 }
 
@@ -654,27 +665,38 @@ export async function backfillClientWork(tenantId: string, clientId: string, day
 }
 
 /** Respuesta a «¿en qué URL…?» (llega por Operaciones). Acepta una o varias URLs, o una ruta del dominio del cliente. */
-export async function answerUrlQuestion(tenantId: string, taskId: string, answer: string | null): Promise<string> {
+/** Respuesta a «¿en qué URL…?» con resultado: ok = se guardó una URL válida del cliente (o «no aplica»). */
+export async function answerUrl(tenantId: string, taskId: string, answer: string | null): Promise<{ ok: boolean; message: string }> {
   const fact = await getWorkFact(tenantId, taskId);
-  if (!fact) return 'Esa pregunta ya no está activa.';
+  if (!fact) return { ok: false, message: 'Esa pregunta ya no está activa.' };
   if (answer === null) {
     await updateWorkFact(fact.id, { urlStatus: 'no_aplica' });
-    return 'Anotado: no aplica a una página concreta.';
+    return { ok: true, message: 'Anotado: no aplica a una página concreta.' };
   }
   const ctx = await loadCtx(tenantId, fact.clientId);
   const home = ctx?.homes[0] ?? null;
-  const raw = [...(answer.match(URL_RE) ?? []), ...answer.split(/\s+/).filter((w) => /^\/[^\s]*$/.test(w)).map((p) => (home ? new URL(p, home).toString() : ''))].filter(Boolean);
-  const urls = cleanExtraction({ urls: raw }, ctx?.domains ?? []).urls;
-  if (!urls.length) return home ? `No veo una dirección de ${hostOf(home)}. Pulsa otra vez «Escribir» en la pregunta y pega la URL completa.` : 'No veo una URL válida. Pulsa otra vez «Escribir» en la pregunta y pega la URL completa.';
+  // Sin web en la ficha no se puede saber qué URLs son del cliente: no se acepta ninguna.
+  if (!home || !ctx?.domains.length) return { ok: false, message: 'Este cliente no tiene su web en la ficha (Webs y cuentas): añádela y vuelve a intentarlo.' };
+  // Rutas del dominio del cliente («/blog/x»), nunca «//otro-dominio».
+  const paths = answer.split(/\s+/).filter((w) => /^\/(?!\/)\S*$/.test(w)).map((p) => new URL(p, home).toString());
+  const urls = cleanExtraction({ urls: [...(answer.match(URL_RE) ?? []), ...paths] }, ctx.domains).urls;
+  if (!urls.length) return { ok: false, message: `No veo una dirección de ${hostOf(home)}. Pega la URL completa (o la ruta, como /blog/articulo).` };
   await updateWorkFact(fact.id, { urls: [...new Set([...fact.urls, ...urls])], urlStatus: 'respondida', needsUrl: false });
   const settings = await getSettings(tenantId);
   let tracked = 0;
-  if (ctx?.gsc) {
+  if (ctx.gsc) {
     for (const u of urls) {
       if (!urlInProperty(u, ctx.gsc.property)) continue;
       await trackUrl(tenantId, fact.clientId, { url: u, property: ctx.gsc.property, reason: `${WORK_CATEGORY_LABEL[fact.category as keyof typeof WORK_CATEGORY_LABEL] ?? 'Trabajo'}: ${fact.title}`, workFactId: fact.id, changedOn: fact.doneOn, trackDays: settings.trackDays });
       tracked++;
     }
   }
-  return tracked ? `Gracias. Desde hoy sigo ${tracked === 1 ? 'esa página' : `esas ${tracked} páginas`} en Google para medir el efecto del trabajo (desde el ${fmtDayYear(fact.doneOn)}).` : 'Gracias, anotado.';
+  return { ok: true, message: tracked ? `Gracias. Desde hoy sigo ${tracked === 1 ? 'esa página' : `esas ${tracked} páginas`} en Google para medir el efecto del trabajo (desde el ${fmtDayYear(fact.doneOn)}).` : 'Gracias, anotado.' };
 }
+
+/** Lo mismo para el bot de Telegram (solo la frase). Si no vale, pide volver a pulsar «Escribir». */
+export async function answerUrlQuestion(tenantId: string, taskId: string, answer: string | null): Promise<string> {
+  const r = await answerUrl(tenantId, taskId, answer);
+  return r.ok ? r.message : `${r.message} Pulsa otra vez «Escribir» en la pregunta.`;
+}
+

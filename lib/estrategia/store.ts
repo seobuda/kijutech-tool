@@ -189,6 +189,8 @@ export async function syncRuns(tenantId: string, clientId: string): Promise<void
   const drop = existing.filter((r) => !wanted.has(r.process)).map((r) => r.id);
   if (drop.length) await db.delete(estProcessRuns).where(inArray(estProcessRuns.id, drop));
   const now = Date.now();
+  // En pausa la agenda la lleva el planificador (próxima ejecución tras la pausa): no se toca.
+  const paused = eff?.settings.pausedUntil && eff.settings.pausedUntil >= new Date().toISOString().slice(0, 10);
   for (const [key, p] of wanted) {
     const cur = existing.find((r) => r.process === key);
     if (!cur) {
@@ -197,9 +199,11 @@ export async function syncRuns(tenantId: string, clientId: string): Promise<void
         .insert(estProcessRuns)
         .values({ tenantId, clientId, process: key, nextRunAt: new Date(now + jitterMinutes(`${clientId}:${key}`) * 60_000) })
         .onConflictDoNothing();
-    } else if (cur.lastRunAt) {
+    } else if (cur.lastRunAt && !paused && cur.errorCount === 0) {
+      // Solo se adelanta si la frecuencia se acortó (la próxima queda más allá de la nueva). Una próxima más cercana
+      // (reintento de confirmación, «Ejecutar ahora» o frecuencia alargada) se respeta: tras ejecutarse se recalcula.
       const next = new Date(cur.lastRunAt.getTime() + p.every * 86_400_000);
-      if (Math.abs(next.getTime() - cur.nextRunAt.getTime()) > 3 * 3_600_000 && cur.errorCount === 0) await db.update(estProcessRuns).set({ nextRunAt: next }).where(eq(estProcessRuns.id, cur.id));
+      if (cur.nextRunAt.getTime() - next.getTime() > 3 * 3_600_000) await db.update(estProcessRuns).set({ nextRunAt: next }).where(eq(estProcessRuns.id, cur.id));
     }
   }
 }
@@ -409,7 +413,7 @@ export async function latestHealth(tenantId: string, clientId: string) {
  * Guarda las señales de una pasada de un detector: las nuevas se abren, las que siguen se actualizan (sin reabrir las
  * descartadas) y las abiertas de esos tipos que ya no aparecen se dan por resueltas. Devuelve las nuevas.
  */
-export async function upsertSignals(tenantId: string, clientId: string, kinds: string[], found: Signal[]): Promise<Signal[]> {
+export async function upsertSignals(tenantId: string, clientId: string, kinds: string[], found: Signal[], opts: { resolveMissing?: boolean } = {}): Promise<Signal[]> {
   const existing = kinds.length ? await db.select().from(estSignals).where(and(eq(estSignals.clientId, clientId), inArray(estSignals.kind, kinds))) : [];
   const byKey = new Map(existing.map((s) => [s.dedupeKey, s]));
   const now = new Date();
@@ -427,12 +431,12 @@ export async function upsertSignals(tenantId: string, clientId: string, kinds: s
       const reopen = cur.status === 'resuelta';
       await db
         .update(estSignals)
-        .set({ severity: f.severity, title: f.title.slice(0, 300), detail: f.detail, evidence: f.evidence, lastSeenAt: now, ...(reopen ? { status: 'abierta', resolvedAt: null, notifiedAt: null } : {}) })
+        .set({ severity: f.severity, title: f.title.slice(0, 300), detail: f.detail, evidence: f.evidence, lastSeenAt: now, ...(reopen ? { status: 'abierta', resolvedAt: null, notifiedAt: null, firstSeenAt: now } : {}) })
         .where(eq(estSignals.id, cur.id));
       if (reopen) fresh.push(f);
     }
   }
-  const gone = existing.filter((s) => s.status === 'abierta' && !seen.has(s.dedupeKey)).map((s) => s.id);
+  const gone = opts.resolveMissing === false ? [] : existing.filter((s) => s.status === 'abierta' && !seen.has(s.dedupeKey)).map((s) => s.id);
   if (gone.length) await db.update(estSignals).set({ status: 'resuelta', resolvedAt: now }).where(inArray(estSignals.id, gone));
   return fresh;
 }

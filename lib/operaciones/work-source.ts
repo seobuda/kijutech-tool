@@ -54,14 +54,16 @@ function toItems(rows: ReqRow[], byOption: Map<string, string>, minutes: Map<str
   return out;
 }
 
-async function completedSince(tenantId: string, since: Date, limit: number): Promise<WorkItem[]> {
+/** «cursor» = fecha de la última fila leída (tenga o no cliente): así la siguiente pasada nunca se atasca. */
+async function completedSince(tenantId: string, since: Date, limit: number): Promise<{ items: WorkItem[]; cursor: string | null }> {
   const rows = await db
     .select()
     .from(opsRequests)
     .where(and(eq(opsRequests.tenantId, tenantId), eq(opsRequests.workStatus, 'completado'), isNotNull(opsRequests.clientOptionId), gte(opsRequests.workStatusAt, since)))
     .orderBy(asc(opsRequests.workStatusAt))
     .limit(Math.max(1, Math.min(limit, 500)));
-  return toItems(rows, await optionMap(tenantId), await minutesBy(tenantId, rows.map((r) => r.id)));
+  const items = toItems(rows, await optionMap(tenantId), await minutesBy(tenantId, rows.map((r) => r.id)));
+  return { items, cursor: rows.length ? rows[rows.length - 1].workStatusAt.toISOString() : null };
 }
 
 async function clientCompleted(tenantId: string, clientId: string, sinceDays: number): Promise<WorkItem[]> {
