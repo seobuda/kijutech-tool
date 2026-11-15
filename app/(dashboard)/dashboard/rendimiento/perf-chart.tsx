@@ -68,7 +68,21 @@ export function PerfChart({
           </span>
         )}
       </figcaption>
-      <div className="relative" style={{ height }} onMouseLeave={() => setHover(null)}>
+      <div
+        className="relative rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+        style={{ height }}
+        onMouseLeave={() => setHover(null)}
+        tabIndex={0}
+        aria-label={`${title}: usa las flechas para recorrer los puntos`}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowRight') setHover((h) => Math.min(n - 1, (h ?? -1) + 1));
+          else if (e.key === 'ArrowLeft') setHover((h) => Math.max(0, (h ?? n) - 1));
+          else if (e.key === 'Escape') setHover(null);
+          else return;
+          e.preventDefault();
+        }}
+        onBlur={() => setHover(null)}
+      >
         <svg viewBox={`0 0 ${W} 100`} preserveAspectRatio="none" className="absolute inset-0 size-full overflow-visible" role="img" aria-label={`${title}${last ? `: último tramo ${format(last.value)}` : ''}`}>
           {[0.25, 0.5, 0.75].map((g) => (
             <line key={g} x1="0" x2={W} y1={100 - g * 100} y2={100 - g * 100} stroke="var(--border)" strokeWidth="1" strokeOpacity="0.6" vectorEffect="non-scaling-stroke" />
@@ -90,7 +104,7 @@ export function PerfChart({
         ))}
         <div className="absolute inset-0 flex">
           {points.map((p, i) => (
-            <div key={i} className="h-full flex-1" onMouseEnter={() => setHover(i)} />
+            <div key={i} className="h-full flex-1" onMouseEnter={() => setHover(i)} onClick={() => setHover(i)} />
           ))}
         </div>
         {hover !== null && (

@@ -11,6 +11,7 @@ import 'server-only';
 //   4. Histórico hacia atrás por tramos hasta el límite de cada fuente o hasta que se acaben los datos.
 //   5. Search Console: las 1.000 consultas y páginas con más clics de cada mes cerrado (del más reciente al más antiguo).
 // Este módulo no habla con Google: usa las fuentes de métricas registradas en el núcleo (Agentes registra la de Google).
+import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { perfSync, type PerfSync } from '@/lib/db/schema';
 import { metricSources, type MetricSource, type MetricSourceKind } from '@/lib/core/capabilities';
@@ -24,6 +25,9 @@ export const TOP_LIMIT = 1000;
 const DISCOVER_EVERY_MS = 10 * 60_000;
 const lastDiscover = new Map<string, number>();
 const running = new Set<string>();
+// Filas en curso, compartidas por todo el proceso (Next.js puede cargar este archivo en varios paquetes).
+const GS = globalThis as unknown as { __kijuPerfBusy?: Set<string> };
+const busyRows = () => (GS.__kijuPerfBusy ??= new Set<string>());
 
 type Resolved = { src: MetricSource; kind: MetricSourceKind };
 
@@ -202,7 +206,19 @@ export async function runPerformanceSync(tenantId: string, opts: { budgetMs?: nu
       work.sort((a, b) => PRIORITY[a.unit] - PRIORITY[b.unit]);
       for (const w of work) {
         if (Date.now() >= deadline) break;
+        // Candado por propiedad: el planificador y «Sincronizar ahora» no trabajan a la vez la misma fila.
+        if (busyRows().has(w.row.id)) continue;
+        busyRows().add(w.row.id);
         try {
+          // Se relee la fila: otra descarga puede haberla avanzado mientras tanto.
+          const [fresh] = await db.select().from(perfSync).where(eq(perfSync.id, w.row.id)).limit(1);
+          const unit = fresh ? nextUnit(fresh, w.r.kind, now, { force: opts.force, at }) : null;
+          if (!fresh || !unit) {
+            if (fresh) rows = rows.map((x) => (x.id === fresh.id ? fresh : x));
+            continue;
+          }
+          w.row = fresh;
+          w.unit = unit;
           const patch = await runUnit(tenantId, w.row, w.unit, w.r, now.date);
           const merged = { ...w.row, ...patch } as PerfSync;
           const finished = merged.backfillDone && !nextMonthToFetch(merged, w.r.kind, now.date);
@@ -220,6 +236,8 @@ export async function runPerformanceSync(tenantId: string, opts: { budgetMs?: nu
           errored.add(w.row.id);
           report.errors++;
           console.error(`[rendimiento] ${w.row.source} ${w.row.property}:`, msg);
+        } finally {
+          busyRows().delete(w.row.id);
         }
       }
     }
@@ -237,4 +255,5 @@ export async function runPerformanceSync(tenantId: string, opts: { budgetMs?: nu
 export function _resetSyncState(): void {
   lastDiscover.clear();
   running.clear();
+  busyRows().clear();
 }

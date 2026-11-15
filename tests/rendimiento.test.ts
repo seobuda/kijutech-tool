@@ -87,6 +87,12 @@ describe('rendimiento: reglas puras', () => {
     const r = beforeAfter(KPI.gsc_clicks, buildDayMap(rows), '2026-11-01', '2026-11-10');
     expect(r).toMatchObject({ before: 10, after: 20, afterDays: 10, pct: 100, good: true });
     expect(beforeAfter(KPI.gsc_clicks, buildDayMap(rows), '2026-12-01', '2026-11-10').before).toBeNull(); // hito futuro
+    // Analytics instalado 10 días antes del hito: la media es por día con datos (no se divide por 28) …
+    const partial = [];
+    for (let i = -10; i < 10; i++) partial.push(day('ga4', addDays('2026-11-01', i), 'sessions', 10));
+    expect(beforeAfter(KPI.ga4_sessions, buildDayMap(partial), '2026-11-01', '2026-11-10')).toMatchObject({ before: 10, after: 10, pct: 0 });
+    // … y con menos de 7 días de «antes» no se compara.
+    expect(beforeAfter(KPI.ga4_sessions, buildDayMap(partial.slice(6)), '2026-11-01', '2026-11-10').before).toBeNull();
   });
 
   it('avisos: caída fuerte con volumen suficiente; no avisa con poco volumen', () => {
@@ -121,6 +127,10 @@ describe('rendimiento: reglas puras', () => {
     expect(normalizeGoogleProperty('gbp', 'accounts/1/locations/987')).toBe('locations/987');
     expect(normalizeGoogleProperty('gsc', 'https://www.x.com/')).toBe('https://www.x.com/');
     expect(normalizeGoogleProperty('gsc', 'x.com')).toBeNull();
+    expect(normalizeGoogleProperty('gsc', 'https://cliente.com')).toBe('https://cliente.com/'); // Google exige la «/» final
+    expect(normalizeGoogleProperty('gsc', 'sc-domain:Cliente.com')).toBe('sc-domain:cliente.com');
+    // Comparación fija: el informe del mes compara con el mes natural anterior
+    expect(periodRanges('custom', 'prev', { syncedUntil: '2026-04-10', historyFrom: '2025-01-01' }, { from: '2026-03-01', to: '2026-03-31', prev: { from: '2026-02-01', to: '2026-02-28' } })!.prev).toEqual({ from: '2026-02-01', to: '2026-02-28' });
   });
 
   it('qué toca hacer con cada propiedad', () => {

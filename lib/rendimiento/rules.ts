@@ -167,7 +167,7 @@ export function periodRanges(
   period: PeriodKey,
   compare: CompareKey,
   src: { syncedUntil: string | null; historyFrom: string | null },
-  opts: { from?: string; to?: string; serviceStart?: string | null } = {}
+  opts: { from?: string; to?: string; serviceStart?: string | null; prev?: Range } = {}
 ): { cur: Range; prev: Range | null } | null {
   if (!src.syncedUntil) return null;
   let to = src.syncedUntil;
@@ -183,6 +183,8 @@ export function periodRanges(
   if (compare === 'prev' && period !== 'all') prev = { from: addDays(from, -len), to: addDays(from, -1) };
   else if (compare === 'yoy') prev = { from: addDays(from, -364), to: addDays(to, -364) };
   else if (compare === 'contract' && opts.serviceStart) prev = { from: addDays(opts.serviceStart, -len), to: addDays(opts.serviceStart, -1) };
+  // Comparación fija (el informe del mes compara con el mes natural anterior o el mismo mes del año pasado).
+  if (opts.prev && compare !== 'none') prev = opts.prev;
   return { cur: { from, to }, prev };
 }
 
@@ -226,6 +228,16 @@ export function movers(cur: TopRow[], prev: TopRow[], n = 10): { up: Mover[]; do
   };
 }
 
+/** Días de un periodo en los que la fuente tiene algún dato. */
+export function daysWithData(source: Source, days: DayMap, from: string, to: string): number {
+  let n = 0;
+  for (let d = from; d <= to; d = addDays(d, 1)) {
+    const day = days.get(d);
+    if (day && [...day.keys()].some((k) => k.startsWith(`${source}|`))) n++;
+  }
+  return n;
+}
+
 // --- Antes y después de un hito ------------------------------------------------------------------------------------
 
 /**
@@ -237,13 +249,17 @@ export function beforeAfter(kpi: Kpi, days: DayMap, date: string, lastDay: strin
   if (!lastDay || date > lastDay) return empty;
   const afterTo = addDays(date, window - 1) < lastDay ? addDays(date, window - 1) : lastDay;
   const afterDays = daysBetween(date, afterTo) + 1;
-  const avg = (from: string, to: string, n: number) => {
+  // Media por día CON datos (si Analytics se instaló a mitad, el «antes» no sale artificialmente bajo) y con un
+  // mínimo de 7 días; los porcentajes y la posición ya son medias.
+  const avg = (from: string, to: string) => {
+    const n = daysWithData(kpi.source, days, from, to);
+    if (n < Math.min(7, daysBetween(from, to) + 1)) return null;
     const v = kpiValue(kpi, days, from, to);
     if (v === null) return null;
-    return kpi.format === 'int' ? v / n : v; // los porcentajes y la posición ya son medias
+    return kpi.format === 'int' ? v / n : v;
   };
-  const before = avg(addDays(date, -window), addDays(date, -1), window);
-  const after = avg(date, afterTo, afterDays);
+  const before = avg(addDays(date, -window), addDays(date, -1));
+  const after = avg(date, afterTo);
   const d = delta(after, before, kpi.lowerBetter);
   return { before, after, afterDays, pct: d.pct, good: d.good };
 }

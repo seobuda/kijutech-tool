@@ -5,7 +5,7 @@ import 'server-only';
 //   - publica sus herramientas: trabajos de subagentes e integraciones (DataForSEO, Clarity, Google);
 //   - programa los trabajos de los subagentes en el planificador.
 import { registerAssetDirectory, registerMetricSource, registerScheduled, registerTools, setInboundHandler, type AgentTool, type ToolContext } from '@/lib/core/capabilities';
-import { GOOGLE_METRIC_SOURCE } from '@/lib/agentes/metrics';
+import { GOOGLE_METRIC_SOURCE, normalizeGoogleProperty } from '@/lib/agentes/metrics';
 import { findCoreClient, primaryAsset } from '@/lib/core/clients';
 import { handleInbound } from '@/lib/agentes/inbound';
 import { encargarAgente, estadoTrabajos, runAgentJobs } from '@/lib/agentes/jobs';
@@ -121,7 +121,7 @@ export const INTEGRATION_TOOLS: AgentTool[] = [
       additionalProperties: false
     },
     available: (t) => isConnected(t, 'google'),
-    run: (ctx, i) => withClient(ctx, 'search_console', s(i.sitio, 200), s(i.cliente, 120), (site) => gscPerformance(ctx.tenantId, site, n(i.dias, 28, 7, 480), s(i.dimension, 10) || 'query', s(i.pagina_contiene, 200) || null, n(i.limite, 25, 5, 100)))
+    run: (ctx, i) => withClient(ctx, 'search_console', s(i.sitio, 200), s(i.cliente, 120), (site) => gscPerformance(ctx.tenantId, normalizeGoogleProperty('gsc', site) ?? site, n(i.dias, 28, 7, 480), s(i.dimension, 10) || 'query', s(i.pagina_contiene, 200) || null, n(i.limite, 25, 5, 100)))
   },
   {
     name: 'ga4_propiedades',
@@ -137,7 +137,7 @@ export const INTEGRATION_TOOLS: AgentTool[] = [
     name: 'ga4_informe',
     module: 'agentes',
     title: 'Analytics: informe',
-    description: 'Informe de Google Analytics 4: métricas (sessions, totalUsers, newUsers, conversions, engagementRate, screenPageViews…) de los últimos N días, opcionalmente por una dimensión (sessionDefaultChannelGroup, pagePath, deviceCategory, country, date…). Lo normal es pasar «cliente»: se usa la propiedad de Analytics de su ficha.',
+    description: 'Informe de Google Analytics 4: métricas (sessions, totalUsers, newUsers, keyEvents (conversiones), engagementRate, screenPageViews…) de los últimos N días, opcionalmente por una dimensión (sessionDefaultChannelGroup, pagePath, deviceCategory, country, date…). Lo normal es pasar «cliente»: se usa la propiedad de Analytics de su ficha.',
     risk: 'lectura',
     inputSchema: {
       type: 'object',
@@ -151,7 +151,7 @@ export const INTEGRATION_TOOLS: AgentTool[] = [
           ctx.tenantId,
           prop,
           n(i.dias, 28, 1, 365),
-          (Array.isArray(i.metricas) && i.metricas.length ? i.metricas : ['sessions', 'totalUsers', 'conversions']).map((m) => s(m, 60)).filter(Boolean),
+          (Array.isArray(i.metricas) && i.metricas.length ? i.metricas : ['sessions', 'totalUsers', 'keyEvents']).map((m) => s(m, 60)).filter(Boolean),
           s(i.dimension, 60) || 'sessionDefaultChannelGroup'
         )
       )

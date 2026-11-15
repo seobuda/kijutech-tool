@@ -123,7 +123,7 @@ function statusOf(rows: PerfSync[], active: Partial<Record<Source, PerfSync>>): 
 export async function clientPerformance(
   tenantId: string,
   clientId: string,
-  opts: { period?: PeriodKey; compare?: CompareKey; from?: string; to?: string; isAdmin?: boolean } = {}
+  opts: { period?: PeriodKey; compare?: CompareKey; from?: string; to?: string; isAdmin?: boolean; prevRange?: Range } = {}
 ): Promise<ClientPerformance | null> {
   const client = await getClient(tenantId, clientId);
   if (!client) return null;
@@ -136,7 +136,7 @@ export async function clientPerformance(
 
   const ranges: Partial<Record<Source, { cur: Range; prev: Range | null }>> = {};
   for (const s of sources) {
-    const r = periodRanges(period, compare, { syncedUntil: s.syncedUntil, historyFrom: s.historyFrom }, { from: opts.from, to: opts.to, serviceStart });
+    const r = periodRanges(period, compare, { syncedUntil: s.syncedUntil, historyFrom: s.historyFrom }, { from: opts.from, to: opts.to, serviceStart, prev: opts.prevRange });
     if (r) ranges[s.source] = r;
   }
   const stored = await listAnnotations(tenantId, clientId);
@@ -304,7 +304,10 @@ export async function tenantOverview(tenantId: string, days = 28): Promise<Overv
   const actives = new Map<string, Partial<Record<Source, PerfSync>>>();
   for (const [c, rows] of byClient) actives.set(c, activeBySource(rows));
   const refs = [...actives.entries()].flatMap(([clientId, a]) => Object.values(a).map((r) => ({ clientId, source: r!.source as Source, property: r!.property })));
-  const sus = [...actives.values()].flatMap((a) => Object.values(a).map((r) => r!.syncedUntil));
+  // El rango sale de las propiedades activas: una antigua (inactiva) no debe arrastrar años de datos en cada carga.
+  const all = [...actives.values()].flatMap((a) => Object.values(a) as PerfSync[]);
+  const live = all.filter((r) => r.status !== 'inactiva');
+  const sus = (live.length ? live : all).map((r) => r.syncedUntil);
   const from = minD(sus);
   const to = maxD(sus);
   const data = from && to ? await loadTenantDays(tenantId, refs, addDays(from, -(2 * days - 1)), to) : new Map<string, DayMap>();
@@ -393,8 +396,8 @@ export const previousMonth = (today: string) => addMonths(monthStart(today), -1)
 export async function monthlyClientText(tenantId: string, clientId: string, month: string, opts: { isAdmin?: boolean } = {}): Promise<string | null> {
   const m = monthStart(month);
   const [vsPrev, vsYear] = await Promise.all([
-    clientPerformance(tenantId, clientId, { period: 'custom', compare: 'prev', from: m, to: monthEnd(m), isAdmin: opts.isAdmin }),
-    clientPerformance(tenantId, clientId, { period: 'custom', compare: 'yoy', from: m, to: monthEnd(m), isAdmin: opts.isAdmin })
+    clientPerformance(tenantId, clientId, { period: 'custom', compare: 'prev', from: m, to: monthEnd(m), isAdmin: opts.isAdmin, prevRange: { from: addMonths(m, -1), to: monthEnd(addMonths(m, -1)) } }),
+    clientPerformance(tenantId, clientId, { period: 'custom', compare: 'yoy', from: m, to: monthEnd(m), isAdmin: opts.isAdmin, prevRange: { from: addMonths(m, -12), to: monthEnd(addMonths(m, -12)) } })
   ]);
   if (!vsPrev || !vsPrev.hasData) return null;
   const yoy = new Map(vsYear?.kpis.map((k) => [k.key, k]) ?? []);

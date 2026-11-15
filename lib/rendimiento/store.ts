@@ -3,9 +3,9 @@ import 'server-only';
 // Módulo Rendimiento: lectura y escritura de sus tablas (perf_*). Sin red: la descarga está en sync.ts.
 import { and, asc, desc, eq, gte, inArray, lte, ne, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { perfAnnotations, perfDaily, perfGscMonthly, perfSettings, perfSync, type PerfAnnotation, type PerfSettings, type PerfSync } from '@/lib/db/schema';
+import { clients, perfAnnotations, perfDaily, perfGscMonthly, perfSettings, perfSync, type PerfAnnotation, type PerfSettings, type PerfSync } from '@/lib/db/schema';
 import type { MetricRow, MetricTopRow } from '@/lib/core/capabilities';
-import { buildDayMap, isAnnotationKind, isYmd, type DayMap, type Source, type TopRow } from '@/lib/rendimiento/rules';
+import { KPIS, buildDayMap, isAnnotationKind, isYmd, type DayMap, type Source, type TopRow } from '@/lib/rendimiento/rules';
 
 export class PerfError extends Error {
   constructor(public userMessage: string) {
@@ -56,10 +56,22 @@ export async function loadDays(tenantId: string, clientId: string, props: Proper
   const rows = await db
     .select({ source: perfDaily.source, property: perfDaily.property, date: perfDaily.date, metric: perfDaily.metric, dimType: perfDaily.dimType, dimValue: perfDaily.dimValue, value: perfDaily.value })
     .from(perfDaily)
-    .where(and(eq(perfDaily.tenantId, tenantId), eq(perfDaily.clientId, clientId), gte(perfDaily.date, from), lte(perfDaily.date, to), inArray(perfDaily.property, props.map((p) => p.property))));
+    .where(
+      and(
+        eq(perfDaily.tenantId, tenantId),
+        eq(perfDaily.clientId, clientId),
+        inArray(perfDaily.source, [...new Set(props.map((p) => p.source))]),
+        inArray(perfDaily.property, props.map((p) => p.property)),
+        gte(perfDaily.date, from),
+        lte(perfDaily.date, to)
+      )
+    );
   const allowed = new Set(props.map((p) => `${p.source}|${p.property}`));
   return buildDayMap(rows.filter((r) => allowed.has(`${r.source}|${r.property}`)));
 }
+
+/** Métricas que necesitan las cifras (todas las de KPIS), para acotar las consultas de todos los clientes. */
+const TENANT_METRICS = [...new Set([...KPIS.flatMap((k) => k.parts.map((p) => p.split('|')[1])), 'position'].filter((m) => m !== 'posw'))];
 
 /** Datos diarios de todos los clientes (panel central e informes), con su cliente. Solo totales y el canal orgánico. */
 export async function loadTenantDays(tenantId: string, props: (PropertyRef & { clientId: string })[], from: string, to: string): Promise<Map<string, DayMap>> {
@@ -68,7 +80,17 @@ export async function loadTenantDays(tenantId: string, props: (PropertyRef & { c
   const rows = await db
     .select({ clientId: perfDaily.clientId, source: perfDaily.source, property: perfDaily.property, date: perfDaily.date, metric: perfDaily.metric, dimType: perfDaily.dimType, dimValue: perfDaily.dimValue, value: perfDaily.value })
     .from(perfDaily)
-    .where(and(eq(perfDaily.tenantId, tenantId), gte(perfDaily.date, from), lte(perfDaily.date, to), sql`(${perfDaily.dimType} = '' OR (${perfDaily.dimType} = 'channel' AND ${perfDaily.dimValue} = 'Organic Search'))`));
+    .where(
+      and(
+        eq(perfDaily.tenantId, tenantId),
+        // Fuente y métrica acotadas para que use el índice (tenant, source, metric, date) y no recorra años de filas.
+        inArray(perfDaily.source, [...new Set(props.map((p) => p.source))]),
+        inArray(perfDaily.metric, TENANT_METRICS),
+        gte(perfDaily.date, from),
+        lte(perfDaily.date, to),
+        sql`(${perfDaily.dimType} = '' OR (${perfDaily.dimType} = 'channel' AND ${perfDaily.dimValue} = 'Organic Search'))`
+      )
+    );
   const allowed = new Set(props.map((p) => `${p.clientId}|${p.source}|${p.property}`));
   const byClient = new Map<string, typeof rows>();
   for (const r of rows) {
@@ -175,6 +197,9 @@ export async function saveAnnotation(tenantId: string, clientId: string, input: 
     if (!res.length) throw new PerfError('Ese hito ya no existe.');
     return res[0].id;
   }
+  // El cliente tiene que ser de esta cuenta (aislamiento entre cuentas).
+  const [owner] = await db.select({ id: clients.id }).from(clients).where(and(eq(clients.id, clientId), eq(clients.tenantId, tenantId))).limit(1);
+  if (!owner) throw new PerfError('Ese cliente no existe.');
   const [row] = await db
     .insert(perfAnnotations)
     .values({ tenantId, clientId, ...v, source: input.source ?? 'manual', createdBy: input.createdBy ?? null })

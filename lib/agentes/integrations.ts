@@ -319,15 +319,34 @@ export async function gscSiteList(tenantId: string): Promise<GoogleAsset[]> {
     .map((s) => ({ kind: 'search_console' as const, value: s.siteUrl, label: s.siteUrl.replace(/^sc-domain:/, '').replace(/^https?:\/\//, '').replace(/\/$/, ''), domain: hostOf(s.siteUrl), detail: s.siteUrl.startsWith('sc-domain:') ? 'Propiedad de dominio' : 'Prefijo de URL' }));
 }
 
-/** Propiedades de Analytics 4 con la web de su flujo de datos (para emparejarlas por dominio). Máximo 60. */
+/** Todas las páginas de un listado de Google (pageToken), con tope de seguridad. */
+async function allPages<T>(tenantId: string, url: (token: string) => string, pick: (r: T & { nextPageToken?: string }) => unknown[], maxPages = 20): Promise<unknown[]> {
+  const out: unknown[] = [];
+  let token = '';
+  for (let i = 0; i < maxPages; i++) {
+    const r = await gapi<T & { nextPageToken?: string }>(tenantId, url(token));
+    out.push(...pick(r));
+    if (!r.nextPageToken) break;
+    token = r.nextPageToken;
+  }
+  return out;
+}
+
+/**
+ * Propiedades de Analytics 4 con la web de su flujo de datos (para emparejarlas por dominio). Se listan TODAS (así
+ * «Comprobar accesos» no marca «Sin acceso» a una propiedad que quedó fuera); la web del flujo se pide para las 60
+ * primeras (una petición por propiedad).
+ */
 export async function ga4PropertyList(tenantId: string): Promise<GoogleAsset[]> {
-  const r = await gapi<{ accountSummaries?: { displayName: string; propertySummaries?: { property: string; displayName: string }[] }[] }>(tenantId, 'https://analyticsadmin.googleapis.com/v1beta/accountSummaries?pageSize=200');
-  const props = (r.accountSummaries ?? []).flatMap((a) => (a.propertySummaries ?? []).map((p) => ({ ...p, account: a.displayName }))).slice(0, 60);
+  type Summ = { accountSummaries?: { displayName: string; propertySummaries?: { property: string; displayName: string }[] }[] };
+  const accounts = (await allPages<Summ>(tenantId, (t) => `https://analyticsadmin.googleapis.com/v1beta/accountSummaries?pageSize=200${t ? `&pageToken=${encodeURIComponent(t)}` : ''}`, (r) => r.accountSummaries ?? [])) as NonNullable<Summ['accountSummaries']>;
+  const props = accounts.flatMap((a) => (a.propertySummaries ?? []).map((p) => ({ ...p, account: a.displayName })));
   const out: GoogleAsset[] = [];
   for (let i = 0; i < props.length; i += 5) {
     const batch = await Promise.all(
-      props.slice(i, i + 5).map(async (p) => {
-        const s = await gapi<{ dataStreams?: { type?: string; webStreamData?: { defaultUri?: string } }[] }>(tenantId, `https://analyticsadmin.googleapis.com/v1beta/${p.property}/dataStreams`).catch(() => ({ dataStreams: [] }));
+      props.slice(i, i + 5).map(async (p, j) => {
+        const withStream = i + j < 60;
+        const s = withStream ? await gapi<{ dataStreams?: { type?: string; webStreamData?: { defaultUri?: string } }[] }>(tenantId, `https://analyticsadmin.googleapis.com/v1beta/${p.property}/dataStreams`).catch(() => ({ dataStreams: [] })) : { dataStreams: [] };
         const uri = (s.dataStreams ?? []).find((d) => d.webStreamData?.defaultUri)?.webStreamData?.defaultUri ?? null;
         return { kind: 'analytics' as const, value: p.property, label: p.displayName, domain: hostOf(uri), detail: `${p.account} · ${p.property.replace('properties/', '')}${uri ? ` · ${hostOf(uri)}` : ''}` };
       })
@@ -337,13 +356,15 @@ export async function ga4PropertyList(tenantId: string): Promise<GoogleAsset[]> 
   return out;
 }
 
-/** Fichas de Business Profile con su web (para emparejarlas por dominio). El identificador es «locations/…». */
+/** Fichas de Business Profile con su web (para emparejarlas por dominio), de todas las cuentas. El identificador es «locations/…». */
 export async function gbpLocationList(tenantId: string): Promise<GoogleAsset[]> {
-  const acc = await gapi<{ accounts?: { name: string; accountName: string }[] }>(tenantId, 'https://mybusinessaccountmanagement.googleapis.com/v1/accounts');
+  type Acc = { accounts?: { name: string; accountName: string }[] };
+  type Loc = { locations?: { name: string; title: string; websiteUri?: string; storefrontAddress?: { locality?: string } }[] };
+  const accounts = (await allPages<Acc>(tenantId, (t) => `https://mybusinessaccountmanagement.googleapis.com/v1/accounts?pageSize=20${t ? `&pageToken=${encodeURIComponent(t)}` : ''}`, (r) => r.accounts ?? [])) as NonNullable<Acc['accounts']>;
   const out: GoogleAsset[] = [];
-  for (const a of (acc.accounts ?? []).slice(0, 5)) {
-    const loc = await gapi<{ locations?: { name: string; title: string; websiteUri?: string; storefrontAddress?: { locality?: string } }[] }>(tenantId, `https://mybusinessbusinessinformation.googleapis.com/v1/${a.name}/locations?readMask=name,title,storefrontAddress,websiteUri&pageSize=100`);
-    for (const l of loc.locations ?? []) out.push({ kind: 'business_profile', value: l.name, label: l.title, domain: hostOf(l.websiteUri), detail: [l.storefrontAddress?.locality, a.accountName].filter(Boolean).join(' · ') });
+  for (const a of accounts) {
+    const locs = (await allPages<Loc>(tenantId, (t) => `https://mybusinessbusinessinformation.googleapis.com/v1/${a.name}/locations?readMask=name,title,storefrontAddress,websiteUri&pageSize=100${t ? `&pageToken=${encodeURIComponent(t)}` : ''}`, (r) => r.locations ?? [])) as NonNullable<Loc['locations']>;
+    for (const l of locs) out.push({ kind: 'business_profile', value: l.name, label: l.title, domain: hostOf(l.websiteUri), detail: [l.storefrontAddress?.locality, a.accountName].filter(Boolean).join(' · ') });
   }
   return out;
 }
@@ -356,7 +377,7 @@ const GBP_METRICS: Record<string, string> = {
   CALL_CLICKS: 'llamadas',
   WEBSITE_CLICKS: 'clics a la web',
   BUSINESS_DIRECTION_REQUESTS: 'cómo llegar',
-  MESSAGING_CLICKS: 'mensajes',
+  BUSINESS_CONVERSATIONS: 'mensajes',
   BUSINESS_BOOKINGS: 'reservas'
 };
 

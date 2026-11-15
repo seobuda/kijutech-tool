@@ -125,7 +125,8 @@ export async function performanceHealth(tenantId: string): Promise<ModuleCheck[]
 }
 
 let done = false;
-let lastExtras = 0;
+const lastExtras = new Map<string, number>();
+const inBackground = new Set<string>();
 export function registerRendimientoCapabilities(): void {
   if (done) return;
   done = true;
@@ -139,10 +140,17 @@ export function registerRendimientoCapabilities(): void {
     }
   });
   registerScheduled('rendimiento de clientes', async (tenantId) => {
-    await runPerformanceSync(tenantId);
+    // La descarga va en segundo plano (no se espera): una petición lenta a Google no retrasa los avisos, la bandeja de
+    // salida ni la jornada, que comparten el planificador. Una sola descarga a la vez por cuenta.
+    if (!inBackground.has(tenantId)) {
+      inBackground.add(tenantId);
+      void runPerformanceSync(tenantId, { budgetMs: 20_000 })
+        .catch((e) => console.error('[rendimiento] descarga:', e instanceof Error ? e.message : e))
+        .finally(() => inBackground.delete(tenantId));
+    }
     // Avisos y resumen mensual: basta con mirarlo cada 10 minutos.
-    if (Date.now() - lastExtras < 10 * 60_000) return;
-    lastExtras = Date.now();
+    if (Date.now() - (lastExtras.get(tenantId) ?? 0) < 10 * 60_000) return;
+    lastExtras.set(tenantId, Date.now());
     await runPerformanceAlerts(tenantId);
     await runMonthlySummary(tenantId);
   });

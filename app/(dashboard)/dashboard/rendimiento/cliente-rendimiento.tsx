@@ -3,7 +3,7 @@
 // Pestaña «Rendimiento» de la ficha del cliente (módulo Rendimiento, 15 nov 2026): cifras de Google con su variación,
 // gráficas con los hitos, canales y dispositivos, consultas y páginas que suben y bajan, hitos de la estrategia con su
 // antes y después, informe del mes para copiar y estado de la descarga. Todo sale de lo guardado (sin llamar a Google).
-import { useCallback, useEffect, useState, useTransition } from 'react';
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { ArrowDownRight, ArrowUpRight, CalendarPlus, ClipboardCopy, FileText, Flag, LineChart, Minus, Pencil, RefreshCw, TriangleAlert } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -36,10 +36,14 @@ export function ClienteRendimiento({ clientId, clientName }: { clientId: string;
   const [syncing, startSync] = useTransition();
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
 
+  const reqId = useRef(0);
+  const badRange = period === 'custom' && Boolean(from && to) && from > to;
   const load = useCallback(() => {
-    if (period === 'custom' && (!from || !to)) return;
+    if (period === 'custom' && (!from || !to || from > to)) return;
+    const id = ++reqId.current;
     startLoad(async () => {
       const r = await getClientPerformanceAction(clientId, { period, compare, from, to });
+      if (id !== reqId.current) return; // llegó tarde: ya se pidió otro periodo
       if (r.ok) {
         setData(r.data);
         setError(null);
@@ -85,7 +89,15 @@ export function ClienteRendimiento({ clientId, clientName }: { clientId: string;
         <div className="flex flex-wrap items-end gap-2">
           <label className="text-sm">
             <span className="mb-1 block text-xs text-muted-foreground">Periodo</span>
-            <select className={selectCls} value={period} onChange={(e) => setPeriod(e.target.value as PeriodKey)}>
+            <select
+              className={selectCls}
+              value={period}
+              onChange={(e) => {
+                const v = e.target.value as PeriodKey;
+                setPeriod(v);
+                if (v === 'all' && compare === 'prev') setCompare('yoy'); // «todo» no tiene periodo anterior
+              }}
+            >
               {(Object.keys(PERIOD_LABEL) as PeriodKey[]).map((k) => (
                 <option key={k} value={k}>
                   {PERIOD_LABEL[k]}
@@ -127,6 +139,11 @@ export function ClienteRendimiento({ clientId, clientName }: { clientId: string;
           </Button>
         </div>
       </div>
+      {badRange && (
+        <p role="alert" className="text-sm text-destructive">
+          La fecha «Desde» tiene que ser anterior a «Hasta».
+        </p>
+      )}
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
 
       {!p.hasData ? (
@@ -327,7 +344,7 @@ function MoversPanel({ m }: { m: NonNullable<ClientPerformance['movers']> }) {
 }
 
 type Draft = { id: string | null; date: string; kind: string; title: string; notes: string };
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Madrid' }).format(new Date()); // fecha de Madrid
 
 function Milestones({ clientId, annotations, onChange }: { clientId: string; annotations: AnnotationView[]; onChange: () => void }) {
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -499,7 +516,16 @@ function MonthlyReport({ clientId, clientName }: { clientId: string; clientName:
     <Panel title="Informe del mes">
       <p className="mb-3 text-xs text-muted-foreground">Cifras del mes frente al anterior y al mismo mes del año pasado, lo que hicimos (hitos) y las búsquedas que más crecen. Listo para revisar y enviar a {clientName}.</p>
       <div className="flex flex-wrap items-center gap-2">
-        <select aria-label="Mes del informe" className={selectCls} value={month} onChange={(e) => setMonth(e.target.value)}>
+        <select
+          aria-label="Mes del informe"
+          className={selectCls}
+          value={month}
+          onChange={(e) => {
+            setMonth(e.target.value);
+            setText(null); // que no se copie el informe de otro mes
+            setMsg(null);
+          }}
+        >
           {months.map((m) => (
             <option key={m} value={m}>
               {fmtMonthLong(m)}

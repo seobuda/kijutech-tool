@@ -19,7 +19,7 @@ export const GBP_METRIC_KEYS: Record<string, string> = {
   CALL_CLICKS: 'calls',
   WEBSITE_CLICKS: 'website_clicks',
   BUSINESS_DIRECTION_REQUESTS: 'directions',
-  MESSAGING_CLICKS: 'messages',
+  BUSINESS_CONVERSATIONS: 'messages',
   BUSINESS_BOOKINGS: 'bookings'
 };
 
@@ -30,7 +30,12 @@ const GA4_CHANNEL = ['sessions', 'keyEvents'];
 export function normalizeGoogleProperty(source: string, value: string): string | null {
   const v = String(value ?? '').trim();
   if (!v) return null;
-  if (source === 'gsc') return /^(sc-domain:[^\s/]+|https?:\/\/\S+)$/i.test(v) ? v : null;
+  if (source === 'gsc') {
+    if (/^sc-domain:[^\s/]+$/i.test(v)) return v.toLowerCase();
+    // Prefijo de URL: Google exige la URL exacta y siempre con «/» final (https://cliente.com/).
+    if (/^https?:\/\/[^\s/]+$/i.test(v)) return `${v}/`;
+    return /^https?:\/\/\S+$/i.test(v) ? v : null;
+  }
   if (source === 'ga4') {
     const id = (v.match(/(?:properties\/)?(\d{5,})/) ?? [])[1];
     return id ? `properties/${id}` : null;
@@ -133,7 +138,7 @@ export const GOOGLE_METRIC_SOURCE: MetricSource = {
     // Search Console guarda 16 meses (también por la API).
     { assetKind: 'search_console', source: 'gsc', label: 'Search Console', historyDays: 486, lagDays: 2, chunkDays: 120, monthlyTop: true },
     // Analytics: desde que existe la propiedad (se para al encontrar un año vacío).
-    { assetKind: 'analytics', source: 'ga4', label: 'Analytics', historyDays: 365 * 6, lagDays: 1, chunkDays: 365, monthlyTop: false },
+    { assetKind: 'analytics', source: 'ga4', label: 'Analytics', historyDays: 365 * 6, lagDays: 2, chunkDays: 365, monthlyTop: false },
     // Business Profile no documenta el límite: se prueba hasta 18 meses y, si Google lo rechaza, se para.
     { assetKind: 'business_profile', source: 'gbp', label: 'Business Profile', historyDays: 548, lagDays: 3, chunkDays: 180, monthlyTop: false }
   ],
