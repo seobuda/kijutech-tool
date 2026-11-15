@@ -5,7 +5,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, Brain, Building2, CircleCheck, CircleDashed, Globe, LayoutDashboard, Settings2, Sparkles, Swords, Users } from 'lucide-react';
+import { ArrowLeft, Brain, Building2, CircleCheck, CircleDashed, Globe, LayoutDashboard, LineChart, Settings2, Sparkles, Swords, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/page';
 import { cn } from '@/lib/utils';
@@ -20,6 +20,7 @@ import { EmpresaTab } from './tab-empresa';
 import { ContactosTab } from './tab-contactos';
 import { WebsTab } from './tab-webs';
 import { CompetenciaTab } from './tab-competencia';
+import { ClienteRendimiento } from '../../rendimiento/cliente-rendimiento';
 
 export type ClientView = {
   id: string;
@@ -77,6 +78,7 @@ const TABS = [
   { key: 'contactos', label: 'Contactos', icon: Users },
   { key: 'webs', label: 'Webs y cuentas', icon: Globe },
   { key: 'competencia', label: 'Competencia', icon: Swords },
+  { key: 'rendimiento', label: 'Rendimiento', icon: LineChart },
   { key: 'memoria', label: 'Memoria', icon: Brain },
   { key: 'operaciones', label: 'Operaciones', icon: Settings2 }
 ] as const;
@@ -185,6 +187,7 @@ export function FichaView({ data }: { data: FichaData }) {
         {tab === 'contactos' && <ContactosTab clientId={c.id} contacts={data.contacts} locations={data.locations} isAdmin={data.isAdmin} />}
         {tab === 'webs' && <WebsTab clientId={c.id} assets={data.assets} integrations={data.integrations} />}
         {tab === 'competencia' && <CompetenciaTab clientId={c.id} competitors={data.competitors} />}
+        {tab === 'rendimiento' && <ClienteRendimiento clientId={c.id} clientName={c.name} />}
         {tab === 'memoria' && (
           <div className="rounded-xl border bg-card p-4 shadow-xs sm:p-5">
             <ClientMemoria clientId={c.id} />

@@ -70,6 +70,8 @@ export const DEFAULT_AGENTS: Omit<typeof agtAgents.$inferInsert, 'tenantId'>[] =
       'gsc_rendimiento',
       'ga4_informe',
       'gbp_rendimiento',
+      'rendimiento_cliente',
+      'anotar_hito',
       'encargar_a_agente',
       'estado_trabajos'
     ],
@@ -102,6 +104,12 @@ const UPGRADES: { id: string; agent: string; addTools: string[]; instructions?: 
     id: '2026-11-15-google-por-cliente',
     agent: PRINCIPAL_KEY,
     addTools: ['gsc_rendimiento', 'ga4_informe', 'gbp_rendimiento']
+  },
+  {
+    // 15 nov 2026: módulo Rendimiento. Histórico guardado de cada cliente (sin gastar llamadas a Google) e hitos.
+    id: '2026-11-15-rendimiento',
+    agent: PRINCIPAL_KEY,
+    addTools: ['rendimiento_cliente', 'anotar_hito']
   }
 ];
 const SYSTEM_PROVIDER = 'sistema';

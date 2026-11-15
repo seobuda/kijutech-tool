@@ -21,6 +21,7 @@ import {
   opsTelegramConfig,
   type OpsHealthIncident
 } from '@/lib/db/schema';
+import { moduleHealthChecks } from '@/lib/core/capabilities';
 import { getAuto, num } from '@/lib/operaciones/automations';
 import { enqueueNotification } from '@/lib/operaciones/notifications';
 import { getOwnerMember } from '@/lib/operaciones/telegram-config';
@@ -376,7 +377,7 @@ export async function runHealthChecks(tenantId: string, now = Date.now()): Promi
   if (now - (lastRun.get(tenantId) ?? 0) < HEALTH_EVERY_MS) return;
   lastRun.set(tenantId, now);
   // El latido lo vigila desde fuera scripts/watchdog.sh: si este código se ejecuta, el planificador vive.
-  const checks = evaluate(await collectSnapshot(tenantId)).filter((c) => c.key !== 'planificador');
+  const checks = [...evaluate(await collectSnapshot(tenantId)), ...(await moduleHealthChecks(tenantId))].filter((c) => c.key !== 'planificador');
   const open = await db
     .select()
     .from(opsHealthIncidents)
@@ -447,7 +448,8 @@ export type HealthOverview = {
 const TZ = 'Europe/Madrid';
 
 export async function getHealthOverview(tenantId: string): Promise<HealthOverview> {
-  const checks = evaluate(await collectSnapshot(tenantId));
+  // Las comprobaciones de otros módulos (p. ej. Rendimiento) llegan por el registro del núcleo.
+  const checks = [...evaluate(await collectSnapshot(tenantId)), ...(await moduleHealthChecks(tenantId))];
   const since30 = new Date(Date.now() - 30 * 86_400_000);
   const incidents = await db
     .select({

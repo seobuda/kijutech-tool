@@ -5,6 +5,7 @@ import { OPS_MAPS } from '@/lib/operaciones/process-map';
 import { SECURITY_PROCESS_MAP } from '@/lib/auth/security-process-map';
 import { AGENTES_PROCESS_MAP } from '@/lib/agentes/process-map';
 import { CLIENTES_PROCESS_MAP } from '@/lib/core/clients-process-map';
+import { RENDIMIENTO_PROCESS_MAP } from '@/lib/rendimiento/process-map';
 
 export interface SystemNode {
   id: string;
@@ -162,6 +163,27 @@ const CORE_NODES: SystemNode[] = [
     }
   },
   {
+    id: 'rendimiento',
+    name: 'Rendimiento de clientes',
+    description:
+      'Guarda cada día los números de Google de cada cliente (Search Console, Analytics 4 y Business Profile) para no perder el histórico y medir la estrategia: pestaña en la ficha, panel central, hitos con su antes y después, avisos de caídas e informes.',
+    status: 'built',
+    icon: 'BarChart3',
+    detailMapId: 'rendimiento',
+    group: 'infrastructure',
+    technicalDetail: {
+      summary:
+        'Módulo propio (tablas perf_*, migración 0049, 15 nov 2026). No habla con Google: usa las fuentes de métricas del núcleo (Agentes registra la de Google). Formato largo: una métrica nueva no necesita migración.',
+      stack: ['PostgreSQL (perf_daily en formato largo)', 'Planificador del núcleo', 'Gráficas SVG propias'],
+      keyDecisions: [
+        'Guardar cada día porque Google borra pasados 16 meses (Search Console)',
+        'Consultas y páginas por mes (top 1.000), no por día: 15 veces menos filas',
+        'Sin IA: cifras, comparaciones y avisos son cálculos',
+        'Los hitos permiten medir la estrategia (antes y después), no solo mirar números'
+      ]
+    }
+  },
+  {
     id: 'integraciones',
     name: 'Integraciones',
     description: 'Las conexiones con el exterior: ClickUp (caché y contador de peticiones), Telegram y la IA, con el prompt que usa cada función.',
@@ -264,7 +286,7 @@ export function getSystemMap(): SystemNode[] {
 }
 
 // Todos los mapas de detalle conocidos (el Server Component los resuelve y los pasa al cliente).
-export const PROCESS_MAP_IDS = ['clustering', 'competitor_analysis', 'security', 'agentes', 'clientes', ...Object.keys(OPS_MAPS)];
+export const PROCESS_MAP_IDS = ['clustering', 'competitor_analysis', 'security', 'agentes', 'clientes', 'rendimiento', ...Object.keys(OPS_MAPS)];
 
 export function getProcessMap(detailMapId: string): ProcessStep[] {
   switch (detailMapId) {
@@ -278,6 +300,8 @@ export function getProcessMap(detailMapId: string): ProcessStep[] {
       return AGENTES_PROCESS_MAP;
     case 'clientes':
       return CLIENTES_PROCESS_MAP;
+    case 'rendimiento':
+      return RENDIMIENTO_PROCESS_MAP;
     default:
       return OPS_MAPS[detailMapId] ?? [];
   }

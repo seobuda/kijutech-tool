@@ -89,13 +89,18 @@ const clientesSrc = read('lib/core/clients-process-map.ts');
 for (const f of uniq(all(/file: '([^']+)'/g, clientesSrc))) if (!fs.existsSync(path.join(root, f))) fail(`El mapa de Clientes cita un archivo que no existe: ${f}`);
 for (const t of coreClientTables) if (!clientesSrc.includes(`'${t}'`)) fail(`La tabla «${t}» (cliente del núcleo) no aparece en el mapa de Clientes.`);
 for (const t of listOf(/tables: \[([^\]]*)\]/g, clientesSrc)) if (!coreClientTables.includes(t) && !tables.includes(t)) fail(`El mapa de Clientes cita la tabla «${t}», que no existe en el esquema.`);
+// 5e. Mapa del módulo Rendimiento (lib/rendimiento/process-map.ts): archivos y todas sus tablas perf_*.
+const perfSrc = read('lib/rendimiento/process-map.ts');
+for (const f of uniq(all(/file: '([^']+)'/g, perfSrc))) if (!fs.existsSync(path.join(root, f))) fail(`El mapa de Rendimiento cita un archivo que no existe: ${f}`);
+for (const t of uniq(all(/pgTable\(\s*'(perf_\w+)'/g, schemaSrc))) if (!perfSrc.includes(`'${t}'`)) fail(`La tabla «${t}» (módulo Rendimiento) no aparece en el mapa de Rendimiento.`);
+if (!/registerScheduled\('rendimiento de clientes'/.test(read('lib/rendimiento/register.ts'))) fail('La tarea del planificador de Rendimiento no está registrada (lib/rendimiento/register.ts).');
 function schemaSrcForAgt() {
   return read('lib/db/schema.ts');
 }
 
 // 6. Enlaces entre mapas
 const mapIds = all(/^ {2}(\w+): [A-Z_]+,$/gm, mapSrc.slice(mapSrc.indexOf('export const OPS_MAPS')));
-const known = new Set([...mapIds, 'clustering', 'competitor_analysis', 'security', 'agentes', 'clientes']);
+const known = new Set([...mapIds, 'clustering', 'competitor_analysis', 'security', 'agentes', 'clientes', 'rendimiento']);
 for (const id of uniq([...all(/detailMapId: '(\w+)'/g, mapSrc), ...all(/detailMapId: '(\w+)'/g, registrySrc)])) {
   if (!known.has(id)) fail(`detailMapId «${id}» no corresponde a ningún mapa registrado en OPS_MAPS.`);
 }

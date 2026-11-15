@@ -251,6 +251,9 @@ async function gapi<T>(tenantId: string, url: string, body?: unknown): Promise<T
   return res.json() as Promise<T>;
 }
 
+/** Llamada autenticada a una API de Google (para la fuente de métricas de lib/agentes/metrics.ts). */
+export const gapiFetch = gapi;
+
 const ymd = (d: Date) => d.toISOString().slice(0, 10);
 
 export async function gscSites(tenantId: string): Promise<string> {

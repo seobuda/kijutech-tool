@@ -31,6 +31,7 @@ import {
   HeartPulse,
   Clock,
   IdCard,
+  LineChart,
   Cog,
   Timer,
   UserRound,
@@ -138,6 +139,7 @@ export const NAV: NavGroup[] = [
     items: [
       { href: '/dashboard/operaciones', label: 'Operaciones', icon: LayoutGrid, section: 'operaciones', keywords: 'agente encargos clickup' },
       { href: '/dashboard/clientes', label: 'Clientes', icon: Building2, prefix: true, keywords: 'fichas cliente contactos webs cuentas competencia semáforo alertas onboarding' },
+      { href: '/dashboard/rendimiento', label: 'Rendimiento', icon: LineChart, keywords: 'search console analytics business profile ficha google clics sesiones llamadas métricas histórico informe mensual caídas' },
       { href: '/dashboard/operaciones/equipo-hoy', label: 'Equipo', icon: UsersRound, section: 'equipo', keywords: 'jornada fichas personas' },
       { href: '/dashboard/projects', label: 'Proyectos SEO', icon: FolderKanban, prefix: true, keywords: 'seo keywords clusters' },
       { href: '/dashboard/agentes', label: 'Agentes', icon: Bot, prefix: true, keywords: 'agente ia telegram audio subagentes integraciones search console analytics dataforseo clarity', show: (r) => r.isAdmin }
@@ -195,6 +197,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   dashboard: 'Inicio',
   operaciones: 'Operaciones',
   clientes: 'Clientes',
+  rendimiento: 'Rendimiento',
   projects: 'Proyectos SEO',
   ai: 'IA',
   settings: 'Ajustes',

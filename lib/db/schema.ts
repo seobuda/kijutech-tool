@@ -16,6 +16,8 @@ import {
   uniqueIndex,
   customType,
   bigint,
+  doublePrecision,
+  primaryKey,
   vector,
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
@@ -2278,3 +2280,136 @@ export const agtIntegrations = pgTable(
   ]
 );
 export type AgtIntegration = typeof agtIntegrations.$inferSelect;
+
+// --- Módulo Rendimiento (0049): histórico diario de Search Console, Analytics 4 y Business Profile por cliente ---------
+// Lo llena lib/rendimiento/sync.ts con las fuentes de métricas que registran otros módulos en el núcleo (Agentes: Google).
+
+export const perfDaily = pgTable(
+  'perf_daily',
+  {
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    source: varchar('source', { length: 10 }).notNull(), // gsc | ga4 | gbp
+    property: varchar('property', { length: 200 }).notNull(),
+    date: date('date').notNull(),
+    metric: varchar('metric', { length: 40 }).notNull(),
+    dimType: varchar('dim_type', { length: 20 }).notNull().default(''),
+    dimValue: varchar('dim_value', { length: 120 }).notNull().default(''),
+    value: doublePrecision('value').notNull()
+  },
+  (table) => [
+    primaryKey({ name: 'perf_daily_pk', columns: [table.clientId, table.source, table.property, table.date, table.metric, table.dimType, table.dimValue] }),
+    index('perf_daily_tenant_idx').on(table.tenantId, table.source, table.metric, table.date),
+    check('perf_daily_source_check', sql`${table.source} IN ('gsc', 'ga4', 'gbp')`)
+  ]
+);
+export type PerfDaily = typeof perfDaily.$inferSelect;
+
+export const perfGscMonthly = pgTable(
+  'perf_gsc_monthly',
+  {
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    property: varchar('property', { length: 200 }).notNull(),
+    month: date('month').notNull(),
+    kind: varchar('kind', { length: 10 }).notNull(), // query | page
+    key: text('key').notNull(),
+    clicks: integer('clicks').notNull().default(0),
+    impressions: integer('impressions').notNull().default(0),
+    ctr: doublePrecision('ctr').notNull().default(0),
+    position: doublePrecision('position').notNull().default(0)
+  },
+  (table) => [
+    primaryKey({ name: 'perf_gsc_monthly_pk', columns: [table.clientId, table.property, table.month, table.kind, table.key] }),
+    check('perf_gsc_monthly_kind_check', sql`${table.kind} IN ('query', 'page')`)
+  ]
+);
+export type PerfGscMonthly = typeof perfGscMonthly.$inferSelect;
+
+export type PerfSyncState = { cursor?: string; empty?: number; months?: string[]; lastFetchedRows?: number };
+
+export const perfSync = pgTable(
+  'perf_sync',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    source: varchar('source', { length: 10 }).notNull(),
+    property: varchar('property', { length: 200 }).notNull(),
+    status: varchar('status', { length: 20 }).notNull().default('pendiente'),
+    historyFrom: date('history_from'),
+    syncedUntil: date('synced_until'),
+    backfillDone: boolean('backfill_done').notNull().default(false),
+    state: jsonb('state').$type<PerfSyncState>().notNull().default({}),
+    lastDailyOn: date('last_daily_on'),
+    lastRunAt: timestamp('last_run_at'),
+    nextAttemptAt: timestamp('next_attempt_at'),
+    lastError: text('last_error'),
+    errorCount: integer('error_count').notNull().default(0),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow()
+  },
+  (table) => [
+    unique('perf_sync_property_unique').on(table.clientId, table.source, table.property),
+    index('perf_sync_tenant_idx').on(table.tenantId, table.status),
+    check('perf_sync_source_check', sql`${table.source} IN ('gsc', 'ga4', 'gbp')`),
+    check('perf_sync_status_check', sql`${table.status} IN ('pendiente', 'descargando', 'al_dia', 'error', 'inactiva')`)
+  ]
+);
+export type PerfSync = typeof perfSync.$inferSelect;
+
+export const perfAnnotations = pgTable(
+  'perf_annotations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    date: date('date').notNull(),
+    kind: varchar('kind', { length: 20 }).notNull().default('otro'),
+    title: varchar('title', { length: 200 }).notNull(),
+    notes: text('notes'),
+    source: varchar('source', { length: 10 }).notNull().default('manual'),
+    createdBy: integer('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow()
+  },
+  (table) => [
+    index('perf_annotations_client_idx').on(table.clientId, table.date),
+    check('perf_annotations_kind_check', sql`${table.kind} IN ('servicio', 'web', 'contenido', 'campana', 'google', 'otro')`),
+    check('perf_annotations_source_check', sql`${table.source} IN ('manual', 'agente', 'sistema')`)
+  ]
+);
+export type PerfAnnotation = typeof perfAnnotations.$inferSelect;
+
+export type PerfSettingsState = { sentAlerts?: Record<string, string>; lastMonthly?: string; lastAlertsOn?: string };
+
+export const perfSettings = pgTable('perf_settings', {
+  tenantId: uuid('tenant_id')
+    .primaryKey()
+    .references(() => tenants.id, { onDelete: 'cascade' }),
+  alertsEnabled: boolean('alerts_enabled').notNull().default(true),
+  alertPct: integer('alert_pct').notNull().default(30),
+  alertRises: boolean('alert_rises').notNull().default(true),
+  alertMinVolume: integer('alert_min_volume').notNull().default(20),
+  monthlyReport: boolean('monthly_report').notNull().default(true),
+  weeklySection: boolean('weekly_section').notNull().default(true),
+  state: jsonb('state').$type<PerfSettingsState>().notNull().default({}),
+  updatedAt: timestamp('updated_at').notNull().defaultNow()
+});
+export type PerfSettings = typeof perfSettings.$inferSelect;
