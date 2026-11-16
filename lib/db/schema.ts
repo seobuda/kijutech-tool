@@ -2420,7 +2420,15 @@ export type PerfSettings = typeof perfSettings.$inferSelect;
 // palabras clave, salud de la web, señales, trabajo hecho y URLs trabajadas día a día.
 
 export type EstProcessConfig = Record<string, { on: boolean; every: number }>;
-export type EstSettingsState = { lastExtractAt?: string; notified?: Record<string, string> };
+/** Ajustes del estratega (fase 2): se guardan en est_settings.state para no tocar la tabla. */
+export type EstStrategistSettings = { maxSuggestions?: number; alertsPerMonth?: number; expireDays?: number; snoozeDays?: number };
+export type EstSettingsState = {
+  lastExtractAt?: string;
+  notified?: Record<string, string>;
+  strategist?: EstStrategistSettings;
+  /** Respuesta escrita que espera el estratega por Telegram, por chat: propuesta y qué se espera (ajuste o motivo). */
+  awaiting?: Record<string, { id: string; mode: 'ajustar' | 'motivo'; at: string }>;
+};
 
 export const estSettings = pgTable(
   'est_settings',
@@ -2759,3 +2767,97 @@ export const estEvents = pgTable(
   ]
 );
 export type EstEvent = typeof estEvents.$inferSelect;
+export type EstEvidence = { tipo: string; ref: string; periodo: string; dato: string };
+export type EstExpected = { metrica?: string; donde?: string; cambio_pct?: number; dias?: number };
+
+export const estAnalyses = pgTable(
+  'est_analyses',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    trigger: varchar('trigger', { length: 12 }).notNull().default('programado'),
+    reason: text('reason'),
+    status: varchar('status', { length: 12 }).notNull().default('pendiente'),
+    summary: text('summary'),
+    diagnosis: jsonb('diagnosis').$type<{ diagnostico: string[]; aprendizajes: string[] } | string[]>().notNull().default([]),
+    discarded: jsonb('discarded').$type<{ title: string; reason: string }[]>().notNull().default([]),
+    proposed: integer('proposed').notNull().default(0),
+    dossierChars: integer('dossier_chars'),
+    model: varchar('model', { length: 80 }),
+    aiJobId: uuid('ai_job_id'),
+    costUsd: decimal('cost_usd', { precision: 10, scale: 6 }),
+    error: text('error'),
+    requestedBy: varchar('requested_by', { length: 120 }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    startedAt: timestamp('started_at'),
+    finishedAt: timestamp('finished_at')
+  },
+  (table) => [
+    index('est_analyses_client_idx').on(table.clientId, table.createdAt),
+    index('est_analyses_tenant_idx').on(table.tenantId, table.status, table.createdAt),
+    check('est_analyses_trigger_check', sql`${table.trigger} IN ('programado', 'alerta', 'manual')`),
+    check('est_analyses_status_check', sql`${table.status} IN ('pendiente', 'en_curso', 'hecho', 'error', 'omitido')`)
+  ]
+);
+export type EstAnalysis = typeof estAnalyses.$inferSelect;
+
+export const estSuggestions = pgTable(
+  'est_suggestions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    analysisId: uuid('analysis_id')
+      .notNull()
+      .references(() => estAnalyses.id, { onDelete: 'cascade' }),
+    objectiveId: uuid('objective_id').references(() => estObjectives.id, { onDelete: 'set null' }),
+    rank: smallint('rank').notNull(),
+    title: varchar('title', { length: 200 }).notNull(),
+    description: text('description').notNull(),
+    workType: varchar('work_type', { length: 40 }),
+    category: varchar('category', { length: 20 }).notNull().default('otro'),
+    evidence: jsonb('evidence').$type<EstEvidence[]>().notNull().default([]),
+    expected: jsonb('expected').$type<EstExpected>().notNull().default({}),
+    impact: smallint('impact').notNull(),
+    confidence: smallint('confidence').notNull(),
+    hours: decimal('hours', { precision: 6, scale: 2 }).notNull(),
+    hoursAi: decimal('hours_ai', { precision: 6, scale: 2 }),
+    hoursSource: varchar('hours_source', { length: 10 }).notNull().default('ia'),
+    ice: decimal('ice', { precision: 8, scale: 3 }).notNull(),
+    status: varchar('status', { length: 12 }).notNull().default('pendiente'),
+    rejectReason: varchar('reject_reason', { length: 20 }),
+    rejectNote: text('reject_note'),
+    adjustNote: text('adjust_note'),
+    decidedBy: varchar('decided_by', { length: 120 }),
+    decidedAt: timestamp('decided_at'),
+    snoozeUntil: date('snooze_until'),
+    taskRef: varchar('task_ref', { length: 60 }),
+    taskUrl: text('task_url'),
+    taskError: text('task_error'),
+    executedAt: timestamp('executed_at'),
+    actual: jsonb('actual').$type<Record<string, unknown>>(),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow()
+  },
+  (table) => [
+    index('est_suggestions_client_idx').on(table.clientId, table.status, table.createdAt),
+    index('est_suggestions_tenant_idx').on(table.tenantId, table.status, table.createdAt),
+    index('est_suggestions_analysis_idx').on(table.analysisId, table.rank),
+    index('est_suggestions_task_idx').on(table.tenantId, table.taskRef),
+    check('est_suggestions_status_check', sql`${table.status} IN ('pendiente', 'aprobada', 'ajustada', 'aplazada', 'rechazada', 'caducada')`),
+    check('est_suggestions_reason_check', sql`${table.rejectReason} IS NULL OR ${table.rejectReason} IN ('ya_hecho', 'no_encaja', 'poco_impacto', 'sin_horas', 'otro')`),
+    check('est_suggestions_scores_check', sql`${table.impact} BETWEEN 1 AND 10 AND ${table.confidence} BETWEEN 1 AND 10 AND ${table.hours} > 0`),
+    check('est_suggestions_hours_source_check', sql`${table.hoursSource} IN ('equipo', 'ia')`),
+    check('est_suggestions_category_check', sql`${table.category} IN ('contenido', 'onpage', 'tecnico', 'enlaces', 'gbp', 'web', 'campana', 'informe', 'otro')`)
+  ]
+);
+export type EstSuggestion = typeof estSuggestions.$inferSelect;

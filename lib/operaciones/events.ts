@@ -34,7 +34,8 @@ export type EventType =
   | 'tiempos'
   | 'calendario'
   | 'autonomia'
-  | 'ficha_cliente';
+  | 'ficha_cliente'
+  | 'modulo';
 
 export async function logEvent(
   tenantId: string,

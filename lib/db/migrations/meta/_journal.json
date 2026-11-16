@@ -358,6 +358,13 @@
       "when": 1794470000000,
       "tag": "0050_est_estrategia",
       "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1794560000000,
+      "tag": "0051_est_estratega",
+      "breakpoints": true
     }
   ]
 }

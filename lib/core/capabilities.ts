@@ -359,7 +359,17 @@ export type WorkSource = {
   workload: (tenantId: string, clientId: string) => Promise<ClientWorkload | null>;
   /** Pregunta a quien hizo el encargo (Telegram, con botones «Escribir» y «No aplica»); la respuesta va al manejador «kind». */
   askAboutTask: (tenantId: string, ref: string, kind: string, html: string) => Promise<boolean>;
+  /** Encargos abiertos de un cliente (para no proponer lo que ya está pedido). Fase 2 de Estrategia (16 nov 2026). */
+  clientOpen?: (tenantId: string, clientId: string) => Promise<OpenWorkItem[]>;
+  /** Lo que suele tardar el equipo por tipo de trabajo (mediana de minutos trabajados y número de encargos). */
+  effortByType?: (tenantId: string, sinceDays: number) => Promise<Record<string, { medianMinutes: number; n: number }>>;
+  /** Tipos de trabajo de la cuenta (clave y nombre). */
+  workTypes?: (tenantId: string) => Promise<{ key: string; label: string }[]>;
+  /** Crea un encargo para un cliente (lista, responsable y fecha los elige Operaciones con sus fichas). */
+  createTask?: (tenantId: string, input: NewTaskInput) => Promise<{ ok: boolean; ref: string | null; url: string | null; message: string }>;
 };
+export type OpenWorkItem = { ref: string; title: string; workType: string | null; status: string; dueDate: string | null };
+export type NewTaskInput = { clientId: string; title: string; description: string; workType: string | null; requestedBy: string };
 export function registerWorkSource(w: WorkSource): void {
   GK.__kijuWorkSource = w;
 }
@@ -394,3 +404,33 @@ export async function externalEvents(tenantId: string, from: string, to: string)
   }
   return out.sort((a, b) => a.date.localeCompare(b.date));
 }
+
+// --- Botones y respuestas escritas de otros módulos por Telegram (16 nov 2026) ----------------------------------------
+// El bot es de Operaciones. Otro módulo (Estrategia: propuestas del estratega) manda mensajes con botones cuyo dato
+// empieza por «x:<módulo>:» y registra aquí quién los atiende; si necesita un texto («¿qué ajustas?»), lo pide con
+// awaitText y Operaciones le entrega el siguiente mensaje de ese chat.
+export type ModuleCallbackInput = { tenantId: string; data: string; chatId: string; by: string; isOwner: boolean };
+export type ModuleCallbackResult = {
+  /** Texto corto del aviso del botón. */
+  answer?: string;
+  alert?: boolean;
+  /** Botones nuevos para el mensaje (null = quitarlos; sin definir = dejarlos). */
+  keyboard?: OutboundButton[][] | null;
+  /** Mensaje aparte en el chat (HTML ya escapado). */
+  reply?: string;
+  /** El módulo espera un texto: Operaciones pregunta esto y le pasa la respuesta. */
+  awaitText?: string;
+};
+export type ModuleTextInput = { tenantId: string; chatId: string; text: string; by: string; isOwner: boolean };
+type ModuleHandlers = { callback: (i: ModuleCallbackInput) => Promise<ModuleCallbackResult>; text?: (i: ModuleTextInput) => Promise<string> };
+const GX = globalThis as unknown as { __kijuModuleButtons?: Map<string, ModuleHandlers> };
+
+/** Prefijo corto del módulo (2-4 letras): sus botones llevan el dato «x:<prefijo>:…» (máx. 64 bytes en Telegram). */
+export function registerModuleButtons(prefix: string, handlers: ModuleHandlers): void {
+  if (!/^[a-z]{2,4}$/.test(prefix)) throw new Error(`Prefijo de botones no válido: ${prefix}`);
+  (GX.__kijuModuleButtons ??= new Map()).set(prefix, handlers);
+}
+export function moduleButtons(prefix: string): ModuleHandlers | null {
+  return GX.__kijuModuleButtons?.get(prefix) ?? null;
+}
+export const MODULE_BUTTON_RE = /^x:([a-z]{2,4}):([A-Za-z0-9:_-]{1,58})$/;

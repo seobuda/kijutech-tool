@@ -47,7 +47,7 @@ import { handleJornadaCallback, handleJornadaCommand, handleJornadaPending, JORN
 import { handleTiemposCallback, handleTiemposPending } from '@/lib/operaciones/tiempos-bot';
 import { handleAutopilotCallback } from '@/lib/operaciones/autopilot';
 import { AGENT_TOOL_CALLBACK_RE, decideAgentTool } from '@/lib/operaciones/agent-capabilities';
-import { dispatchInbound, taskAnswerHandler } from '@/lib/core/capabilities';
+import { dispatchInbound, MODULE_BUTTON_RE, moduleButtons, taskAnswerHandler } from '@/lib/core/capabilities';
 import { TASK_QUESTION_CALLBACK_RE } from '@/lib/operaciones/work-source';
 
 // Botones del motor de acciones del agente: ag:<id de la acción>:ok (aprobar) | no (descartar) | ed (corregir).
@@ -75,6 +75,21 @@ async function answerTaskQuestion(tenantId: string, token: string, chatId: numbe
     console.error('[operaciones] respuesta a una pregunta de encargo:', e instanceof Error ? e.message : e);
     await reply(token, chatId, 'No he podido guardarlo. Inténtalo más tarde.');
   }
+}
+
+/** Entrega a otro módulo el texto que pidió tras un botón suyo y contesta lo que diga. */
+async function answerModuleText(tenantId: string, token: string, chatId: number, prefix: string, text: string, member: OpsTelegramMember) {
+  const h = moduleButtons(prefix);
+  if (!h?.text) return void (await reply(token, chatId, 'Eso ya no está activo.'));
+  const owner = await getOwnerMember(tenantId);
+  try {
+    const line = await h.text({ tenantId, chatId: String(chatId), text: text.slice(0, 3000), by: member.username, isOwner: owner?.id === member.id });
+    await reply(token, chatId, line);
+  } catch (e) {
+    console.error(`[operaciones] respuesta para el módulo ${prefix}:`, e instanceof Error ? e.message : e);
+    await reply(token, chatId, 'No he podido guardarlo. Inténtalo más tarde.');
+  }
+  await logEvent(tenantId, { actor: { clickupUserId: member.clickupUserId, name: member.username }, type: 'modulo', payload: { module: prefix, kind: 'texto' } });
 }
 
 async function reply(token: string, chatId: number, html: string) {
@@ -198,7 +213,7 @@ async function toAgent(tenantId: string, token: string, member: OpsTelegramMembe
 async function setPending(
   tenantId: string,
   chatId: number,
-  kind: 'done_note' | 'done_review' | 'block_question' | 'return_reason' | 'owner_reply' | 'suggestion' | 'agent_correct' | `mq:${string}`,
+  kind: 'done_note' | 'done_review' | 'block_question' | 'return_reason' | 'owner_reply' | 'suggestion' | 'agent_correct' | `mq:${string}` | `x:${string}`,
   ids: { requestId?: string; blockerId?: string; agentActionId?: string }
 ) {
   const row = {
@@ -290,6 +305,8 @@ async function handlePending(
   if (p.kind.startsWith('ttu:')) return void (await handleTiemposPending(tenantId, token, chatId, p.kind, text));
   // Pregunta de otro módulo sobre un encargo (p. ej. Estrategia: «¿En qué URL se publicó?»).
   if (p.kind.startsWith('mq:') && p.requestId) return void (await answerTaskQuestion(tenantId, token, chatId, p.kind.slice(3), p.requestId, text, member.username));
+  // Texto que espera otro módulo tras uno de sus botones (p. ej. Estrategia: qué ajustar de una propuesta).
+  if (p.kind.startsWith('x:')) return void (await answerModuleText(tenantId, token, chatId, p.kind.slice(2), text, member));
 
   const owner = await getOwnerMember(tenantId);
   const isOwner = owner?.id === member.id;
@@ -573,6 +590,31 @@ async function handleCallback(tenantId: string, token: string, cb: TgCallbackQue
     await setPending(tenantId, chatId, `mq:${mq[2]}`, { requestId: req.id });
     await answer();
     return void (await reply(token, chatId, `✍️ <b>${escapeHtml(req.title)}</b>\nEscríbela aquí (o /cancelar).`));
+  }
+  // Botones de otros módulos (x:<módulo>:…), p. ej. las propuestas del estratega. El módulo decide quién puede usarlos.
+  const mx = cb.data?.match(MODULE_BUTTON_RE);
+  if (mx) {
+    const h = moduleButtons(mx[1]);
+    if (!h) return void (await answer('Este botón ya no está activo.', true));
+    const owner = await getOwnerMember(tenantId);
+    let r: Awaited<ReturnType<typeof h.callback>>;
+    try {
+      r = await h.callback({ tenantId, data: mx[2], chatId: String(chatId), by: presser.username, isOwner: owner?.id === presser.id });
+    } catch (e) {
+      console.error(`[operaciones] botón del módulo ${mx[1]}:`, e instanceof Error ? e.message : e);
+      return void (await answer('No se pudo hacer. Inténtalo más tarde.', true));
+    }
+    await logEvent(tenantId, { actor: { clickupUserId: presser.clickupUserId, name: presser.username }, type: 'modulo', payload: { module: mx[1], data: mx[2].slice(0, 40) } });
+    if (r.keyboard !== undefined) {
+      const rows = (r.keyboard ?? []).map((row) => row.map((b) => ({ text: b.text, callback_data: b.data })));
+      await tg(token, 'editMessageReplyMarkup', { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: rows } }).catch(() => undefined);
+    }
+    if (r.awaitText) {
+      await setPending(tenantId, chatId, `x:${mx[1]}`, {});
+      await reply(token, chatId, `${r.awaitText}\n<i>(o /cancelar)</i>`);
+    }
+    if (r.reply) await reply(token, chatId, r.reply);
+    return void (await answer(r.answer, r.alert));
   }
   // Piloto automático (ap:…): «Mover a mañana» del parte y «Pasar a autónomo» (solo el dueño).
   if (cb.data?.startsWith('ap:')) return handleAutopilotCallback(tenantId, cb, presser, answer);

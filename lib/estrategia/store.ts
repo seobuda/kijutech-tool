@@ -78,6 +78,15 @@ export async function saveSettingsState(tenantId: string, state: EstSettingsStat
   await db.update(estSettings).set({ state }).where(eq(estSettings.tenantId, tenantId));
 }
 
+/** Mezcla claves en el estado sin pisar las demás (cursor de la extracción, ajustes del estratega, respuestas esperadas). */
+export async function patchSettingsState(tenantId: string, patch: Partial<EstSettingsState>): Promise<void> {
+  await getSettings(tenantId);
+  await db
+    .update(estSettings)
+    .set({ state: sql`${estSettings.state} || ${JSON.stringify(patch)}::jsonb` })
+    .where(eq(estSettings.tenantId, tenantId));
+}
+
 // --- Planes ---------------------------------------------------------------------------------------------------------
 
 /** Planes de la cuenta (los de partida se crean la primera vez). */
