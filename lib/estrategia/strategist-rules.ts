@@ -1,5 +1,5 @@
 // Módulo Estrategia, fase 2: reglas puras del estratega (sin base de datos, red ni IA). Se prueban en
-// tests/estrategia.test.ts.
+// tests/estratega.test.ts.
 //   - limpiar la respuesta de la IA (JSON) y validar la evidencia contra el expediente (sin evidencia real, fuera)
 //   - quitar duplicados frente a encargos abiertos, trabajo hecho y propuestas anteriores
 //   - horas a partir de lo que tarda el equipo, prioridad ICE y recorte a las horas que quedan del contrato

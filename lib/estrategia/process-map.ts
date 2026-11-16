@@ -1,6 +1,6 @@
 // Mapa Visual del módulo Estrategia (nivel 3): cómo se hace el seguimiento de cada cliente según su plan. Se registra
-// en lib/architecture-map/registry.ts (detailMapId «estrategia»). Fase 1 construida el 15 nov 2026; las fases 2 (estratega
-// con Opus) y 3 (impacto, aprendizajes, informes) van en gris.
+// en lib/architecture-map/registry.ts (detailMapId «estrategia»). Fase 1 construida el 15 nov 2026 y fase 2 (estratega con
+// Opus y su calidad) el 16 nov; la fase 3 (impacto, aprendizajes, informes) va en gris.
 import type { ProcessStep } from '@/lib/ai/clustering/pipeline';
 
 export const ESTRATEGIA_PROCESS_MAP: ProcessStep[] = [
@@ -61,7 +61,7 @@ export const ESTRATEGIA_PROCESS_MAP: ProcessStep[] = [
     status: 'built',
     file: 'lib/estrategia/rules.ts',
     when: 'Según el plan (por defecto, cada semana).',
-    ai: 'Nada: son reglas. El estratega (fase 2) las usará para pensar.',
+    ai: 'Nada: son reglas. El estratega las recibe en su expediente.',
     code: 'Cada señal tiene una clave única: no se repite, se actualiza, se resuelve sola cuando deja de aparecer y no se reabre si se descartó. Solo avisan por Telegram las de gravedad «aviso» o «crítico»; las oportunidades salen en el panel y en el informe semanal.',
     tables: ['est_signals']
   },
@@ -118,7 +118,7 @@ export const ESTRATEGIA_PROCESS_MAP: ProcessStep[] = [
     id: 'est-ver',
     lane: 'Ver',
     name: 'Pestaña, panel, informe semanal y agente',
-    description: 'Pestaña «Estrategia» de la ficha (solo las secciones de los procesos activos del cliente), panel propio (clientes, planes, calendario, ajustes), apartado del informe semanal y herramienta del agente estrategia_cliente.',
+    description: 'Pestaña «Estrategia» de la ficha (solo las secciones de los procesos activos del cliente), panel propio (clientes, planes, calendario, calidad del estratega, ajustes), apartado del informe semanal y herramienta del agente estrategia_cliente.',
     status: 'built',
     file: 'lib/estrategia/report.ts',
     when: 'Al abrir la pestaña o el panel; el informe semanal los lunes; el agente cuando se le pregunta.',
@@ -129,13 +129,27 @@ export const ESTRATEGIA_PROCESS_MAP: ProcessStep[] = [
   {
     id: 'est-estratega',
     lane: 'Decidir',
-    name: 'Estratega (fase 2)',
-    description: 'Opus con herramientas: relaciona el rendimiento con el trabajo hecho y propone tareas con evidencias, horas estimadas e impacto esperado, dentro de las horas contratadas; con ✅ crea el encargo en ClickUp.',
-    status: 'planned',
-    file: 'docs/DISENO-ESTRATEGIA-VIVA.md',
-    when: 'Con la frecuencia de su plan, al momento ante algo grave y a petición.',
-    ai: 'Opus 5.5.',
-    code: 'Priorización ICE con horas reales; evidencia obligatoria validada en código; sin repetir encargos abiertos; métricas de aceptación, ejecución y calibración.'
+    name: 'Estratega (Opus)',
+    description: 'Prepara el expediente del cliente (ficha, horas, objetivos con código O1…, cifras de 28 días frente a las anteriores y al año pasado, señales con código S1…, palabras clave, consultas y páginas de Search Console, salud de la web, trabajo hecho con el antes y después de cada URL, encargos abiertos, propuestas anteriores con sus motivos, lo que suele tardar el equipo y el calendario) y Opus devuelve un diagnóstico y propuestas en JSON. Llegan por Telegram con botones ✅ Crear · ✏️ Ajustar · ⏸️ Luego · ✖️ No (con motivo) y salen en la ficha → Estrategia → Propuestas. ✅ crea el encargo en ClickUp a través de Operaciones.',
+    status: 'built',
+    file: 'lib/estrategia/strategist.ts',
+    when: 'Con la frecuencia de su plan (proceso «Análisis del estratega», por defecto semanal en SEO estratégico y quincenal en SEO local); al momento si un objetivo pasa a desviado o hay una caída crítica (proceso «Análisis por alerta», como mucho N al mes por cliente y nunca dos en 3 días); y con «Analizar ahora» en la ficha. Los análisis van en cola y un trabajador los hace de uno en uno, aparte del resto de procesos.',
+    ai: 'Opus 5.5 con el prompt editable est_strategist (IA y modelos → Prompts): diagnóstico, aprendizajes y hasta el máximo de propuestas con evidencia, tipo de trabajo, impacto, confianza, horas y efecto esperado. Los datos del cliente van marcados como no fiables (no son instrucciones).',
+    code: 'Valida cada propuesta: evidencia que esté de verdad en el expediente (si no, fuera), sin repetir encargos abiertos, trabajo hecho ni propuestas anteriores; horas = mediana del equipo para ese tipo de trabajo si hay al menos 3 casos; prioridad ICE (impacto × confianza / horas) y recorte a las horas que quedan del mes. Tope de gasto de IA del módulo. Decidir: edición; quien lleva las operaciones decide por Telegram. Una propuesta se reclama antes de crear el encargo (nunca dos). Caducan si no se deciden; «Más adelante» vuelve a poder proponerse pasado el plazo. Ajustes en Trabajo → Estrategia → Ajustes → Estratega (propuestas por análisis, alertas al mes, caducidad y «Más adelante»). Nunca cambia nada en la web del cliente.',
+    tables: ['est_analyses', 'est_suggestions', 'est_settings'],
+    prompts: ['est_strategist']
+  },
+  {
+    id: 'est-calidad',
+    lane: 'Aprender',
+    name: 'Calidad del estratega',
+    description: 'Pestaña «Calidad del estratega» del panel: aceptación (encargos creados / decididas), ejecución (encargos terminados de los creados hace más de 3 semanas), motivos de «No», análisis y coste, por cliente y en 30, 90 o 180 días.',
+    status: 'built',
+    file: 'lib/estrategia/strategist-rules.ts',
+    when: 'Al abrir la pestaña. Un encargo de una propuesta se marca hecho cuando la extracción ve que se ha terminado.',
+    ai: 'Nada. Los motivos de «No» y los resultados vuelven al estratega en el siguiente expediente para que aprenda.',
+    code: 'Las aplazadas no cuentan en la aceptación; las aprobadas recientes no cuentan en la ejecución.',
+    tables: ['est_suggestions', 'est_analyses']
   },
   {
     id: 'est-impacto',

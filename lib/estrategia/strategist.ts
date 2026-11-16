@@ -33,6 +33,7 @@ import {
   isDuplicate,
   normQuery,
   normUrl,
+  qualityStats,
   reasonKeyboard,
   validEvidence,
   type Button,
@@ -41,7 +42,7 @@ import {
   type RejectReason,
   type StrategistSettings
 } from '@/lib/estrategia/strategist-rules';
-import { getSettings, listSignals, patchSettingsState } from '@/lib/estrategia/store';
+import { clientEffective, getSettings, listSignals, patchSettingsState } from '@/lib/estrategia/store';
 import { aiSpentThisMonth, loadCtx, search, type Ctx } from '@/lib/estrategia/processes';
 import { clientStrategy } from '@/lib/estrategia/report';
 
@@ -85,6 +86,9 @@ async function setAwaiting(tenantId: string, chatId: string, value: { id: string
 
 /** Pide un análisis de un cliente. Si ya hay uno en cola o en marcha, no se duplica. */
 export async function queueAnalysis(tenantId: string, clientId: string, trigger: 'programado' | 'alerta' | 'manual', opts: { reason?: string; by?: string } = {}): Promise<{ ok: boolean; message: string; id: string | null }> {
+  // Solo clientes de la cuenta con plan de seguimiento (el cliente puede venir de una acción web).
+  const eff = await clientEffective(tenantId, clientId);
+  if (!eff) return { ok: false, message: 'Ese cliente no tiene plan de seguimiento: actívalo antes en Estrategia.', id: null };
   const [open] = await db
     .select({ id: estAnalyses.id })
     .from(estAnalyses)
@@ -706,6 +710,37 @@ export async function tenantSuggestions(tenantId: string, sinceDays: number) {
       .where(and(eq(estAnalyses.tenantId, tenantId), gte(estAnalyses.createdAt, since)))
   ]);
   return { sugs, analyses };
+}
+
+export type QualityView = {
+  days: number;
+  stats: ReturnType<typeof qualityStats>;
+  analyses: { total: number; done: number; failed: number; skipped: number; byAlert: number; manual: number; costUsd: number };
+  byClient: { clientId: string; stats: ReturnType<typeof qualityStats>; analyses: number; costUsd: number }[];
+};
+
+/** Calidad del estratega en los últimos «days» días: aceptación, ejecución, motivos de rechazo, coste y por cliente. */
+export async function strategistQuality(tenantId: string, days: number, now = new Date()): Promise<QualityView> {
+  const { sugs, analyses } = await tenantSuggestions(tenantId, days);
+  const cost = (list: { cost: string | null }[]) => Math.round(list.reduce((t, a) => t + (a.cost !== null ? Number(a.cost) : 0), 0) * 100) / 100;
+  const clientIds = [...new Set([...sugs.map((s) => s.clientId), ...analyses.map((a) => a.clientId)])];
+  return {
+    days,
+    stats: qualityStats(sugs, now),
+    analyses: {
+      total: analyses.length,
+      done: analyses.filter((a) => a.status === 'hecho').length,
+      failed: analyses.filter((a) => a.status === 'error').length,
+      skipped: analyses.filter((a) => a.status === 'omitido').length,
+      byAlert: analyses.filter((a) => a.trigger === 'alerta').length,
+      manual: analyses.filter((a) => a.trigger === 'manual').length,
+      costUsd: cost(analyses)
+    },
+    byClient: clientIds.map((clientId) => {
+      const mine = analyses.filter((a) => a.clientId === clientId);
+      return { clientId, stats: qualityStats(sugs.filter((s) => s.clientId === clientId), now), analyses: mine.length, costUsd: cost(mine) };
+    })
+  };
 }
 
 /** Texto corto de las propuestas pendientes de un cliente (para la herramienta del agente). */

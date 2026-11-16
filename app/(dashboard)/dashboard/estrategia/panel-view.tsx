@@ -5,13 +5,14 @@
 import { useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { CalendarDays, Compass, Copy, ListChecks, Play, Plus, Search, Settings2, TriangleAlert, Users } from 'lucide-react';
+import { BarChart3, CalendarDays, Compass, Copy, ListChecks, Play, Plus, Search, Settings2, TriangleAlert, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge, EmptyState } from '@/components/ui/page';
+import { Badge, EmptyState, StatCard } from '@/components/ui/page';
 import { cn } from '@/lib/utils';
-import { deleteEventAction, deletePlanAction, saveEstSettingsAction, saveEventAction, savePlanAction, setClientPlanAction } from '@/lib/estrategia/actions';
+import { deleteEventAction, deletePlanAction, saveEstSettingsAction, saveEventAction, savePlanAction, saveStrategistSettingsAction, setClientPlanAction } from '@/lib/estrategia/actions';
 import type { OverviewRow } from '@/lib/estrategia/report';
 import { FREQUENCY_LABEL, HEALTH_LABEL, fmtDayYear, type Health } from '@/lib/estrategia/rules';
+import { REJECT_REASONS, type StrategistSettings } from '@/lib/estrategia/strategist-rules';
 import { ConfirmDelete } from '../clientes/ui';
 import { HEALTH_TONE } from './cliente-estrategia';
 
@@ -20,7 +21,15 @@ type PlanV = { id: string; key: string; name: string; description: string; proce
 type ProcV = { key: string; label: string; description: string; cost: string; frequencies: number[]; phase: number; needs: string[] };
 type EventV = { id: string; date: string; endDate: string | null; kind: string; title: string; notes: string; source: string };
 type SettingsV = { onTrackPct: number; atRiskPct: number; graceDays: number; strikingFrom: number; strikingTo: number; minImpressions: number; alertsEnabled: boolean; askUrl: boolean; trackDays: number; aiMonthlyCapUsd: number };
-type Tab = 'clientes' | 'planes' | 'calendario' | 'ajustes';
+type Tab = 'clientes' | 'planes' | 'calendario' | 'calidad' | 'ajustes';
+type QualityStatsV = { total: number; pending: number; accepted: number; adjusted: number; rejected: number; snoozed: number; expired: number; acceptanceRate: number | null; executionRate: number | null; executedOld: number; oldAccepted: number; reasons: Record<string, number> };
+type QualityV = {
+  days: number;
+  dayOptions: number[];
+  stats: QualityStatsV;
+  analyses: { total: number; done: number; failed: number; skipped: number; byAlert: number; manual: number; costUsd: number };
+  byClient: { clientId: string; name: string; analyses: number; costUsd: number; total: number; accepted: number; rejected: number; pending: number; acceptanceRate: number | null; executionRate: number | null }[];
+};
 
 const selectCls = 'h-9 rounded-md border border-input bg-card px-2.5 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-brand/40';
 const COST_LABEL: Record<string, string> = { gratis: 'Gratis', ia_minima: 'IA mínima', ia: 'IA (Opus)', dataforseo: 'DataForSEO' };
@@ -40,12 +49,13 @@ function useAct() {
   return { pending, run, Msg };
 }
 
-export function PanelView(props: { initialTab: Tab; isAdmin: boolean; rows: OverviewRow[]; withoutPlan: { id: string; name: string; status: string }[]; plans: PlanV[]; processes: ProcV[]; events: EventV[]; settings: SettingsV }) {
+export function PanelView(props: { initialTab: Tab; isAdmin: boolean; rows: OverviewRow[]; withoutPlan: { id: string; name: string; status: string }[]; plans: PlanV[]; processes: ProcV[]; events: EventV[]; settings: SettingsV; strategist: StrategistSettings; quality: QualityV }) {
   const [tab, setTab] = useState<Tab>(props.initialTab);
   const tabs: { key: Tab; label: string; icon: typeof Users; show: boolean }[] = [
     { key: 'clientes', label: `Clientes (${props.rows.length})`, icon: Users, show: true },
     { key: 'planes', label: 'Planes', icon: ListChecks, show: true },
     { key: 'calendario', label: 'Calendario', icon: CalendarDays, show: true },
+    { key: 'calidad', label: 'Calidad del estratega', icon: BarChart3, show: true },
     { key: 'ajustes', label: 'Ajustes', icon: Settings2, show: props.isAdmin }
   ];
   return (
@@ -64,7 +74,8 @@ export function PanelView(props: { initialTab: Tab; isAdmin: boolean; rows: Over
       {/* La clave cambia al guardar o crear planes: el borrador se rehace con lo que hay en el servidor. */}
       {tab === 'planes' && <Planes key={props.plans.map((p) => `${p.id}:${p.name}:${JSON.stringify(p.processes)}`).join('|')} plans={props.plans} processes={props.processes} isAdmin={props.isAdmin} />}
       {tab === 'calendario' && <Calendario events={props.events} isAdmin={props.isAdmin} />}
-      {tab === 'ajustes' && props.isAdmin && <Ajustes initial={props.settings} />}
+      {tab === 'calidad' && <Calidad q={props.quality} />}
+      {tab === 'ajustes' && props.isAdmin && <Ajustes initial={props.settings} strategist={props.strategist} />}
     </div>
   );
 }
@@ -402,16 +413,118 @@ function Calendario({ events, isAdmin }: { events: EventV[]; isAdmin: boolean })
   );
 }
 
+// --- Calidad del estratega ------------------------------------------------------------------------------------------
+
+const pct = (v: number | null) => (v === null ? '—' : `${Math.round(v * 100)} %`);
+const usd = (v: number) => `${v.toFixed(2).replace('.', ',')} $`;
+
+function Calidad({ q }: { q: QualityV }) {
+  const s = q.stats;
+  const reasons = Object.entries(s.reasons).sort((a, b) => b[1] - a[1]);
+  const maxReason = Math.max(1, ...reasons.map(([, n]) => n));
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="max-w-3xl text-sm text-muted-foreground">Si las propuestas del estratega sirven: cuántas se convierten en encargo, cuántas se terminan y por qué se descartan las demás. Los motivos de «No» se le pasan en el siguiente análisis para que aprenda.</p>
+        <div className="flex gap-1" role="group" aria-label="Periodo">
+          {q.dayOptions.map((d) => (
+            <Button key={d} size="sm" variant={q.days === d ? 'default' : 'ghost'} asChild>
+              <Link href={`/dashboard/estrategia?tab=calidad&dias=${d}`} scroll={false}>
+                {d} días
+              </Link>
+            </Button>
+          ))}
+        </div>
+      </div>
+      {s.total === 0 && q.analyses.total === 0 ? (
+        <EmptyState icon={BarChart3} title="El estratega aún no ha propuesto nada en este periodo" description="Analiza a los clientes cuyo plan incluye «Análisis del estratega», según su frecuencia. También se puede pedir a mano en la ficha del cliente → Estrategia → «Analizar ahora»." />
+      ) : (
+        <>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard label="Aceptación" value={pct(s.acceptanceRate)} hint={`${s.accepted} encargo(s) creados de ${s.accepted + s.rejected} decididas${s.adjusted ? ` · ${s.adjusted} con ajuste` : ''}`} tone={s.acceptanceRate === null ? 'neutral' : s.acceptanceRate >= 0.5 ? 'success' : s.acceptanceRate >= 0.3 ? 'warning' : 'danger'} />
+            <StatCard label="Ejecución" value={pct(s.executionRate)} hint={s.oldAccepted ? `${s.executedOld} de ${s.oldAccepted} encargos de hace más de 3 semanas, terminados` : 'Cuenta los encargos con más de 3 semanas'} />
+            <StatCard label="Propuestas" value={s.total} hint={`${s.pending} pendientes · ${s.snoozed} más adelante · ${s.expired} caducadas`} />
+            <StatCard label="Análisis y coste" value={usd(q.analyses.costUsd)} hint={`${q.analyses.done} hechos de ${q.analyses.total}${q.analyses.byAlert ? ` · ${q.analyses.byAlert} por alerta` : ''}${q.analyses.manual ? ` · ${q.analyses.manual} a mano` : ''}${q.analyses.failed ? ` · ${q.analyses.failed} con error` : ''}${q.analyses.skipped ? ` · ${q.analyses.skipped} omitidos` : ''}`} />
+          </div>
+          <div className="grid gap-4 lg:grid-cols-3">
+            <section className="rounded-xl border bg-card p-4 shadow-xs">
+              <h3 className="text-sm font-semibold">Motivos de «No»</h3>
+              {reasons.length === 0 ? (
+                <p className="mt-2 text-sm text-muted-foreground">Ninguna rechazada.</p>
+              ) : (
+                <ul className="mt-3 space-y-2">
+                  {reasons.map(([k, n]) => (
+                    <li key={k} className="text-sm">
+                      <div className="flex justify-between gap-2">
+                        <span>{REJECT_REASONS[k as keyof typeof REJECT_REASONS] ?? k}</span>
+                        <span className="tabular-nums text-muted-foreground">{n}</span>
+                      </div>
+                      <div className="mt-1 h-1.5 rounded-full bg-muted">
+                        <div className="h-1.5 rounded-full bg-brand" style={{ width: `${(n / maxReason) * 100}%` }} />
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="mt-3 text-xs text-muted-foreground">Muchos «Ya hecho» = le falta ver encargos o trabajo; muchos «No encaja» = revisar la ficha del cliente o el prompt (IA y modelos → Prompts).</p>
+            </section>
+            <section className="overflow-x-auto rounded-xl border bg-card shadow-xs lg:col-span-2">
+              <table className="data-table min-w-[620px]">
+                <thead>
+                  <tr>
+                    <th>Cliente</th>
+                    <th className="text-right">Análisis</th>
+                    <th className="text-right">Propuestas</th>
+                    <th className="text-right">Pendientes</th>
+                    <th className="text-right">Aceptación</th>
+                    <th className="text-right">Ejecución</th>
+                    <th className="text-right">Coste</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {q.byClient.map((c) => (
+                    <tr key={c.clientId}>
+                      <td>
+                        <Link href={`/dashboard/clientes/${c.clientId}?tab=estrategia`} className="font-medium hover:text-brand hover:underline">
+                          {c.name}
+                        </Link>
+                      </td>
+                      <td className="text-right tabular-nums">{c.analyses}</td>
+                      <td className="text-right tabular-nums">{c.total}</td>
+                      <td className="text-right tabular-nums">{c.pending || '—'}</td>
+                      <td className="text-right tabular-nums">{pct(c.acceptanceRate)}</td>
+                      <td className="text-right tabular-nums">{pct(c.executionRate)}</td>
+                      <td className="text-right tabular-nums">{usd(c.costUsd)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // --- Ajustes --------------------------------------------------------------------------------------------------------
 
-function Ajustes({ initial }: { initial: SettingsV }) {
+function Ajustes({ initial, strategist }: { initial: SettingsV; strategist: StrategistSettings }) {
   const [s, setS] = useState(initial);
+  const [st, setSt] = useState(strategist);
   const { pending, run, Msg } = useAct();
   const numIn = (key: keyof SettingsV, label: string, hint: string, min: number, max: number) => (
     <label className="text-sm">
       <span className="mb-1 block text-xs text-muted-foreground">{label}</span>
       <input type="number" min={min} max={max} value={s[key] as number} onChange={(e) => setS({ ...s, [key]: Number(e.target.value) })} className={cn(selectCls, 'w-28')} />
       <span className="mt-1 block text-xs text-muted-foreground">{hint}</span>
+    </label>
+  );
+  const stIn = (key: keyof StrategistSettings, label: string, hint: string, min: number, max: number) => (
+    <label className="text-sm">
+      <span className="mb-1 block max-w-[220px] text-xs text-muted-foreground">{label}</span>
+      <input type="number" min={min} max={max} value={st[key]} onChange={(e) => setSt({ ...st, [key]: Number(e.target.value) })} className={cn(selectCls, 'w-28')} />
+      <span className="mt-1 block max-w-[220px] text-xs text-muted-foreground">{hint}</span>
     </label>
   );
   const check = (key: keyof SettingsV, label: string, hint: string) => (
@@ -454,8 +567,18 @@ function Ajustes({ initial }: { initial: SettingsV }) {
           </div>
         </div>
       </div>
+      <div>
+        <h3 className="text-sm font-semibold">Estratega (Opus)</h3>
+        <p className="mt-1 max-w-3xl text-xs text-muted-foreground">Cuándo analiza cada cliente lo dice su plan (proceso «Análisis del estratega»). Aquí, cuánto propone y cuánto duran las propuestas. Su gasto cuenta dentro del tope de IA del módulo.</p>
+        <div className="mt-3 flex flex-wrap gap-6">
+          {stIn('maxSuggestions', 'Propuestas por análisis (máximo)', 'Se quedan las de más prioridad que quepan en las horas. Por defecto 5.', 1, 10)}
+          {stIn('alertsPerMonth', 'Análisis por alerta al mes por cliente', 'Solo si el plan los incluye. 0 = ninguno. Por defecto 2.', 0, 8)}
+          {stIn('expireDays', 'Días hasta que caduca una propuesta sin decidir', 'Por defecto 21.', 7, 90)}
+          {stIn('snoozeDays', 'Días de «Más adelante»', 'Después puede volver a proponerla. Por defecto 30.', 7, 120)}
+        </div>
+      </div>
       <div className="flex items-center gap-3">
-        <Button size="sm" onClick={() => run(() => saveEstSettingsAction(s), 'Ajustes guardados.')} disabled={pending}>
+        <Button size="sm" onClick={() => run(async () => { const a = await saveEstSettingsAction(s); return a.ok ? saveStrategistSettingsAction(st) : a; }, 'Ajustes guardados.')} disabled={pending}>
           {pending ? 'Guardando…' : 'Guardar ajustes'}
         </Button>
         <Msg />
