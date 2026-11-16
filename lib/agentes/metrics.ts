@@ -7,7 +7,7 @@ import 'server-only';
 //        día; sesiones y eventos clave por canal.
 //   gbp  Business Profile: vistas en Búsqueda y Maps (móvil y ordenador), llamadas, clics a la web, cómo llegar,
 //        mensajes y reservas por día (un valor ausente es 0, según Google).
-import type { MetricRow, MetricSource, MetricTopRow } from '@/lib/core/capabilities';
+import type { MetricRow, MetricSource, MetricTopRow, SearchQuery, SearchRow, UrlInspection } from '@/lib/core/capabilities';
 import { gapiFetch, isConnected } from '@/lib/agentes/integrations';
 
 /** Nombre corto con el que se guarda cada métrica de Business Profile. */
@@ -132,6 +132,33 @@ async function fetchTop(tenantId: string, source: string, property: string, from
   return rows.map((r) => ({ kind, key: r.keys[0], clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position }));
 }
 
+/** Consulta libre a Search Console (módulo Estrategia: palabras clave, URLs trabajadas, detectores). */
+async function search(tenantId: string, source: string, property: string, q: SearchQuery): Promise<SearchRow[]> {
+  if (source !== 'gsc') return [];
+  const body: Record<string, unknown> = { startDate: q.from, endDate: q.to, dimensions: q.dimensions, rowLimit: Math.min(Math.max(q.limit ?? 1000, 1), 25000), dataState: 'final' };
+  if (q.filters?.length) body.dimensionFilterGroups = [{ groupType: 'and', filters: q.filters.map((f) => ({ dimension: f.dimension, operator: f.operator, expression: f.expression })) }];
+  const rows = await gscQuery(tenantId, property, body);
+  return rows.map((r) => ({ keys: r.keys ?? [], clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position }));
+}
+
+type InspectResp = { inspectionResult?: { indexStatusResult?: { verdict?: string; coverageState?: string; indexingState?: string; robotsTxtState?: string; lastCrawlTime?: string; googleCanonical?: string } } };
+
+/** Inspección de URL de Search Console: último rastreo e indexación (cuota de Google: unas 2.000 al día por propiedad). */
+async function inspectUrl(tenantId: string, source: string, property: string, url: string): Promise<UrlInspection | null> {
+  if (source !== 'gsc') return null;
+  const r = await gapiFetch<InspectResp>(tenantId, 'https://searchconsole.googleapis.com/v1/urlInspection/index:inspect', { inspectionUrl: url, siteUrl: property, languageCode: 'es' });
+  const s = r.inspectionResult?.indexStatusResult;
+  if (!s) return null;
+  return {
+    lastCrawl: s.lastCrawlTime ? s.lastCrawlTime.slice(0, 10) : null,
+    verdict: s.verdict ?? null,
+    coverage: s.coverageState ?? null,
+    indexing: s.indexingState ?? null,
+    robots: s.robotsTxtState ?? null,
+    canonical: s.googleCanonical ?? null
+  };
+}
+
 export const GOOGLE_METRIC_SOURCE: MetricSource = {
   provider: 'google',
   kinds: [
@@ -145,5 +172,7 @@ export const GOOGLE_METRIC_SOURCE: MetricSource = {
   isConnected: (t) => isConnected(t, 'google'),
   normalize: normalizeGoogleProperty,
   fetchDaily,
-  fetchTop
+  fetchTop,
+  search,
+  inspectUrl
 };

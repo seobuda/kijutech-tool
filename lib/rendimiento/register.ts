@@ -8,16 +8,18 @@ import {
   proposeChange,
   registerChangeExecutor,
   registerHealthCheck,
+  registerKpiProvider,
   registerReportSection,
   registerScheduled,
   registerTools,
   type AgentTool,
+  type KpiProvider,
   type ModuleCheck,
   type ToolResult
 } from '@/lib/core/capabilities';
 import { findCoreClient } from '@/lib/core/clients';
-import { ANNOTATION_KINDS, ANNOTATION_KIND_LABEL, daysBetween, fmtDayYear, isAnnotationKind, isYmd, madridNow, type AnnotationKind, type CompareKey, type PeriodKey } from '@/lib/rendimiento/rules';
-import { listSync, PerfError, saveAnnotation } from '@/lib/rendimiento/store';
+import { ANNOTATION_KINDS, ANNOTATION_KIND_LABEL, KPI, KPIS, daysBetween, fmtDayYear, isAnnotationKind, isYmd, kpiValue, madridNow, type AnnotationKind, type CompareKey, type PeriodKey } from '@/lib/rendimiento/rules';
+import { activeBySource, listSync, loadDays, PerfError, saveAnnotation } from '@/lib/rendimiento/store';
 import { runPerformanceSync } from '@/lib/rendimiento/sync';
 import { clientPerformance, monthlyClientText, performanceText, previousMonth, runMonthlySummary, runPerformanceAlerts, weeklyLines } from '@/lib/rendimiento/report';
 
@@ -124,6 +126,26 @@ export async function performanceHealth(tenantId: string): Promise<ModuleCheck[]
   ];
 }
 
+/** Cifras de Rendimiento para otros módulos (Estrategia: objetivos, detectores), por el núcleo. */
+export const RENDIMIENTO_KPI_PROVIDER: KpiProvider = {
+  list: () => KPIS.map((k) => ({ key: k.key, label: k.label, short: k.short, source: k.source, format: k.format, lowerBetter: Boolean(k.lowerBetter), summable: k.format === 'int' })),
+  async values(tenantId, clientId, kpiKey, ranges) {
+    const k = KPI[kpiKey];
+    if (!k || !ranges.length) return ranges.map(() => null);
+    const sync = activeBySource(await listSync(tenantId, clientId))[k.source];
+    if (!sync) return ranges.map(() => null);
+    const from = ranges.map((r) => r.from).sort()[0];
+    const to = ranges.map((r) => r.to).sort().pop()!;
+    const days = await loadDays(tenantId, clientId, [{ source: k.source, property: sync.property }], from, to);
+    return ranges.map((r) => kpiValue(k, days, r.from, r.to));
+  },
+  async lastDay(tenantId, clientId, kpiKey) {
+    const k = KPI[kpiKey];
+    if (!k) return null;
+    return activeBySource(await listSync(tenantId, clientId))[k.source]?.syncedUntil ?? null;
+  }
+};
+
 let done = false;
 const lastExtras = new Map<string, number>();
 const inBackground = new Set<string>();
@@ -131,6 +153,7 @@ export function registerRendimientoCapabilities(): void {
   if (done) return;
   done = true;
   registerTools(RENDIMIENTO_TOOLS);
+  registerKpiProvider(RENDIMIENTO_KPI_PROVIDER);
   registerChangeExecutor('anotar_hito', async (tenantId, data) => {
     try {
       await saveAnnotation(tenantId, String(data.clientId), { date: String(data.fecha), kind: String(data.tipo), title: String(data.titulo), notes: String(data.notas ?? ''), source: 'agente' });

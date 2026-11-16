@@ -94,13 +94,21 @@ const perfSrc = read('lib/rendimiento/process-map.ts');
 for (const f of uniq(all(/file: '([^']+)'/g, perfSrc))) if (!fs.existsSync(path.join(root, f))) fail(`El mapa de Rendimiento cita un archivo que no existe: ${f}`);
 for (const t of uniq(all(/pgTable\(\s*'(perf_\w+)'/g, schemaSrc))) if (!perfSrc.includes(`'${t}'`)) fail(`La tabla «${t}» (módulo Rendimiento) no aparece en el mapa de Rendimiento.`);
 if (!/registerScheduled\('rendimiento de clientes'/.test(read('lib/rendimiento/register.ts'))) fail('La tarea del planificador de Rendimiento no está registrada (lib/rendimiento/register.ts).');
+// 5f. Mapa del módulo Estrategia (lib/estrategia/process-map.ts): archivos, todas sus tablas est_*, la tarea del
+// planificador y los prompts de IA que usa el módulo.
+const estSrc = read('lib/estrategia/process-map.ts');
+for (const f of uniq(all(/file: '([^']+)'/g, estSrc))) if (!fs.existsSync(path.join(root, f))) fail(`El mapa de Estrategia cita un archivo que no existe: ${f}`);
+for (const t of uniq(all(/pgTable\(\s*'(est_\w+)'/g, schemaSrc))) if (!estSrc.includes(`'${t}'`)) fail(`La tabla «${t}» (módulo Estrategia) no aparece en el mapa de Estrategia.`);
+if (!/registerScheduled\('estrategia de clientes'/.test(read('lib/estrategia/register.ts'))) fail('La tarea del planificador de Estrategia no está registrada (lib/estrategia/register.ts).');
+const estPromptSrc = fs.readdirSync(path.join(root, 'lib/estrategia')).filter((f) => f.endsWith('.ts')).map((f) => read(`lib/estrategia/${f}`)).join('\n');
+for (const k of uniq(all(/PROMPT\s*=\s*'(est_\w+)'/g, estPromptSrc))) if (!estSrc.includes(`'${k}'`)) fail(`Prompt de IA «${k}» (Estrategia) sin entrada en el mapa de Estrategia.`);
 function schemaSrcForAgt() {
   return read('lib/db/schema.ts');
 }
 
 // 6. Enlaces entre mapas
 const mapIds = all(/^ {2}(\w+): [A-Z_]+,$/gm, mapSrc.slice(mapSrc.indexOf('export const OPS_MAPS')));
-const known = new Set([...mapIds, 'clustering', 'competitor_analysis', 'security', 'agentes', 'clientes', 'rendimiento']);
+const known = new Set([...mapIds, 'clustering', 'competitor_analysis', 'security', 'agentes', 'clientes', 'rendimiento', 'estrategia']);
 for (const id of uniq([...all(/detailMapId: '(\w+)'/g, mapSrc), ...all(/detailMapId: '(\w+)'/g, registrySrc)])) {
   if (!known.has(id)) fail(`detailMapId «${id}» no corresponde a ningún mapa registrado en OPS_MAPS.`);
 }

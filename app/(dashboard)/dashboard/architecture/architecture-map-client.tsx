@@ -29,6 +29,7 @@ import {
   Map as MapIcon,
   Hammer,
   BarChart3,
+  Compass,
   NotebookText,
   Circle,
   ArrowLeft,
@@ -63,6 +64,7 @@ const ICONS: Record<string, LucideIcon> = {
   Map: MapIcon,
   Hammer,
   BarChart3,
+  Compass,
   NotebookText,
   Circle,
 };

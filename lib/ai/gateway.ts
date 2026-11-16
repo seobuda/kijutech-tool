@@ -33,6 +33,11 @@ type CallAIParams = {
   // (ver DEFAULT_MAX_TOKENS en adapters/anthropic.ts, el único que lo
   // exige como campo obligatorio de su API).
   maxTokens?: number;
+  /**
+   * Modelo concreto para esta llamada (p. ej. uno pequeño y barato para clasificar). Solo se usa si el proveedor activo
+   * es el de ese modelo (Anthropic para «claude-…»); si no, se usa el modelo configurado en IA y modelos.
+   */
+  model?: string;
 };
 
 export async function getPrompt(
@@ -258,6 +263,7 @@ export async function callAI(
   params: CallAIParams
 ): Promise<AIResponse & { jobId: string }> {
   const { tenantId, projectId, function: fn, messages, preferredProvider, promptKey, maxTokens } = params;
+  const modelFor = (provider: string, configured: string) => (params.model && provider === 'anthropic' && /^claude-[a-z0-9-]+$/.test(params.model) ? params.model : configured);
 
   // Si se pasa promptKey, se carga aquí únicamente para dejar constancia
   // en el job de qué prompt estaba activo en el momento de la llamada —
@@ -311,6 +317,7 @@ export async function callAI(
   let primary: { provider: string; model: string } | null = null;
   try {
     const setting = await resolveActiveProvider(tenantId, preferredProvider);
+    setting.model = modelFor(setting.provider, setting.model);
     primary = { provider: setting.provider, model: setting.model };
 
     const adapter = ADAPTERS[setting.provider];

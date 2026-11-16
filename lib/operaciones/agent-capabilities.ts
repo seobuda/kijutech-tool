@@ -13,8 +13,9 @@ import { and, desc, eq, notInArray } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { opsRequests, opsSettings, roles, userRoles, users } from '@/lib/db/schema';
 import { getPrompt } from '@/lib/ai/gateway';
-import { changeExecutor, registerClientDeleteGuard, registerTools, setChangeProposer, setEmailOutbound, setTelegramOutbound, type AgentTool, type ToolContext, type ToolResult } from '@/lib/core/capabilities';
+import { changeExecutor, registerClientDeleteGuard, registerTools, registerWorkSource, setChangeProposer, setEmailOutbound, setTelegramOutbound, type AgentTool, type ToolContext, type ToolResult } from '@/lib/core/capabilities';
 import { decideAction, getAction, recordAction, type Autonomy } from '@/lib/operaciones/agent-actions';
+import { OPS_WORK_SOURCE } from '@/lib/operaciones/work-source';
 import { getCalendar, saveCalendar, validateEntry, KIND_LABEL, type CalendarEntry } from '@/lib/operaciones/calendar';
 import { findClientInText, getLevels, listClients, normText, type ClientWithServices } from '@/lib/operaciones/clients';
 import { applyClientPlan, loadTarget, MEMORY_KINDS, opsSheetText, planClientChange, planHtml, type AgentClientInput, type ClientPlan, type MemoryKind } from '@/lib/operaciones/client-write';
@@ -695,6 +696,8 @@ export function registerOperacionesCapabilities(): void {
   registerTools(OPS_AGENT_TOOLS);
   // El motor de propuestas queda disponible para las herramientas de cambio de otros módulos (núcleo: proposeChange).
   setChangeProposer(proposeOrRun);
+  // Encargos terminados, carga del cliente y preguntas sobre un encargo, para otros módulos (Estrategia).
+  registerWorkSource(OPS_WORK_SOURCE);
   // Un cliente con encargos no se borra (se le da de baja): así no se pierde el historial.
   registerClientDeleteGuard('operaciones', async (tenantId, clientId) => {
     const c = (await listClients(tenantId)).find((x) => x.id === clientId);

@@ -232,7 +232,21 @@ export type MetricSource = {
   normalize: (source: string, value: string) => string | null;
   fetchDaily: (tenantId: string, source: string, property: string, from: string, to: string) => Promise<MetricRow[]>;
   fetchTop?: (tenantId: string, source: string, property: string, from: string, to: string, kind: 'query' | 'page', limit: number) => Promise<MetricTopRow[]>;
+  /** Consulta libre a un buscador (Search Console): por fecha, consulta, página o dispositivo, con filtros (15 nov 2026). */
+  search?: (tenantId: string, source: string, property: string, q: SearchQuery) => Promise<SearchRow[]>;
+  /** Estado de una URL en el buscador (último rastreo, indexación). null si la fuente no lo ofrece. */
+  inspectUrl?: (tenantId: string, source: string, property: string, url: string) => Promise<UrlInspection | null>;
 };
+export type SearchDimension = 'date' | 'query' | 'page' | 'device';
+export type SearchQuery = {
+  from: string;
+  to: string;
+  dimensions: SearchDimension[];
+  filters?: { dimension: 'query' | 'page'; operator: 'equals' | 'contains' | 'includingRegex'; expression: string }[];
+  limit?: number;
+};
+export type SearchRow = { keys: string[]; clicks: number; impressions: number; ctr: number; position: number };
+export type UrlInspection = { lastCrawl: string | null; verdict: string | null; coverage: string | null; indexing: string | null; robots: string | null; canonical: string | null };
 const GM = globalThis as unknown as { __kijuMetricSources?: Map<string, MetricSource>; __kijuReportSections?: Map<string, ReportSection>; __kijuHealthChecks?: Map<string, ModuleHealthCheck> };
 
 export function registerMetricSource(s: MetricSource): void {
@@ -301,4 +315,82 @@ export async function proposeChange(ctx: ToolContext, tool: string, summaryHtml:
   if (GP.__kijuChangeProposer) return GP.__kijuChangeProposer(ctx, tool, summaryHtml, data);
   const exec = changeExecutor(tool);
   return exec ? exec(ctx.tenantId, data, `Agente (${ctx.agentKey})`) : { ok: false, content: 'Esa acción no está disponible.' };
+}
+
+// --- Estrategia (15 nov 2026): cifras, trabajo hecho y calendario, sin que un módulo importe a otro ------------------
+// Rendimiento ofrece sus cifras (KPI) ya calculadas; Operaciones, los encargos terminados, las horas y una pregunta al
+// equipo sobre un encargo; Estrategia, el calendario de eventos (actualizaciones de Google, festivos) que Rendimiento
+// pinta en sus gráficas y usa en sus avisos.
+export type KpiInfo = { key: string; label: string; short: string; source: string; format: 'int' | 'pct' | 'dec'; lowerBetter: boolean; summable: boolean };
+export type KpiProvider = {
+  list: () => KpiInfo[];
+  /** Valor de una cifra en cada tramo (null = sin datos de esa fuente en el tramo). */
+  values: (tenantId: string, clientId: string, kpiKey: string, ranges: { from: string; to: string }[]) => Promise<(number | null)[]>;
+  /** Último día con datos de la fuente de esa cifra para el cliente (null = sin datos). */
+  lastDay: (tenantId: string, clientId: string, kpiKey: string) => Promise<string | null>;
+};
+const GK = globalThis as unknown as { __kijuKpiProvider?: KpiProvider | null; __kijuWorkSource?: WorkSource | null; __kijuTaskAnswers?: Map<string, TaskAnswerHandler>; __kijuEventSources?: Map<string, EventSource> };
+export function registerKpiProvider(p: KpiProvider): void {
+  GK.__kijuKpiProvider = p;
+}
+export function kpiProvider(): KpiProvider | null {
+  return GK.__kijuKpiProvider ?? null;
+}
+
+export type WorkItem = {
+  taskId: string;
+  /** Referencia interna para poder preguntar por el encargo. */
+  ref: string;
+  clientId: string;
+  title: string;
+  description: string;
+  doneNote: string;
+  workType: string | null;
+  doneAt: string; // ISO
+  minutes: number | null;
+  assigneeName: string | null;
+};
+export type ClientWorkload = { hoursMonth: number | null; monthlyHours: number | null; upcoming: number | null; horizonDays: number | null; openTasks: number };
+export type WorkSource = {
+  /** Encargos de clientes terminados desde una fecha (los más antiguos primero, como mucho «limit»). */
+  completedSince: (tenantId: string, since: Date, limit: number) => Promise<{ items: WorkItem[]; cursor: string | null }>;
+  /** Encargos de un cliente terminados en un periodo (para la pestaña). */
+  clientCompleted: (tenantId: string, clientId: string, sinceDays: number) => Promise<WorkItem[]>;
+  workload: (tenantId: string, clientId: string) => Promise<ClientWorkload | null>;
+  /** Pregunta a quien hizo el encargo (Telegram, con botones «Escribir» y «No aplica»); la respuesta va al manejador «kind». */
+  askAboutTask: (tenantId: string, ref: string, kind: string, html: string) => Promise<boolean>;
+};
+export function registerWorkSource(w: WorkSource): void {
+  GK.__kijuWorkSource = w;
+}
+export function workSource(): WorkSource | null {
+  return GK.__kijuWorkSource ?? null;
+}
+
+/** Quien preguntó recibe la respuesta (texto, o null si «No aplica») y devuelve la frase con la que contesta el bot. */
+export type TaskAnswerHandler = (tenantId: string, taskId: string, answer: string | null, by: string) => Promise<string>;
+export function registerTaskAnswerHandler(kind: string, fn: TaskAnswerHandler): void {
+  if (!/^[a-z]{2,10}$/.test(kind)) throw new Error(`Tipo de pregunta no válido: ${kind}`);
+  (GK.__kijuTaskAnswers ??= new Map()).set(kind, fn);
+}
+export function taskAnswerHandler(kind: string): TaskAnswerHandler | null {
+  return GK.__kijuTaskAnswers?.get(kind) ?? null;
+}
+
+export type ExternalEvent = { date: string; endDate: string | null; kind: string; title: string };
+export type EventSource = (tenantId: string, from: string, to: string) => Promise<ExternalEvent[]>;
+export function registerEventSource(key: string, fn: EventSource): void {
+  (GK.__kijuEventSources ??= new Map()).set(key, fn);
+}
+/** Eventos externos que se solapan con un periodo (un fallo de una fuente no rompe a quien pregunta). */
+export async function externalEvents(tenantId: string, from: string, to: string): Promise<ExternalEvent[]> {
+  const out: ExternalEvent[] = [];
+  for (const [key, fn] of GK.__kijuEventSources ?? new Map<string, EventSource>()) {
+    try {
+      out.push(...(await fn(tenantId, from, to)));
+    } catch (e) {
+      console.error(`[núcleo] eventos ${key}:`, e instanceof Error ? e.message : e);
+    }
+  }
+  return out.sort((a, b) => a.date.localeCompare(b.date));
 }

@@ -47,7 +47,8 @@ import { handleJornadaCallback, handleJornadaCommand, handleJornadaPending, JORN
 import { handleTiemposCallback, handleTiemposPending } from '@/lib/operaciones/tiempos-bot';
 import { handleAutopilotCallback } from '@/lib/operaciones/autopilot';
 import { AGENT_TOOL_CALLBACK_RE, decideAgentTool } from '@/lib/operaciones/agent-capabilities';
-import { dispatchInbound } from '@/lib/core/capabilities';
+import { dispatchInbound, taskAnswerHandler } from '@/lib/core/capabilities';
+import { TASK_QUESTION_CALLBACK_RE } from '@/lib/operaciones/work-source';
 
 // Botones del motor de acciones del agente: ag:<id de la acción>:ok (aprobar) | no (descartar) | ed (corregir).
 export const AGENT_CALLBACK_RE = /^ag:([0-9a-f-]{36}):(ok|no|ed|re|pa|as:(\d{1,20}))$/;
@@ -60,6 +61,20 @@ export const FLOW_CALLBACK_RE = /^(st|lt|bl|dn|dr|ok|rt|rp):([0-9a-f-]{36})(?::(
 export async function handleUpdate(tenantId: string, token: string, update: TgUpdate): Promise<void> {
   if (update.message) return handleMessage(tenantId, token, update.message);
   if (update.callback_query) return handleCallback(tenantId, token, update.callback_query);
+}
+
+/** Entrega la respuesta a una pregunta de otro módulo (registrada en el núcleo) y contesta lo que diga ese módulo. */
+async function answerTaskQuestion(tenantId: string, token: string, chatId: number, kind: string, requestId: string, text: string | null, by: string) {
+  const req = await getRequest(tenantId, requestId);
+  const fn = taskAnswerHandler(kind);
+  if (!req || !fn) return void (await reply(token, chatId, 'Esa pregunta ya no está activa.'));
+  try {
+    const line = await fn(tenantId, req.clickupTaskId ?? req.id, text, by);
+    await reply(token, chatId, escapeHtml(line));
+  } catch (e) {
+    console.error('[operaciones] respuesta a una pregunta de encargo:', e instanceof Error ? e.message : e);
+    await reply(token, chatId, 'No he podido guardarlo. Inténtalo más tarde.');
+  }
 }
 
 async function reply(token: string, chatId: number, html: string) {
@@ -183,7 +198,7 @@ async function toAgent(tenantId: string, token: string, member: OpsTelegramMembe
 async function setPending(
   tenantId: string,
   chatId: number,
-  kind: 'done_note' | 'done_review' | 'block_question' | 'return_reason' | 'owner_reply' | 'suggestion' | 'agent_correct',
+  kind: 'done_note' | 'done_review' | 'block_question' | 'return_reason' | 'owner_reply' | 'suggestion' | 'agent_correct' | `mq:${string}`,
   ids: { requestId?: string; blockerId?: string; agentActionId?: string }
 ) {
   const row = {
@@ -273,6 +288,8 @@ async function handlePending(
   if (p.kind.startsWith('jw')) return void (await handleJornadaPending(tenantId, token, chatId, p.kind, text, member.username));
   // Tiempos de tarea: URL de una tarea que se pasó del margen.
   if (p.kind.startsWith('ttu:')) return void (await handleTiemposPending(tenantId, token, chatId, p.kind, text));
+  // Pregunta de otro módulo sobre un encargo (p. ej. Estrategia: «¿En qué URL se publicó?»).
+  if (p.kind.startsWith('mq:') && p.requestId) return void (await answerTaskQuestion(tenantId, token, chatId, p.kind.slice(3), p.requestId, text, member.username));
 
   const owner = await getOwnerMember(tenantId);
   const isOwner = owner?.id === member.id;
@@ -541,6 +558,22 @@ async function handleCallback(tenantId: string, token: string, cb: TgCallbackQue
   if (cb.data?.startsWith('jw:')) return handleJornadaCallback(tenantId, token, cb, presser, chatId, messageId, answer);
   // Tiempos de tarea (tt:…): estimación, tipo de tarea y motivo de exceso.
   if (cb.data?.startsWith('tt:')) return handleTiemposCallback(tenantId, token, cb, presser, chatId, messageId, answer);
+  // Pregunta de otro módulo sobre un encargo (mq:w / mq:n): solo quien lo hizo o quien lleva las operaciones.
+  const mq = cb.data?.match(TASK_QUESTION_CALLBACK_RE);
+  if (mq) {
+    const req = await getRequest(tenantId, mq[3]);
+    if (!req) return void (await answer('Ese encargo ya no existe.', true));
+    const owner = await getOwnerMember(tenantId);
+    if (owner?.id !== presser.id && presser.clickupUserId !== req.assigneeClickupId) return void (await answer('Esta pregunta es para quien hizo el encargo.', true));
+    await tg(token, 'editMessageReplyMarkup', { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [] } }).catch(() => undefined);
+    if (mq[1] === 'n') {
+      await answer('Anotado');
+      return void (await answerTaskQuestion(tenantId, token, chatId, mq[2], req.id, null, presser.username));
+    }
+    await setPending(tenantId, chatId, `mq:${mq[2]}`, { requestId: req.id });
+    await answer();
+    return void (await reply(token, chatId, `✍️ <b>${escapeHtml(req.title)}</b>\nEscríbela aquí (o /cancelar).`));
+  }
   // Piloto automático (ap:…): «Mover a mañana» del parte y «Pasar a autónomo» (solo el dueño).
   if (cb.data?.startsWith('ap:')) return handleAutopilotCallback(tenantId, cb, presser, answer);
   // Propuestas de un agente desde la conversación (at:ok / at:no): solo el dueño.

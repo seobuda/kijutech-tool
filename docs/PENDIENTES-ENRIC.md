@@ -3,11 +3,24 @@
 Lista viva de lo que solo puede hacer Enric (accesos, decisiones, el equipo). Claude la actualiza al terminar cada bloque.
 Detalle paso a paso de la activación en `docs/PRUEBAS-EN-VIVO.md`.
 
-**Última actualización:** 15 nov 2026. En producción: `main` `d7aa3091` (todo lo anterior + ficha del cliente en el núcleo y propuesta del agente en un solo mensaje), 49 migraciones.
+**Última actualización:** 16 nov 2026. En producción: `main` `4426ae3b` (todo lo anterior + Rendimiento del cliente), 50 migraciones.
+
+## Estrategia de clientes, fase 1 (rama `feature/estrategia-viva`, migración 0050)
+Diseño v4 aprobado («ok a todo, adelante con la fase 1»; posiciones solo con Search Console). Detalle en `docs/ESTADO.md` §6.24.
+- [ ] **Desplegar con migración** (hace backup antes): `! git checkout main && git merge --no-ff feature/estrategia-viva && git push origin main && bash scripts/deploy.sh --migrate`
+- [ ] **Revisar los planes** en Trabajo → Estrategia → Planes (Mantenimiento web, SEO local, SEO estratégico): frecuencias por defecto según la investigación; cámbialas, renómbralos o crea otros.
+- [ ] **Activar los clientes** que llevan seguimiento (Trabajo → Estrategia → «Activar un cliente», o en la ficha → Estrategia). Los demás no gastan nada. Para que haya datos, el cliente necesita su web y su Search Console en Webs y cuentas.
+- [ ] **En cada cliente activado:** añadir sus palabras clave (Estrategia → Palabras clave → «Sugerir desde Search Console»), crear sus objetivos («Calcular partida y proponer metas») y pulsar «Procesar encargos anteriores» en Trabajo e impacto.
+- [ ] **Calendario:** añadir las actualizaciones de Google recientes (p. ej. la core update de noviembre de 2026, que empezó el día 10, según el Google Search Status Dashboard). Salen en las gráficas de Rendimiento y en los avisos.
+- [ ] **Mirar las pantallas** (pestaña Estrategia y panel), también en móvil y oscuro: Claude no ha podido verlas en el navegador.
+- [ ] **Explicar al equipo** la pregunta nueva del bot al cerrar un encargo sobre una página: «¿en qué URL se ha hecho este trabajo?» («✍️ Escribir» o «No aplica»). Se puede apagar en Estrategia → Ajustes.
+- [ ] **PageSpeed (opcional):** sin clave, Google limita las consultas de velocidad. Si sale «Google limita las peticiones sin clave», crear una clave de la API de PageSpeed Insights en Google Cloud; para usarla en producción hay que añadir `PAGESPEED_API_KEY` al `.env` del servidor y a `docker-compose.prod.yml` (cambio que necesita tu aprobación).
+- [ ] **Probar por Telegram:** «¿cómo va la estrategia de [cliente]?» (usa estrategia_cliente).
+
 
 ## Rendimiento del cliente + propiedades de Google (rama `feature/rendimiento-cliente`, migración 0049)
 Incluye el paso A (propiedades de Google por cliente) y los pasos B1, B2 y B3 (sección Rendimiento). Informe por correo del 15 nov.
-- [ ] **Desplegar con migración** (hace backup antes): `! git checkout main && git merge --no-ff feature/rendimiento-cliente && git push origin main && bash scripts/deploy.sh --migrate`
+- [x] **Desplegado** el 15 nov (`4426ae3b`, 50 migraciones; web 200, Telegram sin errores).
 - [ ] **Comprobar que Google está conectado** en Agentes → Integraciones (si no, ni el panel de Google de las fichas ni la descarga funcionan).
 - [ ] **En cada cliente:** Clientes → cliente → Webs y cuentas → «Buscar en Google» → marcar las suyas → «Añadir a la ficha». Después «Comprobar accesos». En unos minutos empieza a descargarse su histórico.
 - [ ] **Poner la fecha de inicio del servicio** en las fichas (Empresa y negocio): sale como hito en las gráficas y permite comparar «antes del servicio».
@@ -101,3 +114,6 @@ Incluye el paso A (propiedades de Google por cliente) y los pasos B1, B2 y B3 (s
 - [x] **IA de reserva:** aprobada y construida (falta la segunda clave, ver arriba).
 - [ ] **5C: temporadas, niveles y misiones.** El diseño está aprobado; falta aprobar su esquema de base de datos. Mejor después de
   1–2 semanas de jornada real.
+- [ ] **Módulo Google Ads (propio, más adelante):** decidido el 16 nov que Ads será un módulo independiente y avanzado (es de los
+  departamentos que más facturan), con su investigación y diseño propios cuando acabe Estrategia. Puedes ir pidiendo ya el
+  **token de desarrollador de la API de Google Ads** desde la cuenta de administrador (MCC), porque Google lo revisa y tarda.

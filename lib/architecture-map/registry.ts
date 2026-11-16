@@ -6,6 +6,7 @@ import { SECURITY_PROCESS_MAP } from '@/lib/auth/security-process-map';
 import { AGENTES_PROCESS_MAP } from '@/lib/agentes/process-map';
 import { CLIENTES_PROCESS_MAP } from '@/lib/core/clients-process-map';
 import { RENDIMIENTO_PROCESS_MAP } from '@/lib/rendimiento/process-map';
+import { ESTRATEGIA_PROCESS_MAP } from '@/lib/estrategia/process-map';
 
 export interface SystemNode {
   id: string;
@@ -184,6 +185,27 @@ const CORE_NODES: SystemNode[] = [
     }
   },
   {
+    id: 'estrategia',
+    name: 'Estrategia de clientes',
+    description:
+      'Seguimiento de cada cliente según su plan (frecuencias editables por plan y por cliente): salud de la web, palabras clave, ficha de Google, objetivos con curva SEO, detectores de oportunidades, trabajo hecho y URLs trabajadas. Fase 1 construida; el estratega con Opus (fase 2) y el impacto con aprendizajes (fase 3), pendientes.',
+    status: 'in_progress',
+    icon: 'Compass',
+    detailMapId: 'estrategia',
+    group: 'infrastructure',
+    technicalDetail: {
+      summary:
+        'Módulo propio (tablas est_*, migración 0050, 15 nov 2026). Sin importar otros módulos: Google por la fuente de métricas del núcleo (búsqueda e inspección de URL), cifras por el proveedor de KPI de Rendimiento, encargos y horas por la fuente de trabajo de Operaciones, y la pregunta «¿en qué URL?» por su cola de avisos.',
+      stack: ['Planificador del núcleo (agenda por cliente y proceso)', 'Search Console (búsqueda e inspección de URL)', 'PageSpeed Insights', 'Haiku para clasificar encargos'],
+      keyDecisions: [
+        'Nada se activa solo: cada cliente elige un plan (investigación del 15 nov: lo que vende cada servicio)',
+        'Guardar a diario, decidir con la frecuencia del plan, avisar a diario solo de lo crítico',
+        'Objetivos con curva SEO y días de gracia: sin falsas alarmas los primeros meses',
+        'Detectores con código; la IA solo redacta y prioriza (fase 2)'
+      ]
+    }
+  },
+  {
     id: 'integraciones',
     name: 'Integraciones',
     description: 'Las conexiones con el exterior: ClickUp (caché y contador de peticiones), Telegram y la IA, con el prompt que usa cada función.',
@@ -286,7 +308,7 @@ export function getSystemMap(): SystemNode[] {
 }
 
 // Todos los mapas de detalle conocidos (el Server Component los resuelve y los pasa al cliente).
-export const PROCESS_MAP_IDS = ['clustering', 'competitor_analysis', 'security', 'agentes', 'clientes', 'rendimiento', ...Object.keys(OPS_MAPS)];
+export const PROCESS_MAP_IDS = ['clustering', 'competitor_analysis', 'security', 'agentes', 'clientes', 'rendimiento', 'estrategia', ...Object.keys(OPS_MAPS)];
 
 export function getProcessMap(detailMapId: string): ProcessStep[] {
   switch (detailMapId) {
@@ -302,6 +324,8 @@ export function getProcessMap(detailMapId: string): ProcessStep[] {
       return CLIENTES_PROCESS_MAP;
     case 'rendimiento':
       return RENDIMIENTO_PROCESS_MAP;
+    case 'estrategia':
+      return ESTRATEGIA_PROCESS_MAP;
     default:
       return OPS_MAPS[detailMapId] ?? [];
   }
