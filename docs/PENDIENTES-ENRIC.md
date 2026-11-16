@@ -114,3 +114,6 @@ Incluye el paso A (propiedades de Google por cliente) y los pasos B1, B2 y B3 (s
 - [x] **IA de reserva:** aprobada y construida (falta la segunda clave, ver arriba).
 - [ ] **5C: temporadas, niveles y misiones.** El diseño está aprobado; falta aprobar su esquema de base de datos. Mejor después de
   1–2 semanas de jornada real.
+- [ ] **Módulo Google Ads (propio, más adelante):** decidido el 16 nov que Ads será un módulo independiente y avanzado (es de los
+  departamentos que más facturan), con su investigación y diseño propios cuando acabe Estrategia. Puedes ir pidiendo ya el
+  **token de desarrollador de la API de Google Ads** desde la cuenta de administrador (MCC), porque Google lo revisa y tarda.
