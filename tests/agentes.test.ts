@@ -40,7 +40,7 @@ import { and } from 'drizzle-orm';
 import { accessFromDirectory, assetKey, completeness, domainOf, matchExternalAssets, normalizeUrl, pickClient, recognizableDomain, sameSite, type ExternalAsset } from '@/lib/core/client-rules';
 import { _resetDirectoryCache, addDirectoryAssets, checkAccess, suggestAssets } from '@/lib/core/client-directory';
 import { createCoreClient, saveAsset } from '@/lib/core/clients';
-import { availableTools, dispatchInbound, getTool, registerAssetDirectory, registerTools, setInboundHandler, setTelegramOutbound, type AgentTool } from '@/lib/core/capabilities';
+import { agentJobCreator, availableTools, dispatchInbound, getTool, registerAssetDirectory, registerTools, setInboundHandler, setTelegramOutbound, type AgentTool } from '@/lib/core/capabilities';
 import { runAgent, systemPrompt, toMessages } from '@/lib/agentes/engine';
 import { isOgg, speakableText } from '@/lib/agentes/voice';
 import { signState, sumGbpSeries, verifyState } from '@/lib/agentes/integrations';
@@ -49,7 +49,7 @@ import { createJob, processJob } from '@/lib/agentes/jobs';
 import { handleInbound, waitIdle } from '@/lib/agentes/inbound';
 import { AGENT_TOOL_CALLBACK_RE, decideAgentTool, OPS_AGENT_TOOLS, setToolAutonomy } from '@/lib/operaciones/agent-capabilities';
 import { getCalendar } from '@/lib/operaciones/calendar';
-import { AGENTES_TOOLS, resolveGoogleId } from '@/lib/agentes/register';
+import { AGENTES_TOOLS, registerAgentesCapabilities, resolveGoogleId } from '@/lib/agentes/register';
 
 const sent: { kind: string; chat: string; text?: string; buttons?: { text: string; data: string }[][] }[] = [];
 setTelegramOutbound({
@@ -162,6 +162,21 @@ describe('agentes con la base de datos', () => {
     tenantId = t.id;
   });
   afterAll(cleanup);
+
+  it('el núcleo puede encargar trabajos aunque los agentes por defecto no se hayan creado aún (Técnico de mantenimiento)', async () => {
+    registerAgentesCapabilities();
+    const create = agentJobCreator();
+    expect(create).toBeTruthy();
+    const [t] = await db.insert(tenants).values({ name: 'Prueba agentes sin crear', slug: `${SLUG}-sin` }).returning();
+    try {
+      // Un agente que no existe: no crea ningún trabajo (nada que la app local pueda ejecutar), pero deja creados los de serie.
+      const r = await create!({ tenantId: t.id, agentKey: 'no_existe', title: 'x', instruction: 'x', requestedBy: 'prueba' });
+      expect(r.ok).toBe(false);
+      expect((await getAgent(t.id, MAINTENANCE_KEY))?.kind).toBe('subagente');
+    } finally {
+      await db.delete(tenants).where(eq(tenants.id, t.id));
+    }
+  });
 
   it('crea los agentes por defecto una sola vez', async () => {
     await ensureDefaultAgents(tenantId);

@@ -9,6 +9,7 @@ import { GOOGLE_METRIC_SOURCE, normalizeGoogleProperty } from '@/lib/agentes/met
 import { findCoreClient, primaryAsset } from '@/lib/core/clients';
 import { handleInbound } from '@/lib/agentes/inbound';
 import { createJob, encargarAgente, estadoTrabajos, runAgentJobs } from '@/lib/agentes/jobs';
+import { ensureDefaultAgents } from '@/lib/agentes/store';
 import {
   clarityInsights,
   dataForSeoSerp,
@@ -215,6 +216,8 @@ export function registerAgentesCapabilities(): void {
   });
   // El núcleo (registro de errores) encarga diagnósticos al Técnico de mantenimiento sin importar este módulo.
   setAgentJobCreator(async (r) => {
+    // Los agentes por defecto (el Técnico de mantenimiento entre ellos) se crean al primer uso: asegurarlos antes.
+    await ensureDefaultAgents(r.tenantId);
     const job = await createJob({ ...r, conversationId: null });
     return 'failure' in job ? { ok: false, error: job.failure } : { ok: true, id: job.id };
   });
