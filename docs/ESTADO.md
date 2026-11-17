@@ -644,6 +644,7 @@ Cada uno con su nodo en el nivel 1 del Mapa Visual:
 - **15 nov (madrugada), Rendimiento del cliente:** pasos B1, B2 y B3 construidos de una vez mientras Enric dormía (migración 0049): histórico diario por cliente, pestaña, panel central, hitos, avisos, informe semanal y mensual, y herramientas del agente. Después, revisión completa. Ver `docs/sessions/2026-11-15-05-rendimiento-cliente.md`.
 - **15 nov, despliegue de Rendimiento** (`4426ae3b`, 50 migraciones) e **investigación y diseño de Estrategia viva** (v1 → v4 con las correcciones de Enric y la investigación de mercado).
 - **15-16 nov (noche), Estrategia de clientes, fase 1** (migración 0050): planes de seguimiento con frecuencias editables por plan y por cliente, procesos de vigilancia, objetivos con curva SEO, detectores, trabajo hecho con la pregunta de la URL y calendario. Ver `docs/sessions/2026-11-16-01-estrategia-fase-1.md`.
+- **17 nov, arreglo de la IA con Claude** (rama `fix/ia-respuesta-vacia`): el adaptador de Anthropic leía solo el primer bloque de la respuesta; con Sonnet 5.5 y Opus 5.5, que piensan por defecto, ese bloque es el pensamiento y la respuesta llegaba vacía («crear encargo» por Telegram falló el 16 nov). Ahora une todos los bloques de texto y, si no hay texto, registra el fallo en `ai_jobs` con el motivo. Ver `docs/sessions/2026-11-17-00-arreglo-ia-respuesta-vacia.md`.
 - Historial completo: `git log` y `docs/sessions/`.
 
 ## 19. Mapa de archivos
