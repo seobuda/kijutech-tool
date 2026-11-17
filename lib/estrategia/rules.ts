@@ -549,6 +549,41 @@ export function urlInProperty(url: string, property: string): boolean {
   return url.toLowerCase().startsWith(property.toLowerCase()) || url.toLowerCase().replace('://www.', '://').startsWith(property.toLowerCase().replace('://www.', '://'));
 }
 
+/** Clave para comparar dos URLs como «la misma página»: sin protocolo, sin «www.», sin barra final ni ancla. */
+export function urlKey(u: string): string | null {
+  try {
+    const x = new URL(u.trim());
+    if (!/^https?:$/.test(x.protocol)) return null;
+    const path = x.pathname.replace(/\/+$/, '') || '';
+    return `${x.hostname.toLowerCase().replace(/^www\./, '')}${path}${x.search}`;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Versión canónica de una URL trabajada, a partir de la página ya pedida: la etiqueta canonical si la tiene, si no
+ * la dirección final tras las redirecciones. Solo se acepta si sigue dentro de la propiedad de Search Console; si
+ * la página no responde, se queda la URL escrita (sin ancla).
+ */
+export function canonicalFromFacts(url: string, f: PageFacts | { error: string }, property: string): string {
+  const clean = url.replace(/#.*$/, '');
+  if ('error' in f || f.status >= 400) return clean;
+  const final = f.finalUrl.replace(/#.*$/, '');
+  const canon = f.canonical ? absUrl(f.canonical, final).replace(/#.*$/, '') : null;
+  for (const c of [canon, final]) if (c && /^https?:\/\//i.test(c) && urlInProperty(c, property)) return c;
+  return clean;
+}
+
+/** Entre las páginas que Search Console tiene, la variante de la misma URL con más impresiones (null si ninguna). */
+export function pickGscVariant(url: string, pages: { page: string; impressions: number }[]): string | null {
+  const key = urlKey(url);
+  if (!key) return null;
+  let best: { page: string; impressions: number } | null = null;
+  for (const p of pages) if (urlKey(p.page) === key && (!best || p.impressions > best.impressions)) best = p;
+  return best?.page ?? null;
+}
+
 /** URL de la portada de una propiedad o web («sc-domain:x.com» → https://x.com/). */
 export function homeOf(value: string): string | null {
   const v = value.trim();

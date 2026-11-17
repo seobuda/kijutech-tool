@@ -40,6 +40,9 @@ import {
   sitemapsFromRobots,
   strikingDistance,
   urlInProperty,
+  urlKey,
+  canonicalFromFacts,
+  pickGscVariant,
   URL_RE,
   WORK_CATEGORY_LABEL,
   type EffectiveProcess,
@@ -309,8 +312,8 @@ export async function runKeywords(ctx: Ctx, opts: { onlyUrgent?: boolean } = {})
   let words = (await listKeywords(ctx.tenantId, ctx.clientId)).filter((k) => k.active);
   if (opts.onlyUrgent) {
     const tracked = await listTrackedUrls(ctx.tenantId, ctx.clientId);
-    const recent = new Set(tracked.filter((t) => daysBetween(t.changedOn, ctx.today) <= 28).map((t) => t.url));
-    words = words.filter((k) => k.critical || (k.targetUrl && recent.has(k.targetUrl)));
+    const recent = new Set(tracked.filter((t) => daysBetween(t.changedOn, ctx.today) <= 28).map((t) => urlKey(t.url) ?? t.url));
+    words = words.filter((k) => k.critical || (k.targetUrl && recent.has(urlKey(k.targetUrl) ?? k.targetUrl)));
   }
   if (!words.length) return { status: 'omitido', summary: opts.onlyUrgent ? 'Sin palabras urgentes.' : 'Aún no hay palabras clave que seguir (añádelas en la pestaña Estrategia).' };
   const to = addDays(ctx.today, -3);
@@ -409,11 +412,30 @@ export async function runUrls(ctx: Ctx): Promise<ProcessOutcome> {
   let synced = 0;
   let inspections = 0;
   let crawled = 0;
+  let relinks = 0;
+  let fixed = 0;
   for (const t of tracked) {
     if (t.property !== ctx.gsc.property && !urlInProperty(t.url, ctx.gsc.property)) continue;
     const from = t.backfilled && t.lastSyncedOn ? addDays(t.lastSyncedOn, -7) : addDays(t.changedOn, -90);
     if (from <= to) {
-      const rows = await search(ctx, { from, to, dimensions: ['date'], filters: [{ dimension: 'page', operator: 'equals', expression: t.url }], limit: 1000 });
+      const q = (url: string) => search(ctx, { from, to, dimensions: ['date'], filters: [{ dimension: 'page', operator: 'equals', expression: url }], limit: 1000 });
+      let rows = await q(t.url);
+      // Sin datos con la URL escrita: se busca la variante que Search Console sí tiene (www, barra final,
+      // http/https) y la URL seguida pasa a ser esa. Máximo unas pocas búsquedas por ejecución.
+      if (!rows.length && relinks < 5) {
+        relinks++;
+        const variant = await gscVariant(ctx, t.url, addDays(t.changedOn, -90), to).catch(() => null);
+        if (variant && variant !== t.url) {
+          try {
+            await updateTrackedUrl(t.id, { url: variant });
+            t.url = variant;
+            rows = await q(variant);
+            fixed++;
+          } catch {
+            // Ya se sigue esa variante (fila duplicada): se deja como está.
+          }
+        }
+      }
       await saveUrlDaily(t.id, rows.map((r) => ({ date: r.keys[0], clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position })));
       await updateTrackedUrl(t.id, { backfilled: true, lastSyncedOn: to });
       synced++;
@@ -434,7 +456,22 @@ export async function runUrls(ctx: Ctx): Promise<ProcessOutcome> {
       await updateTrackedUrl(t.id, patch);
     }
   }
-  return { status: 'ok', summary: `${synced} URL(s) actualizada(s)${inspections ? `; ${inspections} inspeccionada(s) en Search Console${crawled ? `, ${crawled} ya rastreada(s) tras el cambio` : ''}` : ''}.` };
+  return { status: 'ok', summary: `${synced} URL(s) actualizada(s)${fixed ? ` (${fixed} corregida(s) a la versión que tiene Google)` : ''}${inspections ? `; ${inspections} inspeccionada(s) en Search Console${crawled ? `, ${crawled} ya rastreada(s) tras el cambio` : ''}` : ''}.` };
+}
+
+/** La página que Search Console tiene para esta URL aunque esté escrita distinta (null si no la tiene). */
+async function gscVariant(ctx: Ctx, url: string, from: string, to: string): Promise<string | null> {
+  let host: string;
+  let path: string;
+  try {
+    const u = new URL(url);
+    host = u.hostname.toLowerCase().replace(/^www\./, '');
+    path = u.pathname.replace(/\/+$/, '');
+  } catch {
+    return null;
+  }
+  const rows = await search(ctx, { from, to, dimensions: ['page'], filters: [{ dimension: 'page', operator: 'contains', expression: path || host }], limit: 200 });
+  return pickGscVariant(url, rows.map((r) => ({ page: r.keys[0] ?? '', impressions: r.impressions })));
 }
 
 // --- Detectores de oportunidades (semanal) --------------------------------------------------------------------------
@@ -640,7 +677,7 @@ export async function runExtraction(tenantId: string, now = new Date()): Promise
     if (!id) continue;
     done++;
     if (isOn(ctx, 'urls') && ctx.gsc) {
-      for (const u of ex.urls) if (urlInProperty(u, ctx.gsc.property)) await trackUrl(tenantId, item.clientId, { url: u, property: ctx.gsc.property, reason: `${WORK_CATEGORY_LABEL[ex.category]}: ${item.title}`, workFactId: id, changedOn: doneOn, trackDays: settings.trackDays });
+      await trackWorkUrls(tenantId, item.clientId, ex.urls, ctx.gsc.property, { reason: `${WORK_CATEGORY_LABEL[ex.category]}: ${item.title}`, workFactId: id, changedOn: doneOn, trackDays: settings.trackDays });
     }
     if (askable) {
       const ok = await ws.askAboutTask(tenantId, item.ref, 'url', `🔗 <b>${esc(ctx.clientName)}</b>: ¿en qué URL se ha hecho este trabajo?\nAsí mediremos su efecto en Google. Pulsa «Escribir» y pega la dirección (o «No aplica»).`).catch(() => false);
@@ -650,6 +687,29 @@ export async function runExtraction(tenantId: string, now = new Date()): Promise
   // El cursor avanza con la última fila leída aunque fuese de un cliente sin ficha: así nunca se atasca.
   await patchSettingsState(tenantId, { lastExtractAt: new Date(Date.parse(cursor) + 1).toISOString() });
   return done;
+}
+
+/**
+ * Empieza a seguir las URLs de un trabajo con su versión canónica (la que Google indexa): sigue las redirecciones
+ * y respeta la etiqueta canonical. Así «web.com/pagina» y «https://www.web.com/pagina/» no se miden como dos
+ * páginas, y la consulta a Search Console no se queda sin datos. Devuelve cuántas se siguen.
+ */
+async function trackWorkUrls(tenantId: string, clientId: string, urls: string[], property: string, base: { reason: string; workFactId: string | null; changedOn: string; trackDays: number }): Promise<number> {
+  const seen = new Set<string>();
+  for (const u of urls) {
+    if (!urlInProperty(u, property)) continue;
+    const url = await resolveCanonical(u, property);
+    const key = urlKey(url) ?? url;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    await trackUrl(tenantId, clientId, { url, property, ...base });
+  }
+  return seen.size;
+}
+
+export async function resolveCanonical(url: string, property: string): Promise<string> {
+  const facts = await fetchPage(url).catch((e) => ({ error: e instanceof Error ? e.message : String(e) }));
+  return canonicalFromFacts(url, facts, property);
 }
 
 /**
@@ -670,7 +730,7 @@ export async function backfillClientWork(tenantId: string, clientId: string, day
     const id = await insertWorkFact({ tenantId, clientId, taskId: item.taskId, title: item.title.slice(0, 500), category: ex.category, urls: ex.urls, keywords: ex.keywords, kpis: ex.kpis, hours: item.minutes !== null ? (item.minutes / 60).toFixed(2) : null, doneOn, needsUrl: ex.needsUrl, urlStatus: ex.needsUrl ? 'falta' : 'no_aplica', extraction: ex.extraction });
     if (!id) continue;
     done++;
-    if (isOn(ctx, 'urls') && ctx.gsc) for (const u of ex.urls) if (urlInProperty(u, ctx.gsc.property)) await trackUrl(tenantId, clientId, { url: u, property: ctx.gsc.property, reason: `${WORK_CATEGORY_LABEL[ex.category]}: ${item.title}`, workFactId: id, changedOn: doneOn, trackDays: settings.trackDays });
+    if (isOn(ctx, 'urls') && ctx.gsc) await trackWorkUrls(tenantId, clientId, ex.urls, ctx.gsc.property, { reason: `${WORK_CATEGORY_LABEL[ex.category]}: ${item.title}`, workFactId: id, changedOn: doneOn, trackDays: settings.trackDays });
   }
   return done;
 }
@@ -695,13 +755,7 @@ export async function answerUrl(tenantId: string, taskId: string, answer: string
   await updateWorkFact(fact.id, { urls: [...new Set([...fact.urls, ...urls])], urlStatus: 'respondida', needsUrl: false });
   const settings = await getSettings(tenantId);
   let tracked = 0;
-  if (ctx.gsc) {
-    for (const u of urls) {
-      if (!urlInProperty(u, ctx.gsc.property)) continue;
-      await trackUrl(tenantId, fact.clientId, { url: u, property: ctx.gsc.property, reason: `${WORK_CATEGORY_LABEL[fact.category as keyof typeof WORK_CATEGORY_LABEL] ?? 'Trabajo'}: ${fact.title}`, workFactId: fact.id, changedOn: fact.doneOn, trackDays: settings.trackDays });
-      tracked++;
-    }
-  }
+  if (ctx.gsc) tracked = await trackWorkUrls(tenantId, fact.clientId, urls, ctx.gsc.property, { reason: `${WORK_CATEGORY_LABEL[fact.category as keyof typeof WORK_CATEGORY_LABEL] ?? 'Trabajo'}: ${fact.title}`, workFactId: fact.id, changedOn: fact.doneOn, trackDays: settings.trackDays });
   return { ok: true, message: tracked ? `Gracias. Desde hoy sigo ${tracked === 1 ? 'esa página' : `esas ${tracked} páginas`} en Google para medir el efecto del trabajo (desde el ${fmtDayYear(fact.doneOn)}).` : 'Gracias, anotado.' };
 }
 

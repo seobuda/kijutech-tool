@@ -52,10 +52,13 @@ import {
   seasonalIndex,
   strikingDistance,
   urlInProperty,
+  urlKey,
+  canonicalFromFacts,
+  pickGscVariant,
   type QP
 } from '@/lib/estrategia/rules';
 import { isPublicUrl } from '@/lib/estrategia/web';
-import { addKeywords, clientEffective, getSettings, listKeywords, listObjectives, listPlans, listRuns, listSignals, saveClientOverride, saveEvent, saveObjective, setClientPlan, pauseClient } from '@/lib/estrategia/store';
+import { addKeywords, clientEffective, getSettings, listKeywords, listObjectives, listPlans, listRuns, listSignals, saveClientOverride, saveEvent, saveObjective, setClientPlan, pauseClient, trackUrl } from '@/lib/estrategia/store';
 import { loadCtx, runCritico, runDetectores, runExtraction, runGuardian, runKeywords, runObjetivos, runUrls, answerUrlQuestion } from '@/lib/estrategia/processes';
 import { _resetSchedulerState, runEstrategia } from '@/lib/estrategia/scheduler';
 import { clientStrategy, strategyOverview, weeklyLines } from '@/lib/estrategia/report';
@@ -163,6 +166,32 @@ describe('estrategia: objetivos', () => {
     expect(pos.low).toBeLessThan(11);
     expect(pos.high).toBeLessThan(pos.low);
     expect(pos.high).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe('estrategia: URL canónica de lo trabajado', () => {
+  const facts = (o: Partial<{ status: number; finalUrl: string; canonical: string | null }>) => ({ status: 200, finalUrl: 'https://a.com/x', redirects: 0, noindex: false, title: 't', description: null, canonical: null, xRobots: null, ...o });
+  it('urlKey trata como la misma página www, barra final, http/https y ancla', () => {
+    expect(urlKey('http://www.A.com/blog/x/#top')).toBe(urlKey('https://a.com/blog/x'));
+    expect(urlKey('https://a.com/')).toBe('a.com');
+    expect(urlKey('https://a.com/x?p=2')).not.toBe(urlKey('https://a.com/x'));
+    expect(urlKey('nada')).toBeNull();
+  });
+  it('canonicalFromFacts: canonical > redirección final > URL escrita, siempre dentro de la propiedad', () => {
+    expect(canonicalFromFacts('https://a.com/x', facts({ finalUrl: 'https://www.a.com/x/', canonical: '/x-final' }), 'sc-domain:a.com')).toBe('https://www.a.com/x-final');
+    expect(canonicalFromFacts('https://a.com/x', facts({ finalUrl: 'https://www.a.com/x/' }), 'sc-domain:a.com')).toBe('https://www.a.com/x/');
+    expect(canonicalFromFacts('https://a.com/x', facts({ canonical: 'https://otro.com/x' }), 'sc-domain:a.com')).toBe('https://a.com/x');
+    expect(canonicalFromFacts('https://a.com/x#y', { error: 'tarda' }, 'sc-domain:a.com')).toBe('https://a.com/x');
+    expect(canonicalFromFacts('https://a.com/x', facts({ status: 404, finalUrl: 'https://a.com/404' }), 'sc-domain:a.com')).toBe('https://a.com/x');
+  });
+  it('pickGscVariant elige la variante de la misma página con más impresiones', () => {
+    const pages = [
+      { page: 'http://a.com/x', impressions: 3 },
+      { page: 'https://www.a.com/x/', impressions: 40 },
+      { page: 'https://www.a.com/x/otra', impressions: 900 }
+    ];
+    expect(pickGscVariant('https://a.com/x', pages)).toBe('https://www.a.com/x/');
+    expect(pickGscVariant('https://a.com/nada', pages)).toBeNull();
   });
 });
 
@@ -283,6 +312,8 @@ const fakeGoogle: MetricSource = {
     searches.push(q);
     if (q.dimensions.join() === 'query,page') return q.from > addDays(TODAY, -40) ? detectorRows : [];
     if (q.dimensions.join() === 'date,query') return [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].map((i) => ({ keys: [addDays(TODAY, -3 - i), 'abogado madrid'], clicks: 3, impressions: 100, ctr: 0.03, position: i < 7 ? 6 : 9 }));
+    if (q.dimensions.join() === 'page' && q.filters?.[0]?.operator === 'contains') return [{ keys: ['https://www.prueba-est.invalid/variante/'], clicks: 2, impressions: 50, ctr: 0.04, position: 8 }, { keys: ['https://www.prueba-est.invalid/variante/otra'], clicks: 9, impressions: 500, ctr: 0.02, position: 5 }];
+    if (q.dimensions.join() === 'date' && q.filters?.[0]?.expression === 'https://prueba-est.invalid/variante') return [];
     if (q.dimensions.join() === 'date' && q.filters?.[0]?.dimension === 'page') return [{ keys: [addDays(TODAY, -5), ''], clicks: 4, impressions: 80, ctr: 0.05, position: 7 }];
     if (q.dimensions.join() === 'query') return [{ keys: ['abogado madrid'], clicks: 9, impressions: 900, ctr: 0.01, position: 7 }, { keys: ['despido improcedente'], clicks: 3, impressions: 400, ctr: 0.01, position: 12 }];
     return [];
@@ -474,6 +505,18 @@ describe('estrategia con la base de datos', () => {
     expect(t.every((x) => x.backfilled && x.crawledOn === TODAY && x.indexState === 'Enviada e indexada')).toBe(true);
     const daily = await db.select().from(estUrlDaily).where(eq(estUrlDaily.trackedUrlId, t[0].id));
     expect(daily).toHaveLength(1);
+  });
+
+  it('URLs trabajadas: si Search Console no tiene la URL escrita, se pasa a la variante que sí tiene', async () => {
+    const ctx = (await loadCtx(tid, clientId))!;
+    await trackUrl(tid, clientId, { url: 'https://prueba-est.invalid/variante', property: ctx.gsc!.property, reason: 'Prueba', workFactId: null, changedOn: TODAY, trackDays: 60 });
+    const out = await runUrls(ctx);
+    expect(out.summary).toContain('1 corregida(s)');
+    const t = await db.select().from(estTrackedUrls).where(eq(estTrackedUrls.clientId, clientId));
+    const v = t.find((x) => x.url.includes('variante'))!;
+    expect(v.url).toBe('https://www.prueba-est.invalid/variante/');
+    expect(await db.select().from(estUrlDaily).where(eq(estUrlDaily.trackedUrlId, v.id))).toHaveLength(1);
+    await db.delete(estTrackedUrls).where(eq(estTrackedUrls.id, v.id)); // las pruebas siguientes cuentan 2 URLs
   });
 
   it('vigilancia crítica: la web que no responde solo avisa si sigue caída en la segunda comprobación', async () => {
