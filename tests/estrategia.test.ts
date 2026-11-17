@@ -6,7 +6,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { estProcessRuns, estSignals, estTrackedUrls, estUrlDaily, estWorkFacts, tenants } from '@/lib/db/schema';
+import { estAnalyses, estProcessRuns, estSignals, estSuggestions, estTrackedUrls, estUrlDaily, estWorkFacts, tenants } from '@/lib/db/schema';
 import {
   externalEvents,
   getTool,
@@ -60,6 +60,7 @@ import { loadCtx, runCritico, runDetectores, runExtraction, runGuardian, runKeyw
 import { _resetSchedulerState, runEstrategia } from '@/lib/estrategia/scheduler';
 import { clientStrategy, strategyOverview, weeklyLines } from '@/lib/estrategia/report';
 import { registerEstrategiaCapabilities, strategyHealth } from '@/lib/estrategia/register';
+import { decideSuggestion, queueAnalysis, saveStrategistSettings, strategistQuality } from '@/lib/estrategia/strategist';
 import { confirmedAlerts } from '@/lib/rendimiento/report';
 import { buildDayMap } from '@/lib/rendimiento/rules';
 
@@ -75,7 +76,8 @@ describe('estrategia: planes y frecuencias', () => {
     expect(by.keywords).toMatchObject({ on: true, every: 1, from: 'cliente' });
     expect(by.salud).toMatchObject({ on: false, from: 'cliente' });
     expect(by.gbp).toMatchObject({ on: true, every: 7, from: 'plan' });
-    expect(by.estratega).toMatchObject({ on: true, every: 15, runnable: false }); // fase 2: en el plan, pero no se ejecuta
+    expect(by.estratega).toMatchObject({ on: true, every: 15, runnable: true }); // fase 2 construida (16 nov)
+    expect(by.competencia.runnable).toBe(false); // fase 3
     expect(by.competencia.on).toBe(false);
   });
 
@@ -324,6 +326,8 @@ describe('estrategia con la base de datos', () => {
     await cleanup();
     const [t] = await db.insert(tenants).values({ name: 'Prueba estrategia', slug: SLUG }).returning();
     tid = t.id;
+    // Sin análisis por alerta: un análisis en cola lo cogería el planificador de la app y llamaría a Opus de verdad.
+    await saveStrategistSettings(tid, { alertsPerMonth: 0 });
     registerMetricSource(fakeGoogle);
     registerKpiProvider(fakeKpis);
     registerWorkSource({
@@ -350,7 +354,7 @@ describe('estrategia con la base de datos', () => {
     expect(plans.map((p) => p.key)).toEqual(['mantenimiento', 'seo_local', 'seo_estrategico']);
     await setClientPlan(tid, clientId, plans.find((p) => p.key === 'seo_estrategico')!.id);
     const runs = await listRuns(tid, clientId);
-    expect(runs.map((r) => r.process).sort()).toEqual(['critico', 'detectores', 'gbp', 'guardian', 'keywords', 'objetivos', 'salud', 'urls', 'velocidad']); // ni «por evento» ni fases 2-3
+    expect(runs.map((r) => r.process).sort()).toEqual(['critico', 'detectores', 'estratega', 'gbp', 'guardian', 'keywords', 'objetivos', 'salud', 'urls', 'velocidad']); // ni «por evento» ni fase 3
     expect(runs.every((r) => r.nextRunAt.getTime() <= Date.now() + 61 * 60_000)).toBe(true); // en la próxima hora
     expect(await clientEffective(tid, other)).toBeNull(); // sin plan: nada
   });
@@ -548,6 +552,41 @@ describe('estrategia con la base de datos', () => {
     expect(r.ok).toBe(true);
     expect(r.content).toContain('Más clics: Desviado');
     expect((await tool.run(toolCtx(), { cliente: 'sin plan' })).content).toContain('no tiene seguimiento');
+  });
+
+  // Nunca se deja un análisis «pendiente»: el planificador real de la app lo cogería y llamaría a Opus.
+  it('estratega: cola sin duplicados, solo clientes con plan, decisiones sin doble encargo y calidad', async () => {
+    expect((await queueAnalysis(tid, other, 'manual')).ok).toBe(false); // sin plan
+    const [a] = await db.insert(estAnalyses).values({ tenantId: tid, clientId, trigger: 'manual', status: 'en_curso', startedAt: new Date() }).returning();
+    const dup = await queueAnalysis(tid, clientId, 'manual');
+    expect(dup).toMatchObject({ ok: false, id: a.id });
+    expect((await db.select().from(estAnalyses).where(eq(estAnalyses.tenantId, tid))).map((x) => x.id)).toEqual([a.id]); // ninguna alerta encolada
+    await db.update(estAnalyses).set({ status: 'hecho', finishedAt: new Date() }).where(eq(estAnalyses.id, a.id));
+    const base = { tenantId: tid, clientId, analysisId: a.id, description: 'Descripción de prueba', category: 'onpage', evidence: [], impact: 6, confidence: 5, hours: '1.00', hoursAi: '1.00', hoursSource: 'ia', ice: '30.000' };
+    const [s1, s2, s3] = await db
+      .insert(estSuggestions)
+      .values([
+        { ...base, rank: 1, title: 'Propuesta uno' },
+        { ...base, rank: 2, title: 'Propuesta dos' },
+        { ...base, rank: 3, title: 'Propuesta tres' }
+      ])
+      .returning();
+    // Aprobar sin Operaciones capaz de crear encargos: queda aprobada con el error y no se puede aprobar dos veces.
+    const ok = await decideSuggestion(tid, s1.id, { kind: 'aprobar' }, 'Prueba');
+    expect(ok.ok).toBe(false);
+    expect(ok.message).toContain('no se pudo crear el encargo');
+    expect((await decideSuggestion(tid, s1.id, { kind: 'aprobar' }, 'Prueba')).message).toContain('Ya está decidida');
+    expect((await decideSuggestion(tid, s2.id, { kind: 'aplazar' }, 'Prueba')).ok).toBe(true);
+    expect((await decideSuggestion(tid, s2.id, { kind: 'aplazar' }, 'Prueba')).message).toContain('Ya está para más adelante');
+    expect((await decideSuggestion(tid, s3.id, { kind: 'rechazar', reason: 'ya_hecho' }, 'Prueba')).ok).toBe(true);
+    const [row] = await db.select().from(estSuggestions).where(eq(estSuggestions.id, s1.id));
+    expect(row).toMatchObject({ status: 'aprobada', decidedBy: 'Prueba' });
+    expect(row.taskError).toBeTruthy();
+    const q = await strategistQuality(tid, 30);
+    expect(q.stats).toMatchObject({ total: 3, accepted: 1, rejected: 1, snoozed: 1, reasons: { ya_hecho: 1 } });
+    expect(q.stats.acceptanceRate).toBe(0.5);
+    expect(q.analyses).toMatchObject({ total: 1, done: 1, manual: 1 });
+    expect(q.byClient.map((c) => c.clientId)).toEqual([clientId]);
   });
 
   it('quitar el plan apaga todo pero conserva lo guardado; un plan con clientes no se borra', async () => {

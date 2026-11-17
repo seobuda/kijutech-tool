@@ -3,10 +3,13 @@ import 'server-only';
 // Módulo Estrategia: planificador. Cada vuelta (desde la tarea del núcleo, cada 30 s en el proceso líder) ejecuta los
 // procesos que tocan según la agenda (est_process_runs.next_run_at), con un tope de tiempo, y cada 5 minutos la
 // extracción de los encargos terminados. Un proceso que falla espera y reintenta (15 min, 30, 60… hasta 12 h).
+// El estratega (fase 2) solo pide su análisis: lo hace aparte el trabajador de la cola (strategist.ts), de uno en uno,
+// para que una llamada larga a Opus no frene a los demás procesos.
 import { publicError } from '@/lib/errors';
 import { listKeywords, dueRuns, listClientSettings, syncRuns, updateRun } from '@/lib/estrategia/store';
 import { madridNow, nextRunAfter, addDays, type ProcessKey } from '@/lib/estrategia/rules';
 import { loadCtx, runCritico, runDetectores, runExtraction, runGbp, runGuardian, runKeywords, runObjetivos, runSalud, runUrls, runVelocidad, type Ctx, type ProcessOutcome } from '@/lib/estrategia/processes';
+import { runEstratega, runPendingAnalyses } from '@/lib/estrategia/strategist';
 
 const RUNNERS: Partial<Record<ProcessKey, (ctx: Ctx) => Promise<ProcessOutcome>>> = {
   critico: runCritico,
@@ -17,7 +20,8 @@ const RUNNERS: Partial<Record<ProcessKey, (ctx: Ctx) => Promise<ProcessOutcome>>
   urls: runUrls,
   detectores: runDetectores,
   objetivos: runObjetivos,
-  guardian: runGuardian
+  guardian: runGuardian,
+  estratega: runEstratega
 };
 
 const G = globalThis as unknown as { __kijuEstBusy?: Set<string>; __kijuEstTick?: Map<string, { sync: number; extract: number; urgentDay: string; urgentDone: Set<string> }> };
@@ -81,6 +85,8 @@ export async function runEstrategia(tenantId: string, opts: { budgetMs?: number;
   ticks().set(tenantId, t);
   const clients = await listClientSettings(tenantId);
   if (!clients.length) return { ran: 0, errors: 0 };
+  // Análisis del estratega en cola: aparte y sin esperar (tiene su propio candado por cuenta).
+  void runPendingAnalyses(tenantId).catch((e) => console.error('[estrategia] cola del estratega:', e instanceof Error ? e.message : e));
   if (Date.now() - t.sync > 10 * 60_000) {
     t.sync = Date.now();
     for (const c of clients) await syncRuns(tenantId, c.clientId);

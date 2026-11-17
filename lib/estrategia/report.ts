@@ -37,6 +37,7 @@ import {
   urlSummaries
 } from '@/lib/estrategia/store';
 import { evaluateObjective, loadCtx, searchTopQueries } from '@/lib/estrategia/processes';
+import type { AnalysisView, SuggestionView } from '@/lib/estrategia/strategist';
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -90,6 +91,8 @@ export type ClientStrategy = {
   workload: Awaited<ReturnType<NonNullable<ReturnType<typeof workSource>>['workload']>> | null;
   hasGsc: boolean;
   today: string;
+  /** Fase 2: análisis del estratega y sus propuestas. */
+  strategist: { analyses: AnalysisView[]; suggestions: SuggestionView[] };
 };
 export type HealthView = { checkedAt: string; status: string; issues: EstHealthCheck['issues']; metrics: Record<string, unknown> };
 
@@ -121,7 +124,8 @@ export async function clientStrategy(tenantId: string, clientId: string): Promis
     tracked: [],
     workload: null,
     hasGsc: false,
-    today
+    today,
+    strategist: { analyses: [], suggestions: [] }
   };
   if (!eff) return base;
   const runs = await listRuns(tenantId, clientId);
@@ -208,6 +212,7 @@ export async function clientStrategy(tenantId: string, clientId: string): Promis
     const a = sum(after);
     return { id: t.id, url: t.url, reason: t.reason ?? '', changedOn: t.changedOn, crawledOn: t.crawledOn, indexState: t.indexState, activeUntil: t.activeUntil, before: b, after: a, enoughData: a.days >= 28 && b.days >= 14 && b.impressions + a.impressions >= 100 };
   });
+  base.strategist = await import('@/lib/estrategia/strategist').then((m) => m.clientStrategist(tenantId, clientId));
   return base;
 }
 
@@ -348,6 +353,8 @@ export async function strategyText(tenantId: string, clientId: string): Promise<
   if (web) out.push(`Web: ${web.status === 'ok' ? 'correcta' : web.issues.map((i) => i.detail).join('; ')} (comprobada ${web.checkedAt.slice(0, 10)}).`);
   if (s.keywords.length) out.push(`Palabras clave seguidas: ${s.keywords.slice(0, 15).map((k) => `${k.keyword} (${k.position === null ? 'sin datos' : `pos. ${fmt(k.position)}`})`).join(', ')}.`);
   if (s.work.length) out.push(`Trabajo reciente: ${s.work.slice(0, 8).map((w) => `${w.doneOn} ${w.categoryLabel}: ${w.title}`).join(' | ')}.`);
+  const pending = await import('@/lib/estrategia/strategist').then((m) => m.pendingSuggestionsText(tenantId, clientId)).catch(() => '');
+  if (pending) out.push(pending);
   return out.join('\n');
 }
 

@@ -89,7 +89,7 @@ export const PROCESSES: ProcessDef[] = [
 ];
 export const PROCESS: Record<ProcessKey, ProcessDef> = Object.fromEntries(PROCESSES.map((p) => [p.key, p])) as Record<ProcessKey, ProcessDef>;
 export const isProcessKey = (k: string): k is ProcessKey => k in PROCESS;
-export const CURRENT_PHASE = 1;
+export const CURRENT_PHASE = 2;
 export const isRunnable = (k: ProcessKey) => PROCESS[k].phase <= CURRENT_PHASE;
 
 export type ProcessConfig = Record<string, { on: boolean; every: number }>;

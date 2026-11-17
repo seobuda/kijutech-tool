@@ -7,7 +7,7 @@ import { cleanupFixtures, createFixtures, emailFor, FIXTURE_PASSWORD, loginAs, P
 
 import { aiProposeClient, applyClientProposal, saveClientOps } from '@/lib/operaciones/client-actions';
 import { deleteAnnotationAction, getClientPerformanceAction, getMonthlyReportAction, resyncClientAction, saveAnnotationAction, savePerfSettingsAction } from '@/lib/rendimiento/actions';
-import { addKeywordsAction, backfillWorkAction, closeObjectiveAction, deleteEventAction, deleteKeywordAction, deleteObjectiveAction, deletePlanAction, deleteTrackedUrlAction, getClientStrategyAction, objectiveBaselineAction, pauseClientAction, runProcessNowAction, saveClientOverrideAction, saveEstSettingsAction, saveEventAction, saveObjectiveAction, savePlanAction, setClientPlanAction, setSignalStatusAction, setWorkUrlAction, suggestKeywordsAction, updateKeywordAction } from '@/lib/estrategia/actions';
+import { addKeywordsAction, backfillWorkAction, closeObjectiveAction, decideSuggestionAction, requestAnalysisAction, saveStrategistSettingsAction, deleteEventAction, deleteKeywordAction, deleteObjectiveAction, deletePlanAction, deleteTrackedUrlAction, getClientStrategyAction, objectiveBaselineAction, pauseClientAction, runProcessNowAction, saveClientOverrideAction, saveEstSettingsAction, saveEventAction, saveObjectiveAction, savePlanAction, setClientPlanAction, setSignalStatusAction, setWorkUrlAction, suggestKeywordsAction, updateKeywordAction } from '@/lib/estrategia/actions';
 import {
   createClientAction,
   addDirectoryAssetsAction,
@@ -127,6 +127,7 @@ const ACCIONES_ADMIN: [string, () => unknown][] = [
   ['saveEventAction (estrategia: calendario)', () => saveEventAction({ date: 'x', kind: 'otro', title: '' })],
   ['deleteEventAction (estrategia: calendario)', () => deleteEventAction(ZERO)],
   ['deleteObjectiveAction (estrategia: borrar objetivo)', () => deleteObjectiveAction(ZERO)],
+  ['saveStrategistSettingsAction (estrategia: ajustes del estratega)', () => saveStrategistSettingsAction({})],
   ['saveTelegramToken (tokens)', () => saveTelegramToken('')],
   ['savePilotStartAction (piloto)', () => savePilotStartAction('no-es-una-fecha')],
   ['sendCleanupAction (limpieza)', () => sendCleanupAction(ZERO)],
@@ -204,6 +205,8 @@ const ACCIONES_EDITOR: [string, () => unknown][] = [
   ['setWorkUrlAction (estrategia: trabajo)', () => setWorkUrlAction(ZERO, 'x', '')],
   ['backfillWorkAction (estrategia: trabajo)', () => backfillWorkAction(ZERO)],
   ['deleteTrackedUrlAction (estrategia: URLs)', () => deleteTrackedUrlAction(ZERO)],
+  ['requestAnalysisAction (estrategia: estratega)', () => requestAnalysisAction(ZERO)],
+  ['decideSuggestionAction (estrategia: estratega)', () => decideSuggestionAction(ZERO, { kind: 'aplazar' })],
   ['saveCompetitorAction (competencia)', () => saveCompetitorAction(ZERO, { name: 'x' })],
   ['deleteCompetitorAction (competencia)', () => deleteCompetitorAction(ZERO, ZERO)],
   ['listClientMemory (memoria)', () => listClientMemory(ZERO)],

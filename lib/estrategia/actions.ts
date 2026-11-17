@@ -4,6 +4,8 @@
 //   - ver la estrategia de un cliente, objetivos, palabras clave, señales, trabajo y «Ejecutar ahora»: «edit»;
 //   - asignar o quitar un plan, ajustar frecuencias de un cliente, pausar, editar planes, ajustes, calendario y borrar
 //     objetivos: «admin» (cambian qué se hace y cuánto cuesta).
+//   - estratega (fase 2): pedir un análisis y decidir propuestas (crear encargo, ajustar, más adelante, no): «edit»;
+//     sus ajustes (máximo de propuestas, análisis por alerta al mes, caducidad): «admin».
 import { revalidatePath } from 'next/cache';
 import { requirePermission } from '@/lib/auth/permissions';
 import { publicError } from '@/lib/errors';
@@ -38,9 +40,11 @@ import { clientStrategy, objectiveBaseline, suggestKeywords, type ClientStrategy
 import { answerUrl, backfillClientWork } from '@/lib/estrategia/processes';
 import { runProcess } from '@/lib/estrategia/scheduler';
 import { isProcessKey, isRunnable } from '@/lib/estrategia/rules';
+import { StrategistError, decideSuggestion, queueAnalysis, runPendingAnalyses, saveStrategistSettings, type Decision } from '@/lib/estrategia/strategist';
+import { REJECT_REASONS } from '@/lib/estrategia/strategist-rules';
 
 type Ok<T = object> = ({ ok: true } & T) | { ok: false; error: string };
-const fail = (e: unknown, fallback: string): { ok: false; error: string } => ({ ok: false, error: e instanceof EstError ? e.userMessage : publicError(e, fallback) });
+const fail = (e: unknown, fallback: string): { ok: false; error: string } => ({ ok: false, error: e instanceof EstError || e instanceof StrategistError ? e.userMessage : publicError(e, fallback) });
 const id = (v: unknown) => String(v ?? '').slice(0, 60);
 
 export async function getClientStrategyAction(clientId: string): Promise<Ok<{ data: ClientStrategy }>> {
@@ -293,5 +297,57 @@ export async function deleteEventAction(eventId: string): Promise<Ok> {
     return { ok: true };
   } catch (e) {
     return fail(e, 'No se pudo eliminar el evento');
+  }
+}
+
+// --- Estratega (fase 2) ---------------------------------------------------------------------------------------------
+
+/** «Analizar ahora»: pide un análisis del estratega para el cliente y lo empieza en segundo plano. */
+export async function requestAnalysisAction(clientId: string): Promise<Ok<{ message: string }>> {
+  try {
+    const user = await requirePermission('edit');
+    wireApp();
+    const r = await queueAnalysis(user.tenantId, id(clientId), 'manual', { by: user.name ?? user.email ?? 'Panel' });
+    if (r.ok) void runPendingAnalyses(user.tenantId).catch((e) => console.error('[estrategia] análisis a mano:', e instanceof Error ? e.message : e));
+    return r.ok ? { ok: true, message: r.message } : { ok: false, error: r.message };
+  } catch (e) {
+    return fail(e, 'No se pudo pedir el análisis');
+  }
+}
+
+type DecisionInput = { kind: 'aprobar' | 'ajustar' | 'aplazar' | 'rechazar'; note?: string; reason?: string };
+
+/** Decide una propuesta del estratega: crear encargo, crear con un ajuste, más adelante o no (con motivo). */
+export async function decideSuggestionAction(suggestionId: string, input: DecisionInput): Promise<Ok<{ message: string; url: string | null }>> {
+  try {
+    const user = await requirePermission('edit');
+    wireApp();
+    const note = String(input?.note ?? '').trim().slice(0, 2000);
+    let d: Decision;
+    if (input?.kind === 'aprobar') d = { kind: 'aprobar' };
+    else if (input?.kind === 'aplazar') d = { kind: 'aplazar' };
+    else if (input?.kind === 'ajustar') {
+      if (!note) return { ok: false, error: 'Escribe qué cambias.' };
+      d = { kind: 'ajustar', note };
+    } else if (input?.kind === 'rechazar') {
+      const reason = String(input.reason ?? '');
+      if (!(reason in REJECT_REASONS)) return { ok: false, error: 'Elige un motivo.' };
+      d = { kind: 'rechazar', reason: reason as keyof typeof REJECT_REASONS, note: note || undefined };
+    } else return { ok: false, error: 'Decisión no válida.' };
+    const r = await decideSuggestion(user.tenantId, id(suggestionId), d, user.name ?? user.email ?? 'Panel');
+    return r.ok ? { ok: true, message: r.message, url: r.url ?? null } : { ok: false, error: r.message };
+  } catch (e) {
+    return fail(e, 'No se pudo guardar la decisión');
+  }
+}
+
+export async function saveStrategistSettingsAction(input: { maxSuggestions?: number; alertsPerMonth?: number; expireDays?: number; snoozeDays?: number }): Promise<Ok> {
+  try {
+    const user = await requirePermission('admin');
+    await saveStrategistSettings(user.tenantId, input ?? {});
+    revalidatePath('/dashboard/estrategia');
+    return { ok: true };
+  } catch (e) {
+    return fail(e, 'No se pudieron guardar los ajustes del estratega');
   }
 }

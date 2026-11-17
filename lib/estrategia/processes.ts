@@ -59,7 +59,7 @@ import {
   markSignalsNotified,
   saveHealthCheck,
   saveKeywordHistory,
-  saveSettingsState,
+  patchSettingsState,
   saveUrlDaily,
   trackUrl,
   updateKeywordSummary,
@@ -115,7 +115,7 @@ async function notify(ctx: Ctx, key: string, html: string): Promise<void> {
   await telegramOutbound()?.notifyOwner(ctx.tenantId, key, `${html}${tabLink(ctx.clientId)}`);
 }
 
-async function search(ctx: Ctx, q: Parameters<NonNullable<MetricSource['search']>>[3]): Promise<SearchRow[]> {
+export async function search(ctx: Ctx, q: Parameters<NonNullable<MetricSource['search']>>[3]): Promise<SearchRow[]> {
   if (!ctx.gsc?.source.search) return [];
   return ctx.gsc.source.search(ctx.tenantId, 'gsc', ctx.gsc.property, q);
 }
@@ -130,6 +130,9 @@ async function notifySignals(ctx: Ctx, process: string, fresh: Signal[], minSeve
   const rows = await db.select({ id: estSignals.id, key: estSignals.dedupeKey }).from(estSignals).where(eq(estSignals.clientId, ctx.clientId));
   const keys = new Set(list.map((s) => s.key));
   await markSignalsNotified(rows.filter((r) => keys.has(r.key)).map((r) => r.id));
+  // Una caída fuerte (crítica) en Google o en la ficha despierta al estratega. La web caída no: es una urgencia técnica.
+  const grave = list.find((s) => s.severity === 'critico');
+  if (grave && ['detectores', 'gbp', 'keywords'].includes(process)) await import('@/lib/estrategia/strategist').then((m) => m.maybeAlertAnalysis(ctx, grave.title.slice(0, 300))).catch((e) => console.error('[estrategia] análisis por alerta:', e instanceof Error ? e.message : e));
 }
 
 /** Huella corta de un conjunto de claves: dos lotes distintos el mismo día no chocan en la cola de avisos. */
@@ -501,16 +504,20 @@ export async function runObjetivos(ctx: Ctx): Promise<ProcessOutcome> {
   const counts: Partial<Record<Health, number>> = {};
   const worse: string[] = [];
   const good: string[] = [];
+  const alertReasons: string[] = [];
   for (const o of list) {
     const r = await evaluateObjective(ctx, o);
     counts[r.health] = (counts[r.health] ?? 0) + 1;
     const before = (o.lastHealth ?? 'en_camino') as Health;
     if (HEALTH_RANK[r.health] > HEALTH_RANK[before] && ['en_riesgo', 'desviado', 'vencido'].includes(r.health)) worse.push(`• ${esc(o.title)}: ${HEALTH_LABEL[before].toLowerCase()} → <b>${HEALTH_LABEL[r.health].toLowerCase()}</b>${r.note ? ` (${esc(r.note)})` : ''}`);
+    if (r.health === 'desviado' && before !== 'desviado') alertReasons.push(`objetivo desviado: ${o.title}`);
     if (r.health === 'logrado' && o.lastHealth !== 'logrado') good.push(`• ${esc(o.title)}`);
     await updateObjectiveHealth(o.id, r.health, r.actual);
   }
   if (ctx.settings.alertsEnabled && worse.length) await notify(ctx, `est:objetivos:${ctx.clientId}:${ctx.today}`, `📉 <b>${esc(ctx.clientName)}</b>: objetivos que empeoran\n${worse.join('\n')}`);
   if (ctx.settings.alertsEnabled && good.length) await notify(ctx, `est:logrado:${ctx.clientId}:${ctx.today}`, `🎉 <b>${esc(ctx.clientName)}</b>: objetivo alcanzado\n${good.join('\n')}\nCiérralo en su pestaña Estrategia cuando quieras.`);
+  // Un objetivo que pasa a desviado despierta al estratega (si el plan lo incluye y no se ha pasado del tope del mes).
+  if (alertReasons.length) await import('@/lib/estrategia/strategist').then((m) => m.maybeAlertAnalysis(ctx, alertReasons.join('; ').slice(0, 300))).catch((e) => console.error('[estrategia] análisis por alerta:', e instanceof Error ? e.message : e));
   return { status: worse.length ? 'aviso' : 'ok', summary: Object.entries(counts).map(([h, n]) => `${HEALTH_LABEL[h as Health].toLowerCase()}: ${n}`).join(' · ') };
 }
 
@@ -599,7 +606,10 @@ export async function runExtraction(tenantId: string, now = new Date()): Promise
   const aiAllowed = (await aiSpentThisMonth(tenantId, now)) < Number(settings.aiMonthlyCapUsd);
   const ctxCache = new Map<string, Ctx | null>();
   let done = 0;
+  const strategist = await import('@/lib/estrategia/strategist');
   for (const item of items) {
+    // Un encargo nacido de una propuesta del estratega cuenta para su tasa de ejecución.
+    await strategist.markSuggestionExecuted(tenantId, item.ref).catch(() => undefined);
     if (!ctxCache.has(item.clientId)) ctxCache.set(item.clientId, await loadCtx(tenantId, item.clientId, now));
     const ctx = ctxCache.get(item.clientId);
     const today = madridNow(now).date;
@@ -637,7 +647,7 @@ export async function runExtraction(tenantId: string, now = new Date()): Promise
     }
   }
   // El cursor avanza con la última fila leída aunque fuese de un cliente sin ficha: así nunca se atasca.
-  await saveSettingsState(tenantId, { ...settings.state, lastExtractAt: new Date(Date.parse(cursor) + 1).toISOString() });
+  await patchSettingsState(tenantId, { lastExtractAt: new Date(Date.parse(cursor) + 1).toISOString() });
   return done;
 }
 

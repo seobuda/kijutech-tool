@@ -1,6 +1,7 @@
 'use client';
 
-// Pestaña «Estrategia» de la ficha del cliente (módulo Estrategia, fase 1, 15 nov 2026): plan de seguimiento y la
+// Pestaña «Estrategia» de la ficha del cliente (módulo Estrategia, fase 1, 15 nov 2026; propuestas del estratega en la
+// fase 2, 16 nov): plan de seguimiento y la
 // frecuencia de cada proceso (editable para este cliente), objetivos con su estado, señales (oportunidades y
 // problemas), salud de la web, palabras clave y trabajo hecho con las URLs que se siguen. Solo se ven las secciones de
 // los procesos que el cliente tiene activos.
@@ -32,6 +33,7 @@ import {
 import type { ClientStrategy, ObjectiveView, ProcessView } from '@/lib/estrategia/report';
 import { FREQUENCY_LABEL, addDays, fmtDayYear, type Health } from '@/lib/estrategia/rules';
 import { ConfirmDelete } from '../clientes/ui';
+import { PropuestasEstratega } from './propuestas-estratega';
 
 const selectCls = 'h-9 rounded-md border border-input bg-card px-2.5 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-brand/40';
 const inputCls = cn(selectCls, 'w-full');
@@ -55,7 +57,7 @@ const RUN_TONE: Record<string, 'success' | 'warning' | 'danger' | 'neutral'> = {
 const RUN_LABEL: Record<string, string> = { ok: 'Correcto', aviso: 'Con avisos', error: 'Error', omitido: 'Sin datos', pendiente: 'Pendiente' };
 const COST_LABEL: Record<string, string> = { gratis: 'Gratis', ia_minima: 'IA mínima', ia: 'IA (Opus)', dataforseo: 'DataForSEO' };
 
-type Section = 'resumen' | 'objetivos' | 'palabras' | 'web' | 'trabajo' | 'seguimiento';
+type Section = 'resumen' | 'propuestas' | 'objetivos' | 'palabras' | 'web' | 'trabajo' | 'seguimiento';
 
 export function ClienteEstrategia({ clientId, isAdmin }: { clientId: string; isAdmin: boolean }) {
   const [data, setData] = useState<ClientStrategy | null>(null);
@@ -77,9 +79,11 @@ export function ClienteEstrategia({ clientId, isAdmin }: { clientId: string; isA
   useEffect(load, [load]);
 
   const on = useMemo(() => new Set((data?.processes ?? []).filter((p) => p.on).map((p) => p.key)), [data]);
+  const pendingCount = data?.strategist.suggestions.filter((s) => s.status === 'pendiente').length ?? 0;
   const sections = useMemo(() => {
     const s: { key: Section; label: string; icon: typeof Compass; show: boolean }[] = [
       { key: 'resumen', label: 'Resumen', icon: Compass, show: true },
+      { key: 'propuestas', label: `Propuestas${pendingCount ? ` (${pendingCount})` : ''}`, icon: Sparkles, show: on.has('estratega') || (data?.strategist.suggestions.length ?? 0) > 0 },
       { key: 'objetivos', label: 'Objetivos', icon: Target, show: on.has('objetivos') },
       { key: 'palabras', label: 'Palabras clave', icon: KeyRound, show: on.has('keywords') },
       { key: 'web', label: 'Salud de la web', icon: Globe, show: on.has('critico') || on.has('salud') || on.has('velocidad') },
@@ -87,7 +91,7 @@ export function ClienteEstrategia({ clientId, isAdmin }: { clientId: string; isA
       { key: 'seguimiento', label: 'Plan y frecuencias', icon: ListChecks, show: true }
     ];
     return s.filter((x) => x.show);
-  }, [on]);
+  }, [on, data, pendingCount]);
 
   if (error) return <p role="alert" className="text-sm text-destructive">{error}</p>;
   if (!data) return <Skeleton className="h-64 w-full" />;
@@ -126,6 +130,7 @@ export function ClienteEstrategia({ clientId, isAdmin }: { clientId: string; isA
         ))}
       </nav>
       {current === 'resumen' && <Resumen data={data} go={setSection} onChange={load} />}
+      {current === 'propuestas' && <PropuestasEstratega data={data} onChange={load} />}
       {current === 'objetivos' && <Objetivos data={data} isAdmin={isAdmin} onChange={load} />}
       {current === 'palabras' && <Palabras data={data} onChange={load} />}
       {current === 'web' && <Web data={data} onChange={load} />}

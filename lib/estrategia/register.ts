@@ -4,10 +4,12 @@ import 'server-only';
 //   - tarea del planificador «estrategia de clientes» (procesos por plan y frecuencia, extracción de encargos);
 //   - respuesta a la pregunta «¿en qué URL…?» que Operaciones hace por Telegram (tipo «url»);
 //   - calendario de eventos para las gráficas y los avisos de Rendimiento;
-//   - herramienta del agente estrategia_cliente (lectura), comprobación de Salud y apartado del informe semanal.
+//   - herramienta del agente estrategia_cliente (lectura), comprobación de Salud y apartado del informe semanal;
+//   - botones «x:est:…» de las propuestas del estratega por Telegram y el texto de «Ajustar» u «Otro motivo».
 import {
   registerEventSource,
   registerHealthCheck,
+  registerModuleButtons,
   registerReportSection,
   registerScheduled,
   registerTaskAnswerHandler,
@@ -19,6 +21,7 @@ import { findCoreClient } from '@/lib/core/clients';
 import { eventsOverlapping, listRuns } from '@/lib/estrategia/store';
 import { runEstrategia } from '@/lib/estrategia/scheduler';
 import { answerUrlQuestion } from '@/lib/estrategia/processes';
+import { handleStrategistButton, handleStrategistText } from '@/lib/estrategia/strategist';
 import { strategyText, weeklyLines } from '@/lib/estrategia/report';
 import { PROCESS, isProcessKey } from '@/lib/estrategia/rules';
 
@@ -27,7 +30,7 @@ const estrategiaCliente: AgentTool = {
   module: 'estrategia',
   title: 'Estrategia y seguimiento de un cliente',
   description:
-    'Cómo va la estrategia de un cliente según su plan de seguimiento: objetivos con su estado (en camino, en riesgo, desviado…), señales abiertas (oportunidades como consultas al alcance o CTR bajo, páginas en caída, problemas técnicos o de la web), salud de la web, palabras clave seguidas y trabajo reciente con las URLs tocadas. No gasta llamadas a Google. Úsala para «¿cómo va la estrategia de X?», «¿qué oportunidades tiene X?» o «¿va bien la web de X?».',
+    'Cómo va la estrategia de un cliente según su plan de seguimiento: objetivos con su estado (en camino, en riesgo, desviado…), señales abiertas (oportunidades como consultas al alcance o CTR bajo, páginas en caída, problemas técnicos o de la web), salud de la web, palabras clave seguidas, trabajo reciente con las URLs tocadas y las propuestas del estratega pendientes de decidir. No gasta llamadas a Google. Úsala para «¿cómo va la estrategia de X?», «¿qué oportunidades tiene X?», «¿qué propone el estratega para X?» o «¿va bien la web de X?».',
   risk: 'lectura',
   inputSchema: { type: 'object', properties: { cliente: { type: 'string', description: 'Nombre del cliente' } }, required: ['cliente'], additionalProperties: false },
   async run(ctx, input) {
@@ -75,4 +78,5 @@ export function registerEstrategiaCapabilities(): void {
   });
   registerReportSection('estrategia', { title: '🧭 Estrategia de los clientes', order: 25, weekly: (t) => weeklyLines(t) });
   registerHealthCheck('estrategia', strategyHealth);
+  registerModuleButtons('est', { callback: handleStrategistButton, text: handleStrategistText });
 }
