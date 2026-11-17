@@ -16,6 +16,8 @@ export type AIAdapter = {
     messages: AIMessage[],
     model: string,
     apiKey: string,
-    maxTokens?: number
+    maxTokens?: number,
+    /** Cancela la petición HTTP (tiempo máximo del gateway): sin esto, la llamada seguía viva y se cobraba igual. */
+    signal?: AbortSignal
   ): Promise<AIResponse>;
 };

@@ -1,6 +1,8 @@
 'use client';
 
 import Link from 'next/link';
+import { useEffect } from 'react';
+import { sendClientError } from '@/components/error-reporter';
 import { CircleIcon } from 'lucide-react';
 
 // Página de error genérica: nunca muestra el detalle técnico (eso queda solo en los logs
@@ -12,6 +14,10 @@ export default function ErrorPage({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  // Al registro central de errores (el servidor ya guarda su parte con el mismo digest).
+  useEffect(() => {
+    sendClientError('pantalla', error.message || 'Página de error', error.stack ?? null, error.digest ?? null);
+  }, [error]);
   return (
     <div className="flex items-center justify-center min-h-[100dvh]">
       <div className="max-w-md space-y-6 p-4 text-center">

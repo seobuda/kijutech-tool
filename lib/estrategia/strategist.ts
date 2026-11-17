@@ -181,7 +181,8 @@ export type Dossier = {
 };
 
 const pctChange = (cur: number | null, prev: number | null): string => (cur === null || prev === null || prev === 0 ? '' : `${cur >= prev ? '+' : ''}${Math.round(((cur - prev) / prev) * 100)} %`);
-const fmtNum = (v: number | null, format: string): string => (v === null ? '—' : format === 'pct' ? `${Math.round(v * 1000) / 10} %` : format === 'dec' ? String(Math.round(v * 10) / 10) : String(Math.round(v)));
+// Los porcentajes de Rendimiento ya vienen en escala 0-100 (ratio() de lib/rendimiento/rules.ts): no se multiplican.
+const fmtNum = (v: number | null, format: string): string => (v === null ? '—' : format === 'pct' ? `${Math.round(v * 10) / 10} %` : format === 'dec' ? String(Math.round(v * 10) / 10) : String(Math.round(v)));
 
 /** Todo lo que el estratega necesita saber del cliente, en texto, y lo que se puede citar como evidencia. */
 export async function buildDossier(tenantId: string, clientId: string, now = new Date()): Promise<Dossier | null> {
@@ -402,6 +403,8 @@ export async function executeAnalysis(a: EstAnalysis, now = new Date()): Promise
       model: STRATEGIST_MODEL,
       // Opus 5.5 siempre piensa y el pensamiento cuenta en max_tokens: margen para pensar y escribir el JSON.
       maxTokens: 16000,
+      // Expediente grande + pensar + 16 000 tokens pueden pasar de los 180 s por defecto.
+      timeoutMs: 600_000,
       messages: [
         { role: 'system', content: fill(prompt.system_prompt) },
         { role: 'user', content: fill(prompt.user_prompt_template) }
@@ -481,7 +484,12 @@ export async function executeAnalysis(a: EstAnalysis, now = new Date()): Promise
         suggestions: inserted.map((s, i) => ({ rank: s.rank, title: s.title, description: s.description, impact: s.impact, confidence: s.confidence, hours: Number(s.hours), hoursSource: s.hoursSource, evidence: s.evidence, overHours: keep[i]?.overHours })),
         link: tabUrl(a.clientId)
       });
-      await telegramOutbound()?.notifyOwner(a.tenantId, `est:analisis:${a.id}`, html, analysisKeyboard(inserted.map((s) => ({ id: s.id, rank: s.rank }))));
+      // El aviso falla aparte: el análisis ya está hecho (y pagado) y sus propuestas se ven en la ficha.
+      try {
+        await telegramOutbound()?.notifyOwner(a.tenantId, `est:analisis:${a.id}`, html, analysisKeyboard(inserted.map((s) => ({ id: s.id, rank: s.rank }))));
+      } catch (e) {
+        console.error('[estrategia] aviso del estratega por Telegram:', e instanceof Error ? e.message : e);
+      }
     }
   } catch (e) {
     console.error('[estrategia] estratega:', e instanceof Error ? e.message : e);

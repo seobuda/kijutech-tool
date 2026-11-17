@@ -4,11 +4,11 @@ import 'server-only';
 //   - atiende los mensajes libres de Telegram y correo del dueño (agente principal);
 //   - publica sus herramientas: trabajos de subagentes e integraciones (DataForSEO, Clarity, Google);
 //   - programa los trabajos de los subagentes en el planificador.
-import { registerAssetDirectory, registerMetricSource, registerScheduled, registerTools, setInboundHandler, type AgentTool, type ToolContext } from '@/lib/core/capabilities';
+import { registerAssetDirectory, registerMetricSource, registerScheduled, registerTools, setAgentJobCreator, setInboundHandler, type AgentTool, type ToolContext } from '@/lib/core/capabilities';
 import { GOOGLE_METRIC_SOURCE, normalizeGoogleProperty } from '@/lib/agentes/metrics';
 import { findCoreClient, primaryAsset } from '@/lib/core/clients';
 import { handleInbound } from '@/lib/agentes/inbound';
-import { encargarAgente, estadoTrabajos, runAgentJobs } from '@/lib/agentes/jobs';
+import { createJob, encargarAgente, estadoTrabajos, runAgentJobs } from '@/lib/agentes/jobs';
 import {
   clarityInsights,
   dataForSeoSerp,
@@ -208,7 +208,16 @@ export function registerAgentesCapabilities(): void {
   done = true;
   registerTools(AGENTES_TOOLS);
   setInboundHandler('agentes', handleInbound);
-  registerScheduled('trabajos de subagentes', runAgentJobs);
+  // En segundo plano (17 nov 2026): un trabajo tarda minutos (varias vueltas con la IA) y bloqueaba el planificador entero
+  // (avisos, bandeja de ClickUp, latido de salud → falsa alarma de «herramienta caída»). runAgentJobs ya tiene su candado.
+  registerScheduled('trabajos de subagentes', async (tenantId) => {
+    void runAgentJobs(tenantId).catch((e) => console.error('[agentes] trabajos de subagentes:', e instanceof Error ? e.message : e));
+  });
+  // El núcleo (registro de errores) encarga diagnósticos al Técnico de mantenimiento sin importar este módulo.
+  setAgentJobCreator(async (r) => {
+    const job = await createJob({ ...r, conversationId: null });
+    return 'failure' in job ? { ok: false, error: job.failure } : { ok: true, id: job.id };
+  });
   registerAssetDirectory({ provider: 'google', kinds: ['search_console', 'analytics', 'business_profile'], isConnected: (t) => isConnected(t, 'google'), list: listGoogleDirectory });
   // Histórico diario para el módulo Rendimiento (lib/rendimiento/sync.ts), sin que Rendimiento sepa de Google.
   registerMetricSource(GOOGLE_METRIC_SOURCE);

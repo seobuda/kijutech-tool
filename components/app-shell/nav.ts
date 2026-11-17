@@ -2,6 +2,7 @@
 // La visibilidad por rol aquí es solo de interfaz: cada página y acción comprueba su permiso en el servidor.
 import {
   Activity,
+  Bug,
   BookOpen,
   Bot,
   Brain,
@@ -167,6 +168,7 @@ export const NAV: NavGroup[] = [
     label: 'Administración',
     items: [
       { href: '/dashboard/operaciones/automatizaciones', label: 'Sistema', icon: Cog, section: 'sistema', keywords: 'automatizaciones salud telegram clickup', show: (r) => r.isAdmin },
+      { href: '/dashboard/errores', label: 'Errores', icon: Bug, keywords: 'errores fallos incidencias diagnóstico mantenimiento técnico registro logs', show: (r) => r.isAdmin },
       { href: '/dashboard/usuarios', label: 'Usuarios', icon: Users, show: (r) => r.isSuperAdmin },
       { href: '/dashboard/seo/admin/cards', label: 'Conocimiento SEO', icon: BookOpen, show: (r) => r.isAdmin },
       { href: '/dashboard/seo/admin/settings', label: 'Configuración SEO', icon: SlidersHorizontal, show: (r) => r.isSuperAdmin }
@@ -198,6 +200,7 @@ export function isActive(item: NavItem, pathname: string): boolean {
 const SEGMENT_LABELS: Record<string, string> = {
   dashboard: 'Inicio',
   operaciones: 'Operaciones',
+  errores: 'Errores',
   clientes: 'Clientes',
   rendimiento: 'Rendimiento',
   estrategia: 'Estrategia',

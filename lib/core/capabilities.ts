@@ -434,3 +434,16 @@ export function moduleButtons(prefix: string): ModuleHandlers | null {
   return GX.__kijuModuleButtons?.get(prefix) ?? null;
 }
 export const MODULE_BUTTON_RE = /^x:([a-z]{2,4}):([A-Za-z0-9:_-]{1,58})$/;
+
+// --- Trabajos para subagentes desde el núcleo (17 nov 2026) -----------------------------------------------------------
+// El registro de errores (núcleo) encarga diagnósticos al Técnico de mantenimiento sin importar el módulo Agentes: Agentes
+// registra aquí cómo crear un trabajo (cola agt_jobs; el resultado llega al dueño por Telegram).
+export type AgentJobRequest = { tenantId: string; agentKey: string; title: string; instruction: string; requestedBy: string; data?: Record<string, unknown> };
+export type AgentJobCreator = (r: AgentJobRequest) => Promise<{ ok: true; id: string } | { ok: false; error: string }>;
+const GJ = globalThis as unknown as { __kijuAgentJobCreator?: AgentJobCreator };
+export function setAgentJobCreator(fn: AgentJobCreator): void {
+  GJ.__kijuAgentJobCreator = fn;
+}
+export function agentJobCreator(): AgentJobCreator | null {
+  return GJ.__kijuAgentJobCreator ?? null;
+}

@@ -16,7 +16,8 @@ export const geminiAdapter: AIAdapter = {
     messages: AIMessage[],
     model: string,
     apiKey: string,
-    maxTokens?: number
+    maxTokens?: number,
+    signal?: AbortSignal
   ): Promise<AIResponse> {
     const resolvedModel = model || DEFAULT_MODEL;
     const systemInstruction = messages
@@ -27,6 +28,7 @@ export const geminiAdapter: AIAdapter = {
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${resolvedModel}:generateContent?key=${apiKey}`;
 
     const res = await fetch(endpoint, {
+      signal,
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

@@ -8,11 +8,13 @@ export const deepseekAdapter: AIAdapter = {
     messages: AIMessage[],
     model: string,
     apiKey: string,
-    maxTokens?: number
+    maxTokens?: number,
+    signal?: AbortSignal
   ): Promise<AIResponse> {
     const resolvedModel = model || DEFAULT_MODEL;
 
     const res = await fetch(ENDPOINT, {
+      signal,
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

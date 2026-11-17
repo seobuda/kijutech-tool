@@ -7,6 +7,7 @@ import { AGENTES_PROCESS_MAP } from '@/lib/agentes/process-map';
 import { CLIENTES_PROCESS_MAP } from '@/lib/core/clients-process-map';
 import { RENDIMIENTO_PROCESS_MAP } from '@/lib/rendimiento/process-map';
 import { ESTRATEGIA_PROCESS_MAP } from '@/lib/estrategia/process-map';
+import { ERRORES_PROCESS_MAP } from '@/lib/core/errors-process-map';
 
 export interface SystemNode {
   id: string;
@@ -68,6 +69,27 @@ const CORE_NODES: SystemNode[] = [
       stack: ['lib/core/clients.ts (datos)', 'lib/core/client-rules.ts (reglas puras y completitud)', 'lib/core/client-actions.ts (acciones con permisos)'],
       keyDecisions: ['Cliente ≠ activo ≠ integración (patrón Semrush/AgencyAnalytics)', 'Mismo id que ops_clients: ninguna referencia se reescribió', 'Nunca contraseñas; contrato solo para administradores']
     },
+  },
+  {
+    id: 'core-errores',
+    name: 'Errores y mantenimiento',
+    description:
+      'Todo lo que falla en la herramienta queda registrado y agrupado (servidor, IA, agentes, pantallas), avisa por Telegram y el Técnico de mantenimiento (subagente) lo diagnostica leyendo el código y propone el arreglo para aprobarlo.',
+    status: 'built',
+    icon: 'Stethoscope',
+    detailMapId: 'errores',
+    group: 'infrastructure',
+    edgesTo: [{ id: 'agentes', label: 'diagnósticos del Técnico de mantenimiento' }],
+    technicalDetail: {
+      summary:
+        'Núcleo (17 nov 2026, migración 0052): tablas sys_error_groups, sys_error_events y sys_error_settings. captureConsole() engancha console.error/warn, onRequestError las peticiones de Next y reportError() da contexto (quién, entrada, lo que vio la persona). Pantalla Administración → Errores.',
+      stack: ['lib/core/errors.ts (captura, lotes, avisos, herramientas)', 'lib/core/error-rules.ts (huella, limpieza de secretos)', 'Subagente «Técnico de mantenimiento» (Sonnet 5.5)'],
+      keyDecisions: [
+        'Tabla propia en vez de Sentry: los datos se quedan en casa y el agente los lee sin otra API',
+        'Agrupar por huella y guardar pocas muestras: una tormenta de errores no llena la base',
+        'El Técnico solo lee y propone; el arreglo se aplica con aprobación'
+      ]
+    }
   },
   {
     id: 'ai-gateway',
@@ -188,7 +210,7 @@ const CORE_NODES: SystemNode[] = [
     id: 'estrategia',
     name: 'Estrategia de clientes',
     description:
-      'Seguimiento de cada cliente según su plan (frecuencias editables por plan y por cliente): salud de la web, palabras clave, ficha de Google, objetivos con curva SEO, detectores de oportunidades, trabajo hecho y URLs trabajadas. Fase 1 construida; el estratega con Opus (fase 2) y el impacto con aprendizajes (fase 3), pendientes.',
+      'Seguimiento de cada cliente según su plan (frecuencias editables por plan y por cliente): salud de la web, palabras clave, ficha de Google, objetivos con curva SEO, detectores de oportunidades, trabajo hecho y URLs trabajadas. Fases 1 y 2 construidas (el estratega con Opus propone tareas con evidencia y ✅ crea el encargo); el impacto con aprendizajes (fase 3), pendiente.',
     status: 'in_progress',
     icon: 'Compass',
     detailMapId: 'estrategia',
@@ -308,7 +330,7 @@ export function getSystemMap(): SystemNode[] {
 }
 
 // Todos los mapas de detalle conocidos (el Server Component los resuelve y los pasa al cliente).
-export const PROCESS_MAP_IDS = ['clustering', 'competitor_analysis', 'security', 'agentes', 'clientes', 'rendimiento', 'estrategia', ...Object.keys(OPS_MAPS)];
+export const PROCESS_MAP_IDS = ['clustering', 'competitor_analysis', 'security', 'agentes', 'clientes', 'rendimiento', 'estrategia', 'errores', ...Object.keys(OPS_MAPS)];
 
 export function getProcessMap(detailMapId: string): ProcessStep[] {
   switch (detailMapId) {
@@ -326,6 +348,8 @@ export function getProcessMap(detailMapId: string): ProcessStep[] {
       return RENDIMIENTO_PROCESS_MAP;
     case 'estrategia':
       return ESTRATEGIA_PROCESS_MAP;
+    case 'errores':
+      return ERRORES_PROCESS_MAP;
     default:
       return OPS_MAPS[detailMapId] ?? [];
   }
