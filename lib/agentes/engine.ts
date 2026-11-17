@@ -240,7 +240,7 @@ export async function summarize(tenantId: string, agent: AgtAgent, previous: str
     const transcript = history.map((h) => `${h.role === 'user' ? 'Enric' : agent.name}: ${h.content}`).join('\n').slice(0, 30_000);
     const r = await client.messages.create({
       model,
-      max_tokens: 800,
+      max_tokens: 3000, // el modelo piensa y el pensamiento cuenta aquí: con 800 el resumen podía salir vacío
       system: 'Resumes conversaciones de trabajo en español: decisiones, encargos pedidos, datos importantes y temas abiertos. Máximo 15 líneas, sin adornos.',
       messages: [{ role: 'user', content: `${previous ? `Resumen anterior:\n${previous}\n\n` : ''}Conversación nueva:\n${transcript}\n\nEscribe el resumen actualizado.` }]
     });

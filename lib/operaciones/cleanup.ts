@@ -68,6 +68,8 @@ export function parseUserDate(raw: string, now = Date.now()): { ok: true; ymd: s
   const month = Number(m[2]);
   let year = m[3] ? Number(m[3]) : Number(today.slice(0, 4));
   if (m[3] && m[3].length === 2) year += 2000;
+  // Sin año y ya pasada este año: es del que viene («5/1» escrito el 28 de diciembre → 5 de enero siguiente).
+  if (!m[3] && `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}` < today) year += 1;
   const ymd = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
   const check = new Date(`${ymd}T12:00:00Z`);
   if (Number.isNaN(check.getTime()) || check.getUTCDate() !== day || check.getUTCMonth() + 1 !== month) {

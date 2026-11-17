@@ -48,14 +48,18 @@ type Claimed = {
   attempts: number;
 };
 
-let processing = false;
+// En globalThis (17 nov 2026): el planificador, el webhook y las acciones pueden cargar este módulo por separado; con
+// una variable del módulo cada copia creía estar sola y reclamaba filas a la vez.
+const GP = globalThis as unknown as { __kijuOutboxBusy?: boolean };
 
 export async function processOutbox(tenantId?: string): Promise<number> {
-  if (processing) return 0;
-  processing = true;
+  if (GP.__kijuOutboxBusy) return 0;
+  GP.__kijuOutboxBusy = true;
   let done = 0;
   try {
-    for (let round = 0; round < 5; round++) {
+    // Una fila por vuelta: la reserva de 90 s cubre solo lo que se está enviando (con 10 a la vez y ClickUp/Telegram
+    // lentos, las últimas caducaban antes de enviarse y otro proceso las reclamaba: duplicados).
+    for (let round = 0; round < 50; round++) {
       const rows = (await db.execute(sql`
         UPDATE ops_clickup_outbox
         SET attempts = attempts + 1,
@@ -66,7 +70,7 @@ export async function processOutbox(tenantId?: string): Promise<number> {
             AND next_attempt_at <= now()
             ${tenantId ? sql`AND tenant_id = ${tenantId}` : sql``}
           ORDER BY created_at
-          LIMIT 10
+          LIMIT 1
           FOR UPDATE SKIP LOCKED)
         RETURNING id, tenant_id, action, payload, attempts
       `)) as unknown as Claimed[];
@@ -77,7 +81,7 @@ export async function processOutbox(tenantId?: string): Promise<number> {
       }
     }
   } finally {
-    processing = false;
+    GP.__kijuOutboxBusy = false;
   }
   return done;
 }

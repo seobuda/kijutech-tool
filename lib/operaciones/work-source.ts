@@ -234,7 +234,7 @@ async function createTask(tenantId: string, input: NewTaskInput): Promise<{ ok: 
       ok: true,
       ref: row.id,
       url: res.ok ? (res.taskUrl ?? null) : null,
-      message: res.ok ? `Encargo creado${item.assigneeName ? ` para ${item.assigneeName}` : ''}.` : 'Encargo guardado; ClickUp falló y se reintenta solo.'
+      message: res.ok ? `Encargo creado${item.assigneeName ? ` para ${item.assigneeName}` : ''}.` : 'Encargo guardado, pero ClickUp falló: reinténtalo desde Encargos o Salud.'
     };
   } catch (e) {
     console.error('[operaciones] crear encargo desde otro módulo:', e instanceof Error ? e.message : e);

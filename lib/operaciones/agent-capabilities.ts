@@ -409,7 +409,7 @@ EXECUTORS.crear_encargo = async (tenantId, data, by) => {
       })
       .returning({ id: opsRequests.id });
     const res = await syncToClickUp(row.id, tenantId, false);
-    out.push(res.ok ? `«${item.title}» creada${res.taskUrl ? ` (${res.taskUrl})` : ''}` : `«${item.title}» guardada, pero ClickUp falló: se reintenta sola`);
+    out.push(res.ok ? `«${item.title}» creada${res.taskUrl ? ` (${res.taskUrl})` : ''}` : `«${item.title}» guardada, pero ClickUp falló: reinténtalo desde Encargos o Salud`);
   }
   return ok(out.join('; '));
 };

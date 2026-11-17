@@ -1,4 +1,5 @@
 // Scraper de páginas competidoras (Fase D — Análisis de competidores SERP).
+import { fetchPublic } from '@/lib/core/net';
 // Sin librería de parsing HTML instalada en el proyecto (no hay cheerio ni
 // jsdom) — se extrae todo con regex sobre el HTML crudo, en la misma línea
 // que lib/seo/csv-parse.ts (parser propio, sin dependencias). Es más frágil
@@ -419,9 +420,9 @@ export async function scrapeUrl(url: string): Promise<ScrapeResult> {
 
   let html: string;
   try {
-    const res = await fetch(url, {
+    // Solo webs públicas, comprobando cada redirección (17 nov 2026: antes un editor podía apuntar a la red interna).
+    const got = await fetchPublic(url, {
       signal: controller.signal,
-      redirect: 'follow',
       headers: {
         // Algunos sitios devuelven una página distinta (o bloquean) a un
         // fetch sin user-agent de navegador.
@@ -430,6 +431,10 @@ export async function scrapeUrl(url: string): Promise<ScrapeResult> {
         Accept: 'text/html,application/xhtml+xml',
       },
     });
+    if ('error' in got) {
+      return { ok: false, error: got.error };
+    }
+    const res = got.res;
 
     if (!res.ok) {
       return { ok: false, error: `HTTP ${res.status} ${res.statusText}` };

@@ -531,11 +531,20 @@ export async function decideSuggestion(tenantId: string, id: string, d: Decision
   if (d.kind === 'aplazar') return { ok: true, message: `⏸️ Para más adelante (vuelve a salir tras el ${addDays(madridNow(now).date, cfg.snoozeDays)}).` };
   if (d.kind === 'rechazar') return { ok: true, message: `✖️ Descartada: ${REJECT_REASONS[d.reason].toLowerCase()}.` };
 
+  // Si no se llegó a crear nada, la propuesta vuelve a como estaba (17 nov 2026): antes quedaba «Encargo creado» sin
+  // encargo, contaba como aceptada y no había forma de reintentar. Si Operaciones guardó el encargo (aunque ClickUp
+  // fallara), ya existe y no se devuelve: así nunca hay dos.
+  const undo = async (error: string) =>
+    db
+      .update(estSuggestions)
+      .set({ status: s.status, decidedBy: s.decidedBy, decidedAt: s.decidedAt, adjustNote: s.adjustNote, taskError: error.slice(0, 500), updatedAt: new Date() })
+      .where(and(eq(estSuggestions.id, id), eq(estSuggestions.status, status)));
+
   // Crear el encargo.
   const ws = workSource();
   if (!ws?.createTask) {
-    await db.update(estSuggestions).set({ taskError: 'Operaciones no está disponible para crear encargos.', updatedAt: new Date() }).where(eq(estSuggestions.id, id));
-    return { ok: false, message: 'Aprobada, pero no se pudo crear el encargo (Operaciones no disponible). Créalo a mano.' };
+    await undo('Operaciones no está disponible para crear encargos.');
+    return { ok: false, message: 'No se pudo crear el encargo (Operaciones no disponible): la propuesta sigue pendiente; inténtalo más tarde.' };
   }
   const evidence = s.evidence.map((e) => `- ${e.dato || e.ref}${e.periodo ? ` (${e.periodo})` : ''}: ${e.ref}`).join('\n');
   const description = [
@@ -548,6 +557,10 @@ export async function decideSuggestion(tenantId: string, id: string, d: Decision
     .filter(Boolean)
     .join('\n');
   const r = await ws.createTask(tenantId, { clientId: s.clientId, title: s.title, description, workType: s.workType, requestedBy: by });
+  if (!r.ok && !r.ref) {
+    await undo(r.message);
+    return { ok: false, message: `No se creó el encargo: ${r.message} La propuesta sigue pendiente para reintentarlo.` };
+  }
   await db
     .update(estSuggestions)
     .set({ taskRef: r.ref, taskUrl: r.url, taskError: r.ok ? null : r.message.slice(0, 500), updatedAt: new Date() })

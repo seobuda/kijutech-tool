@@ -286,7 +286,9 @@ export async function collectSnapshot(tenantId: string): Promise<Snapshot> {
     aiTotalHour
   ] = await Promise.all([
     n(db.select({ n: count() }).from(opsNotifications).where(and(eq(opsNotifications.tenantId, tenantId), eq(opsNotifications.status, 'fallido'), gte(opsNotifications.attempts, maxAttempts)))),
-    n(db.select({ n: count() }).from(opsNotifications).where(and(eq(opsNotifications.tenantId, tenantId), eq(opsNotifications.status, 'pendiente'), lt(opsNotifications.createdAt, stuckBefore)))),
+    // Atascado = debía salir hace más de 15 min. Los aplazados a propósito («te escribo en 30 min», comida, fuera de jornada)
+    // tienen next_attempt_at en el futuro y no cuentan (17 nov 2026: daban falsas alarmas casi a diario).
+    n(db.select({ n: count() }).from(opsNotifications).where(and(eq(opsNotifications.tenantId, tenantId), eq(opsNotifications.status, 'pendiente'), lt(opsNotifications.nextAttemptAt, stuckBefore)))),
     n(db.select({ n: count() }).from(opsClickupOutbox).where(and(eq(opsClickupOutbox.tenantId, tenantId), eq(opsClickupOutbox.status, 'fallido'), gte(opsClickupOutbox.attempts, 6)))),
     n(db.select({ n: count() }).from(opsClickupOutbox).where(and(eq(opsClickupOutbox.tenantId, tenantId), eq(opsClickupOutbox.status, 'pendiente'), lt(opsClickupOutbox.createdAt, stuckBefore)))),
     n(db.select({ n: count() }).from(opsRequests).where(and(eq(opsRequests.tenantId, tenantId), eq(opsRequests.status, 'error_sync')))),

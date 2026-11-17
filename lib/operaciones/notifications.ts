@@ -35,7 +35,9 @@ import type { OpsTask } from '@/lib/operaciones/clickup';
 
 const MAX_ATTEMPTS = 6; // por defecto; se cambia en Automatizaciones → Envío
 const URGENT_KINDS = ['block_alert', 'review_request'];
-const LEASE_SECONDS = 90;
+// Reserva al reclamar un lote: cubre el lote entero (hasta 10 envíos de hasta 20 s; con 90 s caducaba a mitad y otro
+// proceso volvía a reclamar los últimos: mensajes duplicados, 17 nov 2026). Si el proceso muere, se reintenta pasado este tiempo.
+const LEASE_SECONDS = 300;
 
 type Payload = {
   text: string; // cuerpo en HTML (sin la cabecera de modo pruebas)
@@ -456,12 +458,14 @@ async function sendOne(c: Claimed): Promise<void> {
   }
 }
 
-let processing = false;
+// En globalThis (17 nov 2026): el planificador, el webhook y las acciones pueden cargar este módulo por separado; con
+// una variable del módulo cada copia creía estar sola y reclamaba filas a la vez.
+const GP = globalThis as unknown as { __kijuNotifBusy?: boolean };
 
 // Reclama y envía los avisos pendientes/fallidos cuyo momento ha llegado.
 export async function processNotifications(tenantId?: string): Promise<number> {
-  if (processing) return 0; // un solo envío a la vez en este proceso
-  processing = true;
+  if (GP.__kijuNotifBusy) return 0; // un solo envío a la vez en este proceso
+  GP.__kijuNotifBusy = true;
   let sent = 0;
   try {
     const maxAttempts = tenantId ? num(await getAuto(tenantId, 'delivery'), 'maxAttempts') : MAX_ATTEMPTS;
@@ -487,7 +491,7 @@ export async function processNotifications(tenantId?: string): Promise<number> {
       }
     }
   } finally {
-    processing = false;
+    GP.__kijuNotifBusy = false;
   }
   return sent;
 }
