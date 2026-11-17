@@ -7,6 +7,7 @@ import { cleanupFixtures, createFixtures, emailFor, FIXTURE_PASSWORD, loginAs, P
 
 import { aiProposeClient, applyClientProposal, saveClientOps } from '@/lib/operaciones/client-actions';
 import { deleteAnnotationAction, getClientPerformanceAction, getMonthlyReportAction, resyncClientAction, saveAnnotationAction, savePerfSettingsAction } from '@/lib/rendimiento/actions';
+import { errorBriefAction, requestDiagnosisAction, saveErrorNoteAction, saveErrorSettingsAction, setErrorStatusAction } from '@/app/(dashboard)/dashboard/errores/actions';
 import { addKeywordsAction, backfillWorkAction, closeObjectiveAction, decideSuggestionAction, requestAnalysisAction, saveStrategistSettingsAction, deleteEventAction, deleteKeywordAction, deleteObjectiveAction, deletePlanAction, deleteTrackedUrlAction, getClientStrategyAction, objectiveBaselineAction, pauseClientAction, runProcessNowAction, saveClientOverrideAction, saveEstSettingsAction, saveEventAction, saveObjectiveAction, savePlanAction, setClientPlanAction, setSignalStatusAction, setWorkUrlAction, suggestKeywordsAction, updateKeywordAction } from '@/lib/estrategia/actions';
 import {
   createClientAction,
@@ -116,6 +117,11 @@ const form = (data: Record<string, string>) => {
 // Acciones que NO hacen nada si llegaran a ejecutarse (ids que no existen, entradas vacías): así
 // una regresión en un guard hace fallar la prueba sin tocar datos reales.
 const ACCIONES_ADMIN: [string, () => unknown][] = [
+  ['setErrorStatusAction (errores: estado)', () => setErrorStatusAction(ZERO, 'resuelto')],
+  ['saveErrorNoteAction (errores: nota)', () => saveErrorNoteAction(ZERO, 'x')],
+  ['requestDiagnosisAction (errores: diagnóstico con IA)', () => requestDiagnosisAction(ZERO)],
+  ['saveErrorSettingsAction (errores: ajustes)', () => saveErrorSettingsAction({})],
+  ['errorBriefAction (errores: texto para arreglar)', () => errorBriefAction(ZERO)],
   ['saveClickUpToken (tokens)', () => saveClickUpToken('')],
   ['savePerfSettingsAction (avisos de rendimiento)', () => savePerfSettingsAction({ alertPct: 50 })],
   ['setClientPlanAction (estrategia: plan del cliente)', () => setClientPlanAction(ZERO, null)],

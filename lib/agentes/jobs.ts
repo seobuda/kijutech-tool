@@ -81,7 +81,7 @@ export async function processJob(job: AgtJob): Promise<void> {
   const ctx: ToolContext = { tenantId: job.tenantId, agentKey: agent.key, channel: 'job', conversationId: job.conversationId, actor: { name: job.requestedBy, isOwner: true, clickupUserId: null } };
   const data = job.input as Record<string, unknown>;
   const userText = [`Encargo: ${job.title}`, job.instruction, Object.keys(data).length ? `Datos: ${JSON.stringify(data).slice(0, 2000)}` : ''].filter(Boolean).join('\n\n');
-  const run = await runAgent({ tenantId: job.tenantId, agent, ctx, userText, maxTokens: 8000 });
+  const run = await runAgent({ tenantId: job.tenantId, agent, ctx, userText, maxTokens: 12000, maxIterations: 14 });
   const failed = Boolean(run.error);
   await db
     .update(agtJobs)

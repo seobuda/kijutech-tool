@@ -8,6 +8,7 @@ import { registerOperacionesCapabilities } from '@/lib/operaciones/agent-capabil
 import { registerAgentesCapabilities } from '@/lib/agentes/register';
 import { registerRendimientoCapabilities } from '@/lib/rendimiento/register';
 import { registerEstrategiaCapabilities } from '@/lib/estrategia/register';
+import { registerErrorCapabilities } from '@/lib/core/errors';
 
 let wired = false;
 export function wireApp(): void {
@@ -17,4 +18,5 @@ export function wireApp(): void {
   registerAgentesCapabilities();
   registerRendimientoCapabilities();
   registerEstrategiaCapabilities();
+  registerErrorCapabilities(); // registro de errores del núcleo: herramientas del Técnico de mantenimiento, botones y limpieza
 }

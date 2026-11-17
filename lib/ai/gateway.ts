@@ -8,6 +8,7 @@ import { openaiAdapter } from '@/lib/ai/adapters/openai';
 import { geminiAdapter } from '@/lib/ai/adapters/gemini';
 import { deepseekAdapter } from '@/lib/ai/adapters/deepseek';
 import type { AIAdapter, AIMessage, AIResponse } from '@/lib/ai/types';
+import { reportError } from '@/lib/core/errors';
 
 const ADAPTERS: Record<string, AIAdapter> = {
   anthropic: anthropicAdapter,
@@ -38,6 +39,8 @@ type CallAIParams = {
    * es el de ese modelo (Anthropic para «claude-…»); si no, se usa el modelo configurado en IA y modelos.
    */
   model?: string;
+  /** Tiempo máximo de esta llamada (por defecto CALL_TIMEOUT_MS). Las largas (estratega con Opus) necesitan más. */
+  timeoutMs?: number;
 };
 
 export async function getPrompt(
@@ -155,6 +158,23 @@ export const FALLBACK_PRICING: Record<string, [string, string]> = {
   'anthropic/claude-haiku-5-5': ['0.0001', '0.0005']
 };
 
+/**
+ * Llama al adaptador con tiempo máximo y CANCELA la petición al vencer (17 nov 2026: antes solo se dejaba de esperar,
+ * la petición seguía viva y el proveedor la cobraba sin quedar registrada).
+ */
+export async function sendWithTimeout(adapter: AIAdapter, messages: AIMessage[], model: string, apiKey: string, maxTokens: number | undefined, ms: number): Promise<AIResponse> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await adapter.sendMessage(messages, model, apiKey, maxTokens, ctrl.signal);
+  } catch (e) {
+    if (ctrl.signal.aborted) throw new Error(`Llamada a la IA superó el timeout de ${ms / 1000}s`);
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(
@@ -263,6 +283,7 @@ export async function callAI(
   params: CallAIParams
 ): Promise<AIResponse & { jobId: string }> {
   const { tenantId, projectId, function: fn, messages, preferredProvider, promptKey, maxTokens } = params;
+  const timeoutMs = Math.min(900_000, Math.max(10_000, params.timeoutMs ?? CALL_TIMEOUT_MS));
   const modelFor = (provider: string, configured: string) => (params.model && provider === 'anthropic' && /^claude-[a-z0-9-]+$/.test(params.model) ? params.model : configured);
 
   // Si se pasa promptKey, se carga aquí únicamente para dejar constancia
@@ -325,10 +346,7 @@ export async function callAI(
       throw new Error(`Proveedor de IA desconocido: ${setting.provider}`);
     }
 
-    const response = await withTimeout(
-      adapter.sendMessage(messages, setting.model, setting.apiKey, maxTokens),
-      CALL_TIMEOUT_MS
-    );
+    const response = await sendWithTimeout(adapter, messages, setting.model, setting.apiKey, maxTokens, timeoutMs);
     return await finish(response, setting.keyMode, null);
   } catch (error) {
     let message = error instanceof Error ? error.message : 'Error desconocido';
@@ -342,10 +360,7 @@ export async function callAI(
         if (alt) {
           const altAdapter = ADAPTERS[alt.provider];
           if (altAdapter) {
-            const response = await withTimeout(
-              altAdapter.sendMessage(messages, alt.model, alt.apiKey, maxTokens),
-              CALL_TIMEOUT_MS
-            );
+            const response = await sendWithTimeout(altAdapter, messages, alt.model, alt.apiKey, maxTokens, timeoutMs);
             return await finish(response, alt.keyMode, {
               from: `${primary.provider}/${primary.model}`,
               reason: message.slice(0, 300),
@@ -365,6 +380,7 @@ export async function callAI(
         completedAt: new Date(),
       })
       .where(eq(aiJobs.id, job.id));
+    reportError({ message, source: 'ia', area: `ia ${fn}`, tenantId, context: { aiJobId: job.id, proveedor: primary?.provider ?? null, modelo: primary?.model ?? null, maxTokens: maxTokens ?? null, promptKey: promptKey ?? null } });
 
     throw error;
   }

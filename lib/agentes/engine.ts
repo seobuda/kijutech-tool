@@ -1,4 +1,5 @@
 import 'server-only';
+import { reportError } from '@/lib/core/errors';
 
 // Motor de los agentes (13 nov 2026): Claude con herramientas en un bucle (SDK oficial de Anthropic).
 //   - Herramientas: las del registro del núcleo que el agente tenga permitidas (Operaciones, integraciones, trabajos) y
@@ -103,8 +104,11 @@ export async function runAgent(params: {
   summary?: string | null;
   extraSystem?: string;
   maxTokens?: number;
+  /** Vueltas con herramientas (por defecto 8; los trabajos de subagentes, que investigan, más). */
+  maxIterations?: number;
 }): Promise<AgentRun> {
   const { tenantId, agent, ctx } = params;
+  const maxIterations = Math.min(20, Math.max(1, params.maxIterations ?? MAX_ITERATIONS));
   const run: AgentRun = { text: '', toolCalls: [], costUsd: 0, inputTokens: 0, outputTokens: 0, error: null, cards: [] };
 
   if (agent.monthlyBudgetUsd && (await agentMonthSpend(tenantId, agent.key)) >= Number(agent.monthlyBudgetUsd)) {
@@ -146,7 +150,7 @@ export async function runAgent(params: {
   };
 
   try {
-    for (let i = 0; i < MAX_ITERATIONS; i++) {
+    for (let i = 0; i < maxIterations; i++) {
       const response = await client.messages.create({
         model,
         max_tokens: params.maxTokens ?? 4096,
@@ -175,6 +179,15 @@ export async function runAgent(params: {
         messages.push({ role: 'assistant', content: response.content });
         continue;
       }
+      if (response.stop_reason === 'max_tokens') {
+        // Cortada por el límite (con modelos que piensan, a veces sin texto o con una herramienta a medias): nunca «Hecho.».
+        run.error = 'respuesta cortada por el límite de tokens';
+        run.text = text ? `${text}
+
+(La respuesta se cortó por su longitud.)` : 'Me he quedado sin espacio para responder (la respuesta se cortó). Pídemelo de forma más concreta.';
+        console.error(`[agente] ${agent.key}: respuesta cortada por max_tokens (${params.maxTokens ?? 4096}) en la vuelta ${i + 1}`);
+        break;
+      }
       if (response.stop_reason !== 'tool_use') {
         run.text = text || (response.stop_reason === 'refusal' ? 'No puedo ayudar con eso.' : 'Hecho.');
         break;
@@ -191,20 +204,24 @@ export async function runAgent(params: {
         }
         try {
           const r = await tool.run(ctx, (block.input ?? {}) as Record<string, unknown>);
+          // Una herramienta que contesta «no he podido» queda registrada como aviso (patrones de fallo para el Técnico).
+          if (!r.ok) reportError({ source: tool.module, area: `herramienta ${block.name}`, message: r.content.slice(0, 500), severity: 'aviso', tenantId, actor: ctx.actor.name, channel: ctx.channel, context: { input: block.input, agente: agent.key } });
           results.push({ type: 'tool_result', tool_use_id: block.id, content: r.content.slice(0, 30_000), is_error: !r.ok });
           run.toolCalls.push({ name: block.name, input: block.input, ok: r.ok, proposed: r.proposed, preview: r.content.slice(0, 300) });
           if (r.card) run.cards.push(r.card);
         } catch (e) {
-          console.error(`[agente] herramienta ${block.name}:`, e instanceof Error ? e.message : e);
+          reportError({ error: e, source: tool.module, area: `herramienta ${block.name}`, tenantId, actor: ctx.actor.name, channel: ctx.channel, userMessage: 'La herramienta falló', context: { input: block.input, agente: agent.key } });
           results.push({ type: 'tool_result', tool_use_id: block.id, content: 'La herramienta falló. Dilo y sigue con lo que puedas.', is_error: true });
           run.toolCalls.push({ name: block.name, input: block.input, ok: false });
         }
       }
       messages.push({ role: 'user', content: results });
-      if (i === MAX_ITERATIONS - 1) run.text = text || 'He hecho varias consultas pero no he llegado a una respuesta clara. ¿Me lo concretas?';
+      if (i === maxIterations - 1) run.text = text || 'He hecho varias consultas pero no he llegado a una respuesta clara. ¿Me lo concretas?';
     }
+    // Si el bucle acaba sin texto (p. ej. una pausa del servidor en la última vuelta), nunca un mensaje vacío.
+    if (!run.text.trim() && !run.error) run.text = 'He hecho varias consultas pero no he llegado a una respuesta clara. ¿Me lo concretas?';
   } catch (e) {
-    console.error('[agente] IA:', e instanceof Error ? e.message : e);
+    reportError({ error: e, source: 'agentes', area: `IA del agente ${agent.key}`, tenantId, actor: ctx.actor.name, channel: ctx.channel, userMessage: 'Ahora mismo no puedo pensar (la IA ha fallado).', context: { modelo: model } });
     run.error = e instanceof Error ? e.message.slice(0, 300) : 'error';
     run.text = 'Ahora mismo no puedo pensar (la IA ha fallado). Prueba en un momento.';
   }

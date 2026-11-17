@@ -1,4 +1,5 @@
 import 'server-only';
+import { reportError } from '@/lib/core/errors';
 
 // Conversación con el agente principal por Telegram y por correo (13 nov 2026). Llega por el registro del núcleo
 // (dispatchInbound): el bot de Operaciones entrega aquí los mensajes libres y los audios del dueño, y el buzón del agente
@@ -46,8 +47,12 @@ async function converse(m: InboundMessage, agent: NonNullable<Awaited<ReturnType
   let transcript: string | null = null;
   if (m.audio) {
     const t = await transcribe(m.tenantId, m.audio);
-    if (!t.ok) return void (await say(`🎙 ${escape(t.error)}`));
+    if (!t.ok) {
+      reportError({ message: t.error, source: 'agentes', area: 'voz transcripción', tenantId: m.tenantId, actor: m.peerName, channel: m.channel, userMessage: t.error, context: { segundos: m.audio.seconds, bytes: m.audio.data.byteLength, tipo: m.audio.mimeType } });
+      return void (await say(`🎙 ${escape(t.error)}`));
+    }
     transcript = t.text;
+    if (!t.text.trim() && !text) return void (await say('🎙 No he entendido nada en el audio. ¿Me lo repites o me lo escribes?'));
     text = [text, t.text].filter(Boolean).join('\n');
   }
   if (!text) return;

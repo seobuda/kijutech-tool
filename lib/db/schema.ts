@@ -2861,3 +2861,80 @@ export const estSuggestions = pgTable(
   ]
 );
 export type EstSuggestion = typeof estSuggestions.$inferSelect;
+
+// --- Registro central de errores (núcleo, 17 nov 2026, migración 0052) -----------------------------------------------
+// Todo fallo de la herramienta (consola del servidor, peticiones de Next, IA, herramientas de los agentes, navegador)
+// queda aquí agrupado por «huella» para investigarlo y arreglarlo; el Técnico de mantenimiento (subagente) lo diagnostica.
+// tenant_id nulo = error del sistema sin cuenta conocida (solo lo ve el super_admin).
+export const sysErrorGroups = pgTable(
+  'sys_error_groups',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id').references(() => tenants.id, { onDelete: 'cascade' }),
+    fingerprint: varchar('fingerprint', { length: 64 }).notNull(),
+    source: varchar('source', { length: 40 }).notNull(),
+    area: varchar('area', { length: 120 }).notNull().default(''),
+    title: varchar('title', { length: 300 }).notNull(),
+    severity: varchar('severity', { length: 10 }).notNull().default('error'),
+    status: varchar('status', { length: 14 }).notNull().default('nuevo'),
+    occurrences: integer('occurrences').notNull().default(0),
+    reopenedCount: integer('reopened_count').notNull().default(0),
+    firstSeen: timestamp('first_seen').notNull().defaultNow(),
+    lastSeen: timestamp('last_seen').notNull().defaultNow(),
+    resolvedAt: timestamp('resolved_at'),
+    resolvedBy: varchar('resolved_by', { length: 160 }),
+    note: text('note'),
+    diagnosis: jsonb('diagnosis'),
+    diagnosisAt: timestamp('diagnosis_at'),
+    diagnosisJobId: uuid('diagnosis_job_id'),
+    diagnosisRequestedAt: timestamp('diagnosis_requested_at'),
+    notifiedAt: timestamp('notified_at'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('sys_error_groups_fingerprint_unique').on(table.fingerprint),
+    index('sys_error_groups_tenant_idx').on(table.tenantId, table.status, table.lastSeen),
+    index('sys_error_groups_last_seen_idx').on(table.lastSeen),
+    check('sys_error_groups_severity_check', sql`${table.severity} IN ('aviso', 'error', 'critico')`),
+    check('sys_error_groups_status_check', sql`${table.status} IN ('nuevo', 'investigando', 'resuelto', 'ignorado')`),
+  ]
+);
+export type SysErrorGroup = typeof sysErrorGroups.$inferSelect;
+
+export const sysErrorEvents = pgTable(
+  'sys_error_events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    groupId: uuid('group_id')
+      .notNull()
+      .references(() => sysErrorGroups.id, { onDelete: 'cascade' }),
+    tenantId: uuid('tenant_id').references(() => tenants.id, { onDelete: 'cascade' }),
+    message: text('message').notNull().default(''),
+    stack: text('stack'),
+    userMessage: text('user_message'),
+    context: jsonb('context').notNull().default({}),
+    actor: varchar('actor', { length: 160 }),
+    channel: varchar('channel', { length: 20 }),
+    path: varchar('path', { length: 300 }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    index('sys_error_events_group_idx').on(table.groupId, table.createdAt),
+    index('sys_error_events_created_idx').on(table.createdAt),
+  ]
+);
+export type SysErrorEvent = typeof sysErrorEvents.$inferSelect;
+
+export const sysErrorSettings = pgTable('sys_error_settings', {
+  tenantId: uuid('tenant_id')
+    .primaryKey()
+    .references(() => tenants.id, { onDelete: 'cascade' }),
+  alerts: boolean('alerts').notNull().default(true),
+  alertMinSeverity: varchar('alert_min_severity', { length: 10 }).notNull().default('error'),
+  autoDiagnose: boolean('auto_diagnose').notNull().default(true),
+  maxDiagnosesPerDay: integer('max_diagnoses_per_day').notNull().default(2),
+  retentionDays: integer('retention_days').notNull().default(60),
+  state: jsonb('state').notNull().default({}),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+export type SysErrorSettings = typeof sysErrorSettings.$inferSelect;

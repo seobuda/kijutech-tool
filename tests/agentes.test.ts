@@ -44,7 +44,7 @@ import { availableTools, dispatchInbound, getTool, registerAssetDirectory, regis
 import { runAgent, systemPrompt, toMessages } from '@/lib/agentes/engine';
 import { isOgg, speakableText } from '@/lib/agentes/voice';
 import { signState, sumGbpSeries, verifyState } from '@/lib/agentes/integrations';
-import { _resetUpgradeCache, ensureDefaultAgents, getAgent, listAgents, PRINCIPAL_KEY, WEB_REVIEWER_KEY } from '@/lib/agentes/store';
+import { _resetUpgradeCache, ensureDefaultAgents, getAgent, listAgents, MAINTENANCE_KEY, PRINCIPAL_KEY, WEB_REVIEWER_KEY } from '@/lib/agentes/store';
 import { createJob, processJob } from '@/lib/agentes/jobs';
 import { handleInbound, waitIdle } from '@/lib/agentes/inbound';
 import { AGENT_TOOL_CALLBACK_RE, decideAgentTool, OPS_AGENT_TOOLS, setToolAutonomy } from '@/lib/operaciones/agent-capabilities';
@@ -167,7 +167,9 @@ describe('agentes con la base de datos', () => {
     await ensureDefaultAgents(tenantId);
     await ensureDefaultAgents(tenantId);
     const agents = await listAgents(tenantId);
-    expect(agents.map((a) => a.key).sort()).toEqual([PRINCIPAL_KEY, WEB_REVIEWER_KEY].sort());
+    expect(agents.map((a) => a.key).sort()).toEqual([PRINCIPAL_KEY, WEB_REVIEWER_KEY, MAINTENANCE_KEY].sort());
+    // 17 nov 2026: el Técnico de mantenimiento es subagente y solo tiene herramientas de lectura del registro de errores y del código.
+    expect(agents.find((a) => a.key === MAINTENANCE_KEY)).toMatchObject({ kind: 'subagente', tools: ['errores_lista', 'error_detalle', 'codigo_buscar', 'codigo_leer', 'ia_llamada', 'guardar_diagnostico'] });
     expect(agents.find((a) => a.key === PRINCIPAL_KEY)?.tools).toContain('crear_encargo');
   });
 
@@ -366,7 +368,7 @@ describe('agentes con la base de datos', () => {
     _resetUpgradeCache();
     await ensureDefaultAgents(tenantId);
     const [after] = await db.select().from(agtAgents).where(eq(agtAgents.id, p.id));
-    expect(after.tools).toEqual(['estado_equipo', 'crear_cliente', 'actualizar_cliente', 'anotar_memoria_cliente', 'web_fetch', 'gsc_rendimiento', 'ga4_informe', 'gbp_rendimiento', 'rendimiento_cliente', 'anotar_hito', 'estrategia_cliente']);
+    expect(after.tools).toEqual(['estado_equipo', 'crear_cliente', 'actualizar_cliente', 'anotar_memoria_cliente', 'web_fetch', 'gsc_rendimiento', 'ga4_informe', 'gbp_rendimiento', 'rendimiento_cliente', 'anotar_hito', 'estrategia_cliente', 'errores_lista']);
     expect(after.instructions).toBe('Mis instrucciones');
     // Si Enric quita una herramienta después, no vuelve a aparecer.
     await db.update(agtAgents).set({ tools: ['estado_equipo'] }).where(eq(agtAgents.id, p.id));

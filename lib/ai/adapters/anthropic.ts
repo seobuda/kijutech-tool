@@ -38,7 +38,8 @@ export const anthropicAdapter: AIAdapter = {
     messages: AIMessage[],
     model: string,
     apiKey: string,
-    maxTokens?: number
+    maxTokens?: number,
+    signal?: AbortSignal
   ): Promise<AIResponse> {
     const resolvedModel = model || DEFAULT_MODEL;
 
@@ -46,6 +47,7 @@ export const anthropicAdapter: AIAdapter = {
     const conversationMessages = messages.filter((m) => m.role !== 'system');
 
     const res = await fetch(ENDPOINT, {
+      signal,
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

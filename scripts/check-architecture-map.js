@@ -102,13 +102,19 @@ for (const t of uniq(all(/pgTable\(\s*'(est_\w+)'/g, schemaSrc))) if (!estSrc.in
 if (!/registerScheduled\('estrategia de clientes'/.test(read('lib/estrategia/register.ts'))) fail('La tarea del planificador de Estrategia no está registrada (lib/estrategia/register.ts).');
 const estPromptSrc = fs.readdirSync(path.join(root, 'lib/estrategia')).filter((f) => f.endsWith('.ts')).map((f) => read(`lib/estrategia/${f}`)).join('\n');
 for (const k of uniq(all(/PROMPT\s*=\s*'(est_\w+)'/g, estPromptSrc))) if (!estSrc.includes(`'${k}'`)) fail(`Prompt de IA «${k}» (Estrategia) sin entrada en el mapa de Estrategia.`);
+// 5g. Registro central de errores (núcleo, lib/core/errors-process-map.ts): archivos, todas sus tablas sys_* y la tarea
+// del planificador.
+const errSrc = read('lib/core/errors-process-map.ts');
+for (const f of uniq(all(/file: '([^']+)'/g, errSrc))) if (!fs.existsSync(path.join(root, f))) fail(`El mapa de Errores cita un archivo que no existe: ${f}`);
+for (const t of uniq(all(/pgTable\(\s*'(sys_\w+)'/g, schemaSrc))) if (!errSrc.includes(`'${t}'`)) fail(`La tabla «${t}» (registro de errores) no aparece en el mapa de Errores.`);
+if (!/registerScheduled\('registro de errores'/.test(read('lib/core/errors.ts'))) fail('La tarea del planificador del registro de errores no está registrada (lib/core/errors.ts).');
 function schemaSrcForAgt() {
   return read('lib/db/schema.ts');
 }
 
 // 6. Enlaces entre mapas
 const mapIds = all(/^ {2}(\w+): [A-Z_]+,$/gm, mapSrc.slice(mapSrc.indexOf('export const OPS_MAPS')));
-const known = new Set([...mapIds, 'clustering', 'competitor_analysis', 'security', 'agentes', 'clientes', 'rendimiento', 'estrategia']);
+const known = new Set([...mapIds, 'clustering', 'competitor_analysis', 'security', 'agentes', 'clientes', 'rendimiento', 'estrategia', 'errores']);
 for (const id of uniq([...all(/detailMapId: '(\w+)'/g, mapSrc), ...all(/detailMapId: '(\w+)'/g, registrySrc)])) {
   if (!known.has(id)) fail(`detailMapId «${id}» no corresponde a ningún mapa registrado en OPS_MAPS.`);
 }
