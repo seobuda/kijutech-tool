@@ -185,38 +185,47 @@ export async function recordWorkEvent(
   opts: { source: Source; at?: Date; plannedMinutes?: number | null; reason?: string | null; task?: TaskRef | null; createdBy?: { id: number | null; name: string } } = { source: 'telegram' }
 ): Promise<RecordResult> {
   const now = new Date();
-  const day = await getPersonDay(tenantId, person.clickupUserId, now);
-  if (!day) return { ok: false, reason: 'No tienes ficha en Equipo: pide que te la creen.' };
-  // Empezar o marcar ausencia abre siempre el día de hoy.
-  const date = kind === 'entrada' || kind === 'ausencia' ? todayIn(day.sch.timezone, now) : day.date;
-  const state = date === day.date ? day.state : computeDay([], now.getTime());
-  const err = transitionError(state.status, kind);
-  if (err) return { ok: false, reason: err };
+  // Candado por persona (O4): dos pulsaciones a la vez (el webhook procesa en paralelo) daban dos entradas o dos
+  // salidas. Con el candado, la segunda espera, ve el estado ya actualizado y la transición se rechaza.
+  const res = await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`jornada:${tenantId}:${person.clickupUserId}`}))`);
+    const day = await getPersonDay(tenantId, person.clickupUserId, now);
+    if (!day) return { ok: false as const, reason: 'No tienes ficha en Equipo: pide que te la creen.' };
+    // Empezar o marcar ausencia abre siempre el día de hoy.
+    const date = kind === 'entrada' || kind === 'ausencia' ? todayIn(day.sch.timezone, now) : day.date;
+    const state = date === day.date ? day.state : computeDay([], now.getTime());
+    const err = transitionError(state.status, kind);
+    if (err) return { ok: false as const, reason: err };
 
-  const [row] = await db
-    .insert(opsWorkEvents)
-    .values({
-      tenantId,
-      profileId: day.profileId,
-      clickupUserId: person.clickupUserId,
-      personName: day.person.name,
-      workDate: date,
-      kind,
-      at: opts.at ?? now,
-      plannedMinutes: opts.plannedMinutes ?? null,
-      reason: opts.reason?.slice(0, 1000) ?? null,
-      task: opts.task ?? null,
-      source: opts.source,
-      createdByUserId: opts.createdBy?.id ?? null,
-      createdByName: opts.createdBy?.name ?? null
-    })
-    .returning({ id: opsWorkEvents.id });
+    const [row] = await tx
+      .insert(opsWorkEvents)
+      .values({
+        tenantId,
+        profileId: day.profileId,
+        clickupUserId: person.clickupUserId,
+        personName: day.person.name,
+        workDate: date,
+        kind,
+        at: opts.at ?? now,
+        plannedMinutes: opts.plannedMinutes ?? null,
+        reason: opts.reason?.slice(0, 1000) ?? null,
+        task: opts.task ?? null,
+        source: opts.source,
+        createdByUserId: opts.createdBy?.id ?? null,
+        createdByName: opts.createdBy?.name ?? null
+      })
+      .returning({ id: opsWorkEvents.id });
+    return { ok: true as const, row, day };
+  });
+  if (!res.ok) return res;
+  const { row, day } = res;
   await logEvent(tenantId, {
     actor: { clickupUserId: person.clickupUserId, name: day.person.name },
     type: 'jornada',
     payload: { kind, source: opts.source, planned: opts.plannedMinutes ?? null, task: opts.task?.name ?? null }
   });
   if (kind === 'entrada' || kind === 'vuelta') await releaseHeldNotices(tenantId, person.clickupUserId);
+  if (kind === 'entrada' || kind === 'ausencia') await dropPendingStartPrompts(tenantId, person.clickupUserId);
   const fresh = (await getPersonDay(tenantId, person.clickupUserId))!;
   return { ok: true, day: fresh, eventId: row.id };
 }
@@ -274,6 +283,25 @@ export async function releaseHeldNotices(tenantId: string, clickupUserId: string
         ne(opsNotifications.kind, 'jornada'),
         gt(opsNotifications.nextAttemptAt, new Date()),
         sql`(${opsNotifications.payload}->>'heldByJornada') = 'true'`
+      )
+    );
+}
+
+/**
+ * Al empezar (o marcar ausencia): los «⏰ Te escribo en N min» aún sin enviar ya no tienen sentido (O10). Son avisos de
+ * la cola que nunca llegaron a salir: se quitan de la cola.
+ */
+export async function dropPendingStartPrompts(tenantId: string, clickupUserId: string): Promise<void> {
+  await db
+    .delete(opsNotifications)
+    .where(
+      and(
+        eq(opsNotifications.tenantId, tenantId),
+        eq(opsNotifications.forClickupUserId, clickupUserId),
+        eq(opsNotifications.kind, 'jornada'),
+        eq(opsNotifications.status, 'pendiente'),
+        isNull(opsNotifications.sentAt),
+        sql`${opsNotifications.dedupeKey} LIKE ${`jw:later:${clickupUserId}:%`}`
       )
     );
 }

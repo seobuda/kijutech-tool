@@ -53,7 +53,9 @@ export async function transcribeAudio(params: {
   try {
     const { apiKey, keyMode } = await resolveGeminiKey(tenantId);
 
-    const res = await fetch(
+    // Transcribir no necesita «pensar»: se desactiva en todos los modelos flash (antes solo con «2.5-flash», y
+    // con gemini-flash-latest pensaba, I7). Si un modelo no acepta el ajuste (400), se repite sin él.
+    const send = (noThinking: boolean) => fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${apiKey}`,
       {
         method: 'POST',
@@ -71,12 +73,17 @@ export async function transcribeAudio(params: {
           ],
           generationConfig: {
             maxOutputTokens: TRANSCRIBE_MAX_TOKENS,
-            // En 2.5-flash el "pensamiento" gasta tokens de salida; transcribir no lo necesita.
-            ...(model.includes('2.5-flash') ? { thinkingConfig: { thinkingBudget: 0 } } : {})
+            ...(noThinking ? { thinkingConfig: { thinkingBudget: 0 } } : {})
           }
         })
       }
     );
+    const wantsNoThinking = /flash/i.test(model);
+    let res = await send(wantsNoThinking);
+    if (wantsNoThinking && res.status === 400) {
+      const body = await res.clone().text();
+      if (/thinking/i.test(body)) res = await send(false);
+    }
 
     if (!res.ok) {
       // El mensaje de error de Google no incluye la clave, pero nunca se loguea la URL.
@@ -85,11 +92,13 @@ export async function transcribeAudio(params: {
 
     const json = await res.json();
     const text: string = (json.candidates?.[0]?.content?.parts ?? [])
+      .filter((p: { thought?: boolean }) => !p.thought)
       .map((p: { text?: string }) => p.text ?? '')
       .join('')
       .trim();
     const inputTokens: number = json.usageMetadata?.promptTokenCount ?? 0;
-    const outputTokens: number = json.usageMetadata?.candidatesTokenCount ?? 0;
+    // El pensamiento se cobra como salida: se suma para que el coste sea real (I7).
+    const outputTokens: number = (json.usageMetadata?.candidatesTokenCount ?? 0) + (json.usageMetadata?.thoughtsTokenCount ?? 0);
 
     const pricing = await getModelPricing('gemini', model);
     const cost = pricing

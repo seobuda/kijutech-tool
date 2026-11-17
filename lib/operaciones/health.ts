@@ -64,6 +64,8 @@ export type Snapshot = {
   diskUsedPct?: number | null;
   backupAgeH?: number | null;
   restoreTest?: { ageD: number; ok: boolean; detail: string } | null;
+  // Vigilante externo (cron del servidor): cuándo se ejecutó por última vez y si tiene su configuración (D12).
+  watchdog?: { ageMin: number; configured: boolean } | null;
   emailsToday?: number | null; // correos del buzón del agente hoy (entrada + salida, aproximado); plan gratuito: 100/día
   // Servidor (DigitalOcean, de la caché horaria de infra-watch): memoria p95 de 24 h y carga p95 por CPU.
   serverMem?: { p95: number; max: number; limit: number; upgrade: string | null } | null;
@@ -218,6 +220,14 @@ export function evaluate(s: Snapshot): Check[] {
     else add('restauracion', 'Prueba de restauración', 'ok', `Hace ${Math.round(r.ageD)} días: ${r.detail}`);
   }
 
+  // D12: sin watchdog.env (o con el cron parado) el vigilante externo callaba; ahora deja constancia en cada ejecución.
+  if (s.watchdog) {
+    const w = s.watchdog;
+    if (!w.configured) add('vigilante', 'Vigilante externo', 'aviso', 'Se ejecuta, pero le falta /opt/kijutech/watchdog.env: si la herramienta se cae, nadie avisará.', 'Regenera el archivo con scripts/watchdog-env.mjs (pasos en docs/DESPLIEGUE.md).');
+    else if (w.ageMin > 20) add('vigilante', 'Vigilante externo', 'aviso', `No se ejecuta desde hace ${Math.round(w.ageMin)} min (debería cada 5).`, 'Revisa el cron de scripts/watchdog.sh en el servidor.');
+    else add('vigilante', 'Vigilante externo', 'ok', `Última comprobación hace ${Math.round(w.ageMin)} min.`);
+  }
+
   return checks;
 }
 
@@ -327,8 +337,10 @@ export async function collectSnapshot(tenantId: string): Promise<Snapshot> {
   const restoreRows = await db
     .select({ key: opsSettings.key, value: opsSettings.value })
     .from(opsSettings)
-    .where(and(eq(opsSettings.tenantId, tenantId), inArray(opsSettings.key, ['restore_test_at', 'restore_test_result'])));
+    .where(and(eq(opsSettings.tenantId, tenantId), inArray(opsSettings.key, ['restore_test_at', 'restore_test_result', 'watchdog_seen_at', 'watchdog_status'])));
   const restoreAt = Date.parse(restoreRows.find((r) => r.key === 'restore_test_at')?.value ?? '');
+  const watchdogAt = Date.parse(restoreRows.find((r) => r.key === 'watchdog_seen_at')?.value ?? '');
+  const watchdogStatus = restoreRows.find((r) => r.key === 'watchdog_status')?.value ?? null;
   const [restoreStatus, ...restoreDetail] = (restoreRows.find((r) => r.key === 'restore_test_result')?.value ?? '').split('|');
 
   return {
@@ -339,6 +351,7 @@ export async function collectSnapshot(tenantId: string): Promise<Snapshot> {
     backupAgeH: Number.isFinite(backupMs) ? (Date.now() - backupMs) / 3_600_000 : null,
     emailsToday: Number(mail?.n ?? 0),
     ...(await serverFromCache(tenantId)),
+    watchdog: Number.isFinite(watchdogAt) ? { ageMin: (Date.now() - watchdogAt) / 60_000, configured: watchdogStatus !== 'sin_config' } : null,
     restoreTest: Number.isFinite(restoreAt) ? { ageD: (Date.now() - restoreAt) / 86_400_000, ok: restoreStatus === 'ok', detail: restoreDetail.join('|') } : null,
     heartbeatAgeS: await heartbeatAgeS(tenantId),
     notificationsFailed,

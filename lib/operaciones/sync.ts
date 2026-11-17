@@ -1,5 +1,5 @@
 import fs from 'fs';
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, lt, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/lib/db/drizzle';
 import { opsNoteAudios, opsRequests } from '@/lib/db/schema';
@@ -70,6 +70,44 @@ export async function syncToClickUp(
 
 const SYNC_LOCK_NS = 74200127;
 
+/** Reintento automático de encargos que no llegaron a ClickUp: cada cuánto y durante cuánto tiempo (O6). */
+export const AUTO_RETRY_EVERY_MS = 30 * 60_000;
+export const AUTO_RETRY_FOR_MS = 24 * 3600_000;
+
+/**
+ * Planificador: reenvía solos los encargos en «error_sync» (O6). Cada uno, como mucho cada 30 min y solo durante su
+ * primer día (después queda para «Reintentar» a mano y lo avisa Salud). Sin riesgo de duplicar la tarea: el envío
+ * reutiliza la que ya existe con la marca [kiju:ID].
+ */
+export async function retryFailedSyncs(tenantId: string, now = Date.now()): Promise<number> {
+  const rows = await db
+    .select({ id: opsRequests.id })
+    .from(opsRequests)
+    .where(
+      and(
+        eq(opsRequests.tenantId, tenantId),
+        eq(opsRequests.status, 'error_sync'),
+        lt(opsRequests.updatedAt, new Date(now - AUTO_RETRY_EVERY_MS)),
+        gt(opsRequests.createdAt, new Date(now - AUTO_RETRY_FOR_MS))
+      )
+    )
+    .limit(5);
+  for (const r of rows) await syncToClickUp(r.id, tenantId, true);
+  return rows.length;
+}
+
+/**
+ * revalidatePath solo tiene sentido dentro de una petición; desde el planificador o el bot puede lanzar un error y
+ * convertir un envío ya hecho en «error_sync» (O8). Si falla, se ignora: la pantalla se refresca en la próxima visita.
+ */
+function safeRevalidate(path: string): void {
+  try {
+    revalidatePath(path);
+  } catch {
+    // fuera de una petición: no hay caché de página que invalidar
+  }
+}
+
 async function syncUnlocked(
   requestId: string,
   tenantId: string,
@@ -91,7 +129,7 @@ async function syncUnlocked(
       .update(opsRequests)
       .set({ status: 'error_sync', errorMessage: message, updatedAt: new Date() })
       .where(eq(opsRequests.id, requestId));
-    revalidatePath('/dashboard/operaciones/encargos');
+    safeRevalidate('/dashboard/operaciones/encargos');
     return { ok: false, requestId, error: message };
   };
 
@@ -201,7 +239,7 @@ async function syncUnlocked(
       console.error('[telegram] no se pudo encolar el aviso:', e instanceof Error ? e.message : e)
     );
 
-    revalidatePath('/dashboard/operaciones/encargos');
+    safeRevalidate('/dashboard/operaciones/encargos');
     return { ok: true, requestId, taskUrl: task.url, reused };
   } catch (e) {
     return markFailed(e instanceof Error ? e.message : 'Error desconocido al enviar a ClickUp');

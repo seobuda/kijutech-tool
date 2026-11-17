@@ -36,11 +36,31 @@ if ! zcat "$LATEST" | docker exec -i "$NAME" psql -U kijutech -d kijutech_db -q 
   record fallo "psql falló al restaurar $(basename "$LATEST")"; exit 1
 fi
 
+# D8 (revisión del 17 nov): con ON_ERROR_STOP=0 psql sigue tras un error, así que se revisan los errores: un COPY o
+# un CREATE fallido es una copia rota. Solo se toleran los avisos inofensivos de un PostgreSQL recién creado
+# (la extensión o el esquema public ya existen).
+ERRS="$(grep -E '^(psql:.*)?ERROR' /tmp/restore-test.err | grep -viE 'already exists|ya existe' || true)"
+if [[ -n "$ERRS" ]]; then
+  record fallo "errores al restaurar $(basename "$LATEST"): $(echo "$ERRS" | head -2 | tr '
+' ' ' | cut -c1-300)"; exit 1
+fi
+
 q() { docker exec "$1" psql -U kijutech -d kijutech_db -tA -c "$2" 2>/dev/null | tr -d '[:space:]'; }
 SQL_TABLES="SELECT count(*) FROM information_schema.tables WHERE table_schema='public'"
 SQL_ROWS="SELECT (SELECT count(*) FROM ops_requests)||'/'||(SELECT count(*) FROM ops_clients)||'/'||(SELECT count(*) FROM ops_work_events)"
 T_TEST="$(q "$NAME" "$SQL_TABLES")"; T_LIVE="$(q kijutech_db "$SQL_TABLES")"
 R_TEST="$(q "$NAME" "$SQL_ROWS")"
+
+# Filas: la copia es de hasta 24 h antes, así que puede tener algo menos que la base real, pero nunca una tabla vacía
+# que en la real tiene datos, ni menos de la mitad de sus filas (eso sería un COPY perdido; con el margen de un día de crecimiento).
+for T in users clients ops_requests ops_work_events est_url_daily perf_daily ai_jobs; do
+  LIVE="$(q kijutech_db "SELECT count(*) FROM $T")"; COPY="$(q "$NAME" "SELECT count(*) FROM $T")"
+  [[ -z "$LIVE" ]] && continue # la tabla no existe en esta versión
+  if [[ -z "$COPY" ]]; then record fallo "la tabla $T no está en la copia $(basename "$LATEST")"; exit 1; fi
+  if (( LIVE > 0 && COPY * 2 < LIVE )); then
+    record fallo "$T: la copia tiene $COPY filas y la base real $LIVE ($(basename "$LATEST"))"; exit 1
+  fi
+done
 
 if [[ -z "$T_TEST" || "$T_TEST" == "0" ]]; then
   record fallo "la copia $(basename "$LATEST") se restauró vacía"; exit 1

@@ -187,15 +187,22 @@ describe('bot de la jornada', () => {
 import { afterAll, beforeAll } from 'vitest';
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { opsRequestEvents, opsTeamProfiles, opsWorkEvents } from '@/lib/db/schema';
+import { opsNotifications, opsRequestEvents, opsTeamProfiles, opsWorkEvents } from '@/lib/db/schema';
 import { addCorrection, getPersonDay, recordWorkEvent, todayIn, voidWorkEvent } from '@/lib/operaciones/jornada';
 import { cleanupFixtures, createFixtures, type Fixtures } from './fixtures';
 
 const TEST_USER = '999000111';
 let fx: Fixtures;
 
+const TEST_USER2 = '999000112';
+
 async function cleanupJornada() {
-  await db.delete(opsWorkEvents).where(eq(opsWorkEvents.clickupUserId, TEST_USER));
+  for (const u of [TEST_USER, TEST_USER2]) {
+    await db.delete(opsWorkEvents).where(eq(opsWorkEvents.clickupUserId, u));
+    await db.delete(opsRequestEvents).where(eq(opsRequestEvents.personClickupUserId, u));
+    await db.delete(opsNotifications).where(eq(opsNotifications.forClickupUserId, u));
+    await db.delete(opsTeamProfiles).where(eq(opsTeamProfiles.clickupUserId, u));
+  }
   await db.delete(opsRequestEvents).where(eq(opsRequestEvents.personClickupUserId, TEST_USER));
   await db.delete(opsTeamProfiles).where(eq(opsTeamProfiles.clickupUserId, TEST_USER));
 }
@@ -205,6 +212,7 @@ describe('registro real en la base de datos', () => {
     fx = await createFixtures();
     await cleanupJornada();
     await db.insert(opsTeamProfiles).values({ tenantId: fx.kijutechTenantId, clickupUserId: TEST_USER, name: 'seg-test-jornada', timezone: 'UTC' });
+    await db.insert(opsTeamProfiles).values({ tenantId: fx.kijutechTenantId, clickupUserId: TEST_USER2, name: 'seg-test-jornada-2', timezone: 'UTC' });
   });
   afterAll(async () => {
     await cleanupJornada();
@@ -252,5 +260,22 @@ describe('registro real en la base de datos', () => {
     const rows = await db.select().from(opsWorkEvents).where(eq(opsWorkEvents.clickupUserId, TEST_USER));
     expect(rows.some((r) => r.voidedAt)).toBe(true);
     expect(rows.some((r) => r.source === 'correccion')).toBe(true);
+  });
+
+  it('O4: dos pulsaciones de «empezar» a la vez dejan una sola entrada', async () => {
+    const p2 = { clickupUserId: TEST_USER2, name: 'seg-test-jornada-2' };
+    const rs = await Promise.all([1, 2, 3].map(() => recordWorkEvent(fx.kijutechTenantId, p2, 'entrada', { source: 'telegram' })));
+    expect(rs.filter((r) => r.ok).length).toBe(1);
+    const rows = await db.select().from(opsWorkEvents).where(and(eq(opsWorkEvents.clickupUserId, TEST_USER2), eq(opsWorkEvents.kind, 'entrada')));
+    expect(rows.length).toBe(1);
+  });
+
+  it('O10: al empezar se quita de la cola el «te escribo en N min» pendiente', async () => {
+    const t = fx.kijutechTenantId;
+    const key = `jw:later:${TEST_USER2}:hoy:1`;
+    await db.insert(opsNotifications).values({ tenantId: t, kind: 'jornada', dedupeKey: key, forClickupUserId: TEST_USER2, payload: { text: 'x' }, nextAttemptAt: new Date(Date.now() + 15 * 60_000) });
+    const { dropPendingStartPrompts } = await import('@/lib/operaciones/jornada');
+    await dropPendingStartPrompts(t, TEST_USER2);
+    expect((await db.select().from(opsNotifications).where(eq(opsNotifications.dedupeKey, key))).length).toBe(0);
   });
 });

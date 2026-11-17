@@ -299,10 +299,11 @@ const OPS_ENTRY: ProcessStep[] = [
     description: 'Se guarda primero como pendiente, se crea la tarea con la marca [kiju:ID] y se confirma o se deja reintentable.',
     status: 'built',
     file: 'lib/operaciones/request-actions.ts',
-    when: 'Al confirmar los encargos (o «Reintentar» si falló).',
+    when: 'Al confirmar los encargos (o «Reintentar» si falló). Si falló, el planificador lo reintenta solo cada 30 min durante su primer día.',
     ai: 'Nada.',
-    code: 'Guarda en ops_requests como pendiente_clickup antes de hablar con ClickUp; crea la tarea con descripción, responsable, fecha sin hora, prioridad y campo Cliente; adjunta el audio; la marca «creado» solo cuando ClickUp confirma, y si falla queda «error_sync» con el motivo. En un reintento busca antes la marca [kiju:ID] para no duplicar.',
+    code: 'Guarda en ops_requests como pendiente_clickup antes de hablar con ClickUp; crea la tarea con descripción, responsable, fecha sin hora, prioridad y campo Cliente; adjunta el audio; la marca «creado» solo cuando ClickUp confirma, y si falla queda «error_sync» con el motivo. En un reintento busca antes la marca [kiju:ID] para no duplicar. Reintento automático (retryFailedSyncs): hasta 5 por vuelta, cada encargo como mucho cada 30 min y solo las primeras 24 h; después, «Reintentar» a mano y aviso en Salud.',
     tables: ['ops_requests'],
+    runs: ['retryFailedSyncs'],
   },
   {
     id: 'ops-telegram-notify',

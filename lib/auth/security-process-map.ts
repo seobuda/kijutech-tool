@@ -79,6 +79,17 @@ export const SECURITY_PROCESS_MAP: ProcessStep[] = [
     },
   },
   {
+    id: 'agent-untrusted',
+    name: 'Agente y contenido de fuera',
+    description: 'Si el agente lee una web o hace una búsqueda, ningún cambio se ejecuta solo en ese turno: se propone para aprobar.',
+    status: 'built',
+    file: 'lib/operaciones/agent-capabilities.ts',
+    technicalDetail: {
+      summary:
+        'El motor marca el turno (ToolContext.untrustedInput) en cuanto aparece una lectura web del servidor de Anthropic; proposeOrRun baja «autónomo» a «con aprobación». Evita que el texto de una página dispare un cambio (revisión del 17 nov, I13).',
+    },
+  },
+  {
     id: 'errors-headers',
     name: 'Errores y cabeceras',
     description:

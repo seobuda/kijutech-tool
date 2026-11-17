@@ -44,7 +44,7 @@ for (const body of all(/fields: \[([^\]]*)\]\s*\}/g, mapSrc)) {
 // 2. Tareas del planificador
 // Cada paso va aislado en step('nombre', () => tarea(t)); también vale la forma antigua
 // `await tarea(cfg.tenantId)`.
-const schedulerTasks = uniq(all(/\b((?:process|run|retriage)[A-Za-z]+)\((?:cfg\.tenantId|t)\)/g, workerSrc));
+const schedulerTasks = uniq(all(/\b((?:process|run|retriage|retry)[A-Za-z]+)\((?:cfg\.tenantId|t)\)/g, workerSrc));
 const mappedRuns = new Set(listOf(/runs: \[([^\]]*)\]/g, mapSrc));
 for (const t of schedulerTasks) if (!mappedRuns.has(t)) fail(`Tarea del planificador «${t}()» sin entrada en el mapa: añade runs: ['${t}'] al paso que la ejecuta.`);
 for (const t of mappedRuns) if (!schedulerTasks.includes(t)) fail(`El mapa cita la tarea «${t}()», que no está en el planificador (telegram-worker.ts).`);

@@ -3,7 +3,7 @@
 > **Documento vivo y de referencia.** Recoge todo lo que existe, cómo funciona, qué está decidido, qué se ha probado y qué falta. Se actualiza al cerrar cada paso de trabajo (junto al documento de sesión y al Mapa Visual).
 > **No contiene claves, contraseñas ni valores de `.env`** (solo sus nombres).
 
-**Fecha de esta versión:** 2026-11-17 (coste de las llamadas de IA fallidas, I3; informe del mes incompleto frente a los mismos días, C6; medias del antes y el después por días de calendario, C4; URLs trabajadas de Estrategia con su versión canónica; antes: **registro central de errores** y **Técnico de mantenimiento**: todo fallo queda en una tabla, avisa por Telegram y un subagente lo diagnostica leyendo el código; migración 0052; arreglo de las respuestas vacías de la IA con Claude 5.5 y revisión completa del proyecto. Producción en `a103cbf0` con Estrategia fase 2, 52 migraciones)
+**Fecha de esta versión:** 2026-11-17 (todos los pendientes ⏳ de la revisión: IA, jornada atómica, recordatorios, estratega, panel de Rendimiento, despliegue, restauración y vigilante; antes: coste de las llamadas de IA fallidas, I3; informe del mes incompleto frente a los mismos días, C6; medias del antes y el después por días de calendario, C4; URLs trabajadas de Estrategia con su versión canónica; antes: **registro central de errores** y **Técnico de mantenimiento**: todo fallo queda en una tabla, avisa por Telegram y un subagente lo diagnostica leyendo el código; migración 0052; arreglo de las respuestas vacías de la IA con Claude 5.5 y revisión completa del proyecto. Producción en `a103cbf0` con Estrategia fase 2, 52 migraciones)
 **Producción:** `https://brain.kijutech.com` (droplet `kijutech-brain`, Frankfurt). Procedimiento en `docs/DESPLIEGUE.md`. Rama de trabajo del despliegue: `feature/despliegue`.
 **Ramas:** cada mejora en su rama (`feature/…`, `fix/…`, `docs/…`); `main` solo recibe lo terminado y aprobado y es lo que está en producción. Las ramas antiguas (`operaciones`, `feature/seguridad`, `feature/despliegue`…) ya están fusionadas y se mantienen.
 **Rama `main`:** `75481a59` (12 nov, tiempos de tarea 5B), desplegada en producción con 46 migraciones. Revisión de autonomía en `docs/REVISION-AUTONOMIA.md`.
@@ -57,7 +57,7 @@ Todo corre **dentro de Docker**. **Nunca** se ejecuta `pnpm`/`npm` en el host Wi
 |---|---|
 | Levantar | `docker compose up -d` |
 | Reconstruir tras cambiar código (**no hay hot-reload**: el contenedor corre `pnpm build` + `pnpm start`) | `docker compose up --build -d` |
-| Migraciones (después del build; el contenedor lleva las migraciones dentro de la imagen) | `docker exec kijutech_app pnpm db:migrate` |
+| Migraciones (después del build; el contenedor lleva las migraciones dentro de la imagen) | local: `docker exec kijutech_app pnpm db:migrate`; producción: `deploy.sh --migrate` migra con la imagen nueva (`compose run --rm`) ANTES de sustituir la app |
 | Backup antes de migrar un módulo | `docker exec kijutech_db pg_dump -U kijutech -d kijutech_db > backups/backup_pre_<modulo>_<fecha>.sql` |
 | Restaurar (sobre BD limpia) | `docker exec -i kijutech_db psql -U kijutech -d kijutech_db < backups/backup_pre_<modulo>_<fecha>.sql` |
 | Comprobar el Mapa Visual | `node scripts/check-architecture-map.js` (o `pnpm check:map` en el contenedor) |
@@ -163,7 +163,7 @@ Estados (`ops_requests.work_status`): `asignado → en_curso → (bloqueado) →
 - **Silencio por persona:** comida y un hueco de silencio en la ficha de Equipo (+ casilla «Los urgentes pueden saltarse el silencio», desactivada). Los avisos que reaccionan a algo se **retrasan** al final del hueco; los envíos programados salen en el **momento permitido más cercano**. Probado como lógica; no con envíos reales fuera del modo pruebas.
 
 ### 6.5 Planificador (cada 30 s, solo el proceso líder)
-Orden: `processNotifications` → `runDailySummaries` → `runDigests` → `processOutbox` → `runWatch` → `runReminders` → `runActivityDaily`.
+Orden: `processNotifications` → `runDailySummaries` → `runDigests` → `processOutbox` → `retryFailedSyncs` (encargos en `error_sync`: solos, cada 30 min durante su primer día) → `runWatch` → `runReminders` → `runActivityDaily`. «Sistema en marcha» se reintenta hasta 5 vueltas si falla al arrancar.
 
 ### 6.6 Vigilancia de ClickUp (6C)
 Sin webhooks: una consulta agrupada de workspace cada ~150 s (ajustable) con `date_updated_gt` y un cursor (`ops_clickup_watch`, instantáneas en `ops_clickup_task_snapshots`: 873 tareas). Decide el código: las tareas con marca `[kiju:]` son nuestras; una tarea nueva (creada tras activar) o recién asignada a alguien vinculado entra como **encargo espejo** (`origin = clickup`) con aviso y botones (el creador no se avisa a sí mismo; cliente copiado del campo Cliente); **cierre en ClickUp → encargo completado**; **reasignación** → cambia el responsable y se avisa al nuevo (el aviso viejo se reescribe «ahora lo lleva…»). Lo anterior a la activación solo se anota. «Vinculado» = Telegram vinculado (en modo pruebas basta ser miembro de ClickUp). Interruptor «Vigilar ClickUp» **activado**.
@@ -236,6 +236,7 @@ Envío sin duplicados (marca `[kiju:]` + índice único); copia local del Bloc y
 - **Tabla `ops_work_events`** (migración 0044): un registro por acción (`entrada`, `descanso`, `comida`, `salida_urgente`, `vuelta`, `salida`, `ausencia`), con día laboral en la zona de la persona, minutos previstos, motivo, tarea con la que empezó, origen (`telegram` / `web` / `auto` / `correccion`) y anulación (quién y por qué). **Nunca se borra nada.** El estado del día se calcula con `computeDay` (`lib/operaciones/jornada-core.ts`, puro y probado). La 0044 añade también el tipo de aviso `jornada`.
 - **Bot:** a la hora de entrada, buenos días con las tareas vencidas y de hoy y un botón por tarea, «Otra cosa», «Empezaré en 15/30 min» y «Hoy no trabajo» (con motivo). **La entrada se registra al empezar una tarea concreta**; si es un encargo suyo sin empezar, queda «en curso». Sin respuesta: reintento cada `repingMin` por Telegram y correo (buzón del agente → correo de ClickUp), hasta `maxPings`. Comandos `/empiezo`, `/descanso N`, `/comida`, `/salir motivo`, `/vuelvo`, `/termino`, `/ausente motivo`, `/jornada`. «Tengo que salir» exige justificación. Al acabar el descanso o si la comida se alarga: «¿Has vuelto?». Pasado su hueco de comida sin marcarla: le pregunta. Al final del horario: «¿Terminas?»; sin respuesta, cierre automático (marcado `auto`) tras `autoCloseMin` y pregunta en los siguientes buenos días para corregir la hora.
 - **Efectos en lo existente:** con la jornada encendida, los buenos días sustituyen al resumen diario del equipo; los avisos no urgentes se **retienen** en pausa, tras terminar o ausente (salen al volver); los recordatorios cuentan **minutos realmente trabajados** en los días fichados; y la comida de la ficha ya no cuenta como jornada en ningún cálculo de minutos laborables (fallo de la revisión del 11 nov). El primer resumen del día del dueño lleva la sección «🕘 Jornada del último día laborable».
+- **Dos pulsaciones a la vez** (17 nov, O4): `recordWorkEvent` toma un candado por persona (`pg_advisory_xact_lock`), así que la segunda ve el estado ya cambiado y se rechaza; al empezar, los «te escribo en N min» aún sin enviar se quitan de la cola (O10).
 - **Quién ficha:** personas con ficha activa y Telegram vinculado; quien lleva las operaciones (dueño del token de ClickUp) no ficha.
 - **Automatización `jornada`** (panel): **apagada por defecto** (`defaultEnabled: false`), para activarla tras explicar el sistema al equipo.
 - **Correcciones** (pestaña Jornada, solo `admin`): anular (con motivo) y añadir registros; acciones `voidWorkEventAction` y `addWorkEventAction` (`lib/operaciones/jornada-actions.ts`).
@@ -603,12 +604,14 @@ Construido en agosto de 2026 (Fases A–D). Detalle y auditoría completa en `do
 
 ## 16. Pendientes y deuda técnica
 
-- **Revisión completa del 17 nov:** `docs/REVISION-2026-11-17.md` (57 hallazgos verificados en 5 áreas; 25 arreglados y desplegados, el resto con su recomendación). Lo más urgente que queda:
-  - índice y purga de `ai_jobs` y de las tablas de registro (necesita migración y OK);
-  - coste de las llamadas de IA fallidas;
-  - jornada atómica ante dos pulsaciones;
-  - separar el rol de plataforma del `super_admin` de cuenta;
-  - endurecer el cambio de correo y la contraseña (toca login).
+- **Revisión completa del 17 nov:** `docs/REVISION-2026-11-17.md` (57 hallazgos verificados en 5 áreas). El 17 nov por la tarde quedaron resueltos todos los ⏳ salvo D14 (continuo). Lo que queda espera el OK de Enric (🔒):
+  - índice y purga de `ai_jobs` y de las tablas de registro (D4, D5: migración);
+  - borrar un cliente borra su histórico de Google (D6);
+  - rotación de copias previas al despliegue y logs de cron (D11: borra copias antiguas);
+  - `docker-compose.prod.yml` no pasa las variables opcionales (D7);
+  - separar el rol de plataforma del `super_admin` de cuenta (S2, S3) y la política de borrados (S7);
+  - endurecer el cambio de correo y la contraseña (S4, S9: toca login);
+  - Clientes del núcleo que importan módulos (C10).
 
 **Antes de subir a un servidor**
 - **Seguridad:** hecha en el paso 8 (§13); falta **rotar secretos** al migrar (`scripts/rotate-encryption-key.js`, `AUTH_SECRET` y contraseña de la BD nuevos) y decidir cuándo se fusiona `feature/seguridad`.
@@ -705,6 +708,7 @@ Cada uno con su nodo en el nivel 1 del Mapa Visual:
 - **17 nov (tarde), medias por días de calendario** (hallazgo C4, sin migración): el antes y el después de cada URL trabajada se dividen entre los días del calendario hasta el último día sincronizado, no entre los días con datos (Search Console omite los días sin impresiones y la media salía inflada). Ver `docs/sessions/2026-11-17-16-estrategia-medias-calendario.md`.
 - **17 nov (tarde), informe del mes incompleto** (hallazgo C6, sin migración): si el mes aún no tiene todos sus días de datos, el informe compara con los mismos días del mes anterior y del año pasado, no con el mes entero. Ver `docs/sessions/2026-11-17-17-rendimiento-informe-mes.md`.
 - **17 nov (tarde), coste de las llamadas de IA fallidas** (hallazgo I3, sin migración): lo que el proveedor cobra en una respuesta inservible queda en `ai_jobs` aunque falle. Ver `docs/sessions/2026-11-17-17-rendimiento-informe-mes.md`.
+- **17 nov (tarde), resto de pendientes de la revisión** (sin migraciones): IA (I5-I11, I13: respuestas cortadas o vacías con su motivo en los cuatro adaptadores, OpenAI con `max_completion_tokens`, Gemini sin pensamiento y con su coste, capa 0 del clustering con lotes y registro, coste NULL sin precio y búsquedas web contadas, embeddings con tiempo máximo, resumen del agente con error registrado, cambios propuestos tras leer una web), S8, Operaciones (O4 jornada con candado por persona, O6 reintento automático de `error_sync`, O8, O9, O10), Estrategia (C7 transacción, C9 propiedad parada) y servidor (D1 migrar antes de sustituir la app, D8 prueba de restauración que mira errores y filas, D12 vigilante con constancia en Salud, D13). Ver `docs/sessions/2026-11-17-19-pendientes-revision.md`.
 - Historial completo: `git log` y `docs/sessions/`.
 
 ## 19. Mapa de archivos

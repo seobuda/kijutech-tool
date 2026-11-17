@@ -5,7 +5,7 @@
 //  - Si tras el recordatorio sigue sin empezar al terminar su jornada, aparece una vez en el primer
 //    resumen disponible del dueño (digest.ts).
 // Cada persona tiene como máximo un recordatorio por encargo (dedupe_key único en ops_notifications).
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, gte, inArray } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { opsNotifications, opsRequestEvents, opsRequests, opsSettings, type OpsRequest } from '@/lib/db/schema';
 import {
@@ -106,12 +106,9 @@ function reminderText(req: OpsRequest, later: boolean, template: string, personN
 export async function runReminders(tenantId: string, now = new Date()): Promise<void> {
   const cfg = await getTelegramConfig(tenantId);
   if (!cfg) return;
-  const reqs = await db
-    .select()
-    .from(opsRequests)
-    .where(and(eq(opsRequests.tenantId, tenantId), eq(opsRequests.status, 'creado'), eq(opsRequests.workStatus, 'asignado')));
-  if (reqs.length === 0) return;
-
+  // Primero los avisos recientes (solo esos pueden dar recordatorio) y después sus encargos: antes se cargaban cada
+  // 30 s todos los encargos «asignado» de la historia (O9).
+  const since = new Date(Math.max(REMINDERS_FROM.getTime(), now.getTime() - MAX_NOTICE_AGE_MS));
   const notices = await db
     .select()
     .from(opsNotifications)
@@ -120,16 +117,22 @@ export async function runReminders(tenantId: string, now = new Date()): Promise<
         eq(opsNotifications.tenantId, tenantId),
         eq(opsNotifications.kind, 'new_request'),
         eq(opsNotifications.status, 'enviado'),
-        inArray(opsNotifications.requestId, reqs.map((r) => r.id))
+        gte(opsNotifications.sentAt, since)
       )
     );
-  if (notices.length === 0) return;
+  const reqIds = [...new Set(notices.map((n) => n.requestId).filter((x): x is string => Boolean(x)))];
+  if (reqIds.length === 0) return;
+  const reqs = await db
+    .select()
+    .from(opsRequests)
+    .where(and(eq(opsRequests.tenantId, tenantId), inArray(opsRequests.id, reqIds), eq(opsRequests.status, 'creado'), eq(opsRequests.workStatus, 'asignado')));
+  if (reqs.length === 0) return;
   const reminded = new Set(
     (
       await db
         .select({ k: opsNotifications.dedupeKey })
         .from(opsNotifications)
-        .where(and(eq(opsNotifications.tenantId, tenantId), eq(opsNotifications.kind, 'reminder')))
+        .where(and(eq(opsNotifications.tenantId, tenantId), eq(opsNotifications.kind, 'reminder'), inArray(opsNotifications.requestId, reqs.map((r) => r.id))))
     ).map((r) => r.k)
   );
   const events = await db

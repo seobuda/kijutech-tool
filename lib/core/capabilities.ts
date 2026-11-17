@@ -18,6 +18,11 @@ export type ToolContext = {
   channel: ChannelKind;
   conversationId: string | null;
   actor: { name: string; isOwner: boolean; clickupUserId: string | null };
+  /**
+   * El turno ya leyó contenido de fuera (una web o una búsqueda): las herramientas de cambio NO se ejecutan solas
+   * aunque estén en «autónomo», se proponen para aprobar (I13: un texto de una web podría pedir un cambio).
+   */
+  untrustedInput?: boolean;
 };
 
 export type ToolResult = {

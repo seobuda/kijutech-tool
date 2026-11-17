@@ -20,7 +20,10 @@ const TZ = 'Europe/Madrid';
 export const MAX_ITERATIONS = 8;
 
 export type ToolCallLog = { name: string; input: unknown; ok: boolean; proposed?: boolean; preview?: string };
-export type AgentRun = { text: string; toolCalls: ToolCallLog[]; costUsd: number; inputTokens: number; outputTokens: number; error: string | null; cards: NonNullable<ToolResult['card']>[] };
+export type AgentRun = { text: string; toolCalls: ToolCallLog[]; costUsd: number; inputTokens: number; outputTokens: number; error: string | null; cards: NonNullable<ToolResult['card']>[]; unpriced?: boolean };
+
+/** Precio de lista de la búsqueda web de Anthropic: 10 $ por 1.000 búsquedas (I10). */
+export const WEB_SEARCH_USD = 0.01;
 export type HistoryItem = { role: 'user' | 'assistant'; content: string };
 
 function nowText(): string {
@@ -89,7 +92,8 @@ async function logRun(tenantId: string, agent: AgtAgent, provider: string, model
     output: run.error ? null : { content: run.text.slice(0, 2000) },
     inputTokens: run.inputTokens,
     outputTokens: run.outputTokens,
-    estimatedCost: run.costUsd.toFixed(6),
+    // Sin precio para el modelo: NULL (el vigía lo cuenta como «sin coste» y avisa), nunca 0 (I10).
+    estimatedCost: run.unpriced ? null : run.costUsd.toFixed(6),
     error: run.error,
     completedAt: new Date()
   });
@@ -137,7 +141,10 @@ export async function runAgent(params: {
   const system = systemPrompt(agent, ctx, { summary: params.summary, extra: params.extraSystem });
   const messages = toMessages(params.history ?? [], params.userText);
   const pricing = await getModelPricing('anthropic', model);
-  const addUsage = (u: { input_tokens: number; output_tokens: number; cache_read_input_tokens?: number | null; cache_creation_input_tokens?: number | null }) => {
+  const addUsage = (u: { input_tokens: number; output_tokens: number; cache_read_input_tokens?: number | null; cache_creation_input_tokens?: number | null; server_tool_use?: { web_search_requests?: number | null } | null }) => {
+    // Las búsquedas web se cobran aparte de los tokens (antes no se contaban, I10).
+    run.costUsd += (u.server_tool_use?.web_search_requests ?? 0) * WEB_SEARCH_USD;
+    if (!pricing && (u.input_tokens || u.output_tokens)) run.unpriced = true;
     const read = u.cache_read_input_tokens ?? 0;
     const write = u.cache_creation_input_tokens ?? 0;
     run.inputTokens += u.input_tokens + read + write;
@@ -161,6 +168,8 @@ export async function runAgent(params: {
         messages
       });
       addUsage(response.usage);
+      // Lectura de una web o búsqueda en este turno: a partir de aquí, los cambios se proponen, no se ejecutan solos (I13).
+      if (response.content.some((b) => b.type === 'server_tool_use' || b.type === 'web_fetch_tool_result' || b.type === 'web_search_tool_result')) ctx.untrustedInput = true;
       // Solo el texto posterior al último uso de herramientas del servidor (lectura web): lo de antes es «pensar en voz alta».
       let lastToolIdx = -1;
       response.content.forEach((b, idx) => {
@@ -248,8 +257,11 @@ export async function summarize(tenantId: string, agent: AgtAgent, previous: str
     const cost = pricing ? (r.usage.input_tokens / 1000) * Number(pricing.inputCostPer1k) + (r.usage.output_tokens / 1000) * Number(pricing.outputCostPer1k) : null;
     await db.insert(aiJobs).values({ tenantId, function: `agt_${agent.key}_resumen`.slice(0, 100), status: 'completed', provider: 'anthropic', model, input: { messages: history.length }, inputTokens: r.usage.input_tokens, outputTokens: r.usage.output_tokens, estimatedCost: cost !== null ? cost.toFixed(6) : null, completedAt: new Date() });
     const text = r.content.filter((b): b is Anthropic.TextBlock => b.type === 'text').map((b) => b.text).join('\n').trim();
+    if (!text) reportError({ message: `Resumen de conversación vacío (stop_reason: ${r.stop_reason ?? 'desconocido'})`, source: 'agentes', area: `resumen del agente ${agent.key}`, tenantId, context: { modelo: model } });
     return text || previous;
-  } catch {
+  } catch (e) {
+    // Antes el catch {} tragaba el error (I9): se registra y se sigue con el resumen anterior.
+    reportError({ error: e, source: 'agentes', area: `resumen del agente ${agent.key}`, tenantId });
     return previous;
   }
 }

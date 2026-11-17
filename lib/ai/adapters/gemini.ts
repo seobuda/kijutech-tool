@@ -1,4 +1,28 @@
 import type { AIAdapter, AIMessage, AIResponse } from '@/lib/ai/types';
+import { finishResponse, type StopKind } from '@/lib/ai/adapters/common';
+
+type GeminiBody = {
+  candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] }; finishReason?: string }[];
+  promptFeedback?: { blockReason?: string };
+  usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number };
+};
+
+/** Texto de Gemini: une todas las partes de texto, sin las de pensamiento (antes solo leía parts[0], I6). */
+export function geminiText(data: GeminiBody): string {
+  return (data.candidates?.[0]?.content?.parts ?? []).filter((p) => !p.thought && typeof p.text === 'string').map((p) => p.text as string).join('');
+}
+
+export function geminiStop(data: GeminiBody): StopKind {
+  if (data.promptFeedback?.blockReason) return 'refusal';
+  const r = data.candidates?.[0]?.finishReason;
+  if (r === 'MAX_TOKENS') return 'cut';
+  if (r === 'STOP') return 'ok';
+  if (r && /SAFETY|RECITATION|BLOCKLIST|PROHIBITED|SPII/.test(r)) return 'refusal';
+  return 'other';
+}
+
+/** Tokens de salida que cobra Gemini: el texto más el pensamiento (I7). */
+export const geminiOutputTokens = (data: GeminiBody) => (data.usageMetadata?.candidatesTokenCount ?? 0) + (data.usageMetadata?.thoughtsTokenCount ?? 0);
 
 const DEFAULT_MODEL = 'gemini-1.5-flash';
 
@@ -45,14 +69,14 @@ export const geminiAdapter: AIAdapter = {
       throw new Error(`Gemini API error (${res.status}): ${errorBody}`);
     }
 
-    const data = await res.json();
-
-    return {
-      content: data.candidates?.[0]?.content?.parts?.[0]?.text ?? '',
+    const data = (await res.json()) as GeminiBody;
+    const response: AIResponse = {
+      content: geminiText(data),
       input_tokens: data.usageMetadata?.promptTokenCount ?? 0,
-      output_tokens: data.usageMetadata?.candidatesTokenCount ?? 0,
+      output_tokens: geminiOutputTokens(data),
       model: resolvedModel,
       provider: 'gemini',
     };
+    return finishResponse(response, geminiStop(data), data.promptFeedback?.blockReason ?? data.candidates?.[0]?.finishReason);
   },
 };

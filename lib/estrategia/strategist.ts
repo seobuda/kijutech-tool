@@ -435,45 +435,53 @@ export async function executeAnalysis(a: EstAnalysis, now = new Date()): Promise
     const { keep, cut } = fitToHours(valid, dossier.remainingHours, cfg.maxSuggestions);
     for (const c of cut) discarded.push({ title: c.title, reason: dossier.remainingHours !== null ? 'No cabe en las horas que quedan o pasa del máximo de propuestas' : 'Pasa del máximo de propuestas' });
 
-    const inserted: EstSuggestion[] = [];
-    for (const [i, p] of keep.entries()) {
-      const description = p.overHours ? `${p.description}\n\n⚠️ No cabe en las horas que quedan este mes: para el mes que viene o ampliar horas.` : p.description;
-      const [row] = await db
-        .insert(estSuggestions)
-        .values({
-          tenantId: a.tenantId,
-          clientId: a.clientId,
-          analysisId: a.id,
-          objectiveId: dossier.objectiveCodes.get(p.objectiveRef.toUpperCase().replace(/[^A-Z0-9]/g, '')) ?? null,
-          rank: i + 1,
-          title: p.title,
-          description,
-          workType: p.workType,
-          category: p.category,
-          evidence: p.evidence,
-          expected: p.expected,
-          impact: p.impact,
-          confidence: p.confidence,
-          hours: p.hours.toFixed(2),
-          hoursAi: p.hoursAi.toFixed(2),
-          hoursSource: p.hoursSource,
-          ice: p.ice.toFixed(3)
-        })
-        .returning();
-      inserted.push(row);
-    }
     const [job] = await db.select({ cost: aiJobs.estimatedCost }).from(aiJobs).where(eq(aiJobs.id, res.jobId)).limit(1);
-    await finishAnalysis(a.id, {
-      status: 'hecho',
-      summary: out.summary || 'Sin resumen.',
-      diagnosis: { diagnostico: out.diagnosis, aprendizajes: out.learnings },
-      discarded,
-      proposed: inserted.length,
-      dossierChars: dossier.text.length,
-      model: res.model?.slice(0, 80) ?? null,
-      aiJobId: res.jobId,
-      costUsd: job?.cost ?? null,
-      error: null
+    // Propuestas y cierre del análisis en una sola transacción (C7): o se guardan todas y el análisis queda «hecho»,
+    // o ninguna (y el análisis queda en error, sin propuestas sueltas).
+    const inserted: EstSuggestion[] = await db.transaction(async (tx) => {
+      const rows: EstSuggestion[] = [];
+      for (const [i, p] of keep.entries()) {
+        const description = p.overHours ? `${p.description}\n\n⚠️ No cabe en las horas que quedan este mes: para el mes que viene o ampliar horas.` : p.description;
+        const [row] = await tx
+          .insert(estSuggestions)
+          .values({
+            tenantId: a.tenantId,
+            clientId: a.clientId,
+            analysisId: a.id,
+            objectiveId: dossier.objectiveCodes.get(p.objectiveRef.toUpperCase().replace(/[^A-Z0-9]/g, '')) ?? null,
+            rank: i + 1,
+            title: p.title,
+            description,
+            workType: p.workType,
+            category: p.category,
+            evidence: p.evidence,
+            expected: p.expected,
+            impact: p.impact,
+            confidence: p.confidence,
+            hours: p.hours.toFixed(2),
+            hoursAi: p.hoursAi.toFixed(2),
+            hoursSource: p.hoursSource,
+            ice: p.ice.toFixed(3)
+          })
+          .returning();
+        rows.push(row);
+      }
+      await tx
+        .update(estAnalyses)
+        .set({
+        finishedAt: new Date(),
+        status: 'hecho',
+        summary: out.summary || 'Sin resumen.',
+        diagnosis: { diagnostico: out.diagnosis, aprendizajes: out.learnings },
+        discarded,
+        proposed: rows.length,
+        dossierChars: dossier.text.length,
+        model: res.model?.slice(0, 80) ?? null,
+        aiJobId: res.jobId,
+        costUsd: job?.cost ?? null,
+        error: null
+      }).where(eq(estAnalyses.id, a.id));
+      return rows;
     });
     if (inserted.length || a.trigger === 'alerta') {
       const html = analysisMessage({
