@@ -31,7 +31,11 @@ git archive --format=tar.gz -o "$TMP/kijutech.tgz" main
 if [[ $MIGRATE -eq 1 ]]; then
   STAMP="$(date +%Y%m%d_%H%M)"
   echo "→ Backup de la base de datos (backups/backup_pre_deploy_${STAMP}.sql.gz)"
-  "${SSH[@]}" "cd $REMOTE_DIR && docker exec kijutech_db pg_dump -U kijutech -d kijutech_db | gzip > backups/backup_pre_deploy_${STAMP}.sql.gz && echo \"  tablas: \$(zcat backups/backup_pre_deploy_${STAMP}.sql.gz | grep -c 'CREATE TABLE')\""
+  # pipefail: si pg_dump falla, gzip dejaba un .gz vacío y el despliegue seguía migrando sin copia real (17 nov 2026).
+  "${SSH[@]}" "set -o pipefail; cd $REMOTE_DIR && F=backups/backup_pre_deploy_${STAMP}.sql.gz     && docker exec kijutech_db pg_dump -U kijutech -d kijutech_db | gzip > \$F && gzip -t \$F     && N=\$(zcat \$F | grep -c 'CREATE TABLE') && echo \"  tablas: \$N\" && [ \"\$N\" -gt 0 ]" || {
+    echo "✗ La copia de seguridad falló o salió vacía: NO se despliega ni se migra." >&2
+    exit 1
+  }
 fi
 
 echo "→ Subiendo código"
@@ -53,16 +57,23 @@ echo "→ Reconstruyendo (unos minutos)"
 
 if [[ $MIGRATE -eq 1 ]]; then
   echo "→ Migraciones"
-  "${SSH[@]}" "sleep 5 && docker exec kijutech_app pnpm db:migrate 2>&1 | grep -E 'applied|ERROR|error:' | tail -2"
+  # El código de salida es el de la migración (antes el de `tail`, siempre 0: una migración fallida acababa en «✓»).
+  "${SSH[@]}" "sleep 5; docker exec kijutech_app pnpm db:migrate > /tmp/kiju-migrate.log 2>&1; rc=\$?; grep -E 'applied|ERROR|error:' /tmp/kiju-migrate.log | tail -3; exit \$rc" || {
+    echo "✗ La migración FALLÓ: la app nueva ya está en marcha con el esquema anterior. Log en el servidor: /tmp/kiju-migrate.log. Revisa y, si hace falta, restaura la copia backups/backup_pre_deploy_${STAMP}.sql.gz." >&2
+    exit 1
+  }
 fi
 
 echo "→ Verificación"
 EXPECTED="$(git show main:lib/db/migrations/meta/_journal.json | grep -c '"tag"')"
 APPLIED="$("${SSH[@]}" "docker exec kijutech_db psql -U kijutech -d kijutech_db -tAc 'select count(*) from drizzle.__drizzle_migrations'" | tr -d '[:space:]')"
-if [[ "$APPLIED" != "$EXPECTED" ]]; then echo "  ⚠ migraciones: $APPLIED aplicadas de $EXPECTED en main (¿falta --migrate o falló?)" >&2; fi
+if [[ "$APPLIED" != "$EXPECTED" ]]; then
+  echo "  ⚠ migraciones: $APPLIED aplicadas de $EXPECTED en main (¿falta --migrate o falló?)" >&2
+  if [[ $MIGRATE -eq 1 ]]; then echo "✗ Con --migrate deberían estar todas aplicadas: despliegue NO terminado." >&2; exit 1; fi
+fi
 "${SSH[@]}" "sleep 5; \
   echo \"  migraciones: \$(docker exec kijutech_db psql -U kijutech -d kijutech_db -tAc 'select count(*) from drizzle.__drizzle_migrations')\"; \
   echo \"  web: \$(curl -s -o /dev/null -w '%{http_code}' https://brain.kijutech.com/sign-in)\"; \
   echo \"  telegram: \$(docker exec kijutech_db psql -U kijutech -d kijutech_db -tAc \"select receive_mode || ' / ' || coalesce(last_error,'sin error') from ops_telegram_config\")\"; \
-  ERR=\$(docker logs --since 5m kijutech_app 2>&1 | grep -ciE 'ReferenceError|TypeError' || true); echo \"  errores en logs: \$ERR\""
+  ERR=\$(docker logs --since 5m kijutech_app 2>&1 | grep -ciE 'ReferenceError|TypeError' || true); echo \"  errores en logs: \$ERR\";   echo \"  errores nuevos en el registro (10 min): \$(docker exec kijutech_db psql -U kijutech -d kijutech_db -tAc \"select count(*) from sys_error_groups where last_seen > now() - interval '10 minutes'\" 2>/dev/null || echo '—')\""
 echo "✓ Despliegue terminado"

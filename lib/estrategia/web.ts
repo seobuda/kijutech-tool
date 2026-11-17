@@ -4,54 +4,15 @@ import 'server-only';
 // (siguiendo redirecciones), certificado SSL, robots.txt, sitemap y PageSpeed Insights (Core Web Vitals).
 // Solo se piden URLs públicas: nunca direcciones internas (localhost, redes privadas, nombres sin dominio).
 import tls from 'node:tls';
-import { isIP } from 'node:net';
-import { lookup } from 'node:dns/promises';
+import { isPublicUrl, resolvesPublic } from '@/lib/core/net';
 import { parseHtml, type PageFacts } from '@/lib/estrategia/rules';
 
 const UA = 'Mozilla/5.0 (compatible; KijutechMonitor/1.0)';
 const TIMEOUT = 15_000;
 const MAX_BYTES = 400_000;
 
-/** Solo http(s) a nombres públicos: evita que una URL mal puesta en una ficha apunte a la red interna. */
-export function isPublicUrl(u: string): boolean {
-  let url: URL;
-  try {
-    url = new URL(u);
-  } catch {
-    return false;
-  }
-  if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
-  const h = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
-  if (!h.includes('.') || h === 'localhost' || h.endsWith('.local') || h.endsWith('.internal') || h.endsWith('.localhost')) return false;
-  if (isIP(h)) return isIP(h) === 4 && !privateV4(h);
-  return true;
-}
-
-function privateV4(ip: string): boolean {
-  const [a, b] = ip.split('.').map(Number);
-  return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127) || a >= 224;
-}
-
-function privateIp(ip: string): boolean {
-  if (isIP(ip) === 4) return privateV4(ip);
-  const v = ip.toLowerCase();
-  const mapped = v.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-  if (mapped) return privateV4(mapped[1]);
-  return v === '::1' || v === '::' || v.startsWith('fc') || v.startsWith('fd') || v.startsWith('fe8') || v.startsWith('fe9') || v.startsWith('fea') || v.startsWith('feb');
-}
-
-/** El nombre resuelve solo a direcciones públicas (evita dominios que apuntan a la red interna). */
-async function resolvesPublic(u: string): Promise<boolean> {
-  if (!isPublicUrl(u)) return false;
-  const host = new URL(u).hostname.replace(/^\[|\]$/g, '');
-  if (isIP(host)) return true; // ya comprobada arriba
-  try {
-    const addrs = await lookup(host, { all: true });
-    return addrs.length > 0 && addrs.every((a) => !privateIp(a.address));
-  } catch {
-    return false;
-  }
-}
+// Comprobación de URLs públicas: en el núcleo (lib/core/net.ts), compartida con otros módulos.
+export { isPublicUrl };
 
 async function readText(res: Response): Promise<string> {
   const reader = res.body?.getReader();

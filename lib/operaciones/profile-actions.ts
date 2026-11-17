@@ -8,7 +8,8 @@ import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
 import { opsTeamProfileWorkTypes, opsTeamProfiles, opsWorkTypes, users } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
-import { getUserIfAllowed, requirePermission, type Permission } from '@/lib/auth/permissions';
+import { checkPermission, getUserIfAllowed, requirePermission, type Permission } from '@/lib/auth/permissions';
+import { getClickUpConnection } from '@/lib/operaciones/queries';
 import { callAI, getPrompt } from '@/lib/ai/gateway';
 import { extractJsonFromLLMResponse } from '@/lib/ai/parsers/json-extractor';
 import { fillTemplate } from '@/lib/operaciones/format';
@@ -99,6 +100,17 @@ export async function saveProfile(input: ProfileInput): Promise<Ok<{ id: string 
       if (dup && dup.id !== input.id) {
         return { ok: false, error: `Ese miembro de ClickUp ya está vinculado a la ficha de ${dup.name}` };
       }
+    }
+    // Seguridad (17 nov 2026): el miembro de ClickUp de una ficha decide quién es el dueño de Mi bandeja (isInboxOwner).
+    // Un editor podía vaciar el de la ficha del dueño y ponérselo en la suya → aprobar correos a clientes, encargos y
+    // propuestas. Cambiar el miembro de una ficha que ya existe, o dar a una nueva el del dueño, es de administración.
+    const [current] = input.id
+      ? await db.select({ clickupUserId: opsTeamProfiles.clickupUserId }).from(opsTeamProfiles).where(and(eq(opsTeamProfiles.id, input.id), eq(opsTeamProfiles.tenantId, user.tenantId))).limit(1)
+      : [];
+    const ownerClickupId = (await getClickUpConnection(user.tenantId))?.meClickupId ?? null;
+    const changesMember = input.id ? (current?.clickupUserId ?? null) !== clickupUserId : Boolean(clickupUserId && clickupUserId === ownerClickupId);
+    if (changesMember && !(await checkPermission('admin')).ok) {
+      return { ok: false, error: 'Cambiar el miembro de ClickUp de una ficha es de administración: pídeselo a Enric.' };
     }
 
     const validKeys = new Set(

@@ -29,7 +29,9 @@ export async function getInbox(tenantId: string): Promise<InboxItem[]> {
     .select({ blocker: opsBlockers, req: opsRequests })
     .from(opsBlockers)
     .innerJoin(opsRequests, eq(opsBlockers.requestId, opsRequests.id))
-    .where(and(eq(opsBlockers.tenantId, tenantId), eq(opsBlockers.status, 'escalado')))
+    // Solo si el encargo sigue bloqueado: si la persona se desbloqueó sola (empezó, lo terminó o se cerró en ClickUp),
+    // el bloqueo ya no necesita respuesta (17 nov 2026: seguía en Mi bandeja, resúmenes y recordatorios).
+    .where(and(eq(opsBlockers.tenantId, tenantId), eq(opsBlockers.status, 'escalado'), eq(opsRequests.workStatus, 'bloqueado')))
     .orderBy(asc(opsBlockers.createdAt));
 
   const blockerIds = blockers.map((x) => x.blocker.id);

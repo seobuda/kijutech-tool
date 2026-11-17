@@ -11,7 +11,7 @@
 //  4. Los mensajes de texto de un chat vinculado solo se atienden si el bot estaba esperando una
 //     respuesta (enlace, motivo, pregunta…); el resto se ignora.
 import { getAuto, num } from '@/lib/operaciones/automations';
-import { and, eq, ne, sql } from 'drizzle-orm';
+import { and, eq, inArray, ne, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import {
   opsNotifications,
@@ -497,7 +497,8 @@ async function handleWorkflowCallback(
     // «Sin comentario»: cierra el "Hecho" pendiente sin texto.
     const [p] = await db
       .delete(opsTelegramPending)
-      .where(and(eq(opsTelegramPending.chatId, chatId), eq(opsTelegramPending.requestId, req.id)))
+      // Solo la pregunta del «Hecho» (si después pulsó «Bloqueado», esa pregunta no se toca: 17 nov 2026).
+      .where(and(eq(opsTelegramPending.chatId, chatId), eq(opsTelegramPending.requestId, req.id), inArray(opsTelegramPending.kind, ['done_note', 'done_review'])))
       .returning();
     if (!p || p.expiresAt.getTime() < Date.now()) return void (await answer('Ya está hecho o caducó.', true));
     const res = await finishWork(req, actor, null, sk![1] === 'r');

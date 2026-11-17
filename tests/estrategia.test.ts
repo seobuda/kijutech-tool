@@ -571,20 +571,21 @@ describe('estrategia con la base de datos', () => {
         { ...base, rank: 3, title: 'Propuesta tres' }
       ])
       .returning();
-    // Aprobar sin Operaciones capaz de crear encargos: queda aprobada con el error y no se puede aprobar dos veces.
+    // Aprobar sin Operaciones capaz de crear encargos: no se crea nada, así que la propuesta vuelve a pendiente con el
+    // error (se puede reintentar; antes quedaba «aprobada» sin encargo y contaba como aceptada).
     const ok = await decideSuggestion(tid, s1.id, { kind: 'aprobar' }, 'Prueba');
     expect(ok.ok).toBe(false);
-    expect(ok.message).toContain('no se pudo crear el encargo');
-    expect((await decideSuggestion(tid, s1.id, { kind: 'aprobar' }, 'Prueba')).message).toContain('Ya está decidida');
+    expect(ok.message).toContain('No se pudo crear el encargo');
+    expect((await decideSuggestion(tid, s1.id, { kind: 'aprobar' }, 'Prueba')).message).toContain('sigue pendiente');
     expect((await decideSuggestion(tid, s2.id, { kind: 'aplazar' }, 'Prueba')).ok).toBe(true);
     expect((await decideSuggestion(tid, s2.id, { kind: 'aplazar' }, 'Prueba')).message).toContain('Ya está para más adelante');
     expect((await decideSuggestion(tid, s3.id, { kind: 'rechazar', reason: 'ya_hecho' }, 'Prueba')).ok).toBe(true);
     const [row] = await db.select().from(estSuggestions).where(eq(estSuggestions.id, s1.id));
-    expect(row).toMatchObject({ status: 'aprobada', decidedBy: 'Prueba' });
+    expect(row).toMatchObject({ status: 'pendiente', decidedBy: null });
     expect(row.taskError).toBeTruthy();
     const q = await strategistQuality(tid, 30);
-    expect(q.stats).toMatchObject({ total: 3, accepted: 1, rejected: 1, snoozed: 1, reasons: { ya_hecho: 1 } });
-    expect(q.stats.acceptanceRate).toBe(0.5);
+    expect(q.stats).toMatchObject({ total: 3, pending: 1, accepted: 0, rejected: 1, snoozed: 1, reasons: { ya_hecho: 1 } });
+    expect(q.stats.acceptanceRate).toBe(0);
     expect(q.analyses).toMatchObject({ total: 1, done: 1, manual: 1 });
     expect(q.byClient.map((c) => c.clientId)).toEqual([clientId]);
   });

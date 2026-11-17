@@ -201,7 +201,8 @@ export async function runCritico(ctx: Ctx): Promise<ProcessOutcome> {
     await markSignalsNotified(confirmed.map((s) => s.id));
   }
   if (!issues.length) return { status: 'ok', summary: `Web correcta (${ctx.homes.map((h) => hostOf(h)).join(', ')}).` };
-  const pendingConfirm = open.some((s) => !s.notifiedAt && s.severity === 'critico');
+  // Con los avisos apagados no hay nada que confirmar (17 nov 2026: se repetía cada 30 min mientras durase el problema).
+  const pendingConfirm = ctx.settings.alertsEnabled && open.some((s) => !s.notifiedAt && s.severity === 'critico');
   return { status: 'aviso', summary: issues.map((i) => i.detail).join(' · ').slice(0, 500), retryInMin: pendingConfirm ? 30 : undefined };
 }
 
@@ -577,7 +578,7 @@ async function extract(ctx: { tenantId: string; clientName: string; domains: str
         };
         // Una sola pasada y sin patrones «$»: un texto del encargo no puede colarse en otro hueco de la plantilla.
         const fill = (t: string) => t.replace(/\{(cliente|dominios|titulo|descripcion|nota)\}/g, (_m, k: string) => vals[k] ?? '');
-        const res = await callAI({ tenantId: ctx.tenantId, function: 'est_task_extract', promptKey: EXTRACT_PROMPT, model: EXTRACT_MODEL, maxTokens: 400, messages: [{ role: 'system', content: prompt.system_prompt }, { role: 'user', content: fill(prompt.user_prompt_template) }] });
+        const res = await callAI({ tenantId: ctx.tenantId, function: 'est_task_extract', promptKey: EXTRACT_PROMPT, model: EXTRACT_MODEL, maxTokens: 2000 /* Haiku 5.5 piensa y el pensamiento cuenta aquí: con 400 se caía a reglas */, messages: [{ role: 'system', content: prompt.system_prompt }, { role: 'user', content: fill(prompt.user_prompt_template) }] });
         const parsed = cleanExtraction(extractJsonFromLLMResponse(res.content), ctx.domains);
         // Las URLs escritas en el encargo cuentan aunque la IA no las devuelva.
         const written = cleanExtraction({ urls: text.match(URL_RE) ?? [] }, ctx.domains).urls;

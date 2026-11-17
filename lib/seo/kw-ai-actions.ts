@@ -1,10 +1,10 @@
 'use server';
 
 import { redirect } from 'next/navigation';
+import { checkPermission } from '@/lib/auth/permissions';
 import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { aiJobs, seoKwClusterKeywords, seoKwClusters, seoKwRaw } from '@/lib/db/schema';
-import { getUser } from '@/lib/db/queries';
 import { assertUserInProjectTenant } from '@/lib/seo/access';
 import { getKwRaw, getKwCompetitors } from '@/lib/seo/kw-queries';
 import { completeStep3 } from '@/lib/seo/kw-actions';
@@ -291,10 +291,13 @@ export async function testAiPrompt(
   projectId: string,
   promptData: { systemPrompt: string; userPromptTemplate: string }
 ): Promise<TestPromptResult> {
-  const user = await getUser();
-  if (!user) {
-    return { error: 'No autenticado' };
+  // Probar un prompt libre con la IA de la agencia es de la pantalla de IA (solo super_admin), como guardarlo:
+  // con «edit» un editor podía usarla como proxy de IA con cualquier texto (17 nov 2026).
+  const perm = await checkPermission('users');
+  if (!perm.ok) {
+    return { error: perm.error };
   }
+  const user = perm.user;
 
   const auth = await safeAssertUserInProjectTenant(projectId);
   if (!auth.ok) {

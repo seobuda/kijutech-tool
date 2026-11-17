@@ -7,6 +7,7 @@ import { sysErrorEvents, sysErrorGroups, tenants } from '@/lib/db/schema';
 import { setAgentJobCreator } from '@/lib/core/capabilities';
 import { alertMessage, cleanDiagnosis, fingerprint, guessSeverity, isNoise, normalizeMessage, parseConsoleArgs, safeContext, scrub } from '@/lib/core/error-rules';
 import {
+  captureConsole,
   cleanErrorSettings,
   errorEvents,
   flushErrors,
@@ -187,6 +188,16 @@ describe('errores: con la base', () => {
     } finally {
       await saveErrorSettings(tid, { autoDiagnose: false });
     }
+  });
+
+  it('lo que se escribe con console.error en el servidor queda registrado (sin cuenta = sistema)', async () => {
+    captureConsole();
+    const marker = `Fallo de consola de prueba ${crypto.randomUUID()}`;
+    console.error('[estrategia] prueba de consola:', new Error(marker));
+    await flushErrors();
+    const [g] = await db.select().from(sysErrorGroups).where(eq(sysErrorGroups.title, marker));
+    expect(g).toMatchObject({ source: 'estrategia', area: 'estrategia prueba de consola', tenantId: null, severity: 'error' });
+    await db.delete(sysErrorGroups).where(eq(sysErrorGroups.id, g.id));
   });
 
   it('borrar la cuenta borra sus errores (cascada)', async () => {

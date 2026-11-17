@@ -271,10 +271,11 @@ export async function setSummary(conversationId: string, summary: string): Promi
 }
 
 /** Gasto del mes de un agente (sus llamadas en ai_jobs llevan la función agt_<clave>). */
+// Nombre exacto (17 nov 2026): con LIKE 'agt_<clave>%' una clave prefijo de otra sumaba su gasto y «_» era comodín.
 export async function agentMonthSpend(tenantId: string, agentKey: string): Promise<number> {
   const rows = (await db.execute(sql`
     SELECT coalesce(sum(estimated_cost), 0)::float AS usd FROM ai_jobs
-    WHERE tenant_id = ${tenantId} AND function LIKE ${`agt_${agentKey}%`}
+    WHERE tenant_id = ${tenantId} AND function IN (${`agt_${agentKey}`}, ${`agt_${agentKey}_resumen`})
       AND created_at >= date_trunc('month', now() AT TIME ZONE 'Europe/Madrid') AT TIME ZONE 'Europe/Madrid'`)) as unknown as { usd: number }[];
   return Number(rows[0]?.usd ?? 0);
 }

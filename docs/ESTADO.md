@@ -394,6 +394,21 @@ Rama `feature/registro-errores`, **migración 0052** (tablas `sys_error_groups`,
 - **Técnico de mantenimiento** (subagente del módulo Agentes, `claude-sonnet-5-5`, 10 $/mes): herramientas de solo lectura `errores_lista`, `error_detalle`, `codigo_buscar`, `codigo_leer` (código del servidor en `/app`: app, lib, components, scripts, tests, modules, docs; nunca `.env`, `node_modules` ni copias), `ia_llamada` y `guardar_diagnostico` (causa, evidencia archivo:línea, arreglo propuesto, archivos, riesgo, confianza, urgente). Se le encarga desde la pantalla, el botón de Telegram, el agente principal (que tiene `errores_lista` y puede encargarle trabajos) o solo: el planificador encarga los errores nuevos de gravedad «error» o más (2 al día por defecto). El informe llega por Telegram y queda en el error. **No cambia nada**: el arreglo lo aplica quien programa con la aprobación de Enric.
 - **Núcleo sin depender de Agentes:** `setAgentJobCreator` (nueva capacidad en `lib/core/capabilities.ts`) la registra Agentes; el registro de errores la usa para encargar diagnósticos.
 - **De paso (hallazgos de la revisión):** los trabajos de subagentes ya no bloquean el planificador (corren en segundo plano con su candado); el motor de agentes no dice «Hecho.» si la respuesta se cortó por `max_tokens` ni manda mensajes vacíos, y admite más vueltas en los trabajos (14); el gateway **cancela** la petición al agotar el tiempo (antes seguía viva y se cobraba) y admite un tiempo propio por llamada (el estratega, 10 min); el estratega recibía los porcentajes multiplicados por 100 (CTR 3,5 % → «350 %») y un fallo al avisar por Telegram marcaba como error un análisis ya hecho.
+- **Arreglos de la revisión** (rama `fix/revision-17nov`, ver `docs/REVISION-2026-11-17.md`):
+  - un editor ya no puede cambiar el miembro de ClickUp de una ficha (con eso podía hacerse dueño de Mi bandeja);
+  - SSRF del scraper de competidores: `lib/core/net.ts` (`fetchPublic`), compartido con Estrategia;
+  - `testAiPrompt` pasa a ser solo de `super_admin`;
+  - Salud ya no da la alarma por avisos aplazados a propósito;
+  - los bloqueos que ya no lo están salen de Mi bandeja;
+  - la bandeja de ClickUp reserva una fila por vuelta y los avisos tienen una reserva de 300 s (sin duplicados);
+  - «5/1» en diciembre es del año siguiente;
+  - «Sin comentario» solo cierra el «Hecho»;
+  - los textos ya no prometen un reintento automático que no existe;
+  - más tokens para la extracción con Haiku (2 000) y los resúmenes (3 000);
+  - el gasto por agente usa el nombre exacto;
+  - una propuesta del estratega sin encargo creado vuelve a pendiente;
+  - sin avisos de Estrategia, ya no se repite la vigilancia cada 30 min;
+  - `deploy.sh` para si el backup sale vacío o la migración falla.
 - **Limpieza:** tarea del planificador «registro de errores», como mucho una vez por hora: muestras de más de N días o más de 50 por error, y errores cerrados sin actividad.
 - **Permisos:** las 5 acciones son `admin` (en `tests/seguridad.test.ts`); la ruta del navegador exige sesión con permiso de ver. Pruebas en `tests/errores.test.ts`.
 
@@ -586,6 +601,14 @@ Construido en agosto de 2026 (Fases A–D). Detalle y auditoría completa en `do
 **Probado en la fase 2 de Estrategia (16 nov, base local):** `pnpm test` con 346 pruebas (13 nuevas de reglas del estratega: limpieza de la respuesta, evidencia, duplicados, horas, ICE, recorte, botones de 64 bytes, mensaje y calidad; una con la base: cola sin duplicados, solo clientes con plan, decisiones sin doble encargo y calidad; y las 3 acciones en seguridad); `check-architecture-map` OK; en el navegador con el usuario de pruebas: pestaña Calidad (estado vacío), Bloc, Encargos y Equipo hoy, sin `ReferenceError`. **No probado:** un análisis real con Opus, el mensaje y los botones en Telegram, la sección «Propuestas» con datos y crear un encargo real desde una propuesta (en local no hay clientes con plan).
 
 ## 16. Pendientes y deuda técnica
+
+- **Revisión completa del 17 nov:** `docs/REVISION-2026-11-17.md` (57 hallazgos verificados en 5 áreas; 25 arreglados y desplegados, el resto con su recomendación). Lo más urgente que queda:
+  - URLs trabajadas con su versión canónica en Search Console (si no, la medición del antes y el después falla en silencio);
+  - índice y purga de `ai_jobs` y de las tablas de registro (necesita migración y OK);
+  - coste de las llamadas de IA fallidas;
+  - jornada atómica ante dos pulsaciones;
+  - separar el rol de plataforma del `super_admin` de cuenta;
+  - endurecer el cambio de correo y la contraseña (toca login).
 
 **Antes de subir a un servidor**
 - **Seguridad:** hecha en el paso 8 (§13); falta **rotar secretos** al migrar (`scripts/rotate-encryption-key.js`, `AUTH_SECRET` y contraseña de la BD nuevos) y decidir cuándo se fusiona `feature/seguridad`.
