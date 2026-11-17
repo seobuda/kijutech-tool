@@ -1,4 +1,4 @@
-import type { AIAdapter, AIMessage, AIResponse } from '@/lib/ai/types';
+import { AIBilledError, type AIAdapter, type AIMessage, type AIResponse } from '@/lib/ai/types';
 
 const ENDPOINT = 'https://api.anthropic.com/v1/messages';
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
@@ -71,11 +71,20 @@ export const anthropicAdapter: AIAdapter = {
     }
 
     const data = await res.json();
+    const input_tokens = data.usage?.input_tokens ?? 0;
+    const output_tokens = data.usage?.output_tokens ?? 0;
+    let content: string;
+    try {
+      content = anthropicText(data);
+    } catch (e) {
+      // Respuesta inservible pero cobrada: el error lleva los tokens (I3).
+      throw new AIBilledError(e instanceof Error ? e.message : String(e), { input_tokens, output_tokens, model: resolvedModel, provider: 'anthropic' });
+    }
 
     return {
-      content: anthropicText(data),
-      input_tokens: data.usage?.input_tokens ?? 0,
-      output_tokens: data.usage?.output_tokens ?? 0,
+      content,
+      input_tokens,
+      output_tokens,
       model: resolvedModel,
       provider: 'anthropic',
     };

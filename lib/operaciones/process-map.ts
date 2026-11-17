@@ -986,7 +986,7 @@ const OPS_AUTONOMIA: ProcessStep[] = [
     id: 'ops-au-aiwatch',
     lane: 'Vigía de IA',
     name: 'Gasto de IA: previsión, picos y recomendaciones',
-    description: 'Sistema → Gasto de IA: presupuesto mensual y previsión de fin de mes, gasto por día y por función, picos con su porqué, recomendaciones de ahorro y, con la clave de administración de Anthropic, el coste real de toda la cuenta (también Claude Code). La pasarela de IA prueba otro proveedor si el principal falla (IA de reserva) y queda anotado.',
+    description: 'Sistema → Gasto de IA (incluye lo cobrado en llamadas que fallaron con respuesta vacía): presupuesto mensual y previsión de fin de mes, gasto por día y por función, picos con su porqué, recomendaciones de ahorro y, con la clave de administración de Anthropic, el coste real de toda la cuenta (también Claude Code). La pasarela de IA prueba otro proveedor si el principal falla (IA de reserva) y queda anotado.',
     status: 'built',
     file: 'lib/operaciones/ai-watch.ts',
     when: 'Cada 15 min desde el planificador (avisos de 8:00 a 21:00); la pantalla, al abrirla; el informe de Anthropic se refresca cada hora.',

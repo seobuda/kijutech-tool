@@ -7,7 +7,7 @@ import { anthropicAdapter } from '@/lib/ai/adapters/anthropic';
 import { openaiAdapter } from '@/lib/ai/adapters/openai';
 import { geminiAdapter } from '@/lib/ai/adapters/gemini';
 import { deepseekAdapter } from '@/lib/ai/adapters/deepseek';
-import type { AIAdapter, AIMessage, AIResponse } from '@/lib/ai/types';
+import { AIBilledError, type AIAdapter, type AIMessage, type AIResponse } from '@/lib/ai/types';
 import { reportError } from '@/lib/core/errors';
 
 const ADAPTERS: Record<string, AIAdapter> = {
@@ -279,6 +279,12 @@ export async function getEmbeddingConfig(
   };
 }
 
+/** Coste en USD de una llamada según ai_model_pricing (null si el modelo no tiene precio). */
+async function costOf(provider: string, model: string, input: number, output: number): Promise<number | null> {
+  const pricing = await getModelPricing(provider, model);
+  return pricing ? (input / 1000) * Number(pricing.inputCostPer1k) + (output / 1000) * Number(pricing.outputCostPer1k) : null;
+}
+
 export async function callAI(
   params: CallAIParams
 ): Promise<AIResponse & { jobId: string }> {
@@ -308,16 +314,24 @@ export async function callAI(
     })
     .returning();
 
+  // Lo cobrado en intentos que fallaron (respuesta vacía o cortada del proveedor principal antes de la reserva).
+  const billed = { input: 0, output: 0, cost: 0, unpriced: false };
+  const addBilled = async (e: unknown) => {
+    if (!(e instanceof AIBilledError)) return;
+    const c = await costOf(e.usage.provider, e.usage.model, e.usage.input_tokens, e.usage.output_tokens);
+    billed.input += e.usage.input_tokens;
+    billed.output += e.usage.output_tokens;
+    if (c === null) billed.unpriced = true;
+    else billed.cost += c;
+  };
+
   const finish = async (
     response: AIResponse,
     keyMode: string,
     fallback: { from: string; reason: string } | null
   ) => {
-    const pricing = await getModelPricing(response.provider, response.model);
-    const estimatedCost = pricing
-      ? (response.input_tokens / 1000) * Number(pricing.inputCostPer1k) +
-        (response.output_tokens / 1000) * Number(pricing.outputCostPer1k)
-      : null;
+    const own = await costOf(response.provider, response.model, response.input_tokens, response.output_tokens);
+    const estimatedCost = own !== null ? own + billed.cost : billed.cost > 0 ? billed.cost : null;
     await db
       .update(aiJobs)
       .set({
@@ -326,8 +340,8 @@ export async function callAI(
         provider: response.provider,
         model: response.model,
         keyModeUsed: keyMode,
-        inputTokens: response.input_tokens,
-        outputTokens: response.output_tokens,
+        inputTokens: response.input_tokens + billed.input,
+        outputTokens: response.output_tokens + billed.output,
         estimatedCost: estimatedCost !== null ? estimatedCost.toFixed(6) : null,
         completedAt: new Date(),
       })
@@ -350,6 +364,7 @@ export async function callAI(
     return await finish(response, setting.keyMode, null);
   } catch (error) {
     let message = error instanceof Error ? error.message : 'Error desconocido';
+    await addBilled(error).catch(() => {});
 
     // IA de reserva (13 nov 2026): si el fallo es del proveedor (caído, saturado, sin saldo, clave rechazada,
     // modelo retirado, tiempo agotado) y hay otra clave activa de OTRO proveedor, se reintenta una vez con ella.
@@ -368,6 +383,7 @@ export async function callAI(
           }
         }
       } catch (fallbackError) {
+        await addBilled(fallbackError).catch(() => {});
         message = `${message} · Reserva: ${fallbackError instanceof Error ? fallbackError.message : 'error desconocido'}`;
       }
     }
@@ -377,6 +393,10 @@ export async function callAI(
       .set({
         status: 'failed',
         error: message,
+        // Aunque falle, lo que el proveedor cobró cuenta para el vigía y los topes (I3).
+        ...(billed.input || billed.output
+          ? { inputTokens: billed.input, outputTokens: billed.output, estimatedCost: billed.cost > 0 || !billed.unpriced ? billed.cost.toFixed(6) : null }
+          : {}),
         completedAt: new Date(),
       })
       .where(eq(aiJobs.id, job.id));
