@@ -400,7 +400,8 @@ export async function executeAnalysis(a: EstAnalysis, now = new Date()): Promise
       function: 'est_strategist',
       promptKey: STRATEGIST_PROMPT,
       model: STRATEGIST_MODEL,
-      maxTokens: 8000,
+      // Opus 5.5 siempre piensa y el pensamiento cuenta en max_tokens: margen para pensar y escribir el JSON.
+      maxTokens: 16000,
       messages: [
         { role: 'system', content: fill(prompt.system_prompt) },
         { role: 'user', content: fill(prompt.user_prompt_template) }
