@@ -322,7 +322,7 @@ export async function buildDossier(tenantId: string, clientId: string, now = new
     'URLs trabajadas: antes y después del cambio (señal, no prueba de causa)',
     view.tracked.slice(0, 30).map((t) => {
       addUrl(t.url);
-      const perDay = (x: { clicks: number; impressions: number; days: number }) => (x.days ? `${Math.round((x.clicks / x.days) * 10) / 10} clics/día, ${Math.round(x.impressions / x.days)} impr./día (${x.days} días)` : 'sin datos');
+      const perDay = (x: { clicks: number; impressions: number; days: number; dataDays: number }) => (x.days ? `${Math.round((x.clicks / x.days) * 10) / 10} clics/día, ${Math.round(x.impressions / x.days)} impr./día (${x.days} días, ${x.dataDays} con impresiones)` : 'sin datos');
       return `${t.url} · cambio ${t.changedOn}${t.crawledOn ? ` · Google la rastreó el ${t.crawledOn}` : ' · Google aún no la ha vuelto a rastrear'} · antes: ${perDay(t.before)} · después: ${perDay(t.after)}${t.enoughData ? '' : ' · pocos datos todavía'}${t.reason ? ` · ${untrusted(t.reason.slice(0, 120))}` : ''}`;
     })
   );

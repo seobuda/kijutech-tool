@@ -11,6 +11,7 @@ import {
   WORK_CATEGORY_LABEL,
   addDays,
   addMonths,
+  beforeAfter,
   daysBetween,
   dependencyWarnings,
   frequencyLabel,
@@ -20,7 +21,8 @@ import {
   perMonth,
   proposeTargets,
   type EffectiveProcess,
-  type Health
+  type Health,
+  type WindowSum
 } from '@/lib/estrategia/rules';
 import {
   clientEffective,
@@ -69,7 +71,7 @@ export type ObjectiveView = {
   note: string;
   elapsedPct: number;
 };
-export type TrackedView = { id: string; url: string; reason: string; changedOn: string; crawledOn: string | null; indexState: string | null; activeUntil: string; before: { clicks: number; impressions: number; days: number }; after: { clicks: number; impressions: number; days: number }; enoughData: boolean };
+export type TrackedView = { id: string; url: string; reason: string; changedOn: string; crawledOn: string | null; indexState: string | null; activeUntil: string; before: WindowSum; after: WindowSum; enoughData: boolean };
 export type WorkView = { taskId: string; title: string; category: string; categoryLabel: string; urls: string[]; keywords: string[]; kpis: string[]; hours: number | null; doneOn: string; urlStatus: string; extraction: string };
 
 export type ClientStrategy = {
@@ -203,13 +205,7 @@ export async function clientStrategy(tenantId: string, clientId: string): Promis
   const tracked = await listTrackedUrls(tenantId, clientId);
   const daily = await urlSummaries(tracked.map((t) => t.id));
   base.tracked = tracked.map((t) => {
-    const xs = daily.filter((d) => d.id === t.id);
-    const start = t.crawledOn ?? t.changedOn;
-    const before = xs.filter((d) => d.date < t.changedOn && d.date >= addDays(t.changedOn, -28));
-    const after = xs.filter((d) => d.date >= start);
-    const sum = (a: typeof xs) => ({ clicks: a.reduce((s, d) => s + d.clicks, 0), impressions: a.reduce((s, d) => s + d.impressions, 0), days: a.length });
-    const b = sum(before);
-    const a = sum(after);
+    const { before: b, after: a } = beforeAfter(daily.filter((d) => d.id === t.id), t);
     return { id: t.id, url: t.url, reason: t.reason ?? '', changedOn: t.changedOn, crawledOn: t.crawledOn, indexState: t.indexState, activeUntil: t.activeUntil, before: b, after: a, enoughData: a.days >= 28 && b.days >= 14 && b.impressions + a.impressions >= 100 };
   });
   base.strategist = await import('@/lib/estrategia/strategist').then((m) => m.clientStrategist(tenantId, clientId));

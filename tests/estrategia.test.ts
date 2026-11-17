@@ -55,6 +55,7 @@ import {
   urlKey,
   canonicalFromFacts,
   pickGscVariant,
+  beforeAfter,
   type QP
 } from '@/lib/estrategia/rules';
 import { isPublicUrl } from '@/lib/estrategia/web';
@@ -192,6 +193,28 @@ describe('estrategia: URL canónica de lo trabajado', () => {
     ];
     expect(pickGscVariant('https://a.com/x', pages)).toBe('https://www.a.com/x/');
     expect(pickGscVariant('https://a.com/nada', pages)).toBeNull();
+  });
+});
+
+describe('estrategia: antes y después de una URL trabajada (C4)', () => {
+  it('divide entre días de calendario, no entre días con datos', () => {
+    // Antes: 2 días con datos de 28; después: 1 día con datos de 10 (rastreada el 5, sincronizado hasta el 14).
+    const daily = [
+      { date: '2026-10-10', clicks: 4, impressions: 40 },
+      { date: '2026-10-20', clicks: 4, impressions: 40 },
+      { date: '2026-10-31', clicks: 99, impressions: 99 }, // anterior al rastreo: no cuenta en «después»
+      { date: '2026-11-08', clicks: 10, impressions: 100 }
+    ];
+    const r = beforeAfter(daily, { changedOn: '2026-10-30', crawledOn: '2026-11-05', lastSyncedOn: '2026-11-14' });
+    expect(r.before).toEqual({ clicks: 8, impressions: 80, days: 28, dataDays: 2 });
+    expect(r.after).toEqual({ clicks: 10, impressions: 100, days: 10, dataDays: 1 });
+  });
+  it('sin sincronizar, o antes de que lleguen datos tras el rastreo, son 0 días', () => {
+    expect(beforeAfter([], { changedOn: '2026-11-10', crawledOn: null, lastSyncedOn: null }).before.days).toBe(0);
+    const r = beforeAfter([], { changedOn: '2026-11-10', crawledOn: '2026-11-13', lastSyncedOn: '2026-11-12' });
+    expect(r.after.days).toBe(0);
+    // El «antes» solo cuenta hasta el último día sincronizado.
+    expect(beforeAfter([], { changedOn: '2026-11-10', crawledOn: null, lastSyncedOn: '2026-10-20' }).before.days).toBe(8);
   });
 });
 

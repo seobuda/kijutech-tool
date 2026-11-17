@@ -45,7 +45,7 @@ export const ESTRATEGIA_PROCESS_MAP: ProcessStep[] = [
     id: 'est-google',
     lane: 'Vigilar',
     name: 'Palabras clave, ficha de Google y URLs trabajadas',
-    description: 'Posición, clics e impresiones de las palabras que sigue el cliente (Search Console; las críticas y las de páginas recién cambiadas, cada día). Ficha de Google: vistas, llamadas, clics a la web y cómo llegar frente al periodo anterior y al año pasado. URLs trabajadas: datos diarios de cada página con 90 días de «antes» y la fecha en que Google la vuelve a rastrear tras el cambio. Si Search Console no tiene datos de la URL tal como se escribió, se busca la variante que sí tiene (www, barra final, http/https) y se sigue esa.',
+    description: 'Posición, clics e impresiones de las palabras que sigue el cliente (Search Console; las críticas y las de páginas recién cambiadas, cada día). Ficha de Google: vistas, llamadas, clics a la web y cómo llegar frente al periodo anterior y al año pasado. URLs trabajadas: datos diarios de cada página con 90 días de «antes» y la fecha en que Google la vuelve a rastrear tras el cambio. Si Search Console no tiene datos de la URL tal como se escribió, se busca la variante que sí tiene (www, barra final, http/https) y se sigue esa. El antes (28 días previos al cambio) y el después (desde el rastreo) se dan en clics por día de calendario: los días sin impresiones cuentan como cero.',
     status: 'built',
     file: 'lib/estrategia/processes.ts',
     when: 'Según el plan (por defecto, palabras y ficha cada semana; URLs cada día).',
