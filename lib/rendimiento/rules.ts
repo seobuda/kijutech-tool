@@ -184,7 +184,13 @@ export function periodRanges(
   else if (compare === 'yoy') prev = { from: addDays(from, -364), to: addDays(to, -364) };
   else if (compare === 'contract' && opts.serviceStart) prev = { from: addDays(opts.serviceStart, -len), to: addDays(opts.serviceStart, -1) };
   // Comparación fija (el informe del mes compara con el mes natural anterior o el mismo mes del año pasado).
-  if (opts.prev && compare !== 'none') prev = opts.prev;
+  // Si el periodo actual se queda corto (aún no hay datos de los últimos días del mes), la comparación se recorta
+  // a los mismos días (1-N frente a 1-N), para no comparar un mes incompleto con uno entero (C6).
+  if (opts.prev && compare !== 'none') {
+    const short = period === 'custom' && opts.to && to < opts.to;
+    const cut = addDays(opts.prev.from, len - 1);
+    prev = { from: opts.prev.from, to: short && cut < opts.prev.to ? cut : opts.prev.to };
+  }
   return { cur: { from, to }, prev };
 }
 

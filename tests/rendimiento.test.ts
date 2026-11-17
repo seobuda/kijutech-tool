@@ -60,6 +60,10 @@ describe('rendimiento: reglas puras', () => {
     expect(periodRanges('28', 'yoy', src)!.prev).toEqual({ from: addDays('2026-10-16', -364), to: addDays('2026-11-12', -364) });
     expect(periodRanges('28', 'contract', src, { serviceStart: '2026-03-01' })!.prev).toEqual({ from: '2026-02-01', to: '2026-02-28' });
     expect(periodRanges('all', 'prev', src)).toEqual({ cur: { from: '2025-07-01', to: '2026-11-12' }, prev: null });
+    // C6: mes incompleto (datos hasta el 12) frente a los mismos días del mes anterior; mes entero, contra el mes entero.
+    const prevOct = { from: '2026-10-01', to: '2026-10-31' };
+    expect(periodRanges('custom', 'prev', src, { from: '2026-11-01', to: '2026-11-30', prev: prevOct })).toEqual({ cur: { from: '2026-11-01', to: '2026-11-12' }, prev: { from: '2026-10-01', to: '2026-10-12' } });
+    expect(periodRanges('custom', 'prev', src, { from: '2026-02-01', to: '2026-02-28', prev: { from: '2026-01-01', to: '2026-01-31' } })!.prev).toEqual({ from: '2026-01-01', to: '2026-01-31' });
     expect(periodRanges('custom', 'none', src, { from: '2026-11-01', to: '2026-11-30' })!.cur).toEqual({ from: '2026-11-01', to: '2026-11-12' }); // recortado al último dato
     expect(periodRanges('28', 'prev', { syncedUntil: null, historyFrom: null })).toBeNull();
   });

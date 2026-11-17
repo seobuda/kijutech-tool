@@ -412,8 +412,10 @@ export async function monthlyClientText(tenantId: string, clientId: string, mont
   for (const k of vsPrev.kpis) {
     if (k.value === null) continue;
     const y = yoy.get(k.key);
-    const partial = k.range.to < monthEnd(m) ? ` (hasta el ${fmtDay(k.range.to)})` : '';
-    lines.push(`• ${k.label}: ${formatValue(k.value, k.format)}${partial}${k.pct !== null ? ` · ${formatDelta(k.pct)} frente al mes anterior` : ''}${y?.pct != null ? ` · ${formatDelta(y.pct)} frente a ${fmtMonth(addMonths(m, -12))}` : ''}`);
+    const isPartial = k.range.to < monthEnd(m);
+    const partial = isPartial ? ` (hasta el ${fmtDay(k.range.to)})` : '';
+    const same = isPartial ? 'los mismos días de ' : '';
+    lines.push(`• ${k.label}: ${formatValue(k.value, k.format)}${partial}${k.pct !== null ? ` · ${formatDelta(k.pct)} frente ${same ? `a ${same}${fmtMonth(addMonths(m, -1))}` : 'al mes anterior'}` : ''}${y?.pct != null ? ` · ${formatDelta(y.pct)} frente a ${same}${fmtMonth(addMonths(m, -12))}` : ''}`);
   }
   const ms = vsPrev.annotations.filter((a) => a.date >= m && a.date <= monthEnd(m));
   if (ms.length) {

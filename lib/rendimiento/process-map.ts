@@ -32,7 +32,7 @@ export const RENDIMIENTO_PROCESS_MAP: ProcessStep[] = [
     id: 'perf-ficha',
     lane: 'Ver y medir',
     name: 'Pestaña «Rendimiento» de la ficha',
-    description: 'Cifras con su variación (frente al periodo anterior, al año pasado o a antes del inicio del servicio), gráficas por semana con los hitos marcados, sesiones por canal, clics por dispositivo, consultas y páginas que suben y bajan, hitos de la estrategia con su antes y después, informe del mes para copiar y estado de la descarga.',
+    description: 'Cifras con su variación (frente al periodo anterior, al año pasado o a antes del inicio del servicio), gráficas por semana con los hitos marcados, sesiones por canal, clics por dispositivo, consultas y páginas que suben y bajan, hitos de la estrategia con su antes y después, informe del mes para copiar (si al mes aún le faltan días de datos, se compara con los mismos días del mes anterior y del año pasado) y estado de la descarga.',
     status: 'built',
     file: 'lib/rendimiento/report.ts',
     when: 'Al abrir la pestaña (Clientes → ficha → Rendimiento).',
