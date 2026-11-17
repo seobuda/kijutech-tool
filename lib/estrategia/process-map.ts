@@ -45,7 +45,7 @@ export const ESTRATEGIA_PROCESS_MAP: ProcessStep[] = [
     id: 'est-google',
     lane: 'Vigilar',
     name: 'Palabras clave, ficha de Google y URLs trabajadas',
-    description: 'Posición, clics e impresiones de las palabras que sigue el cliente (Search Console; las críticas y las de páginas recién cambiadas, cada día). Ficha de Google: vistas, llamadas, clics a la web y cómo llegar frente al periodo anterior y al año pasado. URLs trabajadas: datos diarios de cada página con 90 días de «antes» y la fecha en que Google la vuelve a rastrear tras el cambio.',
+    description: 'Posición, clics e impresiones de las palabras que sigue el cliente (Search Console; las críticas y las de páginas recién cambiadas, cada día). Ficha de Google: vistas, llamadas, clics a la web y cómo llegar frente al periodo anterior y al año pasado. URLs trabajadas: datos diarios de cada página con 90 días de «antes» y la fecha en que Google la vuelve a rastrear tras el cambio. Si Search Console no tiene datos de la URL tal como se escribió, se busca la variante que sí tiene (www, barra final, http/https) y se sigue esa.',
     status: 'built',
     file: 'lib/estrategia/processes.ts',
     when: 'Según el plan (por defecto, palabras y ficha cada semana; URLs cada día).',
@@ -86,7 +86,7 @@ export const ESTRATEGIA_PROCESS_MAP: ProcessStep[] = [
     file: 'lib/estrategia/processes.ts',
     when: 'Cada 5 minutos, con los encargos terminados desde la última pasada (y «Procesar encargos anteriores» en la pestaña).',
     ai: 'Modelo pequeño (Haiku) con el prompt editable est_task_extract, ≈ 0,0001 $ por encargo. Al llegar al tope del módulo, sigue por reglas sin IA.',
-    code: 'Los encargos llegan de Operaciones por el núcleo (registerWorkSource); la pregunta va por la cola de avisos de Operaciones y la respuesta vuelve a Estrategia (registerTaskAnswerHandler «url»). Solo cuentan URLs de los dominios del cliente.',
+    code: 'Los encargos llegan de Operaciones por el núcleo (registerWorkSource); la pregunta va por la cola de avisos de Operaciones y la respuesta vuelve a Estrategia (registerTaskAnswerHandler «url»). Solo cuentan URLs de los dominios del cliente, y se siguen con su versión canónica (redirección final o etiqueta canonical, si sigue en la propiedad), para que coincidan con la página que tiene Google.',
     tables: ['est_work_facts', 'est_tracked_urls'],
     prompts: ['est_task_extract']
   },
