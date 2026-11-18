@@ -21,7 +21,9 @@ mkdir -p "$OUT"
 if ! docker exec kijutech_db pg_dump -U kijutech -d kijutech_db | gzip > "$FILE"; then
   echo "$(date -Is) ERROR pg_dump"; rm -f "$FILE"; exit 1
 fi
-if ! gzip -t "$FILE" || ! zcat "$FILE" | grep -q 'CREATE TABLE public.tenants'; then
+# Sin «grep -q»: con pipefail, grep -q sale al primer acierto, zcat recibe SIGPIPE (141) y la tubería entera cuenta
+# como fallo aunque la copia esté bien (pasó el 19 nov). grep sin -q lee hasta el final.
+if ! gzip -t "$FILE" || ! zcat "$FILE" | grep 'CREATE TABLE public.tenants' >/dev/null; then
   echo "$(date -Is) ERROR copia inválida: $FILE"; exit 1
 fi
 SIZE="$(du -h "$FILE" | cut -f1)"

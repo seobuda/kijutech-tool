@@ -100,3 +100,16 @@ describe('variables de entorno de producción (D7)', () => {
     expect(missing).toEqual([]);
   });
 });
+
+describe('scripts del servidor', () => {
+  it('ningún script con pipefail usa «| grep -q» (SIGPIPE hace fallar la tubería aunque haya acierto)', async () => {
+    const { readFileSync, readdirSync } = await import('node:fs');
+    const bad = readdirSync('scripts')
+      .filter((f) => f.endsWith('.sh'))
+      .filter((f) => {
+        const src = readFileSync(`scripts/${f}`, 'utf8');
+        return /pipefail/.test(src) && /\|\s*grep\s+-q/.test(src);
+      });
+    expect(bad).toEqual([]);
+  });
+});
