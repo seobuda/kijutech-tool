@@ -297,8 +297,12 @@ describe('circuito de tiempos de tarea (persona y sistema)', () => {
 
   it('Hecho: 35 min reales (sin el descanso), por encima del margen, feedback y «¿con qué sigues?»', async () => {
     at(50);
+    // 18 nov: «Hecho» completa en el momento, sin esperar al comentario (antes, sin contestar, ClickUp no cambiaba).
     await press(`dn:${req1}`);
-    await press(`sk:d:${req1}`);
+    const [r1] = await db.select().from(opsRequests).where(eq(opsRequests.id, req1));
+    expect(r1.workStatus).toBe('completado');
+    expect(String(lastWith('Hecho: tarea completada')?.params.text)).toContain('opcional');
+    await press(`sk:d:${req1}`); // «Sin comentario» después ya no hace nada más
     const row = await rowFor('tt-tk1');
     expect(row.status).toBe('cerrada');
     expect(row.workedMinutes).toBe(35); // 0–10 + 15–20 + 30–50

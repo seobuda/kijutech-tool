@@ -39,6 +39,8 @@ if [[ $MIGRATE -eq 1 ]]; then
 fi
 
 echo "→ Subiendo código"
+# Los scripts de cron (copia diaria, vigilante, prueba de restauración) los llama cron directamente: sin permiso de
+# ejecución fallan sin que nadie lo vea. Se lo damos siempre tras descomprimir (18 nov 2026).
 scp -i "$KEY" -o BatchMode=yes -q "$TMP/kijutech.tgz" "$HOST:/tmp/kijutech.tgz"
 # Descomprimir encima NO borra los archivos que se quitaron de git: en las carpetas de código (solo código versionado)
 # se borran los que ya no están en `main`, si no la compilación los encuentra y puede fallar (pasó el 14 nov).
@@ -46,7 +48,7 @@ scp -i "$KEY" -o BatchMode=yes -q "$TMP/kijutech.tgz" "$HOST:/tmp/kijutech.tgz"
   && find app lib components tests scripts modules -type f 2>/dev/null | sort > /tmp/kiju-old.list \
   && comm -23 /tmp/kiju-old.list /tmp/kiju-new.list > /tmp/kiju-stale.list \
   && N=\$(wc -l < /tmp/kiju-stale.list) && if [ \"\$N\" -gt 0 ]; then echo \"  archivos que ya no están en main: \$N (se borran)\"; sed 's/^/    - /' /tmp/kiju-stale.list | head -20; xargs -r -d '\n' rm -f -- < /tmp/kiju-stale.list; fi \
-  && tar -xzf /tmp/kijutech.tgz -C $REMOTE_DIR && rm /tmp/kijutech.tgz /tmp/kiju-new.list /tmp/kiju-old.list /tmp/kiju-stale.list"
+  && tar -xzf /tmp/kijutech.tgz -C $REMOTE_DIR && chmod +x $REMOTE_DIR/scripts/*.sh && rm /tmp/kijutech.tgz /tmp/kiju-new.list /tmp/kiju-old.list /tmp/kiju-stale.list"
 
 echo "→ Reconstruyendo la imagen (unos minutos)"
 # Si la compilación falla, aquí se para: producción sigue con la versión anterior, sin migrar.

@@ -48,6 +48,12 @@ describe('comprobaciones de salud', () => {
     expect(statusOf({ clickupPeakPerMin: 85 }, 'clickup_limite')).toBe('aviso');
   });
 
+  it('vigilante: en producción, si nunca ha dejado constancia, avisa; en local no sale', () => {
+    expect(statusOf({ watchdog: null, watchdogExpected: true }, 'vigilante')).toBe('aviso');
+    expect(evaluate({ ...healthy, watchdog: null }).some((c) => c.key === 'vigilante')).toBe(false);
+    expect(statusOf({ watchdog: { ageMin: 3, configured: true } }, 'vigilante')).toBe('ok');
+  });
+
   it('cada problema trae su recomendación', () => {
     const bad = evaluate({ ...healthy, outboxFailed: 2, telegramError: '401', emailsError: 1, watchError: 'token' }).filter((c) => c.status !== 'ok');
     expect(bad.length).toBe(4);
