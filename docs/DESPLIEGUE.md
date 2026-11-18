@@ -21,7 +21,7 @@ contenedor de un solo uso ANTES de sustituir la app (desde el 17 nov: si la migr
 Pasos a mano:
 1. En el PC: `git archive --format=tar.gz -o <ruta>/kijutech.tgz HEAD` (solo lo versionado, sin `.env`).
 2. `scp` al servidor y descomprimir en `/opt/kijutech/` (sin tocar `.env` ni `backups/`).
-3. En el servidor: `docker compose -f docker-compose.prod.yml build app`.
+3. En el servidor: `bash scripts/build-image.sh` (hace `docker compose -f docker-compose.prod.yml build app` con prioridad baja de CPU y disco para que la app en marcha siga respondiendo; al terminar devuelve la prioridad normal, y la verificación final comprueba que la app tenga prioridad 0).
 4. Si hay migraciones (antes, backup con `pg_dump`): `docker compose -f docker-compose.prod.yml run --rm --no-deps app pnpm db:migrate`.
 5. `docker compose -f docker-compose.prod.yml up -d`.
 
