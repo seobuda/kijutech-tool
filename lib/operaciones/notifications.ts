@@ -324,6 +324,7 @@ type Claimed = {
   request_id: string | null;
   payload: Payload;
   attempts: number;
+  last_error: string | null;
 };
 
 async function resolveChat(
@@ -342,6 +343,11 @@ async function resolveChat(
   if (member?.telegramChatId) return { chatId: member.telegramChatId };
   return { error: `${c.for_name ?? 'El destinatario'} no ha vinculado su Telegram` };
 }
+
+/** Fallo dudoso: el mensaje pudo llegar aunque no hubo respuesta. */
+const TIMEOUT_ERROR = /tiempo de espera agotado/;
+/** Margen para Telegram antes de dar un aviso por fallido (antes 20 s); la reserva de la fila es de 300 s. */
+const SEND_TIMEOUT_MS = 45_000;
 
 async function sendOne(c: Claimed): Promise<void> {
   const fail = async (message: string, retryAfterSeconds?: number) => {
@@ -394,10 +400,15 @@ async function sendOne(c: Claimed): Promise<void> {
     }
   }
 
+  // 18 nov 2026: con el servidor ocupado (p. ej. reconstruyendo en un despliegue) Telegram puede entregar el mensaje
+  // y la respuesta no llegar a tiempo; el reintento llegaba como un duplicado sin explicación (le pasó a Mayi). Telegram
+  // no permite comprobar si llegó, así que se reenvía igual (perder un aviso es peor) pero diciéndolo.
+  const resend = c.attempts > 1 && TIMEOUT_ERROR.test(c.last_error ?? '') ? '🔁 <i>Por si no te llegó el anterior:</i>\n\n' : '';
   const header =
-    c.payload.testMode && c.kind !== 'test' && !c.payload.toOwner
+    resend +
+    (c.payload.testMode && c.kind !== 'test' && !c.payload.toOwner
       ? `🧪 <i>Modo pruebas · iba dirigido a: ${escapeHtml(c.for_name ?? '—')}</i>\n\n`
-      : '';
+      : '');
   const text = clampMessage(`${header}${c.payload.text}`);
 
   try {
@@ -425,14 +436,14 @@ async function sendOne(c: Claimed): Promise<void> {
             caption: html ? clampMessage(text, 1000) : htmlToPlain(clampMessage(text, 1000)),
             ...(html ? { parse_mode: 'HTML' } : {}),
             ...markup
-          })
+          }, SEND_TIMEOUT_MS)
         : tg<{ message_id: number }>(decodeBotToken(cfg), 'sendMessage', {
             chat_id: dest.chatId,
             text: html ? text : htmlToPlain(text),
             ...(html ? { parse_mode: 'HTML' } : {}),
             disable_web_page_preview: true,
             ...markup
-          });
+          }, SEND_TIMEOUT_MS);
     let msg: { message_id: number };
     try {
       msg = await send(true);
@@ -482,7 +493,7 @@ export async function processNotifications(tenantId?: string): Promise<number> {
           ORDER BY created_at
           LIMIT 10
           FOR UPDATE SKIP LOCKED)
-        RETURNING id, tenant_id, kind, for_clickup_user_id, for_name, request_id, payload, attempts
+        RETURNING id, tenant_id, kind, for_clickup_user_id, for_name, request_id, payload, attempts, last_error
       `)) as unknown as Claimed[];
       if (rows.length === 0) break;
       for (const c of rows) {
