@@ -77,3 +77,26 @@ describe('Salud: memoria y CPU del servidor', () => {
     expect(st({}, 'servidor_memoria')).toBeUndefined();
   });
 });
+
+// D7 (revisión del 17 nov): docker-compose.prod.yml pasa las variables una a una; una que lea el código y no esté ahí
+// no llega a producción aunque se añada al .env del servidor.
+describe('variables de entorno de producción (D7)', () => {
+  it('toda variable que lee el código está en docker-compose.prod.yml (o es solo de desarrollo)', async () => {
+    const { readFileSync, readdirSync, statSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const ONLY_DEV = new Set(['NEXT_RUNTIME', 'SEED_ADMIN_EMAIL', 'SEED_ADMIN_PASSWORD', 'OPS_SIMULATE_FAILURE', 'OPS_DEV_REMINDER_MINUTES', 'NODE_ENV']);
+    const used = new Set<string>();
+    const walk = (dir: string) => {
+      for (const f of readdirSync(dir)) {
+        const p = join(dir, f);
+        if (statSync(p).isDirectory()) walk(p);
+        else if (/\.(ts|tsx)$/.test(f)) for (const m of readFileSync(p, 'utf8').matchAll(/process\.env\.([A-Z_][A-Z0-9_]*)/g)) used.add(m[1]);
+      }
+    };
+    walk('lib');
+    walk('app');
+    const compose = readFileSync('docker-compose.prod.yml', 'utf8');
+    const missing = [...used].filter((v) => !ONLY_DEV.has(v) && !new RegExp(`^[ \\t]+${v}:`, 'm').test(compose));
+    expect(missing).toEqual([]);
+  });
+});

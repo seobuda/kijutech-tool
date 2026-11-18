@@ -3,7 +3,7 @@
 > **Documento vivo y de referencia.** Recoge todo lo que existe, cómo funciona, qué está decidido, qué se ha probado y qué falta. Se actualiza al cerrar cada paso de trabajo (junto al documento de sesión y al Mapa Visual).
 > **No contiene claves, contraseñas ni valores de `.env`** (solo sus nombres).
 
-**Fecha de esta versión:** 2026-11-17 (todos los pendientes ⏳ de la revisión: IA, jornada atómica, recordatorios, estratega, panel de Rendimiento, despliegue, restauración y vigilante; antes: coste de las llamadas de IA fallidas, I3; informe del mes incompleto frente a los mismos días, C6; medias del antes y el después por días de calendario, C4; URLs trabajadas de Estrategia con su versión canónica; antes: **registro central de errores** y **Técnico de mantenimiento**: todo fallo queda en una tabla, avisa por Telegram y un subagente lo diagnostica leyendo el código; migración 0052; arreglo de las respuestas vacías de la IA con Claude 5.5 y revisión completa del proyecto. Producción en `a103cbf0` con Estrategia fase 2, 52 migraciones)
+**Fecha de esta versión:** 2026-11-18 (decisiones de Enric sobre la revisión: un cliente con histórico se da de baja antes de borrarlo y el borrado pide su nombre, D6; variables opcionales en producción, D7; rotación de copias y logs, D11; cambio de correo con contraseña y contraseña de 12 caracteres que cierra las demás sesiones, S4/S9; antes, 17 nov: todos los pendientes ⏳ de la revisión: IA, jornada atómica, recordatorios, estratega, panel de Rendimiento, despliegue, restauración y vigilante; antes: coste de las llamadas de IA fallidas, I3; informe del mes incompleto frente a los mismos días, C6; medias del antes y el después por días de calendario, C4; URLs trabajadas de Estrategia con su versión canónica; antes: **registro central de errores** y **Técnico de mantenimiento**: todo fallo queda en una tabla, avisa por Telegram y un subagente lo diagnostica leyendo el código; migración 0052; arreglo de las respuestas vacías de la IA con Claude 5.5 y revisión completa del proyecto. Producción en `a103cbf0` con Estrategia fase 2, 52 migraciones)
 **Producción:** `https://brain.kijutech.com` (droplet `kijutech-brain`, Frankfurt). Procedimiento en `docs/DESPLIEGUE.md`. Rama de trabajo del despliegue: `feature/despliegue`.
 **Ramas:** cada mejora en su rama (`feature/…`, `fix/…`, `docs/…`); `main` solo recibe lo terminado y aprobado y es lo que está en producción. Las ramas antiguas (`operaciones`, `feature/seguridad`, `feature/despliegue`…) ya están fusionadas y se mantienen.
 **Rama `main`:** `75481a59` (12 nov, tiempos de tarea 5B), desplegada en producción con 46 migraciones. Revisión de autonomía en `docs/REVISION-AUTONOMIA.md`.
@@ -604,13 +604,9 @@ Construido en agosto de 2026 (Fases A–D). Detalle y auditoría completa en `do
 
 ## 16. Pendientes y deuda técnica
 
-- **Revisión completa del 17 nov:** `docs/REVISION-2026-11-17.md` (57 hallazgos verificados en 5 áreas). El 17 nov por la tarde quedaron resueltos todos los ⏳ salvo D14 (continuo). Lo que queda espera el OK de Enric (🔒):
+- **Revisión completa del 17 nov:** `docs/REVISION-2026-11-17.md` (57 hallazgos verificados en 5 áreas). El 17 nov por la tarde quedaron resueltos todos los ⏳ salvo D14 (continuo); el 18 nov, con el OK de Enric, D6, D7, D11, S4 y S9. Lo que queda espera el OK de Enric (🔒):
   - índice y purga de `ai_jobs` y de las tablas de registro (D4, D5: migración);
-  - borrar un cliente borra su histórico de Google (D6);
-  - rotación de copias previas al despliegue y logs de cron (D11: borra copias antiguas);
-  - `docker-compose.prod.yml` no pasa las variables opcionales (D7);
   - separar el rol de plataforma del `super_admin` de cuenta (S2, S3) y la política de borrados (S7);
-  - endurecer el cambio de correo y la contraseña (S4, S9: toca login);
   - Clientes del núcleo que importan módulos (C10).
 
 **Antes de subir a un servidor**
@@ -709,6 +705,7 @@ Cada uno con su nodo en el nivel 1 del Mapa Visual:
 - **17 nov (tarde), informe del mes incompleto** (hallazgo C6, sin migración): si el mes aún no tiene todos sus días de datos, el informe compara con los mismos días del mes anterior y del año pasado, no con el mes entero. Ver `docs/sessions/2026-11-17-17-rendimiento-informe-mes.md`.
 - **17 nov (tarde), coste de las llamadas de IA fallidas** (hallazgo I3, sin migración): lo que el proveedor cobra en una respuesta inservible queda en `ai_jobs` aunque falle. Ver `docs/sessions/2026-11-17-17-rendimiento-informe-mes.md`.
 - **17 nov (tarde), resto de pendientes de la revisión** (sin migraciones): IA (I5-I11, I13: respuestas cortadas o vacías con su motivo en los cuatro adaptadores, OpenAI con `max_completion_tokens`, Gemini sin pensamiento y con su coste, capa 0 del clustering con lotes y registro, coste NULL sin precio y búsquedas web contadas, embeddings con tiempo máximo, resumen del agente con error registrado, cambios propuestos tras leer una web), S8, Operaciones (O4 jornada con candado por persona, O6 reintento automático de `error_sync`, O8, O9, O10), Estrategia (C7 transacción, C9 propiedad parada) y servidor (D1 migrar antes de sustituir la app, D8 prueba de restauración que mira errores y filas, D12 vigilante con constancia en Salud, D13). Ver `docs/sessions/2026-11-17-19-pendientes-revision.md`.
+- **18 nov, decisiones de la revisión** (rama `fix/revision-decisiones`, sin migraciones): un cliente con histórico (encargos, datos de Google o seguimiento de Estrategia) solo se borra después de darle de baja y escribiendo su nombre (D6); `docker-compose.prod.yml` pasa una a una las variables opcionales y una prueba avisa si el código lee una que no está (D7); `backup.sh` guarda las 15 últimas copias previas al despliegue y 3 meses de logs de cron (D11); cambiar el correo pide la contraseña y no puede coincidir con otro sin distinguir mayúsculas (S4); contraseña nueva de 12 caracteres, mensajes en español y al cambiarla se cierran las demás sesiones (S9). Ver `docs/sessions/2026-11-18-` (documento de la sesión).
 - Historial completo: `git log` y `docs/sessions/`.
 
 ## 19. Mapa de archivos

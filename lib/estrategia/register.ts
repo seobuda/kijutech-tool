@@ -8,6 +8,7 @@ import 'server-only';
 //   - botones «x:est:…» de las propuestas del estratega por Telegram y el texto de «Ajustar» u «Otro motivo».
 import {
   registerEventSource,
+  registerClientDeleteGuard,
   registerHealthCheck,
   registerModuleButtons,
   registerReportSection,
@@ -18,7 +19,7 @@ import {
   type ModuleCheck
 } from '@/lib/core/capabilities';
 import { findCoreClient } from '@/lib/core/clients';
-import { eventsOverlapping, listRuns } from '@/lib/estrategia/store';
+import { eventsOverlapping, historyBlocker, listRuns } from '@/lib/estrategia/store';
 import { runEstrategia } from '@/lib/estrategia/scheduler';
 import { answerUrlQuestion } from '@/lib/estrategia/processes';
 import { handleStrategistButton, handleStrategistText } from '@/lib/estrategia/strategist';
@@ -78,5 +79,7 @@ export function registerEstrategiaCapabilities(): void {
   });
   registerReportSection('estrategia', { title: '🧭 Estrategia de los clientes', order: 25, weekly: (t) => weeklyLines(t) });
   registerHealthCheck('estrategia', strategyHealth);
+  // D6: con histórico, el cliente se da de baja antes de borrarlo y el borrado pide escribir su nombre.
+  registerClientDeleteGuard('estrategia', historyBlocker);
   registerModuleButtons('est', { callback: handleStrategistButton, text: handleStrategistText });
 }

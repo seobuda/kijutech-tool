@@ -13,7 +13,7 @@ export const CLIENTES_PROCESS_MAP: ProcessStep[] = [
     file: 'lib/core/clients.ts',
     when: 'Al crear o editar un cliente en Clientes, al aprobar una propuesta del agente o de «Rellenar con IA», y cada vez que un módulo necesita saber algo del cliente.',
     ai: 'Nada aquí (la redacción la hacen el agente o «Rellenar con IA», y esto solo valida y guarda).',
-    code: 'Nombre único por cuenta (sin tildes ni mayúsculas). Fechas de alta y baja automáticas al cambiar el estado (con motivo de baja). Nunca contraseñas. El contrato (cuota, fechas) solo lo ve y edita un administrador (acción aparte con permiso admin; la ficha no lo envía al navegador de un editor). Borrar pregunta antes a los módulos (registro del núcleo: Operaciones lo impide si hay encargos) y arrastra todo lo del cliente.',
+    code: 'Nombre único por cuenta (sin tildes ni mayúsculas). Fechas de alta y baja automáticas al cambiar el estado (con motivo de baja). Nunca contraseñas. El contrato (cuota, fechas) solo lo ve y edita un administrador (acción aparte con permiso admin; la ficha no lo envía al navegador de un editor). Borrar pregunta antes a los módulos (registro del núcleo): si tiene histórico (encargos en Operaciones, datos de Google en Rendimiento, seguimiento en Estrategia) hay que darle de baja primero (queda archivado) y confirmar escribiendo su nombre; el borrado arrastra todo lo del cliente.',
     tables: ['clients', 'ops_clients']
   },
   {

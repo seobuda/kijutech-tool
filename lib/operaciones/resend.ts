@@ -65,7 +65,7 @@ export type EmailConfig = {
 export async function getEmailConfig(tenantId: string): Promise<EmailConfig> {
   const s = await readSettings(tenantId);
   return {
-    apiKey: unseal(s[K.apiKey]) ?? process.env.RESEND_API_KEY ?? null,
+    apiKey: unseal(s[K.apiKey]) ?? (process.env.RESEND_API_KEY || null),
     webhookSecret: unseal(s[K.webhookSecret]),
     webhookId: s[K.webhookId] ?? null,
     address: s[K.address] || AGENT_DEFAULT_ADDRESS,

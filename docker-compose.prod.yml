@@ -31,6 +31,15 @@ services:
       AUTH_SECRET: ${AUTH_SECRET:?Define AUTH_SECRET en .env}
       BASE_URL: https://brain.kijutech.com
       AI_ENCRYPTION_KEY: ${AI_ENCRYPTION_KEY:?Define AI_ENCRYPTION_KEY en .env}
+      # Opcionales (D7, 18 nov 2026): se pasan una a una, no todo el .env, para que la app no reciba lo que no usa
+      # (contraseña de Postgres, tokens de Cloudflare…). Vacía = sin configurar. Una variable nueva que lea el código
+      # tiene que añadirse aquí: lo comprueba tests/servidor.test.ts.
+      PAGESPEED_API_KEY: ${PAGESPEED_API_KEY:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      DO_API_TOKEN: ${DO_API_TOKEN:-}
+      OPS_APP_DROPLET: ${OPS_APP_DROPLET:-}
+      AGT_TTS_MODEL: ${AGT_TTS_MODEL:-}
+      AGT_STT_MODELS: ${AGT_STT_MODELS:-}
     depends_on:
       postgres:
         condition: service_healthy

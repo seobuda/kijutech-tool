@@ -7,6 +7,7 @@ import 'server-only';
 import {
   proposeChange,
   registerChangeExecutor,
+  registerClientDeleteGuard,
   registerHealthCheck,
   registerKpiProvider,
   registerReportSection,
@@ -19,7 +20,7 @@ import {
 } from '@/lib/core/capabilities';
 import { findCoreClient } from '@/lib/core/clients';
 import { ANNOTATION_KINDS, ANNOTATION_KIND_LABEL, KPI, KPIS, daysBetween, fmtDayYear, isAnnotationKind, isYmd, kpiValue, madridNow, type AnnotationKind, type CompareKey, type PeriodKey } from '@/lib/rendimiento/rules';
-import { activeBySource, listSync, loadDays, PerfError, saveAnnotation } from '@/lib/rendimiento/store';
+import { activeBySource, historyBlocker, listSync, loadDays, PerfError, saveAnnotation } from '@/lib/rendimiento/store';
 import { runPerformanceSync } from '@/lib/rendimiento/sync';
 import { clientPerformance, monthlyClientText, performanceText, previousMonth, runMonthlySummary, runPerformanceAlerts, weeklyLines } from '@/lib/rendimiento/report';
 
@@ -179,4 +180,6 @@ export function registerRendimientoCapabilities(): void {
   });
   registerReportSection('rendimiento', { title: '📈 Rendimiento de los clientes', order: 20, weekly: (t) => weeklyLines(t) });
   registerHealthCheck('rendimiento', performanceHealth);
+  // D6: con histórico, el cliente se da de baja antes de borrarlo y el borrado pide escribir su nombre.
+  registerClientDeleteGuard('rendimiento', historyBlocker);
 }

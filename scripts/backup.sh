@@ -2,7 +2,8 @@
 # Copia diaria de la base de datos (revisión de autonomía, 12 nov 2026). Sustituye a /opt/kijutech/backup.sh.
 # Lo ejecuta cron en el servidor:
 #   0 3 * * * /opt/kijutech/scripts/backup.sh >> /opt/kijutech/backups/backup.log 2>&1
-# 1. pg_dump comprimido en /opt/kijutech/backups (7 días).
+# 1. pg_dump comprimido en /opt/kijutech/backups (7 días). Además rota las copias previas al despliegue (15 últimas)
+#    y los logs de cron (3 meses).
 # 2. Comprueba que el volcado no está vacío ni roto (gzip -t y que contiene la tabla tenants).
 # 3. Si está bien, lo anota en ops_settings (clave backup_last_at): Salud avisa si pasa más de un día sin copia.
 # 4. Opcional (copia fuera de DigitalOcean): si existe rclone y RCLONE_REMOTE en /opt/kijutech/backup.env
@@ -32,6 +33,18 @@ docker exec kijutech_db psql -U kijutech -d kijutech_db -q -c "
   || echo "$(date -Is) AVISO no se pudo anotar la copia en ops_settings"
 
 find "$OUT" -name 'backup_daily_*.sql.gz' -mtime +"$KEEP_DAYS" -delete
+
+# Rotación (D11, 18 nov 2026, aprobada por Enric): de las copias previas a cada despliegue se guardan las 15 últimas,
+# y de los logs de cron (backup, vigilante, prueba de restauración) los últimos 3 meses. Una línea sin fecha va con la
+# última fecha vista. Se reescribe con «cat >» para no cambiar el archivo que los cron abren con «>>».
+ls -1t "$OUT"/backup_pre_deploy_*.sql.gz 2>/dev/null | tail -n +16 | xargs -r rm -f --
+CUTOFF="$(date -d '90 days ago' +%F)"
+for L in "$OUT"/*.log; do
+  [[ -f "$L" ]] || continue
+  awk -v c="$CUTOFF" '{ if ($0 ~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/) d = substr($0, 1, 10); if (d == "" || d >= c) print }' "$L" > "$L.tmp" \
+    && cat "$L.tmp" > "$L"
+  rm -f "$L.tmp"
+done
 
 if command -v rclone >/dev/null 2>&1 && [[ -n "${RCLONE_REMOTE:-}" ]]; then
   if rclone copy "$FILE" "$RCLONE_REMOTE" --quiet; then

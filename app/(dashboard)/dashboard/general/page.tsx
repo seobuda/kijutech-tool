@@ -34,28 +34,34 @@ function AccountForm({
     <>
       <div>
         <Label htmlFor="name" className="mb-2">
-          Name
+          Nombre
         </Label>
         <Input
           id="name"
           name="name"
-          placeholder="Enter your name"
+          placeholder="Tu nombre"
           defaultValue={state.name || nameValue}
           required
         />
       </div>
       <div>
         <Label htmlFor="email" className="mb-2">
-          Email
+          Correo
         </Label>
         <Input
           id="email"
           name="email"
           type="email"
-          placeholder="Enter your email"
+          placeholder="tu@correo.com"
           defaultValue={emailValue}
           required
         />
+      </div>
+      <div>
+        <Label htmlFor="account-password" className="mb-2">
+          Contraseña actual <span className="font-normal text-muted-foreground">(solo si cambias el correo)</span>
+        </Label>
+        <Input id="account-password" name="currentPassword" type="password" autoComplete="current-password" maxLength={100} />
       </div>
     </>
   );
@@ -81,12 +87,12 @@ export default function GeneralPage() {
   return (
     <section className="mx-auto w-full max-w-[1400px] px-4 py-6 lg:px-8 lg:py-8">
       <h1 className="text-lg lg:text-2xl font-medium text-foreground mb-6">
-        General Settings
+        Datos de la cuenta
       </h1>
 
       <Card>
         <CardHeader>
-          <CardTitle>Account Information</CardTitle>
+          <CardTitle>Tu cuenta</CardTitle>
         </CardHeader>
         <CardContent>
           <form className="space-y-4" action={formAction}>
@@ -107,10 +113,10 @@ export default function GeneralPage() {
               {isPending ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Saving...
+                  Guardando…
                 </>
               ) : (
-                'Save Changes'
+                'Guardar cambios'
               )}
             </Button>
           </form>

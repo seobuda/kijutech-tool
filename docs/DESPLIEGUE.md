@@ -8,6 +8,7 @@ Backups de DigitalOcean activados (semanales). Sin secretos en este documento.
 - `docker-compose.prod.yml`: Postgres (pgvector) + app + Caddy. Solo Caddy publica puertos.
 - `Caddyfile`: HTTPS automático hacia la app.
 - En el servidor, `/opt/kijutech/`: el código, el `.env` (permisos 600, secretos NUEVOS, distintos a los de desarrollo) y `backups/`.
+- Variables opcionales del `.env` (`PAGESPEED_API_KEY`, `RESEND_API_KEY`, `DO_API_TOKEN`, `OPS_APP_DROPLET`, `AGT_TTS_MODEL`, `AGT_STT_MODELS`): `docker-compose.prod.yml` las pasa una a una (D7, 18 nov). Una variable nueva que lea el código se añade allí; `tests/servidor.test.ts` lo comprueba. Tras cambiar el `.env`: `docker compose -f docker-compose.prod.yml up -d` (recrea la app).
 
 ## Subir una versión
 **Atajo (11 nov):** `bash scripts/deploy.sh` hace los pasos 1-3 y verifica (migraciones, web, Telegram y errores en logs);

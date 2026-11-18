@@ -19,6 +19,8 @@ export const SECURITY_PROCESS_MAP: ProcessStep[] = [
       keyDecisions: [
         'No hay registro público: /sign-up no existe y redirige al inicio de sesión',
         'Los usuarios los crea un super_admin en /dashboard/usuarios (contraseña de 12+ caracteres y rol obligatorio)',
+        'La sesión lleva una huella de la contraseña: al cambiarla (12+ caracteres) se cierran las sesiones de otros dispositivos (S9)',
+        'Cambiar el correo pide la contraseña actual, se guarda en minúsculas y no puede coincidir con el de otro usuario sin distinguir mayúsculas (S4)',
       ],
     },
   },

@@ -6,7 +6,7 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { clientAssets, clients, perfAnnotations, perfDaily, perfGscMonthly, perfSync, tenants } from '@/lib/db/schema';
 import { registerMetricSource, setTelegramOutbound, type MetricRow, type MetricSource, type ToolContext } from '@/lib/core/capabilities';
-import { createCoreClient, saveAsset } from '@/lib/core/clients';
+import { clientHistory, createCoreClient, deleteCoreClient, saveAsset } from '@/lib/core/clients';
 import {
   KPI,
   addDays,
@@ -357,11 +357,19 @@ describe('rendimiento con la base de datos', () => {
     expect(health[0].detail).toContain('403');
   });
 
-  it('un cliente de baja deja de descargarse; borrar el cliente borra su histórico', async () => {
+  it('D6: con histórico de Google, no se borra si no está de baja ni sin escribir su nombre', async () => {
+    const history = await clientHistory(tid, clientId);
+    expect(history.some((h) => h.includes('Rendimiento'))).toBe(true);
+    await expect(deleteCoreClient(tid, clientId)).rejects.toThrow(/Dale de baja primero/);
+    expect(await db.select().from(clients).where(eq(clients.id, clientId))).toHaveLength(1);
+  });
+
+  it('un cliente de baja deja de descargarse; borrarlo escribiendo su nombre borra su histórico', async () => {
     await db.update(clients).set({ status: 'baja' }).where(eq(clients.id, clientId));
     await discover(tid, [fake]);
     expect((await listSync(tid, clientId)).every((x) => x.status === 'inactiva')).toBe(true);
-    await db.delete(clients).where(eq(clients.id, clientId));
+    await expect(deleteCoreClient(tid, clientId, 'Prueba')).rejects.toThrow(/escribe el nombre/);
+    await deleteCoreClient(tid, clientId, 'prueba rendimiento sl'); // sin mayúsculas también vale
     expect(await db.select().from(perfDaily).where(eq(perfDaily.clientId, clientId)).limit(1)).toHaveLength(0);
   });
 });
