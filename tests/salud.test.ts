@@ -49,9 +49,13 @@ describe('comprobaciones de salud', () => {
   });
 
   it('vigilante: en producción, si nunca ha dejado constancia, avisa; en local no sale', () => {
-    expect(statusOf({ watchdog: null, watchdogExpected: true }, 'vigilante')).toBe('aviso');
+    expect(statusOf({ watchdog: null, production: true }, 'vigilante')).toBe('aviso');
     expect(evaluate({ ...healthy, watchdog: null }).some((c) => c.key === 'vigilante')).toBe(false);
     expect(statusOf({ watchdog: { ageMin: 3, configured: true } }, 'vigilante')).toBe('ok');
+    // Lo mismo con la copia diaria y la prueba de restauración (antes, sin registro, no salía nada).
+    expect(statusOf({ production: true }, 'copia')).toBe('critico');
+    expect(statusOf({ production: true }, 'restauracion')).toBe('aviso');
+    expect(evaluate(healthy).some((c) => c.key === 'copia')).toBe(false);
   });
 
   it('cada problema trae su recomendación', () => {
