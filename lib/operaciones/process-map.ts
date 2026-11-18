@@ -507,7 +507,7 @@ const OPS_SCHED: ProcessStep[] = [
     file: 'lib/operaciones/notifications.ts',
     when: 'Cada ciclo, y al encolar un aviso.',
     ai: 'Nada.',
-    code: 'Se inserta primero (clave única) y se envía después; «reclamar» un aviso hace de candado; los fallidos se reintentan con espera creciente hasta el máximo de intentos.',
+    code: 'Se inserta primero (clave única) y se envía después; «reclamar» un aviso hace de candado; los fallidos se reintentan con espera creciente hasta el máximo de intentos. Telegram tiene 45 s para responder; si no responde, el mensaje pudo llegar igualmente, así que el reintento sale con «🔁 Por si no te llegó el anterior» (Telegram no permite comprobarlo y perder un aviso es peor que repetirlo).',
     tables: ['ops_notifications'],
     settings: [{ automation: 'delivery', fields: ['maxAttempts'] }],
     runs: ['processNotifications'],

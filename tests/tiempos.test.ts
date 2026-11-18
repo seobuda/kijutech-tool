@@ -57,6 +57,7 @@ vi.mock('@/lib/operaciones/team-today', async (orig) => {
 import { db } from '@/lib/db/drizzle';
 import {
   opsAutomations,
+  opsNotifications,
   opsRequests,
   opsTaskTimes,
   opsTeamProfiles,
@@ -381,5 +382,24 @@ describe('circuito de tiempos de tarea (persona y sistema)', () => {
     const r = await onTaskStarted(h.tenant, { clickupUserId: EMP, name: 'Leo Prueba' }, { clickupTaskId: 'tt-tk2', name: 'Cambiar el banner' });
     expect(r.ok).toBe(false);
     expect((await db.select().from(opsWorkEvents).where(eq(opsWorkEvents.tenantId, h.tenant))).length).toBe(before);
+  });
+
+  // 18 nov: un aviso que Telegram entregó sin responder a tiempo se reintenta; el reenvío lo dice (le llegó doble a Mayi).
+  it('un reenvío tras «tiempo de espera agotado» avisa de que es un reenvío', async () => {
+    await db.insert(opsNotifications).values({
+      tenantId: h.tenant,
+      kind: 'test',
+      dedupeKey: `test:reenvio:${Date.now()}`,
+      forClickupUserId: EMP,
+      forName: 'Leo Prueba',
+      payload: { text: 'Aviso de prueba de reenvío' },
+      status: 'fallido',
+      attempts: 1,
+      lastError: 'Telegram: Telegram no responde (tiempo de espera agotado)',
+      nextAttemptAt: new Date('2000-01-01T00:00:00Z')
+    });
+    await processNotifications(h.tenant);
+    const msg = h.sent.find((s) => s.method === 'sendMessage' && String(s.params.text).includes('Aviso de prueba de reenvío')); // «test» va al dueño
+    expect(String(msg?.params.text)).toMatch(/^🔁 <i>Por si no te llegó el anterior/);
   });
 });

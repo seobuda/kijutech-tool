@@ -52,7 +52,8 @@ scp -i "$KEY" -o BatchMode=yes -q "$TMP/kijutech.tgz" "$HOST:/tmp/kijutech.tgz"
 
 echo "→ Reconstruyendo la imagen (unos minutos)"
 # Si la compilación falla, aquí se para: producción sigue con la versión anterior, sin migrar.
-"${SSH[@]}" "cd $REMOTE_DIR && docker compose -f docker-compose.prod.yml build app > /tmp/kiju-build.log 2>&1; rc=\$?; grep -E 'rror|Built' /tmp/kiju-build.log | tail -8; exit \$rc" || {
+# Con prioridad baja (scripts/build-image.sh): la app en marcha sigue respondiendo mientras se compila.
+"${SSH[@]}" "bash $REMOTE_DIR/scripts/build-image.sh" || {
   echo "✗ La reconstrucción falló: producción sigue con la versión anterior y NO se ha migrado. Log en el servidor: /tmp/kiju-build.log" >&2
   exit 1
 }
@@ -84,5 +85,5 @@ fi
   echo \"  migraciones: \$(docker exec kijutech_db psql -U kijutech -d kijutech_db -tAc 'select count(*) from drizzle.__drizzle_migrations')\"; \
   echo \"  web: \$(curl -s -o /dev/null -w '%{http_code}' https://brain.kijutech.com/sign-in)\"; \
   echo \"  telegram: \$(docker exec kijutech_db psql -U kijutech -d kijutech_db -tAc \"select receive_mode || ' / ' || coalesce(last_error,'sin error') from ops_telegram_config\")\"; \
-  ERR=\$(docker logs --since 5m kijutech_app 2>&1 | grep -ciE 'ReferenceError|TypeError' || true); echo \"  errores en logs: \$ERR\";   echo \"  errores nuevos en el registro (10 min): \$(docker exec kijutech_db psql -U kijutech -d kijutech_db -tAc \"select count(*) from sys_error_groups where last_seen > now() - interval '10 minutes'\" 2>/dev/null || echo '—')\""
+  NI=\$(ps -o ni= -p \$(docker inspect -f '{{.State.Pid}}' kijutech_app) | tr -d ' '); echo \"  prioridad de la app: \$NI\$([ \"\$NI\" = 0 ] || echo '  ⚠ debería ser 0')\";   ERR=\$(docker logs --since 5m kijutech_app 2>&1 | grep -ciE 'ReferenceError|TypeError' || true); echo \"  errores en logs: \$ERR\";   echo \"  errores nuevos en el registro (10 min): \$(docker exec kijutech_db psql -U kijutech -d kijutech_db -tAc \"select count(*) from sys_error_groups where last_seen > now() - interval '10 minutes'\" 2>/dev/null || echo '—')\""
 echo "✓ Despliegue terminado"
