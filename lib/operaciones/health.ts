@@ -66,6 +66,8 @@ export type Snapshot = {
   restoreTest?: { ageD: number; ok: boolean; detail: string } | null;
   // Vigilante externo (cron del servidor): cuándo se ejecutó por última vez y si tiene su configuración (D12).
   watchdog?: { ageMin: number; configured: boolean } | null;
+  /** En producción (BASE_URL con https) debe haber vigilante: si nunca ha dejado constancia, se avisa. */
+  watchdogExpected?: boolean;
   emailsToday?: number | null; // correos del buzón del agente hoy (entrada + salida, aproximado); plan gratuito: 100/día
   // Servidor (DigitalOcean, de la caché horaria de infra-watch): memoria p95 de 24 h y carga p95 por CPU.
   serverMem?: { p95: number; max: number; limit: number; upgrade: string | null } | null;
@@ -226,6 +228,8 @@ export function evaluate(s: Snapshot): Check[] {
     if (!w.configured) add('vigilante', 'Vigilante externo', 'aviso', 'Se ejecuta, pero le falta /opt/kijutech/watchdog.env: si la herramienta se cae, nadie avisará.', 'Regenera el archivo con scripts/watchdog-env.mjs (pasos en docs/DESPLIEGUE.md).');
     else if (w.ageMin > 20) add('vigilante', 'Vigilante externo', 'aviso', `No se ejecuta desde hace ${Math.round(w.ageMin)} min (debería cada 5).`, 'Revisa el cron de scripts/watchdog.sh en el servidor.');
     else add('vigilante', 'Vigilante externo', 'ok', `Última comprobación hace ${Math.round(w.ageMin)} min.`);
+  } else if (s.watchdogExpected) {
+    add('vigilante', 'Vigilante externo', 'aviso', 'No consta ninguna ejecución del vigilante: si la herramienta se cae, nadie avisará.', 'Revisa en el servidor que el cron llame a scripts/watchdog.sh y que el script tenga permiso de ejecución (docs/DESPLIEGUE.md).');
   }
 
   return checks;
@@ -351,6 +355,7 @@ export async function collectSnapshot(tenantId: string): Promise<Snapshot> {
     backupAgeH: Number.isFinite(backupMs) ? (Date.now() - backupMs) / 3_600_000 : null,
     emailsToday: Number(mail?.n ?? 0),
     ...(await serverFromCache(tenantId)),
+    watchdogExpected: (process.env.BASE_URL ?? '').startsWith('https://'),
     watchdog: Number.isFinite(watchdogAt) ? { ageMin: (Date.now() - watchdogAt) / 60_000, configured: watchdogStatus !== 'sin_config' } : null,
     restoreTest: Number.isFinite(restoreAt) ? { ageD: (Date.now() - restoreAt) / 86_400_000, ok: restoreStatus === 'ok', detail: restoreDetail.join('|') } : null,
     heartbeatAgeS: await heartbeatAgeS(tenantId),
