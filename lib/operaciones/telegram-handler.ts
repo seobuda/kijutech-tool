@@ -31,7 +31,7 @@ import {
 } from '@/lib/operaciones/telegram-config';
 import { logEvent, type Actor } from '@/lib/operaciones/events';
 import { refreshNotice } from '@/lib/operaciones/notifications';
-import { acceptWork, finishWork, getRequest, laterWork, returnWork, startWork } from '@/lib/operaciones/workflow';
+import { acceptWork, addDoneNote, finishWork, getRequest, laterWork, returnWork, startWork } from '@/lib/operaciones/workflow';
 import {
   approveBlockerProposal,
   getBlocker,
@@ -210,6 +210,9 @@ async function toAgent(tenantId: string, token: string, member: OpsTelegramMembe
 // ---------------------------------------------------------------------------
 
 
+/** Estados en los que el encargo aún se puede entregar con «Hecho». */
+const OPEN_WORK = ['asignado', 'en_curso', 'devuelto', 'bloqueado'];
+
 async function setPending(
   tenantId: string,
   chatId: number,
@@ -315,6 +318,13 @@ async function handlePending(
   if ((p.kind === 'done_note' || p.kind === 'done_review') && p.requestId) {
     const req = await getRequest(tenantId, p.requestId);
     if (!req) return;
+    // Desde el 18 nov «Hecho» completa en el momento: lo que escribe después es un comentario para la tarea.
+    if (!OPEN_WORK.includes(req.workStatus)) {
+      if (skip || !text) return void (await reply(token, chatId, 'De acuerdo, sin comentario.'));
+      await addDoneNote(req, actorOf(member), text);
+      return void (await reply(token, chatId, '📝 Comentario añadido a la tarea.'));
+    }
+    // Pregunta pendiente de antes del cambio (la tarea aún sin completar): se completa ahora, como antes.
     const res = await finishWork(req, actorOf(member), skip ? null : text || null, p.kind === 'done_review');
     await reply(
       token,
@@ -476,14 +486,20 @@ async function handleWorkflowCallback(
   }
 
   if (code === 'dn' || code === 'dr') {
-    if (!['asignado', 'en_curso', 'devuelto', 'bloqueado'].includes(req.workStatus)) {
+    if (!OPEN_WORK.includes(req.workStatus)) {
       return void (await answer('Este encargo ya está entregado.', true));
     }
+    // 18 nov 2026: antes «Hecho» solo preguntaba por un comentario y la tarea no se completaba hasta contestar; si la
+    // persona no contestaba, ClickUp se quedaba «en curso». Ahora se completa (o pasa a revisión) en el momento y el
+    // comentario es opcional, después.
+    const res = await finishWork(req, actor, null, code === 'dr');
+    if (!res.ok) return void (await answer(res.reason, true));
+    const review = code === 'dr' || Boolean(req.reviewerKey);
+    await answer(review ? 'Enviado a revisión' : 'Hecho');
     await setPending(tenantId, chatId, code === 'dr' ? 'done_review' : 'done_note', { requestId: req.id });
-    await answer();
     await tg(token, 'sendMessage', {
       chat_id: chatId,
-      text: `${code === 'dr' ? '👀' : '✅'} <b>${escapeHtml(req.title)}</b>\n¿Quieres añadir un enlace o un comentario? Escríbelo, o pulsa el botón.`,
+      text: `${review ? '👀 <b>Enviado a revisión</b>' : '✅ <b>Hecho: tarea completada</b>'}\n${escapeHtml(req.title)}\n\n¿Quieres añadir un enlace o un comentario a la tarea? Escríbelo aquí (es opcional).`,
       parse_mode: 'HTML',
       disable_web_page_preview: true,
       reply_markup: {
@@ -501,6 +517,11 @@ async function handleWorkflowCallback(
       .where(and(eq(opsTelegramPending.chatId, chatId), eq(opsTelegramPending.requestId, req.id), inArray(opsTelegramPending.kind, ['done_note', 'done_review'])))
       .returning();
     if (!p || p.expiresAt.getTime() < Date.now()) return void (await answer('Ya está hecho o caducó.', true));
+    if (!OPEN_WORK.includes(req.workStatus)) {
+      // La tarea ya se completó al pulsar «Hecho»: solo se cierra la pregunta del comentario.
+      await answer('Sin comentario');
+      return void (await closeButtons(token, chatId, messageId));
+    }
     const res = await finishWork(req, actor, null, sk![1] === 'r');
     await answer(res.ok ? 'Hecho' : res.reason, !res.ok);
     await closeButtons(token, chatId, messageId);

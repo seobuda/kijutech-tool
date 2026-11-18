@@ -392,7 +392,7 @@ const OPS_EXEC: ProcessStep[] = [
     file: 'lib/operaciones/workflow.ts',
     when: 'Al terminar el trabajo.',
     ai: 'Nada.',
-    code: 'Si el encargo requiere revisión pasa a en_revision y pide una nota o enlace; si no, se completa. El estado en ClickUp se cambia por la bandeja de salida.',
+    code: 'Al pulsar el botón el encargo se completa en el momento (o pasa a en_revision si requiere revisión) y el estado en ClickUp se cambia por la bandeja de salida. Después el bot ofrece añadir un enlace o comentario OPCIONAL: si lo escribe, se guarda como nota de entrega y va como comentario a la tarea (addDoneNote). Antes del 18 nov la tarea no se completaba hasta contestar esa pregunta.',
     tables: ['ops_requests', 'ops_request_events', 'ops_telegram_pending'],
   },
   {

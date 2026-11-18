@@ -207,6 +207,21 @@ export async function finishWork(
   return { ok: true, req: row };
 }
 
+/**
+ * Comentario que la persona añade DESPUÉS de pulsar «Hecho» (18 nov 2026): la tarea ya está completada; el texto se
+ * guarda como nota de entrega (se suma a la que hubiera) y va como comentario a la tarea de ClickUp.
+ */
+export async function addDoneNote(req: OpsRequest, actor: Actor, note: string): Promise<void> {
+  const clean = note.trim().slice(0, 2000);
+  if (!clean) return;
+  await db
+    .update(opsRequests)
+    .set({ doneNote: req.doneNote ? `${req.doneNote}\n${clean}` : clean, updatedAt: new Date() })
+    .where(eq(opsRequests.id, req.id));
+  await logEvent(req.tenantId, { requestId: req.id, actor, type: 'done', payload: { note: clean, after: true } });
+  await commentOnTask(req, `${actor.name}: ${clean}`, 'done-note');
+}
+
 // Quien revisa acepta: la tarea se completa.
 export async function acceptWork(req: OpsRequest, reviewer: Actor): Promise<ActionResult> {
   const row = await transition(req, 'completado', ['en_revision']);
