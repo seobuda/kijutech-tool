@@ -8,10 +8,12 @@ Backups de DigitalOcean activados (semanales). Sin secretos en este documento.
 - `docker-compose.prod.yml`: Postgres (pgvector) + app + Caddy. Solo Caddy publica puertos.
 - `Caddyfile`: HTTPS automático hacia la app.
 - En el servidor, `/opt/kijutech/`: el código, el `.env` (permisos 600, secretos NUEVOS, distintos a los de desarrollo) y `backups/`.
+- Variables opcionales del `.env` (`PAGESPEED_API_KEY`, `RESEND_API_KEY`, `DO_API_TOKEN`, `OPS_APP_DROPLET`, `AGT_TTS_MODEL`, `AGT_STT_MODELS`): `docker-compose.prod.yml` las pasa una a una (D7, 18 nov). Una variable nueva que lea el código se añade allí; `tests/servidor.test.ts` lo comprueba. Tras cambiar el `.env`: `docker compose -f docker-compose.prod.yml up -d` (recrea la app).
 
 ## Subir una versión
 **Atajo (11 nov):** `bash scripts/deploy.sh` hace los pasos 1-3 y verifica (migraciones, web, Telegram y errores en logs);
-`bash scripts/deploy.sh --migrate` además hace el backup con `pg_dump` antes y aplica las migraciones después. Exige que
+`bash scripts/deploy.sh --migrate` además hace el backup con `pg_dump` antes y aplica las migraciones con la imagen nueva en un
+contenedor de un solo uso ANTES de sustituir la app (desde el 17 nov: si la migración falla, la app anterior sigue en marcha). Exige que
 `main` local coincida con `origin/main`. Para que Claude Code lo ejecute sin pedir permiso cada vez, en
 `.claude/settings.local.json` (no versionado) se permiten exactamente `Bash(bash scripts/deploy.sh)` y
 `Bash(bash scripts/deploy.sh --migrate)`.
@@ -19,8 +21,9 @@ Backups de DigitalOcean activados (semanales). Sin secretos en este documento.
 Pasos a mano:
 1. En el PC: `git archive --format=tar.gz -o <ruta>/kijutech.tgz HEAD` (solo lo versionado, sin `.env`).
 2. `scp` al servidor y descomprimir en `/opt/kijutech/` (sin tocar `.env` ni `backups/`).
-3. En el servidor: `docker compose -f docker-compose.prod.yml up -d --build`.
-4. Migraciones: `docker exec kijutech_app pnpm db:migrate` (antes, backup con `pg_dump`).
+3. En el servidor: `docker compose -f docker-compose.prod.yml build app`.
+4. Si hay migraciones (antes, backup con `pg_dump`): `docker compose -f docker-compose.prod.yml run --rm --no-deps app pnpm db:migrate`.
+5. `docker compose -f docker-compose.prod.yml up -d`.
 
 ## Base de datos de una instalación nueva
 Migraciones (crean el tenant Kijutech y los 4 roles) + copia de los prompts de IA (`ai_prompts`, sin datos de clientes) + usuario

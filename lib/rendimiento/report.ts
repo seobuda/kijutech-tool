@@ -303,6 +303,9 @@ export type OverviewRow = {
   kpis: Record<string, { value: number | null; prev: number | null; pct: number | null; good: boolean | null }>;
 };
 
+/** Días sin datos a partir de los cuales una propiedad se considera parada en el panel central. */
+const STALE_DAYS = 14;
+
 /** Últimos N días (hasta el último dato de cada fuente) frente a los N anteriores, por cliente. */
 export async function tenantOverview(tenantId: string, days = 28): Promise<OverviewRow[]> {
   const [clients, syncRows] = await Promise.all([listCoreClients(tenantId), listSync(tenantId)]);
@@ -315,8 +318,11 @@ export async function tenantOverview(tenantId: string, days = 28): Promise<Overv
   const all = [...actives.values()].flatMap((a) => Object.values(a) as PerfSync[]);
   const live = all.filter((r) => r.status !== 'inactiva');
   const sus = (live.length ? live : all).map((r) => r.syncedUntil);
-  const from = minD(sus);
   const to = maxD(sus);
+  // Una propiedad parada (sin datos desde hace más de STALE_DAYS) no arrastra el rango hacia atrás: antes hacía cargar
+  // meses de datos de todos los clientes (C9). Sus cifras no se calculan y la fila dice desde cuándo no hay datos.
+  const isStale = (su: string | null) => Boolean(su && to && su < addDays(to, -STALE_DAYS));
+  const from = minD(sus.filter((su) => !isStale(su)));
   const data = from && to ? await loadTenantDays(tenantId, refs, addDays(from, -(2 * days - 1)), to) : new Map<string, DayMap>();
   const out: OverviewRow[] = [];
   for (const c of clients) {
@@ -327,7 +333,7 @@ export async function tenantOverview(tenantId: string, days = 28): Promise<Overv
     for (const key of WATCH_KPIS) {
       const k = KPI[key];
       const su = a[k.source]?.syncedUntil;
-      if (!su) continue;
+      if (!su || isStale(su)) continue;
       const value = kpiValue(k, dm, addDays(su, -(days - 1)), su);
       const prev = kpiValue(k, dm, addDays(su, -(2 * days - 1)), addDays(su, -days));
       const d = delta(value, prev, k.lowerBetter);
@@ -336,12 +342,13 @@ export async function tenantOverview(tenantId: string, days = 28): Promise<Overv
     const rows = Object.values(a) as PerfSync[];
     const err = rows.find((r) => r.status === 'error');
     const loading = rows.find((r) => r.status === 'pendiente' || (r.status === 'descargando' && !r.syncedUntil));
+    const stale = rows.find((r) => r.status !== 'inactiva' && isStale(r.syncedUntil));
     out.push({
       clientId: c.id,
       name: c.name,
       status: c.status,
       sources: rows.filter((r) => r.status !== 'inactiva').map((r) => r.source as Source),
-      syncIssue: err ? `${SOURCE_LABEL[err.source as Source]}: ${err.lastError ?? 'error'}` : loading ? 'Descargando el histórico…' : null,
+      syncIssue: err ? `${SOURCE_LABEL[err.source as Source]}: ${err.lastError ?? 'error'}` : stale ? `${SOURCE_LABEL[stale.source as Source]}: sin datos desde el ${fmtDayYear(stale.syncedUntil!)}` : loading ? 'Descargando el histórico…' : null,
       lastData: maxD(rows.map((r) => r.syncedUntil)),
       kpis
     });
@@ -412,8 +419,10 @@ export async function monthlyClientText(tenantId: string, clientId: string, mont
   for (const k of vsPrev.kpis) {
     if (k.value === null) continue;
     const y = yoy.get(k.key);
-    const partial = k.range.to < monthEnd(m) ? ` (hasta el ${fmtDay(k.range.to)})` : '';
-    lines.push(`• ${k.label}: ${formatValue(k.value, k.format)}${partial}${k.pct !== null ? ` · ${formatDelta(k.pct)} frente al mes anterior` : ''}${y?.pct != null ? ` · ${formatDelta(y.pct)} frente a ${fmtMonth(addMonths(m, -12))}` : ''}`);
+    const isPartial = k.range.to < monthEnd(m);
+    const partial = isPartial ? ` (hasta el ${fmtDay(k.range.to)})` : '';
+    const same = isPartial ? 'los mismos días de ' : '';
+    lines.push(`• ${k.label}: ${formatValue(k.value, k.format)}${partial}${k.pct !== null ? ` · ${formatDelta(k.pct)} frente ${same ? `a ${same}${fmtMonth(addMonths(m, -1))}` : 'al mes anterior'}` : ''}${y?.pct != null ? ` · ${formatDelta(y.pct)} frente a ${same}${fmtMonth(addMonths(m, -12))}` : ''}`);
   }
   const ms = vsPrev.annotations.filter((a) => a.date >= m && a.date <= monthEnd(m));
   if (ms.length) {

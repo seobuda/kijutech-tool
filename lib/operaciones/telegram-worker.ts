@@ -24,6 +24,7 @@ import { sendStartupNotice, writeHeartbeat } from '@/lib/operaciones/startup';
 import { retriageStaleBlockers } from '@/lib/operaciones/blockers';
 import { runEmailInterpretations } from '@/lib/operaciones/email-agent';
 import { runHealthChecks } from '@/lib/operaciones/health';
+import { retryFailedSyncs } from '@/lib/operaciones/sync';
 import { runJornada } from '@/lib/operaciones/jornada-worker';
 import { runOwnerSla } from '@/lib/operaciones/owner-queue';
 import { runReports } from '@/lib/operaciones/reports';
@@ -43,6 +44,9 @@ export type WorkerState = {
   lockConn?: ReturnType<typeof postgres>;
   webhookCleared: Set<string>;
   startupSent?: boolean;
+  /** «Sistema en marcha» ya enviado (por cuenta) e intentos hechos: se reintenta unas pocas vueltas si falla (D13). */
+  startupDone?: Set<string>;
+  startupTries?: number;
 };
 
 const g = globalThis as unknown as { __opsTgWorker?: WorkerState };
@@ -210,6 +214,8 @@ async function pollLoop(state: WorkerState) {
 
 // --- Planificador -----------------------------------------------------------
 
+const STARTUP_TRIES = 5;
+
 async function step(name: string, fn: () => Promise<unknown>): Promise<void> {
   try {
     await fn();
@@ -224,19 +230,28 @@ async function schedulerLoop(state: WorkerState) {
     if (state.role !== 'leader') continue;
     try {
       const configs = await db.select().from(opsTelegramConfig);
-      const sendStartup = !state.startupSent;
-      // Se marca ANTES de enviar: si el envío falla, no se repite «Sistema en marcha» cada 30 s.
-      state.startupSent = true;
+      // «Sistema en marcha»: hasta STARTUP_TRIES vueltas por si el primer intento falla (p. ej. la base de datos aún
+      // arrancando). Después, solo el latido: nunca se repite cada 30 s.
+      state.startupDone ??= new Set();
+      const tries = (state.startupTries = (state.startupTries ?? 0) + 1);
+      const sendStartup = !state.startupSent && tries <= STARTUP_TRIES;
+      if (tries >= STARTUP_TRIES) state.startupSent = true;
       for (const cfg of configs) {
         const t = cfg.tenantId;
         // Cada paso va aislado: si uno falla (p. ej. ClickUp caído), los demás siguen funcionando.
         // Una vez por arranque: «Sistema en marcha»; en cada vuelta, el latido que mide las paradas.
-        await step('arranque/latido', () => (sendStartup ? sendStartupNotice(t) : writeHeartbeat(t)));
+        await step('arranque/latido', async () => {
+          if (sendStartup && !state.startupDone!.has(t)) {
+            await sendStartupNotice(t);
+            state.startupDone!.add(t);
+          } else await writeHeartbeat(t);
+        });
         await step('avisos', () => processNotifications(t));
         await step('resúmenes diarios', () => runDailySummaries(t));
         await step('jornada', () => runJornada(t)); // buenos días, reintentos, pausas, fin de horario y cierre automático
         await step('resúmenes de bandeja', () => runDigests(t));
         await step('bandeja de salida', () => processOutbox(t));
+        await step('encargos sin enviar', () => retryFailedSyncs(t)); // reintenta solos los «error_sync» (cada 30 min, su primer día)
         await step('vigilancia', () => runWatch(t)); // tareas creadas o asignadas en ClickUp (cada ~2,5 min)
         await step('recordatorios', () => runReminders(t));
         await step('bloqueos pendientes', () => retriageStaleBlockers(t)); // tras un reinicio a mitad del triaje

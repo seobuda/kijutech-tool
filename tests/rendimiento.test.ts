@@ -6,7 +6,7 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { clientAssets, clients, perfAnnotations, perfDaily, perfGscMonthly, perfSync, tenants } from '@/lib/db/schema';
 import { registerMetricSource, setTelegramOutbound, type MetricRow, type MetricSource, type ToolContext } from '@/lib/core/capabilities';
-import { createCoreClient, saveAsset } from '@/lib/core/clients';
+import { clientHistory, createCoreClient, deleteCoreClient, saveAsset } from '@/lib/core/clients';
 import {
   KPI,
   addDays,
@@ -60,6 +60,10 @@ describe('rendimiento: reglas puras', () => {
     expect(periodRanges('28', 'yoy', src)!.prev).toEqual({ from: addDays('2026-10-16', -364), to: addDays('2026-11-12', -364) });
     expect(periodRanges('28', 'contract', src, { serviceStart: '2026-03-01' })!.prev).toEqual({ from: '2026-02-01', to: '2026-02-28' });
     expect(periodRanges('all', 'prev', src)).toEqual({ cur: { from: '2025-07-01', to: '2026-11-12' }, prev: null });
+    // C6: mes incompleto (datos hasta el 12) frente a los mismos días del mes anterior; mes entero, contra el mes entero.
+    const prevOct = { from: '2026-10-01', to: '2026-10-31' };
+    expect(periodRanges('custom', 'prev', src, { from: '2026-11-01', to: '2026-11-30', prev: prevOct })).toEqual({ cur: { from: '2026-11-01', to: '2026-11-12' }, prev: { from: '2026-10-01', to: '2026-10-12' } });
+    expect(periodRanges('custom', 'prev', src, { from: '2026-02-01', to: '2026-02-28', prev: { from: '2026-01-01', to: '2026-01-31' } })!.prev).toEqual({ from: '2026-01-01', to: '2026-01-31' });
     expect(periodRanges('custom', 'none', src, { from: '2026-11-01', to: '2026-11-30' })!.cur).toEqual({ from: '2026-11-01', to: '2026-11-12' }); // recortado al último dato
     expect(periodRanges('28', 'prev', { syncedUntil: null, historyFrom: null })).toBeNull();
   });
@@ -353,11 +357,19 @@ describe('rendimiento con la base de datos', () => {
     expect(health[0].detail).toContain('403');
   });
 
-  it('un cliente de baja deja de descargarse; borrar el cliente borra su histórico', async () => {
+  it('D6: con histórico de Google, no se borra si no está de baja ni sin escribir su nombre', async () => {
+    const history = await clientHistory(tid, clientId);
+    expect(history.some((h) => h.includes('Rendimiento'))).toBe(true);
+    await expect(deleteCoreClient(tid, clientId)).rejects.toThrow(/Dale de baja primero/);
+    expect(await db.select().from(clients).where(eq(clients.id, clientId))).toHaveLength(1);
+  });
+
+  it('un cliente de baja deja de descargarse; borrarlo escribiendo su nombre borra su histórico', async () => {
     await db.update(clients).set({ status: 'baja' }).where(eq(clients.id, clientId));
     await discover(tid, [fake]);
     expect((await listSync(tid, clientId)).every((x) => x.status === 'inactiva')).toBe(true);
-    await db.delete(clients).where(eq(clients.id, clientId));
+    await expect(deleteCoreClient(tid, clientId, 'Prueba')).rejects.toThrow(/escribe el nombre/);
+    await deleteCoreClient(tid, clientId, 'prueba rendimiento sl'); // sin mayúsculas también vale
     expect(await db.select().from(perfDaily).where(eq(perfDaily.clientId, clientId)).limit(1)).toHaveLength(0);
   });
 });

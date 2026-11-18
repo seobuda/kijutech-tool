@@ -576,3 +576,23 @@ export async function eventsOverlapping(tenantId: string, from: string, to: stri
     .orderBy(asc(estEvents.date));
 }
 
+
+// --- Histórico del cliente (D6, 18 nov 2026) ------------------------------------------------------------------------
+
+/** Motivo para no borrar a la ligera un cliente con seguimiento de Estrategia guardado (o null si no tiene). */
+export async function historyBlocker(tenantId: string, clientId: string): Promise<string | null> {
+  const count = async (t: typeof estObjectives | typeof estSignals | typeof estWorkFacts | typeof estKeywords | typeof estTrackedUrls | typeof estHealthChecks) => {
+    const [r] = await db.select({ n: sql<number>`count(*)::int` }).from(t).where(and(eq(t.tenantId, tenantId), eq(t.clientId, clientId)));
+    return r?.n ?? 0;
+  };
+  const [objectives, signals, facts, keywords, urls, checks] = await Promise.all([count(estObjectives), count(estSignals), count(estWorkFacts), count(estKeywords), count(estTrackedUrls), count(estHealthChecks)]);
+  if (!objectives && !signals && !facts && !keywords && !urls && !checks) return null;
+  const parts = [
+    objectives ? `${objectives} objetivo${objectives === 1 ? '' : 's'}` : '',
+    keywords ? `${keywords} palabra${keywords === 1 ? '' : 's'} clave seguida${keywords === 1 ? '' : 's'}` : '',
+    urls ? `${urls} URL seguida${urls === 1 ? '' : 's'}` : '',
+    facts ? `${facts} trabajo${facts === 1 ? '' : 's'} registrado${facts === 1 ? '' : 's'}` : '',
+    signals || checks ? 'señales y revisiones de la web' : ''
+  ].filter(Boolean);
+  return `Tiene seguimiento en Estrategia (${parts.join(', ')}).`;
+}

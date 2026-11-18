@@ -1,4 +1,5 @@
 import type { AIAdapter, AIMessage, AIResponse } from '@/lib/ai/types';
+import { finishResponse, type StopKind } from '@/lib/ai/adapters/common';
 
 const ENDPOINT = 'https://api.anthropic.com/v1/messages';
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
@@ -13,25 +14,18 @@ type AnthropicBody = { content?: Array<{ type?: string; text?: string }>; stop_r
 /**
  * Texto de una respuesta de la API de Anthropic. Los modelos actuales (Sonnet 5.5, Opus 5.5…) piensan por defecto:
  * la respuesta empieza con bloques `thinking` (texto vacío) y el texto viene después. Antes se leía solo el primer
- * bloque y la respuesta llegaba vacía (16 nov 2026: «crear encargo» por Telegram falló así). Se unen todos los bloques
- * `text`; si no hay ninguno, se lanza un error con el motivo para que quede en ai_jobs como fallo, no como respuesta vacía.
+ * bloque y la respuesta llegaba vacía (16 nov 2026). Se unen todos los bloques `text` (puede quedar vacío: lo decide
+ * finishResponse).
  */
 export function anthropicText(data: AnthropicBody): string {
-  const text = (data.content ?? [])
+  return (data.content ?? [])
     .filter((b) => b?.type === 'text' && typeof b.text === 'string')
     .map((b) => b.text as string)
     .join('');
-  if (!text.trim()) {
-    const why =
-      data.stop_reason === 'max_tokens'
-        ? 'se agotó el límite de tokens antes de escribir la respuesta (todo se fue en pensar)'
-        : data.stop_reason === 'refusal'
-          ? 'el modelo rechazó la petición'
-          : `sin texto (stop_reason: ${data.stop_reason ?? 'desconocido'})`;
-    throw new Error(`Anthropic devolvió una respuesta vacía: ${why}.`);
-  }
-  return text;
 }
+
+/** Motivo de parada de Anthropic → tipo común. */
+export const anthropicStop = (r: string | null | undefined): StopKind => (r === 'max_tokens' ? 'cut' : r === 'refusal' ? 'refusal' : r === 'end_turn' || r === 'stop_sequence' ? 'ok' : 'other');
 
 export const anthropicAdapter: AIAdapter = {
   async sendMessage(
@@ -71,13 +65,13 @@ export const anthropicAdapter: AIAdapter = {
     }
 
     const data = await res.json();
-
-    return {
+    const response: AIResponse = {
       content: anthropicText(data),
       input_tokens: data.usage?.input_tokens ?? 0,
       output_tokens: data.usage?.output_tokens ?? 0,
       model: resolvedModel,
       provider: 'anthropic',
     };
+    return finishResponse(response, anthropicStop(data.stop_reason), data.stop_reason);
   },
 };

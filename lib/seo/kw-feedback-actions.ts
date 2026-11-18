@@ -31,6 +31,10 @@ type RecordFeedbackInput = {
 export async function recordClusterFeedback(data: RecordFeedbackInput): Promise<void> {
   try {
     const { user } = await assertUserInProjectTenant(data.projectId);
+    // El cluster tiene que ser de ESTE proyecto (S8): si no, con el id de un cluster ajeno se podían corregir los
+    // modificadores de intención globales (ai_intent_modifiers).
+    const cluster = data.clusterId ? await getKwClusterById(data.clusterId) : null;
+    if (data.clusterId && (!cluster || cluster.projectId !== data.projectId)) return;
 
     await db.insert(aiClusteringFeedback).values({
       tenantId: user.tenantId,
@@ -44,7 +48,7 @@ export async function recordClusterFeedback(data: RecordFeedbackInput): Promise<
     });
 
     if (data.feedbackType === 'intent_changed' && data.clusterId) {
-      await maybeCorrectIntentModifier(data.clusterId);
+      await maybeCorrectIntentModifier(cluster);
     }
   } catch (err) {
     console.error('recordClusterFeedback falló (ignorado, best-effort):', err);
@@ -61,8 +65,7 @@ export async function recordClusterFeedback(data: RecordFeedbackInput): Promise<
 // que hay en BD (los ai_jobs no guardan las decisiones de la Capa 0), así
 // que se corrigen todos los que aparezcan en el cluster — es una
 // aproximación, documentada aquí a propósito.
-async function maybeCorrectIntentModifier(clusterId: string): Promise<void> {
-  const cluster = await getKwClusterById(clusterId);
+async function maybeCorrectIntentModifier(cluster: Awaited<ReturnType<typeof getKwClusterById>>): Promise<void> {
   if (!cluster || cluster.keywords.length < 2) return;
 
   const primary = cluster.keywords.find((k) => k.isPrimary) ?? cluster.keywords[0];

@@ -103,7 +103,9 @@ const EXECUTORS: Record<string, Executor> = {};
 
 /** Herramienta de cambio: prepara la propuesta (texto legible + datos ya resueltos) y la ejecuta o la manda a aprobar. */
 async function proposeOrRun(ctx: ToolContext, tool: string, summaryHtml: string, data: Record<string, unknown>): Promise<ToolResult> {
-  const autonomy = await getToolAutonomy(ctx.tenantId, tool);
+  const configured = await getToolAutonomy(ctx.tenantId, tool);
+  // Si el agente leyó una web en este turno, nada se ejecuta solo (I13).
+  const autonomy: Autonomy = configured === 'autonomo' && ctx.untrustedInput ? 'aprobacion' : configured;
   const exec = EXECUTORS[tool] ?? changeExecutor(tool);
   if (!exec) return fail('Esa acción no está disponible.');
   if (autonomy === 'autonomo') {

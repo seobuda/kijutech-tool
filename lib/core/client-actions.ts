@@ -91,10 +91,10 @@ export async function setClientStatusAction(clientId: string, status: string, en
   }
 }
 
-export async function deleteClientAction(clientId: string): Promise<Ok> {
+export async function deleteClientAction(clientId: string, confirmName?: string): Promise<Ok> {
   try {
     const user = await requirePermission('admin');
-    await deleteCoreClient(user.tenantId, clientId);
+    await deleteCoreClient(user.tenantId, clientId, typeof confirmName === 'string' ? confirmName.slice(0, 300) : undefined);
     refresh();
     return { ok: true };
   } catch (e) {

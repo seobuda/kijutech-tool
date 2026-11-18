@@ -1,7 +1,7 @@
 import { and, eq, inArray, like } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { authLoginAttempts, projects, roles, tenants, userRoles, users } from '@/lib/db/schema';
-import { hashPassword, signToken } from '@/lib/auth/session';
+import { hashPassword, passwordFingerprint, signToken } from '@/lib/auth/session';
 
 /**
  * Usuarios de prueba (prefijo `seg-test-`): uno por rol en la cuenta Kijutech y uno en OTRA
@@ -94,9 +94,11 @@ export async function loginAs(user: { id: number } | null) {
     holder.token = null;
     return;
   }
+  const [row] = await db.select({ passwordHash: users.passwordHash }).from(users).where(eq(users.id, user.id));
   holder.token = await signToken({
     user: { id: user.id },
-    expires: new Date(Date.now() + 60 * 60 * 1000).toISOString()
+    expires: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+    pv: row ? await passwordFingerprint(row.passwordHash) : undefined
   });
 }
 

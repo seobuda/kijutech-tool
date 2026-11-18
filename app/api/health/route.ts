@@ -9,8 +9,9 @@ export async function GET() {
   try {
     const age = await newestHeartbeatAgeS();
     const ok = age !== null && age <= HEARTBEAT_STALE_S;
-    return Response.json({ ok, heartbeatAgeS: age }, { status: ok ? 200 : 503, headers: { 'Cache-Control': 'no-store' } });
+    return Response.json({ ok, db: true, heartbeatAgeS: age }, { status: ok ? 200 : 503, headers: { 'Cache-Control': 'no-store' } });
   } catch {
-    return Response.json({ ok: false, heartbeatAgeS: null }, { status: 503, headers: { 'Cache-Control': 'no-store' } });
+    // db: false → el vigilante dice «la base de datos no responde» en vez de «planificador parado» (D12).
+    return Response.json({ ok: false, db: false, heartbeatAgeS: null }, { status: 503, headers: { 'Cache-Control': 'no-store' } });
   }
 }

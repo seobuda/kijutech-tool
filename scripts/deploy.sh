@@ -48,21 +48,28 @@ scp -i "$KEY" -o BatchMode=yes -q "$TMP/kijutech.tgz" "$HOST:/tmp/kijutech.tgz"
   && N=\$(wc -l < /tmp/kiju-stale.list) && if [ \"\$N\" -gt 0 ]; then echo \"  archivos que ya no están en main: \$N (se borran)\"; sed 's/^/    - /' /tmp/kiju-stale.list | head -20; xargs -r -d '\n' rm -f -- < /tmp/kiju-stale.list; fi \
   && tar -xzf /tmp/kijutech.tgz -C $REMOTE_DIR && rm /tmp/kijutech.tgz /tmp/kiju-new.list /tmp/kiju-old.list /tmp/kiju-stale.list"
 
-echo "→ Reconstruyendo (unos minutos)"
-# Si la compilación falla, Docker no sustituye el contenedor (sigue la versión anterior) y aquí se para: sin migrar.
-"${SSH[@]}" "cd $REMOTE_DIR && docker compose -f docker-compose.prod.yml up -d --build > /tmp/kiju-build.log 2>&1; rc=\$?; grep -E 'rror|Started|Built' /tmp/kiju-build.log | tail -8; exit \$rc" || {
+echo "→ Reconstruyendo la imagen (unos minutos)"
+# Si la compilación falla, aquí se para: producción sigue con la versión anterior, sin migrar.
+"${SSH[@]}" "cd $REMOTE_DIR && docker compose -f docker-compose.prod.yml build app > /tmp/kiju-build.log 2>&1; rc=\$?; grep -E 'rror|Built' /tmp/kiju-build.log | tail -8; exit \$rc" || {
   echo "✗ La reconstrucción falló: producción sigue con la versión anterior y NO se ha migrado. Log en el servidor: /tmp/kiju-build.log" >&2
   exit 1
 }
 
 if [[ $MIGRATE -eq 1 ]]; then
-  echo "→ Migraciones"
-  # El código de salida es el de la migración (antes el de `tail`, siempre 0: una migración fallida acababa en «✓»).
-  "${SSH[@]}" "sleep 5; docker exec kijutech_app pnpm db:migrate > /tmp/kiju-migrate.log 2>&1; rc=\$?; grep -E 'applied|ERROR|error:' /tmp/kiju-migrate.log | tail -3; exit \$rc" || {
-    echo "✗ La migración FALLÓ: la app nueva ya está en marcha con el esquema anterior. Log en el servidor: /tmp/kiju-migrate.log. Revisa y, si hace falta, restaura la copia backups/backup_pre_deploy_${STAMP}.sql.gz." >&2
+  echo "→ Migraciones (con la imagen nueva, ANTES de sustituir la app)"
+  # D1 (revisión del 17 nov): antes se migraba con la app nueva ya en marcha sobre el esquema viejo. Ahora la migración
+  # corre en un contenedor de un solo uso con la imagen nueva; si falla, la app anterior sigue tal cual.
+  "${SSH[@]}" "cd $REMOTE_DIR && docker compose -f docker-compose.prod.yml run --rm --no-deps app pnpm db:migrate > /tmp/kiju-migrate.log 2>&1; rc=\$?; grep -E 'applied|ERROR|error:' /tmp/kiju-migrate.log | tail -3; exit \$rc" || {
+    echo "✗ La migración FALLÓ: la app sigue con la versión ANTERIOR (no se ha sustituido). Log en el servidor: /tmp/kiju-migrate.log. Revisa y, si hace falta, restaura la copia backups/backup_pre_deploy_${STAMP}.sql.gz." >&2
     exit 1
   }
 fi
+
+echo "→ Sustituyendo la app"
+"${SSH[@]}" "cd $REMOTE_DIR && docker compose -f docker-compose.prod.yml up -d > /tmp/kiju-up.log 2>&1; rc=\$?; grep -E 'rror|Started|Running' /tmp/kiju-up.log | tail -5; exit \$rc" || {
+  echo "✗ No se pudo arrancar la app nueva. Log en el servidor: /tmp/kiju-up.log" >&2
+  exit 1
+}
 
 echo "→ Verificación"
 EXPECTED="$(git show main:lib/db/migrations/meta/_journal.json | grep -c '"tag"')"

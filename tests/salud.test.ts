@@ -61,6 +61,6 @@ describe('/api/health', () => {
     expect([200, 503]).toContain(res.status);
     expect(res.headers.get('cache-control')).toBe('no-store');
     const body = await res.json();
-    expect(Object.keys(body).sort()).toEqual(['heartbeatAgeS', 'ok']);
+    expect(Object.keys(body).sort()).toEqual(['db', 'heartbeatAgeS', 'ok']); // db: solo si la base de datos responde (D12)
   });
 });

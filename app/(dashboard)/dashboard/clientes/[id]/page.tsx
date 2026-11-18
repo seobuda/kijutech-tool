@@ -4,7 +4,7 @@ import { checkPermission, requirePagePermission } from '@/lib/auth/permissions';
 import { db } from '@/lib/db/drizzle';
 import { opsClientActivity } from '@/lib/db/schema';
 import { completeness } from '@/lib/core/client-rules';
-import { getClientSheet } from '@/lib/core/clients';
+import { clientHistory, getClientSheet } from '@/lib/core/clients';
 import { getStructure, selectedSpaces } from '@/lib/operaciones/structure';
 import { evaluateClient, getLevels, getServices, listClients } from '@/lib/operaciones/clients';
 import { isConnected } from '@/lib/agentes/integrations';
@@ -103,7 +103,8 @@ export default async function FichaClientePage({ params }: { params: Promise<{ i
     members: structure.members.map((m) => ({ id: m.id, username: m.username })),
     spaces: selectedSpaces(structure).map((s) => ({ id: s.id, name: s.name, lists: s.lists.map((l) => ({ id: l.id, name: l.folder ? `${l.folder} / ${l.name}` : l.name })) })),
     options: [...options].map(([oid, label]) => ({ id: oid, label })).sort((a, b) => a.label.localeCompare(b.label, 'es')),
-    isAdmin
+    isAdmin,
+    history: isAdmin ? await clientHistory(user.tenantId, id).catch(() => []) : []
   };
   return <FichaView data={data} />;
 }

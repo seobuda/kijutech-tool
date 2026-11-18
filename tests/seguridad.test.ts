@@ -68,7 +68,9 @@ import { generateShareToken, deleteKwCluster } from '@/lib/seo/kw-actions';
 import { createProject } from '@/lib/projects/actions';
 import { createUserAction } from '@/app/(dashboard)/dashboard/usuarios/actions';
 import { toggleAiPrompt } from '@/lib/ai/actions';
-import { signIn } from '@/app/(login)/actions';
+import { signIn, updateAccount, updatePassword } from '@/app/(login)/actions';
+import { getUser } from '@/lib/db/queries';
+import { hashPassword } from '@/lib/auth/session';
 import { GET as getUserRoute } from '@/app/api/user/route';
 import { GET as getTeamRoute } from '@/app/api/team/route';
 import { GET as getProgressRoute } from '@/app/api/projects/[projectId]/seo/progress/route';
@@ -654,5 +656,38 @@ describe('correos de clientes', () => {
     expect((await deleteInboundEmail(pegado.id)).ok).toBe(false);
     const [intacto] = await db.select().from(opsInboundEmails).where(eq(opsInboundEmails.id, pegado.id));
     expect(intacto.status).toBe('sin_cliente');
+  });
+});
+
+// S4 y S9 (revisión del 17 nov): cambiar el correo pide la contraseña y no puede «pisar» el de otro usuario con otras
+// mayúsculas; la contraseña nueva exige 12 caracteres y al cambiarla se cierran las demás sesiones.
+describe('cuenta y contraseña (S4, S9)', () => {
+  type R = { error?: string; success?: string };
+  it('S4: el correo no cambia sin contraseña ni si ya lo usa otro (sin distinguir mayúsculas)', async () => {
+    await loginAs(fx.users.editor);
+    const sin = (await updateAccount({}, form({ name: 'Editor', email: emailFor('nuevo-correo') }))) as R;
+    expect(sin.error).toMatch(/contraseña actual/);
+    const pisado = (await updateAccount({}, form({ name: 'Editor', email: emailFor('admin').toUpperCase(), currentPassword: FIXTURE_PASSWORD }))) as R;
+    expect(pisado.error).toMatch(/otro usuario/);
+    const soloNombre = (await updateAccount({}, form({ name: 'Editor de prueba', email: emailFor('editor').toUpperCase() }))) as R;
+    expect(soloNombre.success).toBeTruthy(); // el mismo correo con otras mayúsculas no es un cambio
+    const [u] = await db.select().from(users).where(eq(users.id, fx.users.editor.id));
+    expect(u.email).toBe(emailFor('editor'));
+  });
+
+  it('S9: 12 caracteres, y al cambiarla la sesión anterior deja de valer y la actual sigue', async () => {
+    await loginAs(fx.users.editor);
+    const corta = (await updatePassword({}, form({ currentPassword: FIXTURE_PASSWORD, newPassword: 'corta-123', confirmPassword: 'corta-123' }))) as R;
+    expect(corta.error).toMatch(/12 caracteres/);
+    const holder = (globalThis as unknown as { __segSession: { token: string | null } }).__segSession;
+    const vieja = holder.token;
+    const nueva = 'Otra-Clave-De-Prueba-99';
+    const ok = (await updatePassword({}, form({ currentPassword: FIXTURE_PASSWORD, newPassword: nueva, confirmPassword: nueva }))) as R;
+    expect(ok.success).toMatch(/Contraseña cambiada/);
+    expect((await getUser())?.id).toBe(fx.users.editor.id); // esta sesión sigue
+    holder.token = vieja;
+    expect(await getUser()).toBeNull(); // la de otro dispositivo, firmada con la contraseña anterior, no
+    await db.update(users).set({ passwordHash: await hashPassword(FIXTURE_PASSWORD) }).where(eq(users.id, fx.users.editor.id));
+    await loginAs(null);
   });
 });

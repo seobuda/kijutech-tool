@@ -10,7 +10,7 @@ import {
   users
 } from './schema';
 import { cookies } from 'next/headers';
-import { verifyToken } from '@/lib/auth/session';
+import { passwordFingerprint, verifyToken } from '@/lib/auth/session';
 
 export async function getUser() {
   const sessionCookie = (await cookies()).get('session');
@@ -38,6 +38,11 @@ export async function getUser() {
     .limit(1);
 
   if (user.length === 0) {
+    return null;
+  }
+
+  // S9: una sesión firmada con otra contraseña (o anterior a la huella) ya no vale.
+  if (sessionData.pv !== (await passwordFingerprint(user[0].passwordHash))) {
     return null;
   }
 

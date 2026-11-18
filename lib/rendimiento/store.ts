@@ -249,3 +249,18 @@ export async function saveSettingsState(tenantId: string, state: PerfSettings['s
     .values({ tenantId, ...DEFAULT_SETTINGS, state })
     .onConflictDoUpdate({ target: perfSettings.tenantId, set: { state, updatedAt: new Date() } });
 }
+
+// --- Histórico del cliente (D6, 18 nov 2026) ------------------------------------------------------------------------
+
+/** Motivo para no borrar a la ligera un cliente con histórico de Google guardado (o null si no tiene). */
+export async function historyBlocker(tenantId: string, clientId: string): Promise<string | null> {
+  const [d] = await db
+    .select({ days: sql<number>`count(distinct ${perfDaily.date})::int`, from: sql<string | null>`min(${perfDaily.date})` })
+    .from(perfDaily)
+    .where(and(eq(perfDaily.tenantId, tenantId), eq(perfDaily.clientId, clientId)));
+  const [m] = await db.select({ n: sql<number>`count(*)::int` }).from(perfGscMonthly).where(and(eq(perfGscMonthly.tenantId, tenantId), eq(perfGscMonthly.clientId, clientId)));
+  const [a] = await db.select({ n: sql<number>`count(*)::int` }).from(perfAnnotations).where(and(eq(perfAnnotations.tenantId, tenantId), eq(perfAnnotations.clientId, clientId)));
+  if (!d?.days && !m?.n && !a?.n) return null;
+  const parts = [d?.days ? `${d.days} días de datos de Google desde ${d.from}` : '', m?.n ? 'resúmenes mensuales de Search Console' : '', a?.n ? `${a.n} hito${a.n === 1 ? '' : 's'}` : ''].filter(Boolean);
+  return `Tiene histórico en Rendimiento (${parts.join(', ')}); Google solo guarda 16 meses y no se puede recuperar.`;
+}

@@ -10,7 +10,20 @@ ENV_FILE="$DIR/watchdog.env"
 STATE_FILE="$DIR/.watchdog_state"
 URL="https://brain.kijutech.com/api/health"
 
-[[ -f "$ENV_FILE" ]] || { echo "$(date -Is) falta $ENV_FILE"; exit 0; }
+# Constancia en la base de datos de cada ejecución (D12): Salud avisa si el vigilante deja de ejecutarse o si le falta
+# su configuración (antes, sin watchdog.env, callaba sin que nadie lo supiera).
+mark() { # $1 = ok|sin_config
+  docker exec kijutech_db psql -U kijutech -d kijutech_db -q -c "
+    INSERT INTO ops_settings (tenant_id, key, value)
+    SELECT id, 'watchdog_seen_at', to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') FROM tenants
+    ON CONFLICT (tenant_id, key) DO UPDATE SET value = EXCLUDED.value, updated_at = now();
+    INSERT INTO ops_settings (tenant_id, key, value)
+    SELECT id, 'watchdog_status', '$1' FROM tenants
+    ON CONFLICT (tenant_id, key) DO UPDATE SET value = EXCLUDED.value, updated_at = now();" >/dev/null 2>&1 || true
+}
+
+[[ -f "$ENV_FILE" ]] || { echo "$(date -Is) falta $ENV_FILE"; mark sin_config; exit 0; }
+mark ok
 # shellcheck disable=SC1090
 source "$ENV_FILE"
 
@@ -32,7 +45,10 @@ if [[ "$CODE" == "200" ]]; then
   fi
 else
   if [[ "$PREV" == "ok" ]]; then
-    DETAIL="$( [[ "$CODE" == "503" ]] && echo 'la web responde pero el planificador está parado (sin latido)' || echo "la web no responde (HTTP $CODE)")"
+    # 503 puede ser el planificador parado o la base de datos sin responder: lo dice /api/health (campo db).
+    if [[ "$CODE" == "503" ]] && grep -q '"db":false' /tmp/kijutech_health.json 2>/dev/null; then DETAIL='la web responde pero la base de datos no'
+    elif [[ "$CODE" == "503" ]]; then DETAIL='la web responde pero el planificador está parado (sin latido)'
+    else DETAIL="la web no responde (HTTP $CODE)"; fi
     send "🔴 <b>La herramienta está caída</b>: ${DETAIL}. Revisa el servidor: <code>docker compose -f docker-compose.prod.yml ps</code> y los logs de kijutech_app."
     echo down > "$STATE_FILE"
     date '+%d/%m %H:%M' > "$STATE_FILE.since"

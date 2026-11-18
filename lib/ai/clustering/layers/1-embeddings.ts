@@ -2,6 +2,8 @@ import { DEFAULT_EMBEDDING_MODEL } from '@/lib/ai/provider-meta';
 import type { KeywordInput, PipelineConfig } from '../types';
 
 const BATCH_SIZE = 100;
+// Tiempo máximo por petición de embeddings (I11): antes no tenían y una petición colgada paraba el clustering.
+const EMBED_TIMEOUT_MS = 60_000;
 
 // La columna `embedding` en BD es vector(1536) fijo (tamaño de OpenAI).
 // Voyage (1024) devuelve menos dimensiones — se rellena con ceros hasta
@@ -31,6 +33,7 @@ async function embedBatchVoyage(
 ): Promise<number[][]> {
   const res = await fetch('https://api.voyageai.com/v1/embeddings', {
     method: 'POST',
+    signal: AbortSignal.timeout(EMBED_TIMEOUT_MS),
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({ input: texts, model }),
   });
@@ -48,6 +51,7 @@ async function embedBatchOpenAI(
 ): Promise<number[][]> {
   const res = await fetch('https://api.openai.com/v1/embeddings', {
     method: 'POST',
+    signal: AbortSignal.timeout(EMBED_TIMEOUT_MS),
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({ input: texts, model }),
   });
@@ -71,6 +75,7 @@ async function embedBatchGemini(
         `https://generativelanguage.googleapis.com/v1beta/models/${model}:embedContent?key=${apiKey}`,
         {
           method: 'POST',
+    signal: AbortSignal.timeout(EMBED_TIMEOUT_MS),
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             content: { parts: [{ text }] },

@@ -47,7 +47,8 @@ import {
   type AssetKind,
   type ClientStatus,
   type MemoryKind,
-  type SenderLike
+  type SenderLike,
+  normClientName
 } from '@/lib/core/client-rules';
 
 export class ClientError extends Error {
@@ -62,13 +63,7 @@ const t = (v: unknown, max: number): string | null => {
   const s = typeof v === 'string' ? v.trim().slice(0, max) : '';
   return s ? s : null;
 };
-const normName = (s: string) =>
-  s
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim();
+const normName = normClientName;
 const isDate = (v: unknown) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
 
 export type ClientSheet = {
@@ -267,12 +262,24 @@ export async function setClientStatus(tenantId: string, id: string, status: Clie
     .where(eq(clients.id, id));
 }
 
-/** Borra el cliente y todo lo suyo (en cascada). Antes pregunta a los módulos (p. ej. encargos en Operaciones). */
-export async function deleteCoreClient(tenantId: string, id: string): Promise<void> {
+/** Lo que el cliente tiene en los módulos (encargos, histórico de Google, seguimiento): vacío = se borra sin más. */
+export async function clientHistory(tenantId: string, id: string): Promise<string[]> {
+  return clientDeleteBlockers(tenantId, id);
+}
+
+/**
+ * Borra el cliente y todo lo suyo (en cascada). Antes pregunta a los módulos (D6, 18 nov 2026): si tiene histórico
+ * (encargos, datos de Google, seguimiento de Estrategia), primero hay que darle de baja (queda archivado) y después
+ * confirmar escribiendo su nombre; así no se pierden 16 meses de Search Console por un clic.
+ */
+export async function deleteCoreClient(tenantId: string, id: string, confirmName?: string): Promise<void> {
   const c = await getClient(tenantId, id);
   if (!c) throw new ClientError('La ficha no existe.');
-  const blockers = await clientDeleteBlockers(tenantId, id);
-  if (blockers.length) throw new ClientError(`${blockers.join(' ')} Dale de baja en vez de borrarlo.`);
+  const history = await clientDeleteBlockers(tenantId, id);
+  if (history.length) {
+    if (c.status !== 'baja') throw new ClientError(`${history.join(' ')} Dale de baja primero (queda archivado); después podrás borrarlo escribiendo su nombre.`);
+    if (normName(confirmName ?? '') !== normName(c.name)) throw new ClientError(`Para borrarlo con su histórico, escribe el nombre del cliente («${c.name}»).`);
+  }
   await db.delete(clients).where(and(eq(clients.id, id), eq(clients.tenantId, tenantId)));
 }
 

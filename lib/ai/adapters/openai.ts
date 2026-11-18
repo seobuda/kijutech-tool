@@ -1,4 +1,5 @@
 import type { AIAdapter, AIMessage, AIResponse } from '@/lib/ai/types';
+import { finishResponse } from '@/lib/ai/adapters/common';
 
 const ENDPOINT = 'https://api.openai.com/v1/chat/completions';
 const DEFAULT_MODEL = 'gpt-4o-mini';
@@ -23,7 +24,8 @@ export const openaiAdapter: AIAdapter = {
       body: JSON.stringify({
         model: resolvedModel,
         messages: messages.map((m) => ({ role: m.role, content: m.content })),
-        ...(maxTokens ? { max_tokens: maxTokens } : {}),
+        // Los modelos de razonamiento (o1, o3, gpt-5…) rechazan max_tokens; max_completion_tokens vale para todos (I6).
+        ...(maxTokens ? { max_completion_tokens: maxTokens } : {}),
       }),
     });
 
@@ -33,13 +35,16 @@ export const openaiAdapter: AIAdapter = {
     }
 
     const data = await res.json();
-
-    return {
-      content: data.choices?.[0]?.message?.content ?? '',
+    const choice = data.choices?.[0];
+    const reason: string | null = choice?.finish_reason ?? null;
+    const response: AIResponse = {
+      content: choice?.message?.content ?? '',
       input_tokens: data.usage?.prompt_tokens ?? 0,
       output_tokens: data.usage?.completion_tokens ?? 0,
       model: resolvedModel,
       provider: 'openai',
     };
+    const stop = choice?.message?.refusal || reason === 'content_filter' ? 'refusal' : reason === 'length' ? 'cut' : reason === 'stop' ? 'ok' : 'other';
+    return finishResponse(response, stop, choice?.message?.refusal ? `refusal: ${String(choice.message.refusal).slice(0, 200)}` : reason);
   },
 };

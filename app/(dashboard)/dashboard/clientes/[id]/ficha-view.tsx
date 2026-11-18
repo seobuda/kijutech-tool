@@ -5,11 +5,11 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, Brain, Building2, CircleCheck, CircleDashed, Compass, Globe, LayoutDashboard, LineChart, Settings2, Sparkles, Swords, Users } from 'lucide-react';
+import { ArrowLeft, Brain, Building2, CircleCheck, CircleDashed, Compass, Globe, LayoutDashboard, LineChart, Settings2, Sparkles, Swords, Trash2, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/page';
 import { cn } from '@/lib/utils';
-import { ACCESS_LABEL, ASSET_KIND_LABEL, CHANNEL_LABEL, CLIENT_STATUSES, CONTACT_ROLE_LABEL, STATUS_LABEL, type ClientStatus, type MissingItem } from '@/lib/core/client-rules';
+import { ACCESS_LABEL, ASSET_KIND_LABEL, CHANNEL_LABEL, CLIENT_STATUSES, CONTACT_ROLE_LABEL, STATUS_LABEL, normClientName, type ClientStatus, type MissingItem } from '@/lib/core/client-rules';
 import { deleteClientAction, setClientStatusAction } from '@/lib/core/client-actions';
 import { AiFill } from '../ai-fill';
 import { ClientMemoria } from '../client-memoria';
@@ -71,6 +71,8 @@ export type FichaData = {
   spaces: Space[];
   options: Option[];
   isAdmin: boolean;
+  /** Lo que el cliente tiene en los módulos (solo para un administrador): con algo, borrar exige baja + su nombre (D6). */
+  history: string[];
 };
 
 const TABS = [
@@ -96,6 +98,8 @@ export function FichaView({ data }: { data: FichaData }) {
   const [showAi, setShowAi] = useState(false);
   const [askBaja, setAskBaja] = useState(false);
   const [reason, setReason] = useState('');
+  const [askDelete, setAskDelete] = useState(false);
+  const [typedName, setTypedName] = useState('');
   const { run, pending, msg } = useRun();
   const c = data.client;
   const counts: Partial<Record<TabKey, number>> = { contactos: data.contacts.length + data.locations.length, webs: data.assets.length, competencia: data.competitors.length };
@@ -139,10 +143,60 @@ export function FichaView({ data }: { data: FichaData }) {
             <Sparkles aria-hidden />
             Rellenar con IA
           </Button>
-          {data.isAdmin && <ConfirmDelete what={`la ficha de ${c.name} (con sus contactos, webs, competencia y memoria)`} disabled={pending} onConfirm={() => run(() => deleteClientAction(c.id), 'Ficha eliminada.', () => router.push('/dashboard/clientes'))} />}
+          {data.isAdmin && !data.history.length && <ConfirmDelete what={`la ficha de ${c.name} (con sus contactos, webs, competencia y memoria)`} disabled={pending} onConfirm={() => run(() => deleteClientAction(c.id), 'Ficha eliminada.', () => router.push('/dashboard/clientes'))} />}
+          {data.isAdmin && data.history.length > 0 && (
+            <Button size="sm" variant="ghost" className="text-destructive hover:bg-destructive-soft hover:text-destructive" onClick={() => setAskDelete((v) => !v)} aria-expanded={askDelete}>
+              <Trash2 aria-hidden />
+              Eliminar
+            </Button>
+          )}
         </div>
       </div>
       <MsgLine msg={msg} />
+
+      {askDelete && data.history.length > 0 && (
+        <div className="space-y-2 rounded-xl border border-destructive/30 bg-destructive-soft p-4 text-sm">
+          <p className="font-medium text-destructive">Este cliente tiene histórico que se borraría con la ficha:</p>
+          <ul className="list-disc space-y-0.5 pl-5 text-foreground/80">
+            {data.history.map((h) => (
+              <li key={h}>{h}</li>
+            ))}
+          </ul>
+          {c.status !== 'baja' ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-foreground/80">Para no perderlo por un clic, primero dale de baja (queda archivado, con todo su histórico). Una vez de baja podrás borrarlo escribiendo su nombre.</p>
+              <Button size="sm" variant="outline" disabled={pending} onClick={() => { setAskDelete(false); setAskBaja(true); }}>
+                Dar de baja
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setAskDelete(false)}>
+                Cancelar
+              </Button>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+              <label className="min-w-0 flex-1">
+                <span className="mb-1 block text-foreground/80">
+                  Para borrarlo definitivamente, escribe <strong>{c.name}</strong>
+                </span>
+                <input className={cn(selectClass, 'w-full')} value={typedName} onChange={(e) => setTypedName(e.target.value)} aria-label="Nombre del cliente para confirmar el borrado" autoComplete="off" />
+              </label>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  disabled={pending || normClientName(typedName) !== normClientName(c.name)}
+                  onClick={() => run(() => deleteClientAction(c.id, typedName), 'Cliente eliminado.', () => router.push('/dashboard/clientes'))}
+                >
+                  Borrar para siempre
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => { setAskDelete(false); setTypedName(''); }}>
+                  Cancelar
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {askBaja && (
         <div className="flex flex-col gap-2 rounded-xl border border-warning/40 bg-warning-soft p-4 sm:flex-row sm:items-end">

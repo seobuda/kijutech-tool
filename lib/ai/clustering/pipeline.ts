@@ -231,7 +231,9 @@ export async function clusterKeywords(
     remainingKeywords,
     input.provider,
     input.model,
-    input.apiKey
+    input.apiKey,
+    'es',
+    { tenantId: input.tenantId, projectId: input.projectId }
   );
   layersUsed.push('intent_normalizer');
 
@@ -329,7 +331,7 @@ export async function clusterKeywords(
     const llmCost = llmPricing
       ? (classification.inputTokens / 1000) * Number(llmPricing.inputCostPer1k) +
         (classification.outputTokens / 1000) * Number(llmPricing.outputCostPer1k)
-      : 0;
+      : null; // sin precio: NULL (el vigía lo marca), no 0
 
     await db
       .update(aiJobs)
@@ -343,7 +345,7 @@ export async function clusterKeywords(
         model: input.model,
         inputTokens: classification.inputTokens,
         outputTokens: classification.outputTokens,
-        estimatedCost: llmCost.toFixed(6),
+        estimatedCost: llmCost !== null ? llmCost.toFixed(6) : null,
         completedAt: new Date(),
       })
       .where(eq(aiJobs.id, job.id));
@@ -392,7 +394,7 @@ export async function clusterKeywords(
         total_keywords: input.keywords.length,
         processing_time_ms: Date.now() - startTime,
         embeddings_cost: embeddingsCost,
-        llm_cost: llmCost,
+        llm_cost: llmCost ?? 0,
         layers_used: layersUsed,
         job_id: job.id,
       },

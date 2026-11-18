@@ -99,6 +99,15 @@ export function matchSender(
 
 // --- Ficha del cliente (núcleo) ---------------------------------------------------------------------------------
 
+/** Nombre sin tildes, mayúsculas ni signos: para nombres únicos y para confirmar un borrado escribiéndolo. */
+export const normClientName = (s: string) =>
+  s
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+
 export const CLIENT_STATUSES = ['prospecto', 'onboarding', 'activo', 'pausado', 'baja'] as const;
 export type ClientStatus = (typeof CLIENT_STATUSES)[number];
 export const STATUS_LABEL: Record<ClientStatus, string> = {

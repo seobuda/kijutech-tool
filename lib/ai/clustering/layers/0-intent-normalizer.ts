@@ -1,8 +1,8 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { aiIntentModifiers } from '@/lib/db/schema';
-import { getAdapter, withTimeout, CALL_TIMEOUT_MS } from '@/lib/ai/gateway';
-import type { AIMessage } from '@/lib/ai/types';
+import { aiIntentModifiers, aiJobs } from '@/lib/db/schema';
+import { getAdapter, getModelPricing, withTimeout, CALL_TIMEOUT_MS } from '@/lib/ai/gateway';
+import { AIBilledError, type AIMessage } from '@/lib/ai/types';
 import type { KeywordInput, ModifierDecision, NormalizedGroup } from '../types';
 
 // Umbral de solape de palabras para considerar dos keywords "candidatas al
@@ -138,16 +138,23 @@ function extractJson(raw: string): unknown {
   throw new Error('La clasificación de modificadores no devolvió JSON válido');
 }
 
-// Clasifica en una sola llamada todos los modificadores desconocidos del
-// lote (no están en ai_intent_modifiers todavía) y los guarda con
-// confidence 70 / source 'ai_classified' para que la próxima vez sean un
-// lookup de tabla en vez de otra llamada a la IA.
+// Clasifica los modificadores desconocidos del lote (no están en ai_intent_modifiers todavía) y guarda lo que la IA
+// devuelve con confidence 70 / source 'ai_classified', para que la próxima vez sean un lookup de tabla.
+// I8 (revisión del 17 nov): lotes de MODIFIER_BATCH con un tope total, cada llamada registrada en ai_jobs (con su
+// coste, también si falla), y lo que la IA no devuelve se trata como 'same_intent' SOLO en esta ejecución, sin
+// guardarlo en la tabla (antes se guardaba como si la IA lo hubiera decidido).
+export const MODIFIER_BATCH = 150;
+export const MODIFIER_MAX = 600;
+
+export type AiJobRef = { tenantId: string; projectId?: string | null };
+
 async function classifyUnknownModifiers(
   modifiers: string[],
   provider: string,
   model: string,
   apiKey: string,
-  language: string
+  language: string,
+  jobRef?: AiJobRef
 ): Promise<Map<string, 'same_intent' | 'different_intent'>> {
   const result = new Map<string, 'same_intent' | 'different_intent'>();
   if (modifiers.length === 0) return result;
@@ -157,65 +164,76 @@ async function classifyUnknownModifiers(
     throw new Error(`Proveedor de IA desconocido: ${provider}`);
   }
 
-  const messages: AIMessage[] = [
-    {
-      role: 'system',
-      content: 'Eres un experto en SEO español. Clasifica modificadores de keywords.',
-    },
-    {
-      role: 'user',
-      content:
-        'Para cada modificador, indica si añadido a una keyword base cambia la intención de ' +
-        'búsqueda del usuario.\n' +
-        'Responde SOLO con JSON válido:\n' +
-        '{ "modificador": "same_intent" | "different_intent" }\n' +
-        `Modificadores: ${JSON.stringify(modifiers)}`,
-    },
-  ];
+  const todo = modifiers.slice(0, MODIFIER_MAX);
+  for (let i = 0; i < todo.length; i += MODIFIER_BATCH) {
+    const batch = todo.slice(i, i + MODIFIER_BATCH);
+    const messages: AIMessage[] = [
+      {
+        role: 'system',
+        content: 'Eres un experto en SEO español. Clasifica modificadores de keywords.',
+      },
+      {
+        role: 'user',
+        content:
+          'Para cada modificador, indica si añadido a una keyword base cambia la intención de ' +
+          'búsqueda del usuario.\n' +
+          'Responde SOLO con JSON válido:\n' +
+          '{ "modificador": "same_intent" | "different_intent" }\n' +
+          `Modificadores: ${JSON.stringify(batch)}`,
+      },
+    ];
 
-  const response = await withTimeout(adapter.sendMessage(messages, model, apiKey), CALL_TIMEOUT_MS);
-  const data = extractJson(response.content);
+    const [job] = jobRef
+      ? await db
+          .insert(aiJobs)
+          .values({ tenantId: jobRef.tenantId, projectId: jobRef.projectId ?? null, function: 'cluster_intent_modifiers', status: 'processing', input: { modifiers: batch.length } })
+          .returning()
+      : [null];
+    const saveJob = async (status: 'completed' | 'failed', usage: { input_tokens: number; output_tokens: number } | null, error: string | null) => {
+      if (!job) return;
+      const pricing = usage ? await getModelPricing(provider, model) : null;
+      const cost = usage && pricing ? (usage.input_tokens / 1000) * Number(pricing.inputCostPer1k) + (usage.output_tokens / 1000) * Number(pricing.outputCostPer1k) : null;
+      await db
+        .update(aiJobs)
+        .set({ status, provider, model, error, inputTokens: usage?.input_tokens ?? null, outputTokens: usage?.output_tokens ?? null, estimatedCost: cost !== null ? cost.toFixed(6) : null, completedAt: new Date() })
+        .where(eq(aiJobs.id, job.id));
+    };
 
-  if (typeof data !== 'object' || data === null) {
-    throw new Error('La clasificación de modificadores no devolvió un objeto JSON');
-  }
+    let data: unknown;
+    try {
+      const response = await withTimeout(adapter.sendMessage(messages, model, apiKey, 4000), CALL_TIMEOUT_MS);
+      await saveJob('completed', response, null);
+      data = extractJson(response.content);
+    } catch (e) {
+      await saveJob('failed', e instanceof AIBilledError ? e.usage : null, e instanceof Error ? e.message.slice(0, 500) : 'error').catch(() => {});
+      throw e;
+    }
 
-  const rows: Array<{ modifier: string; effect: 'same_intent' | 'different_intent' }> = [];
-  for (const [modifier, effect] of Object.entries(data as Record<string, unknown>)) {
-    if (effect !== 'same_intent' && effect !== 'different_intent') continue;
-    result.set(modifier, effect);
-    rows.push({ modifier, effect });
-  }
+    if (typeof data !== 'object' || data === null) {
+      throw new Error('La clasificación de modificadores no devolvió un objeto JSON');
+    }
 
-  // Los modificadores que la IA no devolvió (respuesta incompleta) se
-  // tratan como 'same_intent' — es la opción menos disruptiva: en el peor
-  // caso junta dos keywords que deberían ir separadas, en vez de partir un
-  // grupo que debería estar junto.
-  for (const modifier of modifiers) {
-    if (!result.has(modifier)) {
-      result.set(modifier, 'same_intent');
-      rows.push({ modifier, effect: 'same_intent' });
+    const asked = new Set(batch);
+    for (const [modifier, effect] of Object.entries(data as Record<string, unknown>)) {
+      if (effect !== 'same_intent' && effect !== 'different_intent') continue;
+      if (!asked.has(modifier)) continue;
+      result.set(modifier, effect);
+      await db
+        .insert(aiIntentModifiers)
+        .values({ modifier, effect, confidence: 70, source: 'ai_classified', language })
+        .onConflictDoUpdate({
+          target: [aiIntentModifiers.modifier, aiIntentModifiers.language],
+          set: {
+            timesSeen: sql`${aiIntentModifiers.timesSeen} + 1`,
+            updatedAt: new Date(),
+          },
+        });
     }
   }
 
-  for (const row of rows) {
-    await db
-      .insert(aiIntentModifiers)
-      .values({
-        modifier: row.modifier,
-        effect: row.effect,
-        confidence: 70,
-        source: 'ai_classified',
-        language,
-      })
-      .onConflictDoUpdate({
-        target: [aiIntentModifiers.modifier, aiIntentModifiers.language],
-        set: {
-          timesSeen: sql`${aiIntentModifiers.timesSeen} + 1`,
-          updatedAt: new Date(),
-        },
-      });
-  }
+  // Los que la IA no devolvió (o que superan el tope) se tratan como 'same_intent' en esta ejecución, sin guardarlos:
+  // es la opción menos disruptiva y la próxima vez se volverán a preguntar.
+  for (const modifier of modifiers) if (!result.has(modifier)) result.set(modifier, 'same_intent');
 
   return result;
 }
@@ -240,7 +258,8 @@ export async function normalizeByIntent(
   provider: string,
   model: string,
   apiKey: string,
-  language: string = 'es'
+  language: string = 'es',
+  jobRef?: AiJobRef
 ): Promise<NormalizedGroup[]> {
   const candidates = buildCandidates(keywords);
 
@@ -280,7 +299,8 @@ export async function normalizeByIntent(
     provider,
     model,
     apiKey,
-    language
+    language,
+    jobRef
   );
 
   for (const { candidate, variant, modifier } of pending) {

@@ -20,7 +20,15 @@ export async function comparePasswords(
 type SessionData = {
   user: { id: number };
   expires: string;
+  /** Huella de la contraseña (S9, 18 nov 2026): al cambiarla, las sesiones abiertas con la anterior dejan de valer. */
+  pv?: string;
 };
+
+/** Huella corta del hash de la contraseña (no el hash): va dentro del token firmado. Web Crypto, vale en el proxy. */
+export async function passwordFingerprint(passwordHash: string): Promise<string> {
+  const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`kiju-session:${passwordHash}`));
+  return Buffer.from(d).toString('base64url').slice(0, 16);
+}
 
 export async function signToken(payload: SessionData) {
   return await new SignJWT(payload)
@@ -48,6 +56,7 @@ export async function setSession(user: NewUser) {
   const session: SessionData = {
     user: { id: user.id! },
     expires: expiresInOneDay.toISOString(),
+    pv: await passwordFingerprint(user.passwordHash),
   };
   const encryptedSession = await signToken(session);
   (await cookies()).set('session', encryptedSession, {

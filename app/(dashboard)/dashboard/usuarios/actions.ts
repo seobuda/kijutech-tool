@@ -1,7 +1,7 @@
 'use server';
 
 import { z } from 'zod';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/lib/db/drizzle';
 import { roles, userRoles, users } from '@/lib/db/schema';
@@ -24,7 +24,7 @@ export const createUserAction = validatedActionWithUser(
     const [existing] = await db
       .select({ id: users.id })
       .from(users)
-      .where(eq(users.email, data.email))
+      .where(eq(sql`lower(${users.email})`, data.email)) // sin distinguir mayúsculas, como el login (S4)
       .limit(1);
     if (existing) return { error: 'Ya existe un usuario con ese correo', name: data.name, email: data.email };
 

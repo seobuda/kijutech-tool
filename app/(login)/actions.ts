@@ -110,10 +110,12 @@ export async function signOut() {
   (await cookies()).delete('session');
 }
 
+// S9 (18 nov 2026): 12 caracteres como en el alta, mensajes en español, sin devolver las contraseñas al navegador, y
+// al cambiarla se cierran las demás sesiones (el token lleva una huella de la contraseña; ver lib/auth/session.ts).
 const updatePasswordSchema = z.object({
-  currentPassword: z.string().min(8).max(100),
-  newPassword: z.string().min(8).max(100),
-  confirmPassword: z.string().min(8).max(100)
+  currentPassword: z.string().min(1, 'Escribe tu contraseña actual.').max(100),
+  newPassword: z.string().min(12, 'La contraseña nueva debe tener al menos 12 caracteres.').max(100),
+  confirmPassword: z.string().max(100)
 });
 
 export const updatePassword = validatedActionWithUser(
@@ -121,36 +123,14 @@ export const updatePassword = validatedActionWithUser(
   async (data, _, user) => {
     const { currentPassword, newPassword, confirmPassword } = data;
 
-    const isPasswordValid = await comparePasswords(
-      currentPassword,
-      user.passwordHash
-    );
-
-    if (!isPasswordValid) {
-      return {
-        currentPassword,
-        newPassword,
-        confirmPassword,
-        error: 'Current password is incorrect.'
-      };
+    if (!(await comparePasswords(currentPassword, user.passwordHash))) {
+      return { error: 'La contraseña actual no es correcta.' };
     }
-
     if (currentPassword === newPassword) {
-      return {
-        currentPassword,
-        newPassword,
-        confirmPassword,
-        error: 'New password must be different from the current password.'
-      };
+      return { error: 'La contraseña nueva tiene que ser distinta de la actual.' };
     }
-
     if (confirmPassword !== newPassword) {
-      return {
-        currentPassword,
-        newPassword,
-        confirmPassword,
-        error: 'New password and confirmation password do not match.'
-      };
+      return { error: 'La confirmación no coincide con la contraseña nueva.' };
     }
 
     const newPasswordHash = await hashPassword(newPassword);
@@ -159,13 +139,15 @@ export const updatePassword = validatedActionWithUser(
     await Promise.all([
       db
         .update(users)
-        .set({ passwordHash: newPasswordHash })
+        .set({ passwordHash: newPasswordHash, updatedAt: new Date() })
         .where(eq(users.id, user.id)),
       logActivity(userWithTeam?.teamId, user.id, ActivityType.UPDATE_PASSWORD)
     ]);
+    // Esta sesión sigue abierta con la huella nueva; las demás (otros navegadores) dejan de valer.
+    await setSession({ ...user, passwordHash: newPasswordHash });
 
     return {
-      success: 'Password updated successfully.'
+      success: 'Contraseña cambiada. Las sesiones abiertas en otros dispositivos se han cerrado.'
     };
   }
 );
@@ -183,7 +165,7 @@ export const deleteAccount = validatedActionWithUser(
     if (!isPasswordValid) {
       return {
         password,
-        error: 'Incorrect password. Account deletion failed.'
+        error: 'La contraseña no es correcta: la cuenta no se ha eliminado.'
       };
     }
 
@@ -220,23 +202,44 @@ export const deleteAccount = validatedActionWithUser(
   }
 );
 
+// S4 (18 nov 2026): cambiar el correo pide la contraseña, se guarda en minúsculas y no puede coincidir con el de otro
+// usuario sin distinguir mayúsculas (el login busca con lower(email): un correo «igual» bloquearía el acceso del otro).
 const updateAccountSchema = z.object({
-  name: z.string().min(1, 'Name is required').max(100),
-  email: z.string().email('Invalid email address')
+  name: z.string().trim().min(1, 'Escribe tu nombre.').max(100),
+  email: z.string().trim().toLowerCase().email('El correo no es válido.').max(255),
+  currentPassword: z.string().max(100).optional()
 });
 
 export const updateAccount = validatedActionWithUser(
   updateAccountSchema,
   async (data, _, user) => {
-    const { name, email } = data;
-    const userWithTeam = await getUserWithTeam(user.id);
+    const { name, email, currentPassword } = data;
+    const emailChanged = email !== user.email.trim().toLowerCase();
 
+    if (emailChanged) {
+      if (!currentPassword || !(await comparePasswords(currentPassword, user.passwordHash))) {
+        return { name, error: 'Para cambiar el correo, escribe tu contraseña actual.' };
+      }
+      const [taken] = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(and(eq(sql`lower(${users.email})`, email), sql`${users.id} <> ${user.id}`))
+        .limit(1);
+      if (taken) {
+        return { name, error: 'Ese correo ya lo usa otro usuario.' };
+      }
+    }
+
+    const userWithTeam = await getUserWithTeam(user.id);
     await Promise.all([
-      db.update(users).set({ name, email }).where(eq(users.id, user.id)),
+      db
+        .update(users)
+        .set({ name, ...(emailChanged ? { email } : {}), updatedAt: new Date() })
+        .where(eq(users.id, user.id)),
       logActivity(userWithTeam?.teamId, user.id, ActivityType.UPDATE_ACCOUNT)
     ]);
 
-    return { name, success: 'Account updated successfully.' };
+    return { name, success: emailChanged ? 'Datos guardados. A partir de ahora entra con el correo nuevo.' : 'Datos guardados.' };
   }
 );
 

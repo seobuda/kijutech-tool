@@ -584,6 +584,29 @@ export function pickGscVariant(url: string, pages: { page: string; impressions: 
   return best?.page ?? null;
 }
 
+export type WindowSum = { clicks: number; impressions: number; days: number; dataDays: number };
+
+/**
+ * Antes y después de una URL trabajada, contando DÍAS DE CALENDARIO (C4): Search Console no devuelve los días
+ * sin impresiones, así que dividir entre los días con datos inflaba la media con poco tráfico.
+ * - Antes: los 28 días previos al cambio, hasta el último día ya sincronizado.
+ * - Después: desde que Google la rastreó (o desde el cambio) hasta el último día sincronizado.
+ * Sin sincronizar todavía, 0 días. `dataDays` = días con alguna fila (para saber si hay datos de verdad).
+ */
+export function beforeAfter(
+  daily: { date: string; clicks: number; impressions: number }[],
+  t: { changedOn: string; crawledOn: string | null; lastSyncedOn: string | null }
+): { before: WindowSum; after: WindowSum } {
+  const win = (from: string, to: string): WindowSum => {
+    const end = t.lastSyncedOn && t.lastSyncedOn < to ? t.lastSyncedOn : to;
+    const days = t.lastSyncedOn && end >= from ? daysBetween(from, end) + 1 : 0;
+    const xs = days ? daily.filter((d) => d.date >= from && d.date <= end) : [];
+    return { clicks: xs.reduce((s, d) => s + d.clicks, 0), impressions: xs.reduce((s, d) => s + d.impressions, 0), days, dataDays: xs.length };
+  };
+  const start = t.crawledOn ?? t.changedOn;
+  return { before: win(addDays(t.changedOn, -28), addDays(t.changedOn, -1)), after: win(start, t.lastSyncedOn ?? start) };
+}
+
 /** URL de la portada de una propiedad o web («sc-domain:x.com» → https://x.com/). */
 export function homeOf(value: string): string | null {
   const v = value.trim();

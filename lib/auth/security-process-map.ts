@@ -19,6 +19,8 @@ export const SECURITY_PROCESS_MAP: ProcessStep[] = [
       keyDecisions: [
         'No hay registro público: /sign-up no existe y redirige al inicio de sesión',
         'Los usuarios los crea un super_admin en /dashboard/usuarios (contraseña de 12+ caracteres y rol obligatorio)',
+        'La sesión lleva una huella de la contraseña: al cambiarla (12+ caracteres) se cierran las sesiones de otros dispositivos (S9)',
+        'Cambiar el correo pide la contraseña actual, se guarda en minúsculas y no puede coincidir con el de otro usuario sin distinguir mayúsculas (S4)',
       ],
     },
   },
@@ -76,6 +78,17 @@ export const SECURITY_PROCESS_MAP: ProcessStep[] = [
     technicalDetail: {
       summary:
         'Desactivar borra el token (la URL deja de funcionar al instante); regenerar invalida el anterior y crea uno nuevo. Ambas exigen rol de editor o superior.',
+    },
+  },
+  {
+    id: 'agent-untrusted',
+    name: 'Agente y contenido de fuera',
+    description: 'Si el agente lee una web o hace una búsqueda, ningún cambio se ejecuta solo en ese turno: se propone para aprobar.',
+    status: 'built',
+    file: 'lib/operaciones/agent-capabilities.ts',
+    technicalDetail: {
+      summary:
+        'El motor marca el turno (ToolContext.untrustedInput) en cuanto aparece una lectura web del servidor de Anthropic; proposeOrRun baja «autónomo» a «con aprobación». Evita que el texto de una página dispare un cambio (revisión del 17 nov, I13).',
     },
   },
   {
