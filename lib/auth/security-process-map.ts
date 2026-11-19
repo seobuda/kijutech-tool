@@ -117,4 +117,17 @@ export const SECURITY_PROCESS_MAP: ProcessStep[] = [
       stack: ['Vitest', 'docker exec kijutech_app pnpm test'],
     },
   },
+  {
+    id: 'deploy',
+    name: 'Despliegue protegido',
+    description:
+      'Claude despliega solo (protocolo del 19 nov), pero deploy.sh se niega si fallan las pruebas o el mapa sobre el commit exacto o si faltan migraciones. Guarda la versión anterior y vuelve atrás sola si la verificación falla. Migraciones, esquema, login y borrados siguen necesitando a Enric.',
+    status: 'built',
+    file: 'scripts/deploy.sh',
+    technicalDetail: {
+      summary:
+        'Pruebas (Vitest) y Mapa Visual en una copia temporal de main dentro del contenedor local. Copia de la base con --migrate. Imagen anterior guardada como kijutech-app:previous. Verificación: hasta 60 s esperando un 200 y errores de JavaScript del contenedor nuevo; si falla, scripts/rollback.sh. Estado de producción en solo lectura con scripts/server-status.sh (sin SSH libre). Permisos de Claude Code: deploy.sh sin preguntar; --migrate siempre pregunta.',
+      stack: ['scripts/deploy.sh', 'scripts/rollback.sh', 'scripts/server-status.sh', '.claude/settings.local.json'],
+    },
+  },
 ];

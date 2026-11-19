@@ -14,9 +14,22 @@ Backups de DigitalOcean activados (semanales). Sin secretos en este documento.
 **Atajo (11 nov):** `bash scripts/deploy.sh` hace los pasos 1-3 y verifica (migraciones, web, Telegram y errores en logs);
 `bash scripts/deploy.sh --migrate` además hace el backup con `pg_dump` antes y aplica las migraciones con la imagen nueva en un
 contenedor de un solo uso ANTES de sustituir la app (desde el 17 nov: si la migración falla, la app anterior sigue en marcha). Exige que
-`main` local coincida con `origin/main`. Para que Claude Code lo ejecute sin pedir permiso cada vez, en
-`.claude/settings.local.json` (no versionado) se permiten exactamente `Bash(bash scripts/deploy.sh)` y
-`Bash(bash scripts/deploy.sh --migrate)`.
+`main` local coincida con `origin/main`.
+
+**Protocolo de despliegue autónomo (19 nov, aprobado por Enric).** Claude despliega solo, con estas garantías:
+- **`deploy.sh` se niega si:**
+  - no estás en `main` o hay cambios sin commit;
+  - las pruebas (Vitest) o la comprobación del Mapa Visual fallan sobre el commit exacto que se sube. Se pasan en una copia temporal dentro del contenedor local `kijutech_app`, que tiene que estar en marcha;
+  - hay migraciones pendientes en producción y no se pidió `--migrate`.
+- **Antes de compilar:** guarda la imagen en marcha como `kijutech-app:previous`, y la versión desplegada en `/opt/kijutech/DEPLOYED.previous`.
+- **Verificación con vuelta atrás:** espera hasta 60 s un 200 de la web y cuenta los errores de JavaScript del contenedor nuevo. Si algo falla y no hubo migración, ejecuta solo `scripts/rollback.sh`. Con migración no vuelve solo, porque la base ya cambió: lo decide Enric.
+- **Si todo va bien:** anota la versión en `/opt/kijutech/DEPLOYED` y borra las imágenes sin etiqueta (`docker image prune -f`).
+- **`bash scripts/rollback.sh`:** vuelve a mano a `kijutech-app:previous`. La que falló queda como `kijutech-app:failed`. Solo cambia el código, no la base.
+- **`bash scripts/server-status.sh [--logs]`:** estado de producción en solo lectura (versión, contenedores, web, Telegram, latido, errores, avisos, copias, cron, disco, memoria y log). Claude no tiene SSH libre.
+- **Permisos de Claude Code:**
+  - `.claude/settings.local.json` (no versionado) permite sin preguntar `git checkout main`, `git merge --no-ff …`, `git push origin main`, `bash scripts/deploy.sh`, `rollback.sh` y `server-status.sh`.
+  - `bash scripts/deploy.sh --migrate` está en «ask»: siempre pregunta.
+  - En la configuración global de Enric (`~/.claude/settings.json`, `autoMode`) se quitaron los bloqueos del push a main y del `psql` local, y se describió este protocolo.
 
 Pasos a mano:
 1. En el PC: `git archive --format=tar.gz -o <ruta>/kijutech.tgz HEAD` (solo lo versionado, sin `.env`).

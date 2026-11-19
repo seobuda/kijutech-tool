@@ -130,7 +130,7 @@ A partir de la migración del esquema del núcleo (2026-08-16), el flujo de trab
 
 \- Modificar cualquier archivo dentro de `app/(login)/` o `lib/auth/` (todo lo relacionado con login y sesión)
 
-\- Hacer `git push` a `origin main` (el commit local sí puede hacerlo sin preguntar, pero el push siempre se confirma)
+\- Desplegar con migración (`bash scripts/deploy.sh --migrate`): el permiso de Claude Code lo pregunta siempre
 
 \- Modificar `docker-compose.yml` o `Dockerfile.dev`
 
@@ -139,6 +139,19 @@ A partir de la migración del esquema del núcleo (2026-08-16), el flujo de trab
 \- Instalar una dependencia nueva (`pnpm add`)
 
 
+
+\*\*Protocolo de despliegue autónomo (aprobado por Enric el 19 nov 2026).\*\* Claude puede, sin preguntar, fusionar en `main`
+una rama terminada (`git checkout main`, `git merge --no-ff`), subirla (`git push origin main`) y desplegarla con
+`bash scripts/deploy.sh`, siempre que:
+
+\- El trabajo esté terminado según este archivo: pruebas, Mapa Visual, `docs/ESTADO.md` y documento de sesión. `deploy.sh` además
+  se niega si fallan las pruebas o el mapa sobre el commit exacto, si hay cambios sin commit o si hay migraciones pendientes.
+\- No incluya nada de la lista de arriba sin su aprobación: esquema y migraciones, login y sesión, docker-compose, dependencias nuevas
+  o borrar datos.
+\- Después de cada despliegue, Claude le cuenta a Enric qué ha cambiado, el resultado de la verificación y cómo deshacerlo.
+\- Si la verificación falla, `deploy.sh` vuelve solo a la versión anterior. A mano: `bash scripts/rollback.sh`. Para mirar
+  producción: `bash scripts/server-status.sh` (solo lectura). No hay SSH libre al servidor: si hace falta otro comando en el
+  servidor, se pide a Enric o se añade a un script revisado.
 
 Si tienes dudas sobre si una tarea entra en la segunda lista, pregunta antes de actuar — es preferible una pregunta de más que un cambio no revisado en algo crítico.
 

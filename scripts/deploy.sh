@@ -4,6 +4,15 @@
 #   bash scripts/deploy.sh             sube `main`, reconstruye y verifica
 #   bash scripts/deploy.sh --migrate   además: backup con pg_dump ANTES y migraciones de Drizzle después
 #
+# Protocolo de autonomía (19 nov 2026, aprobado por Enric): Claude puede lanzar `bash scripts/deploy.sh` sin preguntar;
+# `--migrate` SIEMPRE necesita el OK de Enric (el permiso de Claude Code no lo incluye). Por eso el script:
+#   1. se niega si no estás en main, hay cambios sin commit o main no está subida;
+#   2. pasa las pruebas y la comprobación del Mapa Visual sobre el commit EXACTO que se sube (copia en el contenedor local);
+#   3. se niega si hay migraciones pendientes y no se pidió --migrate;
+#   4. guarda la imagen en marcha como kijutech-app:previous antes de compilar;
+#   5. si la verificación falla (web distinta de 200 o errores de JavaScript nuevos), vuelve sola a la imagen anterior
+#      (scripts/rollback.sh). Con --migrate no vuelve sola: la base ya cambió y lo decide Enric.
+#
 # Sin secretos: usa la clave SSH local (~/.ssh/kijutech_brain); el .env del servidor no se toca.
 set -euo pipefail
 
@@ -17,6 +26,14 @@ if [[ "${1:-}" == "--migrate" ]]; then MIGRATE=1; fi
 
 cd "$(dirname "$0")/.."
 
+if [[ "$(git rev-parse HEAD)" != "$(git rev-parse main)" ]]; then
+  echo "✗ No estás en main (o main no apunta a tu commit): git checkout main antes de desplegar." >&2
+  exit 1
+fi
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  echo "✗ Hay cambios sin commit: o se commitean o se descartan antes de desplegar." >&2
+  exit 1
+fi
 git fetch -q origin main
 if [[ "$(git rev-parse main)" != "$(git rev-parse origin/main)" ]]; then
   echo "✗ main local y origin/main no coinciden: haz push (o pull) antes de desplegar." >&2
@@ -26,6 +43,28 @@ echo "→ Desplegando main $(git rev-parse --short main)"
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
+
+echo "→ Pruebas y Mapa Visual sobre el commit que se sube (contenedor local)"
+# Copia exacta de main en una carpeta temporal del contenedor, con los node_modules de la imagen (vitest directo: pnpm
+# intentaría reinstalar). Así se prueba lo que se sube, no lo que haya en el contenedor.
+if ! git archive main | docker exec -i kijutech_app sh -c 'D=$(mktemp -d /tmp/kiju-ci.XXXXXX) && tar -x -C "$D" && ln -s /app/node_modules "$D/node_modules" && cd "$D" && node scripts/check-architecture-map.js && ./node_modules/.bin/vitest run' > "$TMP/tests.log" 2>&1; then
+  grep -E 'FAIL|✗|×|Error:' "$TMP/tests.log" | head -20 >&2
+  echo "✗ Las pruebas o el Mapa Visual fallan (o el contenedor local kijutech_app no está en marcha): NO se despliega." >&2
+  exit 1
+fi
+grep -E 'Mapa Visual OK|Tests ' "$TMP/tests.log" | sed 's/^/  /'
+
+EXPECTED="$(git show main:lib/db/migrations/meta/_journal.json | grep -c '"tag"')"
+APPLIED="$("${SSH[@]}" "docker exec kijutech_db psql -U kijutech -d kijutech_db -tAc 'select count(*) from drizzle.__drizzle_migrations'" | tr -d '[:space:]')"
+if [[ $MIGRATE -eq 0 && "$APPLIED" -lt "$EXPECTED" ]]; then
+  echo "✗ Hay $((EXPECTED - APPLIED)) migración(es) pendiente(s) en producción: hace falta --migrate, con el OK de Enric. NO se despliega." >&2
+  exit 1
+fi
+if [[ "$APPLIED" -gt "$EXPECTED" ]]; then
+  echo "✗ Producción tiene más migraciones ($APPLIED) que main ($EXPECTED): ¿main va por detrás? NO se despliega." >&2
+  exit 1
+fi
+
 git archive --format=tar.gz -o "$TMP/kijutech.tgz" main
 
 if [[ $MIGRATE -eq 1 ]]; then
@@ -49,6 +88,9 @@ scp -i "$KEY" -o BatchMode=yes -q "$TMP/kijutech.tgz" "$HOST:/tmp/kijutech.tgz"
   && comm -23 /tmp/kiju-old.list /tmp/kiju-new.list > /tmp/kiju-stale.list \
   && N=\$(wc -l < /tmp/kiju-stale.list) && if [ \"\$N\" -gt 0 ]; then echo \"  archivos que ya no están en main: \$N (se borran)\"; sed 's/^/    - /' /tmp/kiju-stale.list | head -20; xargs -r -d '\n' rm -f -- < /tmp/kiju-stale.list; fi \
   && tar -xzf /tmp/kijutech.tgz -C $REMOTE_DIR && chmod +x $REMOTE_DIR/scripts/*.sh && rm /tmp/kijutech.tgz /tmp/kiju-new.list /tmp/kiju-old.list /tmp/kiju-stale.list"
+
+echo "→ Guardando la versión en marcha para poder volver atrás"
+"${SSH[@]}" "cd $REMOTE_DIR && if docker image inspect kijutech-app:latest >/dev/null 2>&1; then docker image tag kijutech-app:latest kijutech-app:previous; fi; if [ -f DEPLOYED ]; then cp DEPLOYED DEPLOYED.previous; fi"
 
 echo "→ Reconstruyendo la imagen (unos minutos)"
 # Si la compilación falla, aquí se para: producción sigue con la versión anterior, sin migrar.
@@ -75,7 +117,20 @@ echo "→ Sustituyendo la app"
 }
 
 echo "→ Verificación"
-EXPECTED="$(git show main:lib/db/migrations/meta/_journal.json | grep -c '"tag"')"
+# La app tarda unos segundos en arrancar: hasta 60 s esperando un 200. Después, errores de JavaScript del contenedor nuevo.
+VERIFY="$("${SSH[@]}" "for i in 1 2 3 4 5 6 7 8 9 10 11 12; do sleep 5; C=\$(curl -s -o /dev/null -w '%{http_code}' https://brain.kijutech.com/sign-in); [ \"\$C\" = 200 ] && break; done; sleep 10; E=\$(docker logs --since 3m kijutech_app 2>&1 | grep -ciE 'ReferenceError|TypeError' || true); echo \"\$C \${E:-0}\"")"
+read -r WEB JSERR <<< "$VERIFY"
+if [[ "$WEB" != "200" || "$JSERR" != "0" ]]; then
+  echo "  ✗ web: $WEB · errores de JavaScript: $JSERR" >&2
+  if [[ $MIGRATE -eq 0 ]]; then
+    echo "→ La versión nueva no está bien: volviendo sola a la anterior" >&2
+    bash scripts/rollback.sh || echo "✗ La vuelta atrás también falló: hay que mirarlo YA (bash scripts/server-status.sh --logs)." >&2
+  else
+    echo "✗ Con migración NO se vuelve atrás sola (la base ya cambió). Opciones: bash scripts/rollback.sh (solo código) o restaurar backups/backup_pre_deploy_${STAMP}.sql.gz. Lo decide Enric." >&2
+  fi
+  exit 1
+fi
+"${SSH[@]}" "cd $REMOTE_DIR && echo '$(git rev-parse --short main) $(date -u +%Y-%m-%dT%H:%MZ)' > DEPLOYED && docker image prune -f > /dev/null 2>&1 || true"
 APPLIED="$("${SSH[@]}" "docker exec kijutech_db psql -U kijutech -d kijutech_db -tAc 'select count(*) from drizzle.__drizzle_migrations'" | tr -d '[:space:]')"
 if [[ "$APPLIED" != "$EXPECTED" ]]; then
   echo "  ⚠ migraciones: $APPLIED aplicadas de $EXPECTED en main (¿falta --migrate o falló?)" >&2
