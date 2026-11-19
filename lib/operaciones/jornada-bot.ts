@@ -95,7 +95,10 @@ async function teamTodaySafe(tenantId: string) {
   try {
     return await getTeamToday(tenantId);
   } catch (e) {
-    console.error('[jornada] tareas de hoy sin ClickUp:', e instanceof Error ? e.message : e);
+    // En la cuenta de pruebas es lo esperado (no tiene ClickUp): sin log, que el registro de errores lo tomaría por un
+    // fallo de la cuenta real y avisaría a Enric (pasó en el despliegue del 19 nov).
+    const { isSimTenant } = await import('@/lib/operaciones/sim/env');
+    if (!(await isSimTenant(tenantId).catch(() => false))) console.error('[jornada] tareas de hoy sin ClickUp:', e instanceof Error ? e.message : e);
     return null;
   }
 }

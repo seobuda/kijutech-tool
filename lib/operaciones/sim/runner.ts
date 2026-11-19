@@ -84,7 +84,8 @@ export async function runScenarios(
         );
       } catch (e) {
         error = e instanceof StepFailed ? e.message : `Error inesperado: ${e instanceof Error ? e.message : String(e)}`;
-        if (!(e instanceof StepFailed)) console.error(`[operaciones] prueba simulada ${sc.key}:`, e instanceof Error ? e.message : e);
+        // Sin console.error: el fallo queda en la ejecución (Sistema → Pruebas). El registro de errores lo tomaría por un
+        // fallo de la cuenta real y avisaría a Enric por algo que solo pasa en la cuenta de pruebas.
       }
       const status = error ? 'fallo' : 'ok';
       await db.update(opsSimRuns).set({ status, steps, error: error?.slice(0, 2000) ?? null, finishedAt: new Date() }).where(eq(opsSimRuns.id, run.id));

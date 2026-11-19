@@ -468,6 +468,7 @@ ClickUp de verdad (`scenarios-clickup.ts`, fase 2, **externo**): con el token re
 - «Empezar» guardaba cuándo se vio el aviso pero no quién. Corregido en `startWork`.
 - (Fase 2) Las automatizaciones **apagadas de serie** (jornada, tiempos) **no se podían encender desde el panel**: al encender se guardaba «por defecto», que para ellas es apagada. Corregido en `saveAutomation` (y con prueba).
 - (Fase 2) Si ClickUp no respondía, los buenos días de la jornada y «¿Con qué sigues?» no salían. Ahora salen sin la lista de tareas.
+- (Fase 2, tras desplegar) Una tanda de pruebas no puede escribir errores en el log: el registro de errores captura la consola sin saber de qué cuenta es y lo tomaría por un fallo de la cuenta real (pasó con los buenos días sin ClickUp de la cuenta de pruebas). Lo vigila una prueba. Pendiente, con OK de Enric porque toca el núcleo: que el registro atribuya a la cuenta de pruebas lo que se escriba durante una ejecución simulada.
 
 ## 7. Panel de Automatizaciones: todos los valores
 
