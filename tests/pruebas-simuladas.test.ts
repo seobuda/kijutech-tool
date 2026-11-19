@@ -69,6 +69,11 @@ describe('pruebas simuladas', () => {
     expect(runs.every((x) => x.status === 'ok' && x.finishedAt)).toBe(true);
   }, 240_000);
 
+  it('no quedan avisos pendientes en la cuenta de pruebas (nadie más los enviaría)', async () => {
+    const pend = (await db.select().from(opsNotifications).where(eq(opsNotifications.tenantId, simTenant))).filter((n) => n.status === 'pendiente');
+    expect(pend.map((n) => `${n.kind} ${n.dedupeKey} próximo ${n.nextAttemptAt.toISOString()}`)).toEqual([]);
+  });
+
   it('nada sale a internet', () => {
     expect(outside).toEqual([]);
   });

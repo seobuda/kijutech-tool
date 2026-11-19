@@ -26,11 +26,15 @@ docker ps --format '  {{.Names}}: {{.Status}}'
 echo "== Servicio"
 echo "  web: $(curl -s -o /dev/null -w '%{http_code}' https://brain.kijutech.com/sign-in)"
 echo "  migraciones: $(q 'select count(*) from drizzle.__drizzle_migrations')"
-echo "  telegram: $(q "select receive_mode || ' / ' || coalesce(last_error,'sin error') from ops_telegram_config")"
+# La cuenta de pruebas (Sistema → Pruebas) va aparte: aquí solo lo real.
+REAL="tenant_id NOT IN (SELECT sim_tenant_id FROM ops_sim_environments)"
+echo "  telegram: $(q "select receive_mode || ' / ' || coalesce(last_error,'sin error') from ops_telegram_config where receive_mode <> 'simulado'")"
 HB=$(q "select value from ops_settings where key='worker_heartbeat' limit 1")
 if [ -n "$HB" ]; then echo "  latido del planificador: hace $(( ($(date +%s%3N) - HB) / 1000 )) s"; else echo "  latido del planificador: sin registro"; fi
 echo "  errores nuevos (24 h): $(q "select count(*) from sys_error_groups where last_seen > now() - interval '24 hours' and status = 'nuevo'")"
-echo "  avisos pendientes / fallidos (24 h): $(q "select count(*) filter (where status='pendiente') || ' / ' || count(*) filter (where status='fallido' and created_at > now() - interval '24 hours') from ops_notifications")"
+echo "  avisos pendientes / fallidos (24 h): $(q "select count(*) filter (where status='pendiente') || ' / ' || count(*) filter (where status='fallido' and created_at > now() - interval '24 hours') from ops_notifications where $REAL")"
+echo "  pendientes, detalle: $(q "select coalesce(string_agg(kind || ' (próximo ' || to_char(next_attempt_at, 'DD/MM HH24:MI') || ' UTC, intentos ' || attempts || coalesce(', ' || left(last_error, 80), '') || ')', ', '), 'ninguno') from ops_notifications where status='pendiente' and $REAL")"
+echo "  pruebas simuladas: $(q "select coalesce((select status || ' · ' || scenario_key || ' · ' || to_char(started_at, 'DD/MM HH24:MI') from ops_sim_runs order by started_at desc limit 1), 'ninguna') || ' · fallan ahora: ' || (select count(*) from (select distinct on (scenario_key) status from ops_sim_runs order by scenario_key, started_at desc) x where status = 'fallo')")"
 echo "== Copias"
 ls -lt backups/backup_daily_*.sql.gz 2>/dev/null | head -3 | awk '{print "  " $6, $7, $8, $9, "(" $5 " bytes)"}'
 echo "  último registro: $(tail -1 backups/backup.log 2>/dev/null)"
