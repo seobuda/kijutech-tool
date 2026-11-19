@@ -16,6 +16,7 @@ import {
   uniqueIndex,
   customType,
   bigint,
+  bigserial,
   doublePrecision,
   primaryKey,
   smallint,
@@ -2941,3 +2942,80 @@ export const sysErrorSettings = pgTable('sys_error_settings', {
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
 export type SysErrorSettings = typeof sysErrorSettings.$inferSelect;
+
+// ---------------------------------------------------------------------------
+// Pruebas simuladas (Operaciones, 19 nov 2026). Un ENTORNO DE PRUEBAS es otra cuenta (tenant) aislada, con un bot y un
+// ClickUp «centinela» que nunca salen a internet (lib/operaciones/sim/). Aquí: qué cuenta de pruebas tiene cada cuenta,
+// cada ejecución de un escenario y la conversación simulada de Telegram.
+// ---------------------------------------------------------------------------
+export const opsSimEnvironments = pgTable('ops_sim_environments', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  // La cuenta real (Kijutech) que es dueña del entorno.
+  tenantId: uuid('tenant_id')
+    .notNull()
+    .unique()
+    .references(() => tenants.id, { onDelete: 'cascade' }),
+  // La cuenta de pruebas: todo lo simulado vive en ella, separado por las mismas reglas que separan dos cuentas.
+  simTenantId: uuid('sim_tenant_id')
+    .notNull()
+    .unique()
+    .references(() => tenants.id, { onDelete: 'cascade' }),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+export type OpsSimEnvironment = typeof opsSimEnvironments.$inferSelect;
+
+export const opsSimRuns = pgTable(
+  'ops_sim_runs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    // La cuenta real que lo ve en Sistema → Pruebas.
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    scenarioKey: varchar('scenario_key', { length: 60 }).notNull(),
+    status: varchar('status', { length: 10 }).notNull().default('en_curso'),
+    // claude | manual | despliegue
+    trigger: varchar('trigger', { length: 12 }).notNull().default('manual'),
+    triggeredBy: varchar('triggered_by', { length: 255 }),
+    // [{ label, ok, detail }]: lo que comprobó, paso a paso.
+    steps: jsonb('steps').notNull().default([]),
+    error: text('error'),
+    commit: varchar('commit', { length: 20 }),
+    startedAt: timestamp('started_at').notNull().defaultNow(),
+    finishedAt: timestamp('finished_at'),
+  },
+  (table) => [
+    index('ops_sim_runs_tenant_scenario_idx').on(table.tenantId, table.scenarioKey, table.startedAt),
+    check('ops_sim_runs_status_check', sql`${table.status} IN ('en_curso', 'ok', 'fallo')`),
+    check('ops_sim_runs_trigger_check', sql`${table.trigger} IN ('claude', 'manual', 'despliegue')`),
+  ]
+);
+export type OpsSimRun = typeof opsSimRuns.$inferSelect;
+
+export const opsSimMessages = pgTable(
+  'ops_sim_messages',
+  {
+    // También es el message_id que ve el bot (así editar o borrar un mensaje simulado es por su id).
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    // La cuenta de pruebas.
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    chatId: bigint('chat_id', { mode: 'number' }).notNull(),
+    // bot (lo que manda el bot) | persona (lo que escribe o pulsa la persona simulada) | aviso (ventanita de un botón)
+    direction: varchar('direction', { length: 8 }).notNull(),
+    text: text('text').notNull().default(''),
+    // Botones tal como los manda el bot: [[{ text, callback_data }]].
+    buttons: jsonb('buttons'),
+    runId: uuid('run_id').references(() => opsSimRuns.id, { onDelete: 'set null' }),
+    editedAt: timestamp('edited_at'),
+    deletedAt: timestamp('deleted_at'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    index('ops_sim_messages_chat_idx').on(table.tenantId, table.chatId, table.id),
+    index('ops_sim_messages_run_idx').on(table.runId),
+    check('ops_sim_messages_direction_check', sql`${table.direction} IN ('bot', 'persona', 'aviso')`),
+  ]
+);
+export type OpsSimMessage = typeof opsSimMessages.$inferSelect;

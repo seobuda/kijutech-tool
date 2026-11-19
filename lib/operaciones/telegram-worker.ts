@@ -8,7 +8,7 @@
 // Si Telegram responde 409 (otro oyente con el mismo bot, p. ej. otro entorno), se anota en
 // la configuración y Ajustes lo muestra.
 import postgres from 'postgres';
-import { eq } from 'drizzle-orm';
+import { eq, ne } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { opsTelegramConfig, type OpsTelegramConfig } from '@/lib/db/schema';
 import { tg, TelegramError, type TgUpdate } from '@/lib/operaciones/telegram';
@@ -230,7 +230,8 @@ async function schedulerLoop(state: WorkerState) {
     await sleep(SCHEDULER_EVERY_MS);
     if (state.role !== 'leader') continue;
     try {
-      const configs = await db.select().from(opsTelegramConfig);
+      // El entorno de pruebas (modo «simulado») no entra en el planificador: lo mueve solo quien ejecuta las pruebas.
+      const configs = await db.select().from(opsTelegramConfig).where(ne(opsTelegramConfig.receiveMode, 'simulado'));
       // «Sistema en marcha»: hasta STARTUP_TRIES vueltas por si el primer intento falla (p. ej. la base de datos aún
       // arrancando). Después, solo el latido: nunca se repite cada 30 s.
       state.startupDone ??= new Set();
