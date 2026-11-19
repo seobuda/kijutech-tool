@@ -25,8 +25,8 @@ import { getCurrentDays, todayIn } from '@/lib/operaciones/jornada';
 import { enqueueNotification } from '@/lib/operaciones/notifications';
 import { enqueueOutbox } from '@/lib/operaciones/outbox';
 import { getPendingEmailProposals } from '@/lib/operaciones/owner-queue';
-import { NOTE_PROMPT_KEY, proposeRequests } from '@/lib/operaciones/request-proposer';
-import { getStructure, validClient } from '@/lib/operaciones/structure';
+import { ALL_SPACES, NOTE_PROMPT_KEY, proposeRequests } from '@/lib/operaciones/request-proposer';
+import { getStructure, selectedSpaces, validClient, type CachedStructure } from '@/lib/operaciones/structure';
 import { syncToClickUp } from '@/lib/operaciones/sync';
 import { decodeBotToken, getOwnerMember, getTelegramConfig } from '@/lib/operaciones/telegram-config';
 import { clampMessage, escapeHtml, htmlToPlain, tg, tgSendVoice } from '@/lib/operaciones/telegram';
@@ -350,16 +350,43 @@ async function ownerUserId(tenantId: string): Promise<number | null> {
   return row?.id ?? null;
 }
 
+// Listas de los espacios seleccionados con su ruta legible («Espacio / Carpeta / Lista»).
+function allLists(structure: CachedStructure) {
+  return selectedSpaces(structure).flatMap((sp) => sp.lists.map((l) => ({ id: l.id, name: l.name, space: sp, path: [sp.name, l.folder, l.name].filter(Boolean).join(' / ') })));
+}
+
+/** La lista que nombró Enric («formación», «Kijutech / Interno»…): exacta por nombre, o la única que lo contiene. */
+function findList(structure: CachedStructure, wanted: string) {
+  const q = normText(wanted);
+  const lists = allLists(structure);
+  const exact = lists.filter((l) => normText(l.name) === q || normText(l.path) === q);
+  if (exact.length === 1) return { list: exact[0], options: [] as string[] };
+  const partial = (exact.length ? exact : lists).filter((l) => normText(l.path).includes(q));
+  return partial.length === 1 ? { list: partial[0], options: [] as string[] } : { list: null, options: partial.slice(0, 10).map((l) => l.path) };
+}
+
+// Listas que suelen ser para trabajo interno, para sugerirlas cuando un encargo se queda sin lista.
+const INTERNAL_HINT = /(intern|formaci|kijutech|agencia|equipo|general|administ|procesos|propi)/;
+function suggestLists(structure: CachedStructure): string[] {
+  const lists = allLists(structure);
+  const hinted = lists.filter((l) => INTERNAL_HINT.test(normText(l.path)));
+  return (hinted.length ? hinted : lists).slice(0, 10).map((l) => l.path);
+}
+
 const crearEncargo: AgentTool = {
   name: 'crear_encargo',
   module: 'operaciones',
   title: 'Crear encargos',
   description:
-    'Crea uno o varios encargos (tareas de ClickUp con aviso a la persona) a partir de lo que pide quien te habla. Pasa en «texto» la petición completa en lenguaje natural, con persona, cliente y fecha si los dijo: el sistema elige lista, cliente, responsable y fecha con las fichas. Si falta algo importante, pregunta antes de usarla.',
+    'Crea uno o varios encargos (tareas de ClickUp con aviso a la persona) a partir de lo que pide quien te habla, también tareas internas de la agencia (formación, investigación) sin cliente. Pasa en «texto» la petición completa en lenguaje natural, con persona, cliente y fecha si los dijo: el sistema elige lista, cliente, responsable y fecha con las fichas. Si Enric dice (o elige después) la lista de ClickUp, pásala en «lista». Si la herramienta responde que falta la lista, pregúntale a Enric cuál con las opciones que te da y vuelve a llamarla con el mismo texto y «lista».',
   risk: 'cambio',
   inputSchema: {
     type: 'object',
-    properties: { texto: { type: 'string', description: 'La petición completa, tal como la diría Enric' }, cliente: { type: 'string', description: 'Cliente, si se sabe' } },
+    properties: {
+      texto: { type: 'string', description: 'La petición completa, tal como la diría Enric' },
+      cliente: { type: 'string', description: 'Cliente, si se sabe' },
+      lista: { type: 'string', description: 'Lista de ClickUp donde crearlo (nombre o parte), solo si Enric la dijo o la eligió' }
+    },
     required: ['texto'],
     additionalProperties: false
   },
@@ -367,21 +394,38 @@ const crearEncargo: AgentTool = {
     const text = str(input.texto, 4000);
     if (!text) return fail('Falta el texto del encargo.');
     const structure = await getStructure(ctx.tenantId);
+    if (!allLists(structure).length) return fail('No hay listas de ClickUp en la caché: dile a Enric que pulse «Actualizar desde ClickUp» en Ajustes.');
+    const wanted = str(input.lista, 200);
+    const forced = wanted ? findList(structure, wanted) : null;
+    if (forced && !forced.list) {
+      return fail(forced.options.length ? `Hay varias listas que encajan con «${wanted}»: ${forced.options.join(' | ')}. Pregunta a Enric cuál.` : `No encuentro la lista «${wanted}». Algunas listas: ${suggestLists(structure).join(' | ')}. Pregunta a Enric cuál.`);
+    }
     const clients = await listClients(ctx.tenantId);
     const client = findClientInText(clients, `${str(input.cliente)} ${text}`);
-    const spaceId = client?.usualSpaceId ?? structure.spaces.find((s) => s.selected && s.lists.length)?.id;
-    const space = structure.spaces.find((s) => s.id === spaceId);
-    if (!space) return fail('No sé en qué espacio de ClickUp crearlo: dile a Enric que complete la ficha del cliente con su espacio habitual.');
+    // Espacio: el de la lista elegida, o el habitual del cliente; si no hay ninguno (tarea interna, cliente sin ficha),
+    // la IA ve las listas de TODOS los espacios seleccionados y elige (antes se miraba solo el primero).
+    const space = forced?.list?.space ?? structure.spaces.find((s) => s.id === client?.usualSpaceId && s.lists.length) ?? null;
     const prompt = await getPrompt(NOTE_PROMPT_KEY);
     if (!prompt) return fail('El prompt de conversión de notas está desactivado.');
-    const { items, notConverted } = await proposeRequests(ctx.tenantId, { text, spaceId: space.id, spaceName: space.name, assigneeClickupId: null, assigneeName: null }, prompt);
-    const valid = items.filter((i) => i.listId);
-    if (!valid.length) return fail(`No he podido convertirlo en un encargo claro.${notConverted.length ? ` Sin convertir: ${notConverted.join('; ')}` : ''} Pide más detalle.`);
-    const lists = new Map(structure.spaces.flatMap((s) => s.lists.map((l) => [l.id, l.name])));
-    const summary = valid
+    const { items, notConverted } = await proposeRequests(ctx.tenantId, { text, spaceId: space?.id ?? ALL_SPACES, spaceName: space?.name ?? 'todos los espacios', assigneeClickupId: null, assigneeName: null }, prompt);
+    if (forced?.list) for (const i of items) i.listId = forced.list.id;
+    const extra = notConverted.length ? ` Además, no son encargos: ${notConverted.join('; ')}.` : '';
+    if (!items.length) {
+      return fail(`No he visto ninguna tarea concreta en lo que pide.${extra} Si Enric quiere crearla igualmente, vuelve a llamarme con un «texto» que diga directamente la tarea: qué hay que hacer, quién y para cuándo.`);
+    }
+    const noList = items.filter((i) => !i.listId);
+    if (noList.length) {
+      // Antes se descartaban en silencio y el aviso no decía qué se había perdido (19 nov 2026).
+      return fail(
+        `He preparado ${items.length === 1 ? 'el encargo' : `${items.length} encargos`} (${items.map((i) => `«${i.title}»${i.assigneeName ? ` para ${i.assigneeName}` : ''}`).join(', ')}), pero ${noList.length === items.length ? 'no sé' : `para ${noList.map((i) => `«${i.title}»`).join(', ')} no sé`} en qué lista de ClickUp crearlo. Pregunta a Enric en cuál (por ejemplo: ${suggestLists(structure).join(' | ')}) y vuelve a llamarme con el mismo texto y «lista».${extra}`
+      );
+    }
+    const lists = new Map(allLists(structure).map((l) => [l.id, l.path]));
+    const summary = items
       .map((i) => `📝 <b>${escapeHtml(i.title)}</b>\n${[lists.get(i.listId) ?? '', i.clientName ?? '', i.assigneeName || 'sin asignar', i.dueDate || 'sin fecha', i.priority === 1 ? 'urgente' : ''].filter(Boolean).map(escapeHtml).join(' · ')}`)
       .join('\n\n');
-    return proposeOrRun(ctx, 'crear_encargo', summary, { items: valid, text, spaceId: space.id, requestedBy: ctx.actor.name });
+    const aside = notConverted.length ? `\n\n<i>No son encargos: ${escapeHtml(notConverted.join('; '))}</i>` : '';
+    return proposeOrRun(ctx, 'crear_encargo', summary + aside, { items, text, spaceId: space?.id ?? ALL_SPACES, requestedBy: ctx.actor.name });
   }
 };
 EXECUTORS.crear_encargo = async (tenantId, data, by) => {

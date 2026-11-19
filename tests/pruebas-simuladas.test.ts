@@ -1,10 +1,13 @@
 // Pruebas simuladas (19 nov 2026): los escenarios pasan en el entorno de pruebas, nada sale a internet (Telegram,
-// ClickUp, IA) y la cuenta real no recibe ni un encargo, aviso o cambio.
+// ClickUp, IA) y la cuenta real no recibe ni un encargo, aviso o cambio. Fase 2: jornada y tiempos con reloj simulado
+// (se encienden solo mientras corren), el escenario de ClickUp real fuera de «todas» y «Pedir una prueba».
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { eq, inArray } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { opsClickupOutbox, opsNotifications, opsRequests, opsSimEnvironments, opsSimMessages, opsSimRuns, opsTelegramConfig, tenants, users } from '@/lib/db/schema';
-import { ensureSimEnvironment, isSimTenant, simChatIds } from '@/lib/operaciones/sim/env';
+import { opsAutomations, opsClickupOutbox, opsNotifications, opsRequests, opsSimEnvironments, opsSimMessages, opsSimRuns, opsTelegramConfig, opsTelegramMembers, tenants, users } from '@/lib/db/schema';
+import { getAuto, saveAutomation } from '@/lib/operaciones/automations';
+import { addTestRequest, listTestRequests, markTestRequestsDone, TestRequestError, withdrawTestRequest } from '@/lib/operaciones/sim/requests';
+import { ensureSimEnvironment, isSimTenant, SIM_EMPLOYEE_ID, SIM_OWNER_ID, simChatIds } from '@/lib/operaciones/sim/env';
 import { runScenarios } from '@/lib/operaciones/sim/runner';
 import { SCENARIOS } from '@/lib/operaciones/sim/scenarios';
 import { tg, TelegramError } from '@/lib/operaciones/telegram';
@@ -64,10 +67,24 @@ describe('pruebas simuladas', () => {
     const failed = r.results.filter((x) => x.status !== 'ok').map((x) => `${x.key}: ${x.error}`);
     expect(r.error).toBeUndefined();
     expect(failed).toEqual([]);
-    expect(r.results).toHaveLength(SCENARIOS.length);
+    // «Todas» = las internas: el escenario que sale a ClickUp de verdad no entra (ni en las del despliegue).
+    const internal = SCENARIOS.filter((s) => !s.external);
+    expect(SCENARIOS.some((s) => s.external)).toBe(true);
+    expect(r.results.map((x) => x.key)).toEqual(internal.map((s) => s.key));
     const runs = await db.select().from(opsSimRuns).where(eq(opsSimRuns.tenantId, owner));
     expect(runs.every((x) => x.status === 'ok' && x.finishedAt)).toBe(true);
   }, 240_000);
+
+  it('jornada y tiempos vuelven a quedar apagadas en la cuenta de pruebas', async () => {
+    expect(await db.select().from(opsAutomations).where(eq(opsAutomations.tenantId, simTenant))).toHaveLength(0);
+    expect((await getAuto(simTenant, 'jornada')).enabled).toBe(false);
+  });
+
+  it('los miembros simulados tienen ids numéricos (los botones de jornada y tiempos los exigen)', async () => {
+    const ms = await db.select().from(opsTelegramMembers).where(eq(opsTelegramMembers.tenantId, simTenant));
+    expect(ms.map((m) => m.clickupUserId).sort()).toEqual([SIM_OWNER_ID, SIM_EMPLOYEE_ID].sort());
+    expect(ms.every((m) => /^\d+$/.test(m.clickupUserId))).toBe(true);
+  });
 
   it('no quedan avisos pendientes en la cuenta de pruebas (nadie más los enviaría)', async () => {
     const pend = (await db.select().from(opsNotifications).where(eq(opsNotifications.tenantId, simTenant))).filter((n) => n.status === 'pendiente');
@@ -103,5 +120,27 @@ describe('pruebas simuladas', () => {
       G.__kijuSimTelegram = saved;
     }
     expect(outside).toEqual([]);
+  });
+
+  it('Pedir una prueba: se guarda, se retira y pasa a hecha cuando su escenario existe', async () => {
+    await expect(addTestRequest(owner, 'corto', 'Enric')).rejects.toBeInstanceOf(TestRequestError);
+    const a = await addTestRequest(owner, 'Si pulsa Bloqueado y manda un audio, el bloqueo me llega con el audio transcrito', 'Enric');
+    const b = await addTestRequest(owner, 'Un encargo urgente fuera de horario me llega igualmente', 'Enric');
+    expect((await listTestRequests(owner)).filter((r) => r.status === 'pendiente')).toHaveLength(2);
+    await withdrawTestRequest(owner, b.id);
+    await expect(withdrawTestRequest(owner, b.id)).rejects.toBeInstanceOf(TestRequestError);
+    await markTestRequestsDone(owner, [{ requestId: a.id, scenarioKey: 'aviso-encargo' }]);
+    const list = await listTestRequests(owner);
+    expect(list.find((r) => r.id === a.id)).toMatchObject({ status: 'hecha', scenarioKey: 'aviso-encargo' });
+    expect(list.find((r) => r.id === b.id)?.status).toBe('retirada');
+  });
+
+  it('una automatización apagada de serie (jornada) se puede encender y apagar desde el panel', async () => {
+    const [u] = await db.select({ id: users.id }).from(users).where(eq(users.tenantId, owner));
+    expect((await getAuto(owner, 'jornada')).enabled).toBe(false);
+    expect(await saveAutomation(owner, u.id, 'jornada', { enabled: true })).toEqual({ ok: true });
+    expect((await getAuto(owner, 'jornada')).enabled).toBe(true);
+    expect(await saveAutomation(owner, u.id, 'jornada', { enabled: false })).toEqual({ ok: true });
+    expect((await getAuto(owner, 'jornada')).enabled).toBe(false);
   });
 });

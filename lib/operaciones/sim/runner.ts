@@ -1,7 +1,7 @@
 import 'server-only';
 // Ejecutor de pruebas simuladas (19 nov 2026): lanza escenarios en el entorno de pruebas, guarda cada ejecución
 // (pasos comprobados, error, quién la lanzó) y limpia lo antiguo. Lo usan Sistema → Pruebas, la ruta /api/pruebas/run
-// (scripts/run-scenarios.sh) y, más adelante, el despliegue.
+// (scripts/run-scenarios.sh) y el despliegue (deploy.sh las pasa tras verificar y vuelve atrás si fallan).
 // Aislamiento: todo pasa en la cuenta de pruebas; si un escenario falla o se cuelga, queda como «fallo» y no toca nada
 // de la cuenta real. Una sola tanda a la vez.
 import { and, asc, desc, eq, inArray, lt, sql } from 'drizzle-orm';
@@ -11,6 +11,7 @@ import { ensureSimEnvironment, simChatIds } from '@/lib/operaciones/sim/env';
 import { registerSimTransport, simRunContext } from '@/lib/operaciones/sim/transport';
 import { simLastId } from '@/lib/operaciones/sim/actor';
 import { SCENARIOS, StepFailed, type SimStep } from '@/lib/operaciones/sim/scenarios';
+import { markTestRequestsDone } from '@/lib/operaciones/sim/requests';
 
 const SCENARIO_TIMEOUT_MS = 60_000;
 const KEEP_RUNS_PER_SCENARIO = 30;
@@ -66,7 +67,8 @@ export async function runScenarios(
     await cleanup(ownerTenantId, env.simTenantId);
     const createdBy = await creatorFor(ownerTenantId);
     const ids = simChatIds(env.simTenantId);
-    const list = keys === 'all' ? SCENARIOS : SCENARIOS.filter((s) => keys.includes(s.key));
+    // «Todas» = las internas: el escenario que sale a ClickUp de verdad solo corre si se pide por su clave.
+    const list = keys === 'all' ? SCENARIOS.filter((s) => !s.external) : SCENARIOS.filter((s) => keys.includes(s.key));
     const results: RunSummary[] = [];
     for (const sc of list) {
       const [run] = await db
@@ -78,7 +80,7 @@ export async function runScenarios(
       try {
         const startId = await simLastId(env.simTenantId);
         await simRunContext.run({ runId: run.id }, () =>
-          withTimeout(sc.run({ simTenantId: env.simTenantId, emp: ids.employee, own: ids.owner, createdBy, startId, steps }), SCENARIO_TIMEOUT_MS)
+          withTimeout(sc.run({ ownerTenantId, simTenantId: env.simTenantId, emp: ids.employee, own: ids.owner, createdBy, startId, steps }), SCENARIO_TIMEOUT_MS)
         );
       } catch (e) {
         error = e instanceof StepFailed ? e.message : `Error inesperado: ${e instanceof Error ? e.message : String(e)}`;
@@ -88,6 +90,11 @@ export async function runScenarios(
       await db.update(opsSimRuns).set({ status, steps, error: error?.slice(0, 2000) ?? null, finishedAt: new Date() }).where(eq(opsSimRuns.id, run.id));
       results.push({ key: sc.key, title: sc.title, status, error, steps: steps.length, runId: run.id });
     }
+    // «Pedir una prueba»: la petición cuyo escenario ya existe (y se ha ejecutado) pasa a hecha.
+    await markTestRequestsDone(
+      ownerTenantId,
+      list.filter((s) => s.fromRequest).map((s) => ({ requestId: s.fromRequest!, scenarioKey: s.key }))
+    ).catch((e) => console.error('[operaciones] pruebas pedidas:', e instanceof Error ? e.message : e));
     return { ok: results.every((r) => r.status === 'ok'), results };
   } catch (e) {
     console.error('[operaciones] pruebas simuladas:', e instanceof Error ? e.message : e);
@@ -104,6 +111,8 @@ export type ScenarioView = {
   title: string;
   area: string;
   description: string;
+  external: boolean;
+  fromRequest: string | null;
   last: { id: string; status: string; startedAt: string; finishedAt: string | null; trigger: string; triggeredBy: string | null; error: string | null; steps: SimStep[] } | null;
   history: { id: string; status: string; startedAt: string }[];
 };
@@ -128,6 +137,8 @@ export async function getScenarioOverview(ownerTenantId: string): Promise<Scenar
       title: s.title,
       area: s.area,
       description: s.description,
+      external: Boolean(s.external),
+      fromRequest: s.fromRequest ?? null,
       last: mine[0] ? runView(mine[0]) : null,
       history: mine.slice(0, 10).map((r) => ({ id: r.id, status: r.status, startedAt: r.startedAt.toISOString() }))
     };

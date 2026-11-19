@@ -12,6 +12,8 @@
 #   4. guarda la imagen en marcha como kijutech-app:previous antes de compilar;
 #   5. si la verificación falla (web distinta de 200 o errores de JavaScript nuevos), vuelve sola a la imagen anterior
 #      (scripts/rollback.sh). Con --migrate no vuelve sola: la base ya cambió y lo decide Enric.
+#   6. pasa las pruebas simuladas EN PRODUCCIÓN (cuenta de pruebas aislada: nada sale a Telegram, ClickUp ni a la IA) y,
+#      si alguna falla, vuelve sola a la anterior igual que en el punto 5 (fase 2 de las pruebas, 19 nov 2026).
 #
 # Sin secretos: usa la clave SSH local (~/.ssh/kijutech_brain); el .env del servidor no se toca.
 set -euo pipefail
@@ -127,6 +129,21 @@ if [[ "$WEB" != "200" || "$JSERR" != "0" ]]; then
     bash scripts/rollback.sh || echo "✗ La vuelta atrás también falló: hay que mirarlo YA (bash scripts/server-status.sh --logs)." >&2
   else
     echo "✗ Con migración NO se vuelve atrás sola (la base ya cambió). Opciones: bash scripts/rollback.sh (solo código) o restaurar backups/backup_pre_deploy_${STAMP}.sql.gz. Lo decide Enric." >&2
+  fi
+  exit 1
+fi
+echo "→ Pruebas simuladas en producción (cuenta de pruebas aislada)"
+# Las mismas que Sistema → Pruebas, con el código y la base reales del servidor. Si alguna falla, la versión nueva rompe
+# un flujo que funcionaba: se vuelve a la anterior (sin migración) y el detalle queda en Sistema → Pruebas.
+if bash scripts/run-scenarios.sh --despliegue "$(git rev-parse --short main)" > "$TMP/sim.log" 2>&1; then
+  tail -1 "$TMP/sim.log" | sed 's/^/  /'
+else
+  grep -E '✗' "$TMP/sim.log" | head -12 | sed 's/^/  /' >&2
+  if [[ $MIGRATE -eq 0 ]]; then
+    echo "→ Una prueba simulada falla con la versión nueva: volviendo sola a la anterior" >&2
+    bash scripts/rollback.sh || echo "✗ La vuelta atrás también falló: hay que mirarlo YA (bash scripts/server-status.sh --logs)." >&2
+  else
+    echo "✗ Con migración NO se vuelve atrás sola. Mira Sistema → Pruebas; para volver: bash scripts/rollback.sh (solo código). Lo decide Enric." >&2
   fi
   exit 1
 fi

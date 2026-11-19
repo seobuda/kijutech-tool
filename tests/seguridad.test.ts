@@ -6,7 +6,7 @@ import { clientContacts, clientMemory, clients, opsInboundEmails, projects, user
 import { cleanupFixtures, createFixtures, emailFor, FIXTURE_PASSWORD, loginAs, PREFIX, type Fixtures } from './fixtures';
 
 import { aiProposeClient, applyClientProposal, saveClientOps } from '@/lib/operaciones/client-actions';
-import { createSimRequestAction, getPruebasAction, pressSimButtonAction, runScenariosAction, sendSimTextAction } from '@/lib/operaciones/sim/actions';
+import { addTestRequestAction, createSimRequestAction, getPruebasAction, pressSimButtonAction, runScenariosAction, sendSimTextAction, withdrawTestRequestAction } from '@/lib/operaciones/sim/actions';
 import { POST as pruebasRunPost } from '@/app/api/pruebas/run/route';
 import { deleteAnnotationAction, getClientPerformanceAction, getMonthlyReportAction, resyncClientAction, saveAnnotationAction, savePerfSettingsAction } from '@/lib/rendimiento/actions';
 import { errorBriefAction, requestDiagnosisAction, saveErrorNoteAction, saveErrorSettingsAction, setErrorStatusAction } from '@/app/(dashboard)/dashboard/errores/actions';
@@ -126,6 +126,8 @@ const ACCIONES_ADMIN: [string, () => unknown][] = [
   ['pressSimButtonAction (pruebas simuladas: pulsar)', () => pressSimButtonAction(1, 0, 0)],
   ['sendSimTextAction (pruebas simuladas: escribir)', () => sendSimTextAction('employee', 'x')],
   ['createSimRequestAction (pruebas simuladas: encargo)', () => createSimRequestAction('x', false)],
+  ['addTestRequestAction (pruebas simuladas: pedir una prueba)', () => addTestRequestAction('Un caso de prueba suficientemente largo')],
+  ['withdrawTestRequestAction (pruebas simuladas: retirar petición)', () => withdrawTestRequestAction('abcd1234')],
   ['setErrorStatusAction (errores: estado)', () => setErrorStatusAction(ZERO, 'resuelto')],
   ['saveErrorNoteAction (errores: nota)', () => saveErrorNoteAction(ZERO, 'x')],
   ['requestDiagnosisAction (errores: diagnóstico con IA)', () => requestDiagnosisAction(ZERO)],
