@@ -22,12 +22,24 @@ import {
   type ClientWithServices
 } from '@/lib/operaciones/clients';
 import { getWorkTypeOptions } from '@/lib/operaciones/work-types';
-import { clientFieldForList, getStructure, matchClientOption, validClient } from '@/lib/operaciones/structure';
+import { clientFieldForList, getStructure, matchClientOption, selectedSpaces, validClient } from '@/lib/operaciones/structure';
 import { buildDescription, fillTemplate, isOwnTask } from '@/lib/operaciones/format';
 import { publicError } from '@/lib/errors';
 import type { ProposalItem } from '@/lib/operaciones/note-types';
 
 export const NOTE_PROMPT_KEY = 'ops_note_to_requests';
+/** spaceId especial: las listas de TODOS los espacios seleccionados (para el agente, cuando no hay cliente que diga el espacio). */
+export const ALL_SPACES = '*';
+
+// Reglas que se añaden al prompt del panel (19 nov 2026). Un audio pidiendo «que Jesús se forme en datos estructurados»
+// acababa entero en no_convertido («tarea interna, no hay cliente») y el agente decía que no podía crearlo. El trabajo
+// interno de la agencia también es un encargo. Van en código para que valgan aunque se edite el prompt en el panel.
+export const AGENCY_WORK_RULES = `
+
+Reglas adicionales (siempre válidas):
+- Trabajo INTERNO de la agencia (formarse o investigar un tema, preparar procesos, plantillas, documentación o herramientas propias, tareas de Kijutech sin cliente): ES un encargo si alguien tiene que hacerlo. No lo mandes a no_convertido por no tener cliente: deja cliente vacío y elige la lista interna que mejor encaje (formación, interno, agencia, Kijutech…); si ninguna encaja, lista_id "" pero crea el encargo igualmente.
+- Las ideas a futuro y el contexto que acompañan a una petición van a no_convertido, pero la tarea principal que se pide hacer ahora nunca se pierde: siempre es un encargo.`;
+
 // Cada encargo ocupa ~400-600 tokens de salida: 8000 da para unos 12-15.
 const CONVERT_MAX_TOKENS = 8000;
 
@@ -98,7 +110,7 @@ function clientCardsPrompt(
   const listName = new Map(lists.map((l) => [l.id, `${l.folder ? `${l.folder} / ` : ''}${l.name}`]));
   const out: string[] = [];
   for (const c of clients) {
-    const usual = c.usualSpaceId === spaceId ? c.usualListIds.filter((id) => listName.has(id)) : [];
+    const usual = spaceId === ALL_SPACES || c.usualSpaceId === spaceId ? c.usualListIds.filter((id) => listName.has(id)) : [];
     if (c.aliases.length === 0 && usual.length === 0) continue;
     const lines = [`- ${c.clickupOptionLabel ?? c.name}`];
     if (c.aliases.length > 0) lines.push(`  también se le llama: ${c.aliases.join(', ')}`);
@@ -127,7 +139,10 @@ export async function proposeRequests(
   // Listas y miembros salen de la caché de la base de datos: convertir una nota NO llama a ClickUp.
   const structure = await getStructure(tenantId);
   const members = structure.members.map((m) => ({ id: Number(m.id), username: m.username }));
-  const lists = structure.spaces.find((s) => s.id === input.spaceId)?.lists ?? [];
+  // Un espacio, o todos los seleccionados (ALL_SPACES): entonces cada lista lleva delante el nombre de su espacio.
+  const spaces = input.spaceId === ALL_SPACES ? selectedSpaces(structure) : structure.spaces.filter((s) => s.id === input.spaceId);
+  const multi = spaces.length > 1;
+  const lists = spaces.flatMap((sp) => sp.lists.map((l) => (multi ? { ...l, folder: [sp.name, l.folder].filter(Boolean).join(' / ') } : l)));
   if (lists.length === 0) {
     throw new Error(
       'No hay listas de ese espacio en la caché. Comprueba en Ajustes que el espacio está seleccionado y pulsa «Actualizar desde ClickUp».'
@@ -172,7 +187,7 @@ export async function proposeRequests(
       promptKey: NOTE_PROMPT_KEY,
       maxTokens: CONVERT_MAX_TOKENS,
       messages: [
-        { role: 'system', content: prompt.system_prompt },
+        { role: 'system', content: prompt.system_prompt + AGENCY_WORK_RULES },
         { role: 'user', content: userPrompt }
       ]
     });
@@ -209,7 +224,7 @@ export async function proposeRequests(
   const memberNames = new Map(members.map((m) => [String(m.id), m.username]));
   const allOptions = Object.values(structure.clientFields).flatMap((f) => f.options);
   const usualLists = (c: ClientWithServices) =>
-    c.usualSpaceId === input.spaceId ? c.usualListIds.filter((id) => validListIds.has(id)) : [];
+    input.spaceId === ALL_SPACES || c.usualSpaceId === input.spaceId ? c.usualListIds.filter((id) => validListIds.has(id)) : [];
 
   const holidays = agencyHolidays(await getCalendar(tenantId)); // los plazos saltan los festivos de la agencia
   const items: ProposalItem[] = parsed.encargos.map((e) => {

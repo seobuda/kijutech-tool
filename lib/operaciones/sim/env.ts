@@ -9,22 +9,32 @@ import 'server-only';
 //   - «ClickUp» con token centinela «SIM:…»: cuFetch() falla al momento sin salir a internet;
 //   - IA bloqueada (ai_key_mode_allowed = byok_required sin clave propia): ninguna función de IA puede llamar fuera;
 //   - dos miembros simulados ya vinculados: «Kiju IA (pruebas)» (empleado) y «Dueño (simulado)»;
-//   - una lista simulada con sus estados mapeados (en curso / revisión / listo).
-import { and, eq } from 'drizzle-orm';
+//   - una lista simulada con sus estados mapeados (en curso / revisión / listo);
+//   - ficha de Equipo del empleado simulado (todos los días, sin comida ni silencio) y un tipo de tarea con margen, para
+//     las pruebas de jornada y tiempos. Jornada y tiempos están APAGADAS en la cuenta de pruebas: solo las encienden
+//     sus escenarios mientras corren (y las apagan al terminar).
+import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import {
   opsClickupConnections,
   opsSimEnvironments,
   opsStatusMap,
+  opsTeamProfiles,
   opsTelegramConfig,
   opsTelegramMembers,
+  opsWorkTypes,
   tenants
 } from '@/lib/db/schema';
 import { encrypt } from '@/lib/ai/encryption';
 import { SIM_TOKEN_PREFIX } from '@/lib/operaciones/telegram';
 
-export const SIM_OWNER_ID = 'sim-dueno';
-export const SIM_EMPLOYEE_ID = 'sim-ia';
+// Ids NUMÉRICOS, como los de ClickUp: los botones de jornada y tiempos (jw:…, tt:…, ttu:…) solo aceptan dígitos. Viven en
+// la cuenta de pruebas, así que no pueden chocar con una persona real. Hasta el 19 nov eran «sim-dueno» / «sim-ia»
+// (ensureSimEnvironment los sustituye).
+export const SIM_OWNER_ID = '9000001';
+export const SIM_EMPLOYEE_ID = '9000002';
+const OLD_SIM_IDS = ['sim-dueno', 'sim-ia'];
+export const SIM_WORK_TYPE = { key: 'sim-tarea', label: 'Tarea de prueba', minMinutes: 5, maxMinutes: 20 };
 export const SIM_LIST_ID = 'sim-lista';
 export const SIM_LIST_NAME = 'Pruebas simuladas';
 export const SIM_STATUSES = { inProgress: 'en curso', inReview: 'revisión', done: 'listo' };
@@ -79,7 +89,9 @@ export async function ensureSimEnvironment(ownerTenantId: string): Promise<SimEn
   await db.update(tenants).set({ aiKeyModeAllowed: 'byok_required' }).where(eq(tenants.id, t));
 
   const [conn] = await db.select({ id: opsClickupConnections.id }).from(opsClickupConnections).where(eq(opsClickupConnections.tenantId, t)).limit(1);
-  if (!conn) {
+  if (conn) {
+    await db.update(opsClickupConnections).set({ meClickupId: SIM_OWNER_ID }).where(eq(opsClickupConnections.tenantId, t));
+  } else {
     const k = encrypt(token);
     await db.insert(opsClickupConnections).values({
       tenantId: t,
@@ -109,6 +121,9 @@ export async function ensureSimEnvironment(ownerTenantId: string): Promise<SimEn
     await db.update(opsTelegramConfig).set({ receiveMode: 'simulado', webhookUrl: null, testMode: false }).where(eq(opsTelegramConfig.tenantId, t));
   }
 
+  // Miembros con los ids antiguos (no numéricos): fuera, para que cada chat simulado sea de una sola persona.
+  await db.delete(opsTelegramMembers).where(and(eq(opsTelegramMembers.tenantId, t), inArray(opsTelegramMembers.clickupUserId, OLD_SIM_IDS)));
+  await db.delete(opsTeamProfiles).where(and(eq(opsTeamProfiles.tenantId, t), inArray(opsTeamProfiles.clickupUserId, OLD_SIM_IDS)));
   for (const c of simChats(t)) {
     await db
       .insert(opsTelegramMembers)
@@ -118,6 +133,17 @@ export async function ensureSimEnvironment(ownerTenantId: string): Promise<SimEn
         set: { username: c.name, telegramChatId: c.chatId, linkCode: null, updatedAt: new Date() }
       });
   }
+
+  // Ficha del empleado simulado: trabaja todos los días, sin comida ni horas de silencio (nada retiene sus avisos). Los
+  // escenarios de jornada ajustan su hora de entrada.
+  await db
+    .insert(opsTeamProfiles)
+    .values({ tenantId: t, clickupUserId: SIM_EMPLOYEE_ID, name: 'Kiju IA (pruebas)', jobTitle: 'Empleado simulado', workDays: '1,2,3,4,5,6,7', workStart: '00:00', hoursPerDay: '8', timezone: 'Europe/Madrid' })
+    .onConflictDoNothing();
+  await db
+    .insert(opsWorkTypes)
+    .values({ tenantId: t, key: SIM_WORK_TYPE.key, label: SIM_WORK_TYPE.label, minMinutes: SIM_WORK_TYPE.minMinutes, maxMinutes: SIM_WORK_TYPE.maxMinutes })
+    .onConflictDoNothing();
 
   await db
     .insert(opsStatusMap)

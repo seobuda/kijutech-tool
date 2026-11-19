@@ -1,19 +1,22 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
-import { Bot, CheckCircle2, ChevronDown, CircleDashed, FlaskConical, Loader2, MessageSquareText, Play, Plus, Send, XCircle } from 'lucide-react';
+import { Bot, CheckCircle2, ChevronDown, CircleDashed, FlaskConical, Globe, Lightbulb, Loader2, MessageSquareText, Play, Plus, Send, Undo2, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge, EmptyState, Section, StatCard } from '@/components/ui/page';
 import { cn } from '@/lib/utils';
 import {
+  addTestRequestAction,
   createSimRequestAction,
   getPruebasAction,
   pressSimButtonAction,
   runScenariosAction,
-  sendSimTextAction
+  sendSimTextAction,
+  withdrawTestRequestAction
 } from '@/lib/operaciones/sim/actions';
 import type { ChatMessageView, ScenarioView } from '@/lib/operaciones/sim/runner';
+import type { TestRequest } from '@/lib/operaciones/sim/requests';
 
 type ChatKey = 'employee' | 'owner';
 type ChatInfo = { key: ChatKey; name: string; role: string };
@@ -47,8 +50,20 @@ function StatusIcon({ status, className }: { status: string | null; className?: 
   return <CircleDashed className={cn('size-4 text-muted-foreground', className)} aria-label="Sin ejecutar" />;
 }
 
-export function PruebasView({ initialScenarios, initialMessages, chats }: { initialScenarios: ScenarioView[]; initialMessages: ChatMessageView[]; chats: ChatInfo[] }) {
+export function PruebasView({
+  initialScenarios,
+  initialMessages,
+  initialRequests,
+  chats
+}: {
+  initialScenarios: ScenarioView[];
+  initialMessages: ChatMessageView[];
+  initialRequests: TestRequest[];
+  chats: ChatInfo[];
+}) {
   const [scenarios, setScenarios] = useState(initialScenarios);
+  const [requests, setRequests] = useState(initialRequests);
+  const [ask, setAsk] = useState('');
   const [messages, setMessages] = useState(initialMessages);
   const [chat, setChat] = useState<ChatKey>('employee');
   const [runFilter, setRunFilter] = useState<{ id: string; title: string } | null>(null);
@@ -67,6 +82,7 @@ export function PruebasView({ initialScenarios, initialMessages, chats }: { init
     if (r.ok) {
       setScenarios(r.scenarios);
       setMessages(r.messages);
+      setRequests(r.requests);
     }
   }, [chat, runFilter]);
 
@@ -158,7 +174,32 @@ export function PruebasView({ initialScenarios, initialMessages, chats }: { init
     });
   }
 
+  function addRequest() {
+    const t = ask.trim();
+    if (!t) return;
+    setError(null);
+    startTransition(async () => {
+      const r = await addTestRequestAction(t);
+      if (!r.ok) return setError(r.error);
+      setAsk('');
+      setRequests(r.requests);
+      setNotice('Petición guardada: Claude la convertirá en una prueba y aparecerá aquí como hecha.');
+    });
+  }
+
+  function withdraw(id: string) {
+    if (!window.confirm('¿Retirar esta petición? Ya no se convertirá en prueba.')) return;
+    setError(null);
+    startTransition(async () => {
+      const r = await withdrawTestRequestAction(id);
+      if (!r.ok) return setError(r.error);
+      setRequests(r.requests);
+    });
+  }
+
   const current = chats.find((c) => c.key === chat)!;
+  const titleOf = (key?: string) => scenarios.find((x) => x.key === key)?.title ?? key;
+  const pendingAsks = requests.filter((r) => r.status === 'pendiente').length;
 
   return (
     <div className="space-y-6">
@@ -169,7 +210,8 @@ export function PruebasView({ initialScenarios, initialMessages, chats }: { init
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
             Casos reales de punta a punta en un <b>entorno de pruebas aislado</b>: «Kiju IA (pruebas)» recibe los avisos y pulsa los botones como lo haría
-            una persona. Nada sale a Telegram, ClickUp ni a la IA, y nada aparece en tus resúmenes ni en los de tu equipo.
+            una persona. Nada sale a Telegram, ClickUp ni a la IA, y nada aparece en tus resúmenes ni en los de tu equipo. Se pasan solas después de
+            cada despliegue; si alguna falla, se vuelve a la versión anterior.
           </p>
         </div>
         <Button onClick={() => run('all', 'todas')} disabled={pending || Boolean(running)}>
@@ -190,6 +232,7 @@ export function PruebasView({ initialScenarios, initialMessages, chats }: { init
       )}
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)]">
+        <div className="min-w-0 space-y-6">
         <Section title="Escenarios" description="Cada uno es un caso completo; el resultado es el de su última ejecución.">
           {scenarios.length === 0 ? (
             <EmptyState icon={FlaskConical} title="Aún no hay escenarios" />
@@ -208,8 +251,13 @@ export function PruebasView({ initialScenarios, initialMessages, chats }: { init
                             <div className="flex items-start gap-3">
                               <StatusIcon status={s.last?.status ?? null} className="mt-0.5 shrink-0" />
                               <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setOpen(isOpen ? null : s.key)} aria-expanded={isOpen}>
-                                <span className="flex items-center gap-1 font-medium">
+                                <span className="flex flex-wrap items-center gap-1 font-medium">
                                   {s.title}
+                                  {s.external && (
+                                    <Badge tone="warning" className="gap-1">
+                                      <Globe className="size-3" aria-hidden /> ClickUp real
+                                    </Badge>
+                                  )}
                                   <ChevronDown className={cn('size-4 shrink-0 text-muted-foreground transition-transform', isOpen && 'rotate-180')} aria-hidden />
                                 </span>
                                 <span className="block text-xs text-muted-foreground">
@@ -230,6 +278,9 @@ export function PruebasView({ initialScenarios, initialMessages, chats }: { init
                             {isOpen && (
                               <div className="mt-3 space-y-3 pl-7">
                                 <p className="text-sm text-muted-foreground">{s.description}</p>
+                                {s.external && (
+                                  <p className="text-xs text-muted-foreground">No entra en «Ejecutar todas» ni en las pruebas del despliegue: usa ▶ para lanzarla.</p>
+                                )}
                                 {s.last ? (
                                   <>
                                     {s.last.error && <p className="rounded-md bg-destructive-soft px-2 py-1 text-sm text-destructive">{s.last.error}</p>}
@@ -262,6 +313,57 @@ export function PruebasView({ initialScenarios, initialMessages, chats }: { init
             </div>
           )}
         </Section>
+
+        <Section
+          title="Pedir una prueba"
+          description="Describe un caso que quieras ver probado: qué haces, qué debería pasar y qué no. Claude lo convierte en un escenario y aparece arriba."
+        >
+          <form
+            className="space-y-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              addRequest();
+            }}
+          >
+            <textarea
+              value={ask}
+              onChange={(e) => setAsk(e.target.value)}
+              rows={3}
+              maxLength={2000}
+              placeholder="Ej.: si alguien pulsa «Bloqueado» y escribe un audio en vez de texto, el bloqueo debe llegarme igual con el audio transcrito."
+              className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+              aria-label="Caso que quieres probar"
+            />
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs text-muted-foreground">{pendingAsks ? `${pendingAsks} pendiente${pendingAsks === 1 ? '' : 's'} de convertir` : 'Sin peticiones pendientes'}</span>
+              <Button type="submit" size="sm" disabled={pending || ask.trim().length < 10}>
+                <Lightbulb /> Pedir
+              </Button>
+            </div>
+          </form>
+          {requests.length > 0 && (
+            <ul className="mt-3 divide-y rounded-lg border">
+              {requests.map((r) => (
+                <li key={r.id} className="flex items-start gap-3 p-3 text-sm">
+                  <div className="min-w-0 flex-1">
+                    <p className={cn('whitespace-pre-wrap break-words', r.status === 'retirada' && 'text-muted-foreground line-through')}>{r.text}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {r.by} · {ago(r.at)}
+                      {r.status === 'hecha' && r.scenarioKey && <> · prueba: «{titleOf(r.scenarioKey)}»</>}
+                    </p>
+                  </div>
+                  <Badge tone={r.status === 'hecha' ? 'success' : r.status === 'pendiente' ? 'info' : 'neutral'}>{r.status === 'hecha' ? 'Hecha' : r.status === 'pendiente' ? 'Pendiente' : 'Retirada'}</Badge>
+                  {r.status === 'pendiente' && (
+                    <Button size="sm" variant="ghost" onClick={() => withdraw(r.id)} disabled={pending} aria-label="Retirar la petición">
+                      <Undo2 />
+                    </Button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
+        </div>
 
         <section aria-label="Telegram simulado" className="flex min-h-[560px] flex-col overflow-hidden rounded-xl border bg-card lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)]">
           <div className="border-b p-3">

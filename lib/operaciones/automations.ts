@@ -496,7 +496,9 @@ export async function saveAutomation(
   if (input.enabled !== undefined && key !== 'watch') {
     if (!def.canDisable && !input.enabled) return { ok: false, error: 'Esta automatización no se puede apagar' };
     if (input.enabled !== current.enabled) log.push({ field: 'enabled', old: current.enabled ? 'encendida' : 'apagada', neu: input.enabled ? 'encendida' : 'apagada' });
-    enabled = input.enabled === true ? null : false;
+    // null = «como venga por defecto». Para las que vienen APAGADAS (jornada, tiempos) encender tiene que guardar true:
+    // antes se guardaba null siempre al encender y se leían apagadas igual (lo encontró la prueba simulada, 19 nov 2026).
+    enabled = input.enabled === (def.defaultEnabled ?? true) ? null : input.enabled;
   }
   if (input.config) {
     for (const f of def.fields) {

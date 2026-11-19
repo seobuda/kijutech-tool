@@ -4,6 +4,9 @@
 #   bash scripts/run-scenarios.sh                 todas, en PRODUCCIÓN (cuenta de pruebas aislada)
 #   bash scripts/run-scenarios.sh clave1 clave2   solo esas
 #   bash scripts/run-scenarios.sh --local [...]   en el contenedor local
+#   bash scripts/run-scenarios.sh --despliegue <commit>   las de después de desplegar (las lanza deploy.sh)
+#
+# «Todas» son las internas: clickup-real (ClickUp de verdad, lista «Pruebas Kiju») solo corre si se nombra.
 #
 # Llama a /api/pruebas/run desde dentro del contenedor de la app, con el secreto derivado de AUTH_SECRET (que nunca sale
 # del contenedor). Todo lo simulado vive en la cuenta de pruebas: nada sale a Telegram, ClickUp ni a la IA.
@@ -11,14 +14,20 @@
 set -uo pipefail
 
 LOCAL=0
+EXTRA=""
 if [[ "${1:-}" == "--local" ]]; then LOCAL=1; shift; fi
+if [[ "${1:-}" == "--despliegue" ]]; then
+  [[ "${2:-}" =~ ^[0-9a-f]{4,40}$ ]] || { echo "✗ --despliegue necesita el commit" >&2; exit 2; }
+  EXTRA=",\"trigger\":\"despliegue\",\"commit\":\"$2\""
+  shift 2
+fi
 KEYS="$*"
 
-# JSON del cuerpo (claves solo con letras, números y guiones).
-BODY='{}'
+# JSON del cuerpo (claves solo con letras, números y guiones; el commit, solo hexadecimal).
+BODY="{\"v\":1$EXTRA}"
 if [[ -n "$KEYS" ]]; then
   for k in $KEYS; do [[ "$k" =~ ^[a-z0-9-]+$ ]] || { echo "✗ Clave no válida: $k" >&2; exit 2; }; done
-  BODY="{\"scenarios\":[\"$(echo $KEYS | sed 's/ /","/g')\"]}"
+  BODY="{\"scenarios\":[\"$(echo $KEYS | sed 's/ /","/g')\"]$EXTRA}"
 fi
 
 NODE_SCRIPT='

@@ -10,6 +10,7 @@ import { simPressAt, simSay } from '@/lib/operaciones/sim/actor';
 import { createSimRequest } from '@/lib/operaciones/sim/scenarios';
 import { processNotifications } from '@/lib/operaciones/notifications';
 import { registerSimTransport } from '@/lib/operaciones/sim/transport';
+import { addTestRequest, listTestRequests, TestRequestError, withdrawTestRequest, type TestRequest } from '@/lib/operaciones/sim/requests';
 
 type Fail = { ok: false; error: string };
 type ChatKey = 'employee' | 'owner';
@@ -39,16 +40,17 @@ export async function runScenariosAction(keys: string[] | 'all'): Promise<{ ok: 
   }
 }
 
-export async function getPruebasAction(chat: ChatKey, runId: string | null): Promise<{ ok: true; scenarios: ScenarioView[]; messages: ChatMessageView[] } | Fail> {
+export async function getPruebasAction(chat: ChatKey, runId: string | null): Promise<{ ok: true; scenarios: ScenarioView[]; messages: ChatMessageView[]; requests: TestRequest[] } | Fail> {
   try {
     const user = await requirePermission('admin');
     const { env, chats } = await envFor(user.tenantId);
     const c = chats.find((x) => x.key === chat) ?? chats[0];
-    const [scenarios, messages] = await Promise.all([
+    const [scenarios, messages, requests] = await Promise.all([
       getScenarioOverview(user.tenantId),
-      getSimChat(env.simTenantId, c.chatId, { runId: runId && /^[0-9a-f-]{36}$/i.test(runId) ? runId : null })
+      getSimChat(env.simTenantId, c.chatId, { runId: runId && /^[0-9a-f-]{36}$/i.test(runId) ? runId : null }),
+      listTestRequests(user.tenantId)
     ]);
-    return { ok: true, scenarios, messages };
+    return { ok: true, scenarios, messages, requests };
   } catch (e) {
     return { ok: false, error: publicError(e, 'No se pudieron cargar las pruebas') };
   }
@@ -106,5 +108,26 @@ export async function createSimRequestAction(title: string, urgent: boolean): Pr
     return { ok: true };
   } catch (e) {
     return { ok: false, error: publicError(e, 'No se pudo crear el encargo de prueba') };
+  }
+}
+
+/** «Pedir una prueba»: describe un caso para que Claude lo convierta en escenario. */
+export async function addTestRequestAction(text: string): Promise<{ ok: true; requests: TestRequest[] } | Fail> {
+  try {
+    const user = await requirePermission('admin');
+    await addTestRequest(user.tenantId, String(text ?? ''), user.name ?? user.email);
+    return { ok: true, requests: await listTestRequests(user.tenantId) };
+  } catch (e) {
+    return { ok: false, error: e instanceof TestRequestError ? e.message : publicError(e, 'No se pudo guardar la petición') };
+  }
+}
+
+export async function withdrawTestRequestAction(id: string): Promise<{ ok: true; requests: TestRequest[] } | Fail> {
+  try {
+    const user = await requirePermission('admin');
+    await withdrawTestRequest(user.tenantId, String(id ?? '').slice(0, 20));
+    return { ok: true, requests: await listTestRequests(user.tenantId) };
+  } catch (e) {
+    return { ok: false, error: e instanceof TestRequestError ? e.message : publicError(e, 'No se pudo retirar') };
   }
 }

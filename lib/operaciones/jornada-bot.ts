@@ -88,14 +88,26 @@ export function statusText(day: PersonDay, quotaMin: number): string {
  * «¿Empezamos?», con un botón por tarea. Las tareas viajan en el aviso (payload.jwTasks) para saber su
  * nombre al pulsar sin volver a preguntar a ClickUp.
  */
+/** Tareas de hoy del equipo, o null si ClickUp no responde: los buenos días y «¿con qué sigues?» salen igual, sin la
+ *  lista de tareas (antes un fallo de ClickUp se llevaba por delante el mensaje entero). También es lo que ve el entorno
+ *  de pruebas simuladas, que no tiene ClickUp de verdad. */
+async function teamTodaySafe(tenantId: string) {
+  try {
+    return await getTeamToday(tenantId);
+  } catch (e) {
+    console.error('[jornada] tareas de hoy sin ClickUp:', e instanceof Error ? e.message : e);
+    return null;
+  }
+}
+
 export async function buildStartPrompt(
   tenantId: string,
   person: Person,
   tz: string,
   kind: 'welcome' | 'ping' | 'later'
 ): Promise<{ text: string; buttons: Btn[][]; jwTasks: { id: string; name: string }[] }> {
-  const data = await getTeamToday(tenantId);
-  const b = data.members.find((x) => x.member.id === person.clickupUserId) ?? { member: { id: person.clickupUserId, username: person.name }, overdue: [], today: [] };
+  const data = await teamTodaySafe(tenantId);
+  const b = data?.members.find((x) => x.member.id === person.clickupUserId) ?? { member: { id: person.clickupUserId, username: person.name }, overdue: [], today: [] };
   const tasks = [...b.today, ...b.overdue].slice(0, 6);
   const head =
     kind === 'welcome'
@@ -125,8 +137,8 @@ export async function buildSwitchPrompt(
   excludeTaskId: string | null,
   afterDone: boolean
 ): Promise<{ text: string; buttons: Btn[][]; jwTasks: { id: string; name: string }[] }> {
-  const data = await getTeamToday(tenantId);
-  const b = data.members.find((x) => x.member.id === person.clickupUserId);
+  const data = await teamTodaySafe(tenantId);
+  const b = data?.members.find((x) => x.member.id === person.clickupUserId);
   const fromToday = b ? [...b.today, ...b.overdue].map((t) => ({ id: t.id, name: t.name })) : [];
   const open = await db
     .select({ id: opsRequests.clickupTaskId, name: opsRequests.title })
