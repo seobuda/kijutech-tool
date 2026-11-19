@@ -66,8 +66,8 @@ export type Snapshot = {
   restoreTest?: { ageD: number; ok: boolean; detail: string } | null;
   // Vigilante externo (cron del servidor): cuándo se ejecutó por última vez y si tiene su configuración (D12).
   watchdog?: { ageMin: number; configured: boolean } | null;
-  /** En producción (BASE_URL con https) debe haber vigilante: si nunca ha dejado constancia, se avisa. */
-  watchdogExpected?: boolean;
+  /** En producción (BASE_URL con https) debe haber vigilante, copia diaria y prueba de restauración: si nunca han dejado constancia, se avisa (18 nov 2026: antes no salía nada). */
+  production?: boolean;
   emailsToday?: number | null; // correos del buzón del agente hoy (entrada + salida, aproximado); plan gratuito: 100/día
   // Servidor (DigitalOcean, de la caché horaria de infra-watch): memoria p95 de 24 h y carga p95 por CPU.
   serverMem?: { p95: number; max: number; limit: number; upgrade: string | null } | null;
@@ -192,6 +192,8 @@ export function evaluate(s: Snapshot): Check[] {
     if (s.backupAgeH > 50) add('copia', 'Copia de seguridad', 'critico', `La última copia diaria es de hace ${Math.round(s.backupAgeH)} h.`, 'La copia de las 03:00 lleva más de dos días sin hacerse: revisa el cron del servidor y /opt/kijutech/backups.');
     else if (s.backupAgeH > 27) add('copia', 'Copia de seguridad', 'aviso', `La última copia diaria es de hace ${Math.round(s.backupAgeH)} h.`, 'La copia de esta madrugada no se ha registrado: revisa el cron del servidor.');
     else add('copia', 'Copia de seguridad', 'ok', `Última copia hace ${Math.round(s.backupAgeH)} h.`);
+  } else if (s.production) {
+    add('copia', 'Copia de seguridad', 'critico', 'No consta ninguna copia diaria hecha por scripts/backup.sh.', 'Revisa en el servidor que el cron de las 03:00 llame a /opt/kijutech/scripts/backup.sh (no al script antiguo) y que tenga permiso de ejecución (docs/DESPLIEGUE.md).');
   }
 
   if (s.emailsToday != null) {
@@ -220,6 +222,8 @@ export function evaluate(s: Snapshot): Check[] {
     if (!r.ok) add('restauracion', 'Prueba de restauración', 'critico', `La última prueba falló: ${r.detail}`, 'La copia podría no servir. Revisa /opt/kijutech/backups/restore-test.log y vuelve a lanzar scripts/restore-test.sh.');
     else if (r.ageD > 40) add('restauracion', 'Prueba de restauración', 'aviso', `La última prueba buena es de hace ${Math.round(r.ageD)} días.`, 'Revisa el cron mensual de scripts/restore-test.sh en el servidor.');
     else add('restauracion', 'Prueba de restauración', 'ok', `Hace ${Math.round(r.ageD)} días: ${r.detail}`);
+  } else if (s.production) {
+    add('restauracion', 'Prueba de restauración', 'aviso', 'No consta ninguna prueba de restauración de la copia.', 'Revisa el cron mensual de scripts/restore-test.sh en el servidor, o lánzalo a mano una vez.');
   }
 
   // D12: sin watchdog.env (o con el cron parado) el vigilante externo callaba; ahora deja constancia en cada ejecución.
@@ -228,7 +232,7 @@ export function evaluate(s: Snapshot): Check[] {
     if (!w.configured) add('vigilante', 'Vigilante externo', 'aviso', 'Se ejecuta, pero le falta /opt/kijutech/watchdog.env: si la herramienta se cae, nadie avisará.', 'Regenera el archivo con scripts/watchdog-env.mjs (pasos en docs/DESPLIEGUE.md).');
     else if (w.ageMin > 20) add('vigilante', 'Vigilante externo', 'aviso', `No se ejecuta desde hace ${Math.round(w.ageMin)} min (debería cada 5).`, 'Revisa el cron de scripts/watchdog.sh en el servidor.');
     else add('vigilante', 'Vigilante externo', 'ok', `Última comprobación hace ${Math.round(w.ageMin)} min.`);
-  } else if (s.watchdogExpected) {
+  } else if (s.production) {
     add('vigilante', 'Vigilante externo', 'aviso', 'No consta ninguna ejecución del vigilante: si la herramienta se cae, nadie avisará.', 'Revisa en el servidor que el cron llame a scripts/watchdog.sh y que el script tenga permiso de ejecución (docs/DESPLIEGUE.md).');
   }
 
@@ -355,7 +359,7 @@ export async function collectSnapshot(tenantId: string): Promise<Snapshot> {
     backupAgeH: Number.isFinite(backupMs) ? (Date.now() - backupMs) / 3_600_000 : null,
     emailsToday: Number(mail?.n ?? 0),
     ...(await serverFromCache(tenantId)),
-    watchdogExpected: (process.env.BASE_URL ?? '').startsWith('https://'),
+    production: (process.env.BASE_URL ?? '').startsWith('https://'),
     watchdog: Number.isFinite(watchdogAt) ? { ageMin: (Date.now() - watchdogAt) / 60_000, configured: watchdogStatus !== 'sin_config' } : null,
     restoreTest: Number.isFinite(restoreAt) ? { ageD: (Date.now() - restoreAt) / 86_400_000, ok: restoreStatus === 'ok', detail: restoreDetail.join('|') } : null,
     heartbeatAgeS: await heartbeatAgeS(tenantId),
