@@ -741,7 +741,7 @@ const iaLlamada: AgentTool = {
       : await db
           .select(cols)
           .from(aiJobs)
-          .where(and(eq(aiJobs.tenantId, ctx.tenantId), or(eq(aiJobs.status, 'failed'), sql`coalesce(${aiJobs.output}->>'content', '') = '' AND ${aiJobs.status} = 'completed'`)))
+          .where(and(eq(aiJobs.tenantId, ctx.tenantId), or(eq(aiJobs.status, 'failed'), sql`coalesce(${aiJobs.output}->>'content', '') = '' AND ${aiJobs.output}->>'purgado' IS NULL AND ${aiJobs.status} = 'completed'`)))
           .orderBy(desc(aiJobs.createdAt))
           .limit(10);
     if (!rows.length) return { ok: true, content: 'No hay llamadas con ese criterio.' };

@@ -315,6 +315,17 @@ export const AUTOMATIONS: AutomationDef[] = [
     }
   },
   {
+    key: 'retention',
+    title: 'Limpieza de registros antiguos',
+    what: 'Una vez por semana (domingo de madrugada) borra los registros que ya no sirven: avisos de Telegram enviados, cambios hechos en ClickUp, historial de pulsaciones, correos recibidos ya resueltos y mensajes de conversaciones con agentes, más antiguos que la retención. De los trabajos de IA guarda siempre el coste y los tokens, y solo vacía el texto enviado y recibido. No toca encargos, clientes, fichas, memoria, planes ni informes.',
+    canDisable: true,
+    fields: [
+      { key: 'logMonths', label: 'Guardar los registros', type: 'number', unit: 'meses', min: 3, max: 36, default: 6, help: 'Los informes y el piloto automático miran como mucho 2 meses atrás' },
+      { key: 'aiTextDays', label: 'Guardar el texto de los trabajos de IA', type: 'number', unit: 'días', min: 30, max: 365, default: 90, help: 'Prompts y respuestas completos; el coste y los tokens se guardan siempre' }
+    ],
+    testNote: 'No envía mensajes por sí misma: la prueba te confirma su estado y su configuración. El resultado de la última limpieza sale en el Mapa Visual.'
+  },
+  {
     key: 'delivery',
     title: 'Envío y respuestas por Telegram',
     what: 'Reintenta los avisos que fallan y da un tiempo para contestar cuando el bot te pide una nota o una respuesta.',

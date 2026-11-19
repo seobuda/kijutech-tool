@@ -170,3 +170,27 @@ describe('auditoría de lo que se ha cerrado', () => {
     expect(fallos).toEqual([]);
   });
 });
+
+// S7 (política de borrados, aprobada por Enric el 19 nov 2026): el editor borra lo que también añade un editor
+// (locales, cuentas, competidores, palabras clave, URLs y anotaciones); contactos, memoria del cliente y la ficha
+// entera solo los borra un administrador.
+describe('política de borrados (S7)', () => {
+  const POLITICA: [string, string, 'edit' | 'admin'][] = [
+    ['lib/core/client-actions.ts', 'deleteClientAction', 'admin'],
+    ['lib/core/client-actions.ts', 'deleteContactAction', 'admin'],
+    ['lib/core/client-memory-actions.ts', 'deleteClientMemory', 'admin'],
+    ['lib/core/client-actions.ts', 'deleteLocationAction', 'edit'],
+    ['lib/core/client-actions.ts', 'deleteAssetAction', 'edit'],
+    ['lib/core/client-actions.ts', 'deleteCompetitorAction', 'edit'],
+    ['lib/estrategia/actions.ts', 'deleteKeywordAction', 'edit'],
+    ['lib/estrategia/actions.ts', 'deleteTrackedUrlAction', 'edit'],
+    ['lib/rendimiento/actions.ts', 'deleteAnnotationAction', 'edit']
+  ];
+  it.each(POLITICA)('%s · %s pide «%s»', (file, fn, level) => {
+    const src = read(path.join(ROOT, file));
+    const start = src.indexOf(`export async function ${fn}(`);
+    expect(start).toBeGreaterThan(-1);
+    const body = src.slice(start, start + 400);
+    expect(body).toContain(`requirePermission('${level}')`);
+  });
+});

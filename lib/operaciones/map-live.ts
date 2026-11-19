@@ -27,6 +27,23 @@ type Agg = { kind?: string; last_ok: Date | null; failed: number; err: string | 
 
 const ms = (d: Date | string | null | undefined) => (d ? new Date(d).getTime() : null);
 
+function retentionRun(raw: string): LiveRun {
+  let r: { at?: string; ok?: boolean; aiJobs?: number; notifications?: number; outbox?: number; events?: number; emails?: number; modules?: Record<string, number>; error?: string } | null = null;
+  try {
+    r = raw ? JSON.parse(raw) : null;
+  } catch {
+    r = null;
+  }
+  if (!r?.at) return { label: 'Última limpieza', at: null, error: null, note: 'Aún no se ha hecho ninguna (domingo desde las 05:00)' };
+  const mods = Object.values(r.modules ?? {}).reduce((n, x) => n + x, 0);
+  return {
+    label: 'Última limpieza',
+    at: ms(r.at),
+    error: r.ok === false ? r.error ?? 'Falló sin detalle' : null,
+    note: `Textos de IA vaciados: ${r.aiJobs ?? 0} · avisos: ${r.notifications ?? 0} · ClickUp: ${r.outbox ?? 0} · eventos: ${r.events ?? 0} · correos: ${r.emails ?? 0} · otros módulos: ${mods}`
+  };
+}
+
 export async function getMapLive(tenantId: string): Promise<LiveData> {
   const autos = await getAutoAll(tenantId);
   const automations: LiveData['automations'] = {};
@@ -52,7 +69,7 @@ export async function getMapLive(tenantId: string): Promise<LiveData> {
   const settings = await db
     .select()
     .from(opsSettings)
-    .where(and(eq(opsSettings.tenantId, tenantId), inArray(opsSettings.key, ['client_activity_last_run', 'client_activity_last_error', 'worker_heartbeat'])));
+    .where(and(eq(opsSettings.tenantId, tenantId), inArray(opsSettings.key, ['client_activity_last_run', 'client_activity_last_error', 'worker_heartbeat', 'retention_last'])));
   const setting = (k: string) => settings.find((s) => s.key === k)?.value ?? '';
 
   const notif = (await db.execute(sql`
@@ -123,6 +140,7 @@ export async function getMapLive(tenantId: string): Promise<LiveData> {
       error: activityErr || null,
       note: null
     },
+    retention: retentionRun(setting('retention_last')),
     digest: byKind(['digest']),
     daily: byKind(['daily_summary']),
     reminders: byKind(['reminder']),
