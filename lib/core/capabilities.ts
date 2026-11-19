@@ -169,6 +169,32 @@ export async function runScheduled(tenantId: string): Promise<void> {
   }
 }
 
+// --- Retención de datos (D5, 19 nov 2026) ------------------------------------------------------------------------
+// La limpieza semanal (Operaciones, lib/operaciones/retention.ts) decide la fecha de corte; cada módulo borra lo suyo
+// anterior a esa fecha sin que Operaciones conozca sus tablas (Agentes: mensajes de conversaciones).
+
+type RetentionFn = (tenantId: string, cutoff: Date) => Promise<number>;
+const GR = globalThis as unknown as { __kijuRetention?: Map<string, RetentionFn> };
+
+/** Un módulo registra cómo borrar sus registros anteriores a la fecha de corte; devuelve cuántas filas borró. */
+export function registerRetention(name: string, fn: RetentionFn): void {
+  if (!GR.__kijuRetention) GR.__kijuRetention = new Map();
+  GR.__kijuRetention.set(name, fn);
+}
+
+/** Lo llama la limpieza semanal: cada módulo aislado (un fallo no para los demás). Devuelve las filas por módulo. */
+export async function runRetention(tenantId: string, cutoff: Date): Promise<Record<string, number>> {
+  const out: Record<string, number> = {};
+  for (const [name, fn] of GR.__kijuRetention ?? []) {
+    try {
+      out[name] = await fn(tenantId, cutoff);
+    } catch (e) {
+      console.error(`[núcleo] retención ${name}:`, e instanceof Error ? e.message : e);
+    }
+  }
+  return out;
+}
+
 // --- Clientes del núcleo: lo que cada módulo aporta (14 nov 2026) -------------------------------------------------
 // Un módulo puede impedir que se borre un cliente (p. ej. Operaciones si tiene encargos): devuelve el motivo o null.
 export type ClientDeleteGuard = (tenantId: string, clientId: string) => Promise<string | null>;

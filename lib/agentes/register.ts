@@ -4,7 +4,10 @@ import 'server-only';
 //   - atiende los mensajes libres de Telegram y correo del dueño (agente principal);
 //   - publica sus herramientas: trabajos de subagentes e integraciones (DataForSEO, Clarity, Google);
 //   - programa los trabajos de los subagentes en el planificador.
-import { registerAssetDirectory, registerMetricSource, registerScheduled, registerTools, setAgentJobCreator, setInboundHandler, type AgentTool, type ToolContext } from '@/lib/core/capabilities';
+import { registerAssetDirectory, registerMetricSource, registerRetention, registerScheduled, registerTools, setAgentJobCreator, setInboundHandler, type AgentTool, type ToolContext } from '@/lib/core/capabilities';
+import { and, eq, lt } from 'drizzle-orm';
+import { db } from '@/lib/db/drizzle';
+import { agtMessages } from '@/lib/db/schema';
 import { GOOGLE_METRIC_SOURCE, normalizeGoogleProperty } from '@/lib/agentes/metrics';
 import { findCoreClient, primaryAsset } from '@/lib/core/clients';
 import { handleInbound } from '@/lib/agentes/inbound';
@@ -213,6 +216,12 @@ export function registerAgentesCapabilities(): void {
   // (avisos, bandeja de ClickUp, latido de salud → falsa alarma de «herramienta caída»). runAgentJobs ya tiene su candado.
   registerScheduled('trabajos de subagentes', async (tenantId) => {
     void runAgentJobs(tenantId).catch((e) => console.error('[agentes] trabajos de subagentes:', e instanceof Error ? e.message : e));
+  });
+  // Limpieza semanal (D5): los mensajes de conversaciones más antiguos que la retención del panel. La conversación queda,
+  // vacía de lo antiguo; la memoria de cliente y las fichas no se tocan.
+  registerRetention('agentes: mensajes', async (tenantId, cutoff) => {
+    const r = await db.delete(agtMessages).where(and(eq(agtMessages.tenantId, tenantId), lt(agtMessages.createdAt, cutoff))).returning({ id: agtMessages.id });
+    return r.length;
   });
   // El núcleo (registro de errores) encarga diagnósticos al Técnico de mantenimiento sin importar este módulo.
   setAgentJobCreator(async (r) => {

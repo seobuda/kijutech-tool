@@ -367,9 +367,11 @@ describe('circuito de tiempos de tarea (persona y sistema)', () => {
     at(70);
     await press(`jw:so:-:${EMP}`);
     await say('Reunión con el cliente');
+    // Sin ORDER BY el «último» de la lista dependía del orden físico de las filas y fallaba a veces con la batería
+    // completa (19 nov): se busca el evento por lo que tiene que ser.
     const evs = await db.select().from(opsWorkEvents).where(eq(opsWorkEvents.tenantId, h.tenant));
-    expect(evs.at(-1)?.kind).toBe('tarea');
-    expect((evs.at(-1)?.task as { name: string }).name).toBe('Reunión con el cliente');
+    const ev = evs.find((e) => e.kind === 'tarea' && (e.task as { name?: string } | null)?.name === 'Reunión con el cliente');
+    expect(ev).toBeTruthy();
     expect((await times()).filter((r) => r.status === 'abierta')).toHaveLength(0);
   });
 

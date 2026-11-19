@@ -308,7 +308,10 @@ export const aiJobs = pgTable('ai_jobs', {
   estimatedCost: decimal('estimated_cost', { precision: 10, scale: 6 }),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   completedAt: timestamp('completed_at'),
-});
+}, (table) => [
+  // D4 (19 nov 2026): el vigía de IA y Salud la recorren por cuenta y fecha cada pocos minutos.
+  index('ai_jobs_tenant_created_idx').on(table.tenantId, table.createdAt),
+]);
 
 export const aiPrompts = pgTable('ai_prompts', {
   id: uuid('id').primaryKey().defaultRandom(),
