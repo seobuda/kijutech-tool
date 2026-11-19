@@ -86,6 +86,14 @@ Comprobaciones hechas:
 - `tsc`: sin errores.
 - `node scripts/check-architecture-map.js`: OK (41 tablas, 109 pasos; mapa actualizado).
 
+## Después del despliegue (19 nov, 13:30)
+- Desplegado con `deploy.sh --migrate` (55 migraciones) y **10 de 10 escenarios correctos en producción** con `bash scripts/run-scenarios.sh`.
+- `scripts/server-status.sh` y la verificación de `deploy.sh`:
+  - excluyen la cuenta de pruebas (el bot simulado y sus avisos);
+  - el estado muestra el detalle de los avisos pendientes (próximo intento, intentos, error) y el resumen de las pruebas simuladas.
+- Los 2 avisos pendientes que se vieron eran de la cuenta real: «Sistema en marcha» retenidos por la hora de comida o silencio de la ficha del dueño. Es el comportamiento previsto.
+- Un «Failed to find Server Action» en los logs justo tras desplegar viene de una pestaña abierta con la versión anterior. Desaparece al recargar.
+
 ## Pendientes detectados
 - **Fase 2:**
   - pruebas de humo tras cada despliegue (`deploy.sh` → `run-scenarios.sh` → vuelta atrás si fallan);

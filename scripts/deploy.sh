@@ -139,6 +139,6 @@ fi
 "${SSH[@]}" "sleep 5; \
   echo \"  migraciones: \$(docker exec kijutech_db psql -U kijutech -d kijutech_db -tAc 'select count(*) from drizzle.__drizzle_migrations')\"; \
   echo \"  web: \$(curl -s -o /dev/null -w '%{http_code}' https://brain.kijutech.com/sign-in)\"; \
-  echo \"  telegram: \$(docker exec kijutech_db psql -U kijutech -d kijutech_db -tAc \"select receive_mode || ' / ' || coalesce(last_error,'sin error') from ops_telegram_config\")\"; \
+  echo \"  telegram: \$(docker exec kijutech_db psql -U kijutech -d kijutech_db -tAc \"select receive_mode || ' / ' || coalesce(last_error,'sin error') from ops_telegram_config where receive_mode <> 'simulado'\")\"; \
   NI=\$(ps -o ni= -p \$(docker inspect -f '{{.State.Pid}}' kijutech_app) | tr -d ' '); echo \"  prioridad de la app: \$NI\$([ \"\$NI\" = 0 ] || echo '  ⚠ debería ser 0')\";   ERR=\$(docker logs --since 5m kijutech_app 2>&1 | grep -ciE 'ReferenceError|TypeError' || true); echo \"  errores en logs: \$ERR\";   echo \"  errores nuevos en el registro (10 min): \$(docker exec kijutech_db psql -U kijutech -d kijutech_db -tAc \"select count(*) from sys_error_groups where last_seen > now() - interval '10 minutes'\" 2>/dev/null || echo '—')\""
 echo "✓ Despliegue terminado"
