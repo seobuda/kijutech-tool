@@ -62,8 +62,14 @@ describe('pruebas simuladas', () => {
     expect((await ensureSimEnvironment(owner)).simTenantId).toBe(simTenant);
   });
 
-  it('todos los escenarios pasan', async () => {
+  it('todos los escenarios pasan, sin escribir errores en el log', async () => {
+    // Un console.error en producción va al registro de errores como fallo de la cuenta REAL y avisa a Enric: una tanda
+    // de pruebas no puede escribir ninguno (pasó en el despliegue del 19 nov con los buenos días sin ClickUp).
+    const logged: string[] = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation((...a: unknown[]) => void logged.push(a.map(String).join(' ')));
     const r = await runScenarios(owner, 'all', 'claude', 'vitest');
+    spy.mockRestore();
+    expect(logged).toEqual([]);
     const failed = r.results.filter((x) => x.status !== 'ok').map((x) => `${x.key}: ${x.error}`);
     expect(r.error).toBeUndefined();
     expect(failed).toEqual([]);

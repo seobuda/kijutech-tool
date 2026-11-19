@@ -103,7 +103,21 @@ Ninguna.
   - Si no, el agente te preguntará en qué lista. Contesta por voz o por texto y debe proponerlo con ✅ / ✖️.
 - Automatizaciones: encender «Jornada real» ya funciona. **No la enciendas sin decidirlo**: afecta al equipo.
 
+## Después del despliegue (19 nov, 15:45)
+- Desplegado `0835302a` sin migración. **13 de 13 pruebas simuladas correctas en producción**, lanzadas solas por `deploy.sh`. Verificación:
+  - web 200;
+  - Telegram por webhook, sin error;
+  - prioridad 0;
+  - 0 errores de JavaScript.
+- **Ruido encontrado:** en la cuenta de pruebas, los buenos días escribían «[jornada] tareas de hoy sin ClickUp» con `console.error`, porque esa cuenta no tiene ClickUp. El registro de errores captura la consola **sin saber de qué cuenta es**, así que lo anotó como fallo de la cuenta real (4 apariciones, un grupo «nuevo») y pudo avisar a Enric por Telegram.
+- **Arreglo inmediato** (rama `fix/pruebas-sin-ruido`, dentro de Operaciones):
+  - `teamTodaySafe` no escribe en el log si la cuenta es la de pruebas;
+  - el ejecutor ya no escribe en el log los fallos de un escenario, que quedan en su ejecución;
+  - prueba nueva: una tanda completa no puede llamar a `console.error`.
+- El grupo de error que ya se creó en producción hay que marcarlo como resuelto en Sistema → Errores (Claude no escribe en la base de producción).
+
 ## Pendientes detectados
+- **Atribuir al entorno de pruebas los errores de la consola** (arreglo de raíz del ruido anterior). Toca el núcleo (`lib/core/errors.ts`): un registro genérico del tipo `registerConsoleTenantResolver`. Con él, lo que se escriba durante una ejecución simulada quedaría en la cuenta de pruebas, con avisos y diagnóstico apagados, y no en la real. CLAUDE.md pide preguntar antes de tocar el núcleo: pendiente del OK de Enric.
 - Actualizar el texto del paso «Despliegue protegido» en `lib/auth/security-process-map.ts` para que mencione las pruebas tras desplegar. Necesita el OK de Enric (`lib/auth/`).
 - `TimeoutNegativeWarning` en los logs de producción (19/11 a las 01:07, 12:17 y 13:17): algún `setTimeout` recibe un tiempo negativo. Es inofensivo, pero conviene localizarlo.
 - Si Enric pide a menudo tareas internas, una lista interna por defecto configurable evitaría la pregunta.
