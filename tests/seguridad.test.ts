@@ -6,6 +6,8 @@ import { clientContacts, clientMemory, clients, opsInboundEmails, projects, user
 import { cleanupFixtures, createFixtures, emailFor, FIXTURE_PASSWORD, loginAs, PREFIX, type Fixtures } from './fixtures';
 
 import { aiProposeClient, applyClientProposal, saveClientOps } from '@/lib/operaciones/client-actions';
+import { createSimRequestAction, getPruebasAction, pressSimButtonAction, runScenariosAction, sendSimTextAction } from '@/lib/operaciones/sim/actions';
+import { POST as pruebasRunPost } from '@/app/api/pruebas/run/route';
 import { deleteAnnotationAction, getClientPerformanceAction, getMonthlyReportAction, resyncClientAction, saveAnnotationAction, savePerfSettingsAction } from '@/lib/rendimiento/actions';
 import { errorBriefAction, requestDiagnosisAction, saveErrorNoteAction, saveErrorSettingsAction, setErrorStatusAction } from '@/app/(dashboard)/dashboard/errores/actions';
 import { addKeywordsAction, backfillWorkAction, closeObjectiveAction, decideSuggestionAction, requestAnalysisAction, saveStrategistSettingsAction, deleteEventAction, deleteKeywordAction, deleteObjectiveAction, deletePlanAction, deleteTrackedUrlAction, getClientStrategyAction, objectiveBaselineAction, pauseClientAction, runProcessNowAction, saveClientOverrideAction, saveEstSettingsAction, saveEventAction, saveObjectiveAction, savePlanAction, setClientPlanAction, setSignalStatusAction, setWorkUrlAction, suggestKeywordsAction, updateKeywordAction } from '@/lib/estrategia/actions';
@@ -119,6 +121,11 @@ const form = (data: Record<string, string>) => {
 // Acciones que NO hacen nada si llegaran a ejecutarse (ids que no existen, entradas vacías): así
 // una regresión en un guard hace fallar la prueba sin tocar datos reales.
 const ACCIONES_ADMIN: [string, () => unknown][] = [
+  ['runScenariosAction (pruebas simuladas: ejecutar)', () => runScenariosAction(['botones-estado'])],
+  ['getPruebasAction (pruebas simuladas: ver)', () => getPruebasAction('employee', null)],
+  ['pressSimButtonAction (pruebas simuladas: pulsar)', () => pressSimButtonAction(1, 0, 0)],
+  ['sendSimTextAction (pruebas simuladas: escribir)', () => sendSimTextAction('employee', 'x')],
+  ['createSimRequestAction (pruebas simuladas: encargo)', () => createSimRequestAction('x', false)],
   ['setErrorStatusAction (errores: estado)', () => setErrorStatusAction(ZERO, 'resuelto')],
   ['saveErrorNoteAction (errores: nota)', () => saveErrorNoteAction(ZERO, 'x')],
   ['requestDiagnosisAction (errores: diagnóstico con IA)', () => requestDiagnosisAction(ZERO)],
@@ -689,5 +696,14 @@ describe('cuenta y contraseña (S4, S9)', () => {
     expect(await getUser()).toBeNull(); // la de otro dispositivo, firmada con la contraseña anterior, no
     await db.update(users).set({ passwordHash: await hashPassword(FIXTURE_PASSWORD) }).where(eq(users.id, fx.users.editor.id));
     await loginAs(null);
+  });
+});
+
+describe('pruebas simuladas: ruta interna', () => {
+  it('sin el secreto, /api/pruebas/run responde 404 y no ejecuta nada', async () => {
+    const sin = await pruebasRunPost(new Request('http://localhost/api/pruebas/run', { method: 'POST', body: '{}' }));
+    expect(sin.status).toBe(404);
+    const malo = await pruebasRunPost(new Request('http://localhost/api/pruebas/run', { method: 'POST', headers: { 'x-kiju-pruebas': 'a'.repeat(64) }, body: '{}' }));
+    expect(malo.status).toBe(404);
   });
 });

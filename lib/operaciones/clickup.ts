@@ -123,6 +123,8 @@ async function cuFetch(url: string, init: RequestInit): Promise<Response> {
   const headers = (init.headers ?? {}) as Record<string, string>;
   const token = headers.Authorization ?? '';
   const method = init.method ?? 'GET';
+  // Entorno de pruebas (19 nov 2026): su «token» de ClickUp es un centinela que empieza por SIM:. Nunca sale a internet.
+  if (token.startsWith('SIM:')) throw new ClickUpError('Entorno de pruebas: no se llama a ClickUp de verdad', 0);
 
   for (let attempt = 0; ; attempt++) {
     await acquireSlot(token);

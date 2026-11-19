@@ -27,6 +27,23 @@ export type TgMessage = {
 export type TgCallbackQuery = { id: string; from: TgUser; message?: TgMessage; data?: string };
 export type TgUpdate = { update_id: number; message?: TgMessage; callback_query?: TgCallbackQuery };
 
+// --- Entorno de pruebas (19 nov 2026) ----------------------------------------------------------------------------
+// El bot del entorno de pruebas tiene un token «centinela» que empieza por SIM: (lib/operaciones/sim/env.ts). Toda
+// llamada con ese token va al simulador registrado (lib/operaciones/sim/transport.ts) y NUNCA a internet. Un token real
+// no puede empezar así (los de Telegram son «número:clave»), así que el camino normal no cambia.
+export const SIM_TOKEN_PREFIX = 'SIM:';
+export type SimTelegramTransport = (token: string, method: string, params: Record<string, unknown>) => Promise<unknown>;
+const GS = globalThis as unknown as { __kijuSimTelegram?: SimTelegramTransport };
+export function setSimTelegramTransport(fn: SimTelegramTransport): void {
+  GS.__kijuSimTelegram = fn;
+}
+export const isSimToken = (token: string) => token.startsWith(SIM_TOKEN_PREFIX);
+async function simCall<T>(token: string, method: string, params: Record<string, unknown>): Promise<T> {
+  const fn = GS.__kijuSimTelegram;
+  if (!fn) throw new TelegramError('Simulador de Telegram no disponible');
+  return (await fn(token, method, params)) as T;
+}
+
 function scrub(text: string, token: string): string {
   return text.split(token).join('«token»');
 }
@@ -37,6 +54,7 @@ export async function tg<T>(
   params: Record<string, unknown> = {},
   timeoutMs = 20_000
 ): Promise<T> {
+  if (isSimToken(token)) return simCall<T>(token, method, params);
   let res: Response;
   try {
     res = await fetch(`${API}/bot${token}/${method}`, {
@@ -117,6 +135,7 @@ export function htmlToPlain(html: string): string {
 export async function tgDownloadFile(token: string, fileId: string): Promise<{ data: ArrayBuffer; contentType: string }> {
   const info = await tg<{ file_path?: string }>(token, 'getFile', { file_id: fileId });
   if (!info.file_path) throw new TelegramError('Telegram no devolvió la ruta del archivo');
+  if (isSimToken(token)) throw new TelegramError('El entorno de pruebas no descarga archivos');
   let res: Response;
   try {
     res = await fetch(`${API}/file/bot${token}/${info.file_path}`, { signal: AbortSignal.timeout(30_000), cache: 'no-store' });
@@ -131,6 +150,10 @@ export async function tgDownloadFile(token: string, fileId: string): Promise<{ d
 
 /** Nota de voz (OGG/Opus) con subida de archivo. Devuelve false si Telegram la rechaza (formato u otro error). */
 export async function tgSendVoice(token: string, chatId: string | number, ogg: Uint8Array, caption?: string): Promise<boolean> {
+  if (isSimToken(token)) {
+    await simCall(token, 'sendVoice', { chat_id: chatId, caption: caption ?? '', bytes: ogg.byteLength }).catch(() => undefined);
+    return true;
+  }
   try {
     const form = new FormData();
     form.append('chat_id', String(chatId));

@@ -3,7 +3,7 @@
 > **Documento vivo y de referencia.** Recoge todo lo que existe, cómo funciona, qué está decidido, qué se ha probado y qué falta. Se actualiza al cerrar cada paso de trabajo (junto al documento de sesión y al Mapa Visual).
 > **No contiene claves, contraseñas ni valores de `.env`** (solo sus nombres).
 
-**Fecha de esta versión:** 2026-11-19 (protocolo de despliegue autónomo: `deploy.sh` con pruebas obligatorias sobre el commit exacto, bloqueo si faltan migraciones y vuelta atrás automática, `scripts/rollback.sh` y `scripts/server-status.sh` de solo lectura; antes: limpieza semanal de registros antiguos y de los textos de los trabajos de IA, D4/D5, con la migración 0053, un índice de `ai_jobs`; política de borrados fijada con una prueba, S7; C10 aceptado; copia diaria con el script nuevo, el cron del servidor cambiado y una prueba de restauración superada; antes, 18 nov: un aviso reenviado tras quedarse Telegram sin responder lo dice («🔁 Por si no te llegó el anterior») y Telegram tiene 45 s en vez de 20; antes: «Hecho» en Telegram completa la tarea en el momento y el comentario pasa a ser opcional y posterior; scripts de cron ejecutables tras cada despliegue y aviso en Salud si el vigilante nunca consta; antes: decisiones de Enric sobre la revisión: un cliente con histórico se da de baja antes de borrarlo y el borrado pide su nombre, D6; variables opcionales en producción, D7; rotación de copias y logs, D11; cambio de correo con contraseña y contraseña de 12 caracteres que cierra las demás sesiones, S4/S9; antes, 17 nov: todos los pendientes ⏳ de la revisión: IA, jornada atómica, recordatorios, estratega, panel de Rendimiento, despliegue, restauración y vigilante; antes: coste de las llamadas de IA fallidas, I3; informe del mes incompleto frente a los mismos días, C6; medias del antes y el después por días de calendario, C4; URLs trabajadas de Estrategia con su versión canónica; antes: **registro central de errores** y **Técnico de mantenimiento**: todo fallo queda en una tabla, avisa por Telegram y un subagente lo diagnostica leyendo el código; migración 0052; arreglo de las respuestas vacías de la IA con Claude 5.5 y revisión completa del proyecto. Producción en `a103cbf0` con Estrategia fase 2, 52 migraciones)
+**Fecha de esta versión:** 2026-11-19 (pruebas simuladas en un entorno de pruebas aislado, Sistema → Pruebas, migración 0054, ver §6.27; antes: protocolo de despliegue autónomo: `deploy.sh` con pruebas obligatorias sobre el commit exacto, bloqueo si faltan migraciones y vuelta atrás automática, `scripts/rollback.sh` y `scripts/server-status.sh` de solo lectura; antes: limpieza semanal de registros antiguos y de los textos de los trabajos de IA, D4/D5, con la migración 0053, un índice de `ai_jobs`; política de borrados fijada con una prueba, S7; C10 aceptado; copia diaria con el script nuevo, el cron del servidor cambiado y una prueba de restauración superada; antes, 18 nov: un aviso reenviado tras quedarse Telegram sin responder lo dice («🔁 Por si no te llegó el anterior») y Telegram tiene 45 s en vez de 20; antes: «Hecho» en Telegram completa la tarea en el momento y el comentario pasa a ser opcional y posterior; scripts de cron ejecutables tras cada despliegue y aviso en Salud si el vigilante nunca consta; antes: decisiones de Enric sobre la revisión: un cliente con histórico se da de baja antes de borrarlo y el borrado pide su nombre, D6; variables opcionales en producción, D7; rotación de copias y logs, D11; cambio de correo con contraseña y contraseña de 12 caracteres que cierra las demás sesiones, S4/S9; antes, 17 nov: todos los pendientes ⏳ de la revisión: IA, jornada atómica, recordatorios, estratega, panel de Rendimiento, despliegue, restauración y vigilante; antes: coste de las llamadas de IA fallidas, I3; informe del mes incompleto frente a los mismos días, C6; medias del antes y el después por días de calendario, C4; URLs trabajadas de Estrategia con su versión canónica; antes: **registro central de errores** y **Técnico de mantenimiento**: todo fallo queda en una tabla, avisa por Telegram y un subagente lo diagnostica leyendo el código; migración 0052; arreglo de las respuestas vacías de la IA con Claude 5.5 y revisión completa del proyecto. Producción en `a103cbf0` con Estrategia fase 2, 52 migraciones)
 **Producción:** `https://brain.kijutech.com` (droplet `kijutech-brain`, Frankfurt). Procedimiento en `docs/DESPLIEGUE.md`. Rama de trabajo del despliegue: `feature/despliegue`.
 **Ramas:** cada mejora en su rama (`feature/…`, `fix/…`, `docs/…`); `main` solo recibe lo terminado y aprobado y es lo que está en producción. Las ramas antiguas (`operaciones`, `feature/seguridad`, `feature/despliegue`…) ya están fusionadas y se mantienen.
 **Rama `main`:** `75481a59` (12 nov, tiempos de tarea 5B), desplegada en producción con 46 migraciones. Revisión de autonomía en `docs/REVISION-AUTONOMIA.md`.
@@ -414,6 +414,52 @@ Rama `feature/registro-errores`, **migración 0052** (tablas `sys_error_groups`,
 - **Limpieza:** tarea del planificador «registro de errores», como mucho una vez por hora: muestras de más de N días o más de 50 por error, y errores cerrados sin actividad.
 - **Permisos:** las 5 acciones son `admin` (en `tests/seguridad.test.ts`); la ruta del navegador exige sesión con permiso de ver. Pruebas en `tests/errores.test.ts`.
 
+### 6.27 Pruebas simuladas y entorno de pruebas aislado (19 nov)
+
+**Para qué:** que Claude, y Enric si quiere, prueben flujos reales de Telegram de punta a punta sin que les llegue nada a Enric ni al equipo, y que se pueda ver lo probado sin preguntar por el terminal. Pantalla **Sistema → Pruebas** (solo admin).
+
+**Entorno aislado (`lib/operaciones/sim/env.ts`):** otra cuenta (tenant), «Kijutech · pruebas», enlazada en `ops_sim_environments`. La plataforma ya separa los datos por cuenta, así que lo simulado no sale en resúmenes, informes, Equipo hoy, piloto ni plazos.
+- **Bot:** token centinela `SIM:<cuenta>` y modo `simulado`. `tg()` lo manda al simulador y nunca a internet. La escucha del bot, el webhook y el planificador ignoran ese modo.
+- **ClickUp:** token centinela. `cuFetch()` falla al momento sin salir a internet; los cambios quedan en `ops_clickup_outbox` y los escenarios los comprueban.
+- **IA:** bloqueada (`ai_key_mode_allowed = byok_required` sin clave). Ninguna función puede llamarla, tampoco el motor de agentes.
+- **Miembros:** «Kiju IA (pruebas)» (empleado) y «Dueño (simulado)», ya vinculados. Sus chats son negativos y propios de cada entorno: un chat privado real de Telegram nunca es negativo, y `ops_telegram_pending` se indexa solo por chat.
+- **Lista:** una lista simulada con sus estados (en curso / revisión / listo).
+
+**Escenarios (`lib/operaciones/sim/scenarios.ts`):** 10 casos con el código real del bot:
+- aviso nuevo;
+- botones según el estado;
+- Empezar y Hecho;
+- Hecho con enlace;
+- Más tarde;
+- doble «Hecho»;
+- revisión urgente aceptada;
+- revisión devuelta con motivo;
+- Bloqueado y /cancelar;
+- botón de un encargo borrado.
+
+**Ejecutor (`runner.ts`):**
+- una tanda a la vez y 60 s como máximo por escenario;
+- cada paso queda en `ops_sim_runs` (✓/✗ con detalle);
+- borra lo simulado de más de 30 días y guarda 30 ejecuciones por escenario.
+
+**Telegram simulado:** `transport.ts` guarda lo que envía el bot en `ops_sim_messages` y devuelve lo mismo que Telegram. `actor.ts` construye las actualizaciones y se las entrega a `handleUpdate`. El panel muestra los dos chats con sus botones (solo el HTML que admite Telegram) y se puede:
+- filtrar por ejecución;
+- pulsar botones;
+- escribir;
+- crear un encargo de prueba.
+
+**Lanzar:**
+- desde el panel, todas o una;
+- `bash scripts/run-scenarios.sh [claves] [--local]`, que llama a `/api/pruebas/run` desde dentro del contenedor con un secreto derivado de `AUTH_SECRET` (404 sin él).
+
+**Primer hallazgo:** «Empezar» guardaba cuándo se vio el aviso pero no quién. Corregido en `startWork`.
+
+**Pendiente (fase 2):**
+- pruebas de humo tras cada despliegue, con vuelta atrás si fallan;
+- «Pedir una prueba» desde el panel;
+- escenarios de jornada y tiempos, que necesitan reloj simulado;
+- ClickUp real en la lista «Pruebas Kiju».
+
 ## 7. Panel de Automatizaciones: todos los valores
 
 Los valores por defecto viven en el código (`lib/operaciones/automations.ts`); la tabla `ops_automations` solo guarda lo que se cambia (restaurar = borrar la fila). Caché de 10 s. Textos en formato de Telegram (`<b>`, `<i>`, `<u>`, `<code>`, `<a href>`) con huecos validados; una línea con un hueco opcional vacío desaparece.
@@ -476,7 +522,7 @@ Construido en agosto de 2026 (Fases A–D). Detalle y auditoría completa en `do
 
 ## 10. Base de datos
 
-**Total: 105 tablas** (18 núcleo —con `clients`, `client_contacts`, `client_locations`, `client_assets`, `client_competitors` y `client_memory` desde la 0048—, 15 SEO, 7 IA, **38 `ops_*`** y 5 `agt_*` del módulo Agentes 5 `perf_*` del módulo Rendimiento (0049, ver §6.23) y 15 `est_*` del módulo Estrategia (13 en la 0050 y `est_analyses` y `est_suggestions` en la 0051, ver §6.24 y §6.25) y 3 `sys_error_*` del registro de errores del núcleo (0052, ver §6.26); `ops_client_senders` se eliminó y `ops_client_memory` pasó a ser `client_memory`). Las últimas: `ops_agent_actions` (0040), `ops_health_incidents` (0043), `ops_work_events` (0044, jornada real; ver §6.18) y `ops_task_times` (0045, tiempos de tarea; ver §6.19). La revisión de autonomía no añade tablas: el calendario y la última copia diaria van en `ops_settings` (claves `calendar` y `backup_last_at`). Los conteos de filas de abajo son de la base local del 30 oct (orientativos).
+**Total: 108 tablas** (18 núcleo —con `clients`, `client_contacts`, `client_locations`, `client_assets`, `client_competitors` y `client_memory` desde la 0048—, 15 SEO, 7 IA, **41 `ops_*`** (las 3 `ops_sim_*` de las pruebas simuladas desde la 0054, ver §6.27) y 5 `agt_*` del módulo Agentes 5 `perf_*` del módulo Rendimiento (0049, ver §6.23) y 15 `est_*` del módulo Estrategia (13 en la 0050 y `est_analyses` y `est_suggestions` en la 0051, ver §6.24 y §6.25) y 3 `sys_error_*` del registro de errores del núcleo (0052, ver §6.26); `ops_client_senders` se eliminó y `ops_client_memory` pasó a ser `client_memory`). Las últimas: `ops_agent_actions` (0040), `ops_health_incidents` (0043), `ops_work_events` (0044, jornada real; ver §6.18) y `ops_task_times` (0045, tiempos de tarea; ver §6.19). La revisión de autonomía no añade tablas: el calendario y la última copia diaria van en `ops_settings` (claves `calendar` y `backup_last_at`). Los conteos de filas de abajo son de la base local del 30 oct (orientativos).
 
 **Núcleo / plantilla:** `tenants` 1 · `users` 2 · `roles` 4 · `user_roles` 1 · `projects` 1 · `modules` 1 · `project_modules` 0 · `teams` 2 · `team_members` 2 · `invitations` 0 · `activity_logs` 10 (`teams`, `team_members` e `invitations` son restos de la plantilla pendientes de limpieza).
 
@@ -579,6 +625,7 @@ Construido en agosto de 2026 (Fases A–D). Detalle y auditoría completa en `do
 8. **Telegram:** con varios servidores el candado impide dos oyentes, pero las cachés en memoria (Equipo hoy 2 min, panel 10 s, mes de clientes 2 min, contador de peticiones) son **por proceso**. Un duplicado teórico es posible si el servidor cae justo entre enviar y anotar un mensaje.
 9. **Puntos no verificables con el usuario de pruebas:** las pantallas de administración (Arquitectura, IA, SEO admin) y el alta de usuarios por la interfaz se comprobaron por pruebas automáticas, no con un clic de `super_admin` en el navegador.
 
+- **Pruebas simuladas (19 nov):** el entorno de pruebas es otra cuenta. Sus credenciales centinela (`SIM:…`) no pueden salir a internet: `tg()`, `tgSendVoice` y `cuFetch()` las desvían o fallan antes de cualquier `fetch`, y una prueba lo verifica interceptando `fetch`. Su IA está bloqueada. Las acciones de Sistema → Pruebas son solo admin (en `tests/seguridad.test.ts`) y `/api/pruebas/run` responde 404 sin el secreto derivado de `AUTH_SECRET`.
 - **Política de borrados (S7, 19 nov):** el editor borra lo que también añade un editor (locales, cuentas, competidores, palabras clave, URLs y anotaciones); contactos, memoria del cliente y la ficha entera solo los borra un administrador (la ficha con histórico, además, de baja antes y escribiendo su nombre). La fija `tests/auditoria.test.ts` («política de borrados»).
 
 ## 14. Datos y elementos de prueba (a limpiar antes de servidor)
@@ -715,6 +762,7 @@ Cada uno con su nodo en el nivel 1 del Mapa Visual:
 - **18 nov (noche), Salud ya no calla sin registro** (rama `fix/salud-copia`, sin migraciones): en producción, si la copia diaria o la prueba de restauración nunca han dejado constancia, Salud lo dice (antes no salía la línea; así pasó desapercibido que `backup.sh` no registraba ninguna copia). Ver `docs/sessions/2026-11-18-19-salud-copia.md`.
 - **19 nov, copia diaria y decisiones de la revisión** (ramas `fix/salud-copia` y `fix/revision-purga-permisos`; migración **0053**): el cron del servidor seguía con el script antiguo de copia y el nuevo fallaba al comprobarla (`grep -q` con `pipefail`). Se cambió el crontab (copia a las 03:00, prueba de restauración el día 1 a las 04:00, vigilante cada 5 min) y la primera prueba de restauración salió bien. Después: **D4/D5**, limpieza semanal de registros antiguos (6 meses) y de los textos de IA (90 días), con índice de `ai_jobs`; **S7**, la política de borrados queda fijada en una prueba; **C10**, aceptado. Ver `docs/sessions/2026-11-18-19-salud-copia.md` y `docs/sessions/2026-11-19-01-purga-registros.md`.
 - **19 nov, protocolo de despliegue autónomo** (rama `feature/autonomia-despliegue`, sin migraciones, aprobado por Enric): Claude fusiona, sube y despliega solo. `deploy.sh` pasa las pruebas y el Mapa Visual sobre el commit exacto, se niega si faltan migraciones sin `--migrate`, guarda la imagen anterior y vuelve atrás sola si la verificación falla. Scripts nuevos `rollback.sh` y `server-status.sh` (solo lectura). `--migrate` y lo delicado siguen necesitando a Enric. Ver `docs/sessions/2026-11-19-12-autonomia-despliegue.md`.
+- **19 nov, pruebas simuladas** (rama `feature/pruebas-simuladas`, migración **0054**, esquema aprobado por Enric): entorno de pruebas aislado (otra cuenta, bot y ClickUp centinela, IA bloqueada), 10 escenarios de punta a punta, Telegram simulado en Sistema → Pruebas y `scripts/run-scenarios.sh`. La primera tanda encontró un fallo real: «Empezar» no guardaba quién vio el aviso. Ver §6.27 y `docs/sessions/2026-11-19-13-pruebas-simuladas.md`.
 - Historial completo: `git log` y `docs/sessions/`.
 
 ## 19. Mapa de archivos

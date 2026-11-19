@@ -129,6 +129,8 @@ export async function startWork(
   const takeOver = principal && principal.id !== req.assigneeClickupId && (req.candidateIds ?? []).includes(principal.id);
   const row = await transition(req, 'en_curso', ['asignado', 'devuelto', 'bloqueado'], {
     seenAt: req.seenAt ?? new Date(),
+    // Quién lo vio, como hacen «Más tarde», «Hecho» y «Bloqueado» (lo detectó la prueba simulada «botones-estado», 19 nov).
+    seenBy: req.seenBy ?? actor.name,
     ...(takeOver ? { assigneeClickupId: principal.id, assigneeName: principal.name } : {})
   });
   if (!row) return { ok: false, reason: 'Este encargo ya no está pendiente de empezar.' };

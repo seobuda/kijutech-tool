@@ -29,6 +29,7 @@ import {
   Workflow,
   Building2,
   Gauge,
+  FlaskConical,
   HeartPulse,
   Clock,
   IdCard,
@@ -100,12 +101,13 @@ export const OPS_SECTIONS: TabSection[] = [
     key: 'sistema',
     label: 'Sistema',
     icon: Cog,
-    description: 'Lo técnico: automatizaciones, salud del sistema, bot de Telegram y conexión con ClickUp.',
+    description: 'Lo técnico: automatizaciones, salud del sistema, pruebas simuladas, bot de Telegram y conexión con ClickUp.',
     tabs: [
       { href: '/dashboard/operaciones/automatizaciones', label: 'Automatizaciones', icon: Workflow, keywords: 'avisos recordatorios resúmenes', show: adminOnly },
       { href: '/dashboard/operaciones/gasto-ia', label: 'Gasto de IA', icon: Coins, keywords: 'coste ia tokens presupuesto anthropic claude previsión', show: adminOnly },
       { href: '/dashboard/operaciones/servidor', label: 'Servidor y costes', icon: Server, keywords: 'digitalocean coste servidor memoria disco cpu factura', show: adminOnly },
       { href: '/dashboard/operaciones/salud', label: 'Salud', icon: HeartPulse, keywords: 'errores incidencias caídas colas atascadas estado', show: adminOnly },
+      { href: '/dashboard/operaciones/pruebas', label: 'Pruebas', icon: FlaskConical, keywords: 'pruebas simuladas escenarios telegram simulado test kiju ia', show: adminOnly },
       { href: '/dashboard/operaciones/telegram', label: 'Telegram', icon: MessageCircle, keywords: 'bot avisos', show: adminOnly },
       { href: '/dashboard/operaciones/ajustes', label: 'Ajustes ClickUp', icon: SlidersHorizontal, keywords: 'token estados listas', show: adminOnly }
     ]
