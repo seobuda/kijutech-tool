@@ -131,3 +131,8 @@ CREATE INDEX IF NOT EXISTS "agt_team_questions_person_idx" ON "agt_team_question
 - **Fase 3:** triaje de «Bloqueado» con la misma búsqueda y pestaña Huecos de conocimiento.
 - **Coste real con Opus:** está por medir. La estimación es de unos 0,09 $ por duda.
 - Sigue pendiente lo de antes: el paso «Despliegue protegido» del mapa de Seguridad (necesita OK) y el `TimeoutNegativeWarning` de producción.
+
+## Segunda parte (misma sesión): «/jefe» para probarlo
+- Enric preguntó por qué no usar el entorno de pruebas simulado para probar el circuito. Ese entorno tiene la IA bloqueada a propósito y su cuenta está vacía (sin base ni fichas), así que el jefe no podría responder nada útil.
+- Se añadió **«/jefe tu duda»** en el chat principal (`lib/agentes/inbound.ts`, `TEST_AS_TEAM_RE`). El jefe trata a Enric como si fuera del equipo, **aunque esté apagado** (`handleTeamInbound(…, { force: true })`), y en su mismo chat le llegan la respuesta con sus botones y las aprobaciones o escaladas. Usa la IA, la base y las fichas reales. Las dudas quedan como «Enric (prueba)».
+- Se añadió a la ayuda del bot (`/ayuda`). Prueba nueva en `tests/equipo.test.ts`. Pasan 454 de 454.

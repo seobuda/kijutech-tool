@@ -543,6 +543,7 @@ Los agentes tienen departamento (`agt_agents.department_key`): Revisor web → C
   3. **Red de seguridad.** Contraseñas, sueldo, nómina, despidos y quejas de clientes se escalan sin preguntar a la IA.
   4. **Sin bucles.** Si una persona hace N dudas del mismo tema en 24 h sin resolverlas (3 por defecto), o insiste en la misma duda, se escala con «creo que no te estoy ayudando».
   5. **Plazos, prioridades, precios y temas personales** los escala el propio agente (`escalar_a_enric`).
+- **Probarlo (Enric):** «/jefe tu duda» en el chat principal: el jefe le trata como si fuera del equipo (aunque esté apagado) y le llegan a la vez la respuesta con sus botones y las aprobaciones o escaladas. Usa la IA, la base y las fichas reales. El entorno de Sistema → Pruebas no sirve para esto: su cuenta tiene la IA bloqueada y está vacía.
 - **Lo que ve la persona:** la respuesta con su fuente (📒 ficha · 📚 base · 🔁 caso anterior · 💡 sugerencia general) y los botones ✅ Me sirve · ❌ No me sirve (pide qué probó y escala) · 🙋 Que lo vea Enric. «Me sirve» o «no me sirve» suma o resta a las entradas de la base usadas. Un «gracias» cierra la duda. Un mensaje en los 30 minutos siguientes sigue la misma duda.
 - **Lo que ve Enric (chat principal):**
   - Para aprobar: ✅ Enviar · ✏️ Cambiar (dice qué y el jefe lo rehace; vuelve a él) · 📝 Responder yo · 🗑 Descartar.

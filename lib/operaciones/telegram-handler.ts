@@ -293,6 +293,7 @@ const HELP_TEXT = [
   '',
   '<b>Comandos</b>',
   '/sugerencia: cuéntanos qué mejorarías (texto o captura).',
+  '/jefe tu duda: (solo Enric) prueba al jefe de operaciones como si fueras del equipo.',
   '/ayuda: este mensaje.',
   '/cancelar: anula lo que el bot esté esperando.'
 ].join('\n');

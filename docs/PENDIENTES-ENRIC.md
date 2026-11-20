@@ -8,7 +8,7 @@ Detalle paso a paso de la activación en `docs/PRUEBAS-EN-VIVO.md`.
 ## Jefe de operaciones: dudas del equipo (rama `feature/jefe-operaciones-fase2`, migración 0057, 20 nov)
 Aprobado: agente libre con garantías en código, Opus 5.5 para los jefes y el esquema. Detalle en `docs/ESTADO.md` §6.30.
 - [ ] **Desplegar con migración** (Claude lo lanza con tu OK; hace backup antes). Con el despliegue, el Operations manager y el jefe de sistema pasan a Opus 5.5.
-- [ ] **Probarlo antes de encenderlo para todos:** en Agentes → Dudas del equipo, enciéndelo y escríbele tú desde otra cuenta de Telegram vinculada (o pide a una persona de confianza que pruebe). Prueba una duda que esté en la base, una que no, «No me sirve» y algo de plazos.
+- [ ] **Probarlo antes de encenderlo para todos:** desde tu chat principal escribe «/jefe tu duda» (funciona aunque esté apagado; te llegan la respuesta con sus botones y las aprobaciones). Prueba una duda que esté en la base, una que no, «No me sirve» y algo de plazos.
 - [ ] **Avisar al equipo** antes de dejarlo encendido: pueden preguntar por su chat de siempre (texto o audio, o respondiendo al aviso de un encargo); verán la fuente y los botones Me sirve / No me sirve / Que lo vea Enric.
 - [ ] **Decidir cuándo pasar la IA general a «Las envía solo»** (de serie, con tu aprobación).
 - [ ] Vigilar el coste del jefe los primeros días (cada duda muestra su coste; presupuesto del jefe: 30 $/mes, editable en Agentes).
