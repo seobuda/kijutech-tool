@@ -13,6 +13,7 @@ import { findCoreClient, primaryAsset } from '@/lib/core/clients';
 import { handleInbound } from '@/lib/agentes/inbound';
 import { createJob, encargarAgente, estadoTrabajos, runAgentJobs } from '@/lib/agentes/jobs';
 import { ensureDefaultAgents } from '@/lib/agentes/store';
+import { registerTeamCapabilities } from '@/lib/agentes/team';
 import {
   clarityInsights,
   dataForSeoSerp,
@@ -211,6 +212,7 @@ export function registerAgentesCapabilities(): void {
   if (done) return;
   done = true;
   registerTools(AGENTES_TOOLS);
+  registerTeamCapabilities(); // 20 nov 2026: jefe de Operaciones (dudas del equipo): herramientas, botones x:tq e informe
   setInboundHandler('agentes', handleInbound);
   // En segundo plano (17 nov 2026): un trabajo tarda minutos (varias vueltas con la IA) y bloqueaba el planificador entero
   // (avisos, bandeja de ClickUp, latido de salud → falsa alarma de «herramienta caída»). runAgentJobs ya tiene su candado.

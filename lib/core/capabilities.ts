@@ -64,6 +64,12 @@ export type InboundMessage = {
   email?: { subject: string; messageId: string | null; references: string | null };
   /** Bot de departamento por el que llegó (organigrama, 20 nov 2026). Sin él, llegó por el bot principal. */
   bot?: string;
+  /**
+   * El mensaje responde a un aviso de encargo (jefe de Operaciones, 20 nov 2026): su id y un resumen corto (título,
+   * cliente, estado, fecha y descripción). Lo rellena el módulo dueño del canal; los agentes no leen sus tablas.
+   */
+  replyToRequestId?: string;
+  replyToSummary?: string;
 };
 
 /**

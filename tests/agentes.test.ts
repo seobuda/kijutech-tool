@@ -44,7 +44,7 @@ import { agentJobCreator, availableTools, dispatchInbound, getTool, registerAsse
 import { runAgent, systemPrompt, toMessages } from '@/lib/agentes/engine';
 import { isOgg, speakableText } from '@/lib/agentes/voice';
 import { signState, sumGbpSeries, verifyState } from '@/lib/agentes/integrations';
-import { _resetUpgradeCache, ensureDefaultAgents, getAgent, listAgents, MAINTENANCE_KEY, PRINCIPAL_KEY, SYSTEM_HEAD_KEY, WEB_REVIEWER_KEY } from '@/lib/agentes/store';
+import { _resetUpgradeCache, ensureDefaultAgents, getAgent, listAgents, MAINTENANCE_KEY, PRINCIPAL_KEY, SYSTEM_HEAD_KEY, OPS_HEAD_KEY, WEB_REVIEWER_KEY } from '@/lib/agentes/store';
 import { createJob, processJob } from '@/lib/agentes/jobs';
 import { handleInbound, waitIdle } from '@/lib/agentes/inbound';
 import { AGENT_TOOL_CALLBACK_RE, decideAgentTool, OPS_AGENT_TOOLS, setToolAutonomy } from '@/lib/operaciones/agent-capabilities';
@@ -183,7 +183,7 @@ describe('agentes con la base de datos', () => {
     await ensureDefaultAgents(tenantId);
     const agents = await listAgents(tenantId);
     // 20 nov 2026: organigrama, también el jefe de sistema (con su propio bot).
-    expect(agents.map((a) => a.key).sort()).toEqual([PRINCIPAL_KEY, WEB_REVIEWER_KEY, MAINTENANCE_KEY, SYSTEM_HEAD_KEY].sort());
+    expect(agents.map((a) => a.key).sort()).toEqual([PRINCIPAL_KEY, WEB_REVIEWER_KEY, MAINTENANCE_KEY, SYSTEM_HEAD_KEY, OPS_HEAD_KEY].sort());
     // 17 nov 2026: el Técnico de mantenimiento es subagente y solo tiene herramientas de lectura del registro de errores y del código.
     expect(agents.find((a) => a.key === MAINTENANCE_KEY)).toMatchObject({ kind: 'subagente', tools: ['errores_lista', 'error_detalle', 'codigo_buscar', 'codigo_leer', 'ia_llamada', 'guardar_diagnostico'] });
     expect(agents.find((a) => a.key === PRINCIPAL_KEY)?.tools).toContain('crear_encargo');

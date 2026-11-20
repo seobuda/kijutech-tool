@@ -11,6 +11,7 @@ import { POST as pruebasRunPost } from '@/app/api/pruebas/run/route';
 import { checkDeptBotAction, removeDeptBotAction, saveDeptBotAction } from '@/lib/operaciones/dept-bot-actions';
 import { archiveCategoryAction, deleteArticleAction, markReviewedAction, redraftArticleAction, reviseArticleAction, saveArticleAction, saveCategoryAction, setArticleStatusAction, submitRequestAction } from '@/lib/core/knowledge-actions';
 import { importKnowledgeAction } from '@/lib/operaciones/kb-import-actions';
+import { answerQuestionAction, approveQuestionAction, discardQuestionAction, saveTeamSettingsAction } from '@/lib/agentes/team-actions';
 import { deleteAnnotationAction, getClientPerformanceAction, getMonthlyReportAction, resyncClientAction, saveAnnotationAction, savePerfSettingsAction } from '@/lib/rendimiento/actions';
 import { errorBriefAction, requestDiagnosisAction, saveErrorNoteAction, saveErrorSettingsAction, setErrorStatusAction } from '@/app/(dashboard)/dashboard/errores/actions';
 import { addKeywordsAction, backfillWorkAction, closeObjectiveAction, decideSuggestionAction, requestAnalysisAction, saveStrategistSettingsAction, deleteEventAction, deleteKeywordAction, deleteObjectiveAction, deletePlanAction, deleteTrackedUrlAction, getClientStrategyAction, objectiveBaselineAction, pauseClientAction, runProcessNowAction, saveClientOverrideAction, saveEstSettingsAction, saveEventAction, saveObjectiveAction, savePlanAction, setClientPlanAction, setSignalStatusAction, setWorkUrlAction, suggestKeywordsAction, updateKeywordAction } from '@/lib/estrategia/actions';
@@ -124,6 +125,10 @@ const form = (data: Record<string, string>) => {
 // Acciones que NO hacen nada si llegaran a ejecutarse (ids que no existen, entradas vacías): así
 // una regresión en un guard hace fallar la prueba sin tocar datos reales.
 const ACCIONES_ADMIN: [string, () => unknown][] = [
+  ['saveTeamSettingsAction (jefe de operaciones: encender y ajustes)', () => saveTeamSettingsAction({ active: false, settings: {} })],
+  ['approveQuestionAction (dudas del equipo: enviar propuesta)', () => approveQuestionAction(ZERO)],
+  ['answerQuestionAction (dudas del equipo: responder)', () => answerQuestionAction(ZERO, 'x')],
+  ['discardQuestionAction (dudas del equipo: descartar)', () => discardQuestionAction(ZERO)],
   ['saveArticleAction (conocimiento: guardar/publicar)', () => saveArticleAction(ZERO, { title: '', problem: '', solution: '', categoryId: null, tags: [], links: [] })],
   ['setArticleStatusAction (conocimiento: estado)', () => setArticleStatusAction(ZERO, 'publicada')],
   ['markReviewedAction (conocimiento: revisada)', () => markReviewedAction(ZERO)],

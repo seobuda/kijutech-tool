@@ -203,7 +203,9 @@ El proveedor de embeddings en producción (Voyage, OpenAI o Gemini) depende de l
 
 ---
 
-## 9. Fase 2: diseño detallado (20 nov, pendiente del OK de Enric)
+## 9. Fase 2: diseño detallado (20 nov; aprobado con cambios y construido)
+
+> **Cambio aprobado por Enric (20 nov):** en vez de un proceso fijo en código (§9.2), el jefe es un **agente libre** (Opus 5.5) con garantías en código: fuente comprobada, IA general con aprobación, red de seguridad, escalado tras N dudas del mismo tema y presupuesto propio. Los ajustes van en Agentes → Dudas del equipo (no en el panel de Operaciones). Lo construido se describe en `docs/ESTADO.md` §6.30.
 
 ### 9.1 Cómo se conecta
 - **Operaciones (el canal):** hoy, un mensaje libre de alguien del equipo se ignora. Pasa a entregarse a los agentes como el de Enric (`dispatchInbound`), con `isOwner: false`.
