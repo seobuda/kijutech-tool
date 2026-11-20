@@ -200,3 +200,80 @@ El proveedor de embeddings en producción (Voyage, OpenAI o Gemini) depende de l
 3. **Autonomía de partida** (§5.4): mi propuesta es base y ficha autónomas, e IA general con tu aprobación la primera semana.
 4. **Categorías iniciales**: SEO, Google Ads, Webs WordPress, Contenidos, Operativa interna y Herramientas. ¿Cambias alguna?
 5. **Quién del equipo puede proponer artículos** (rol editor) o si de momento solo escribes tú.
+
+---
+
+## 9. Fase 2: diseño detallado (20 nov, pendiente del OK de Enric)
+
+### 9.1 Cómo se conecta
+- **Operaciones (el canal):** hoy, un mensaje libre de alguien del equipo se ignora. Pasa a entregarse a los agentes como el de Enric (`dispatchInbound`), con `isOwner: false`.
+  - Si responde a un aviso de encargo, va con el id del encargo. `ops_notifications` ya guarda el id del mensaje de Telegram de cada aviso, así que es una consulta, sin pedir nada a ClickUp.
+- **Núcleo (cambio pequeño, necesita OK):** `InboundMessage` añade `replyToRequestId?: string`.
+- **Agentes (el jefe):** `handleInbound` deja de ignorar al equipo. Sus mensajes van al **Jefe de operaciones** (`jefe_operaciones`, tipo «jefe», departamento Operaciones, Sonnet), que contesta por el **bot principal** (decisión de Enric: el chat de siempre).
+
+### 9.2 Escalera: proceso en código, no agente libre (recomendado)
+Por cada pregunta:
+1. **Clasificar (Haiku, céntimos).** Primero decide si es una pregunta o un «gracias / ok»; lo segundo no hace nada. Después busca el cliente, y si no está claro pregunta «¿De qué cliente?» con botones. Por último mira si es un **tema que siempre se escala**: plazos, prioridades, precios, quejas del cliente, temas personales o de RR. HH., y accesos o contraseñas.
+2. **Reunir contexto (código, sin IA):**
+   - el encargo, si respondía a uno;
+   - la ficha y la memoria aceptada del cliente;
+   - las 5 entradas publicadas de la base más parecidas;
+   - las 3 preguntas ya resueltas por Enric más parecidas (casos anteriores, también de otros clientes);
+   - los 3 ejemplos de corrección de Enric más parecidos (para aprender).
+3. **Responder (Sonnet, una llamada).** Devuelve en JSON la respuesta, la **fuente** (`ficha`, `base`, `casos` o `general`), los ids usados y si es un tema sensible.
+4. **Decidir (código):**
+   - Tema sensible → se escala a Enric.
+   - Fuente `ficha`, `base` o `casos` → la respuesta va a la persona al momento, citando la fuente.
+   - Fuente `general` → según el panel. Al principio, **con aprobación de Enric** (§9.4).
+
+**Por qué en código y no un agente con herramientas.** Garantiza el orden de la escalera y los límites, sabe con certeza de dónde salió la respuesta (y por tanto si necesita aprobación), cuesta menos (dos llamadas fijas) y se puede probar.
+
+**Lo que se pierde.** La conversación libre. Se compensa así: un mensaje de seguimiento en los 30 minutos siguientes se trata como parte de la misma pregunta, con lo anterior como contexto.
+
+**Alternativa descartada:** el jefe como agente con herramientas, igual que el Operations manager. Es más flexible, pero no garantiza la escalera ni cuándo hace falta tu aprobación, y gasta más llamadas.
+
+### 9.3 Lo que ve la persona
+- **Una respuesta con su fuente.** Ejemplos: «📒 Según la ficha de X…», «📚 Base: Cómo redirigir… (revisada en marzo)», «🔁 Ya se resolvió antes…», «💡 Sugerencia general, no está en nuestra base».
+- **Botones:** ✅ Me sirve · ❌ No me sirve / ya lo probé (pide en una línea qué probó) · 🙋 Que lo vea Enric.
+- **«Me sirve»** cuenta a favor de las entradas usadas. **«No me sirve»** cuenta en contra y escala la pregunta.
+
+### 9.4 Lo que ve Enric (por el chat principal)
+- **Respuesta general pendiente de aprobar:** la pregunta, el contexto y la respuesta propuesta. Botones: ✅ Enviar · ✏️ Cambiar (le dices qué y la IA lo vuelve a analizar y te pasa otra versión) · 📝 Responder yo · 🗑 Descartar.
+- **Escalada:** quién pregunta, el cliente, el encargo, la pregunta, lo que se le respondió y por qué no valió (o el tema sensible), y la propuesta del jefe si la hay. Botones: 📝 Responder · ✏️ Cambiar la propuesta · ✅ Enviar la propuesta.
+- **Después de cada respuesta tuya o aprobada:** sale una propuesta de entrada para la base (la de la fase 1, con origen «respuesta»), con sus botones Publicar · Cambiar · Más tarde · Descartar.
+- **Aprender.** Se guardan la primera propuesta, cada indicación tuya con la versión anterior, y la respuesta final. En preguntas parecidas, el jefe recibe esos ejemplos («la última vez propusiste esto y Enric lo cambió así»). No es un reentrenamiento: se le pasan como ejemplos.
+
+### 9.5 Panel y parte
+- **Automatización «Respuestas al equipo» (Operaciones):**
+  - encendida o apagada; **apagada de serie** hasta que Enric la pruebe y avise al equipo;
+  - autonomía por fuente: ficha, base y casos «autónomo»; general «aprobación»;
+  - minutos de seguimiento (30).
+- **Parte diario (sección en el parte existente):** preguntas del día, cuántas por cada fuente, escaladas, sin resolver y temas repetidos sin entrada en la base.
+
+### 9.6 Esquema propuesto (necesita OK)
+**Tabla `agt_team_questions`** (módulo Agentes, donde vive el jefe; Operaciones solo es el canal):
+
+| Columna | Para qué |
+|---|---|
+| `id`, `tenant_id` | — |
+| `asked_by_clickup_id`, `asked_by_name`, `chat_id` | Quién pregunta y a qué chat se contesta |
+| `request_id` (uuid sin clave foránea: es de otro módulo) | El encargo, si respondía a uno |
+| `client_id` → `clients` (núcleo) | El cliente |
+| `question`, `followups` (jsonb) | La pregunta y los mensajes de seguimiento |
+| `status` | `pendiente_cliente` · `respondida` · `pendiente_aprobacion` · `escalada` · `resuelta` · `cerrada` · `descartada` |
+| `tier` | `ficha` · `base` · `casos` · `general` · `enric` |
+| `sources` (jsonb) | Entradas, casos o ficha usados (tipo, id y título) |
+| `ai_first_answer`, `ai_answer`, `revisions` (jsonb), `final_answer`, `answered_by` (`ia` o `enric`) | Para aprender de las correcciones |
+| `feedback` (`sirve` · `no_sirve`), `feedback_note` | Lo que dijo la persona y qué había probado |
+| `escalation_reason` (`no_sirve` · `pide_enric` · `tema_sensible` · `sin_respuesta`), `escalated_at` | Por qué llegó a Enric |
+| `awaiting_chat_id`, `awaiting_kind` | Quién tiene que escribir el siguiente texto (la persona o Enric) |
+| `kb_article_id` → `kb_articles` | La entrada de la base que salió de esta respuesta |
+| `embedding` (vector 1536), `embedding_model` | Buscar casos anteriores |
+| `cost_usd`, `created_at`, `updated_at`, `answered_at`, `closed_at` | — |
+
+Índices por cuenta y estado, y por persona y fecha.
+
+**Datos, sin esquema:**
+- el agente `jefe_operaciones` y su asignación como jefe del departamento Operaciones;
+- los prompts `agt_team_classify` (Haiku) y `agt_team_answer` (Sonnet);
+- la automatización nueva.
