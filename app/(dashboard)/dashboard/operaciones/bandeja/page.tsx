@@ -8,7 +8,8 @@ import { Mail } from 'lucide-react';
 import { getInbox, waitLabel } from '@/lib/operaciones/inbox';
 import { getPendingEmailProposals } from '@/lib/operaciones/owner-queue';
 import { isInboxOwner } from '@/lib/operaciones/inbox-owner';
-import { BandejaList, type BandejaItem } from './bandeja-list';
+import { BandejaList } from './bandeja-list';
+import { toBandejaItems } from './items';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,33 +31,7 @@ export default async function BandejaPage() {
 
   const now = new Date();
   const [inbox, emails] = await Promise.all([getInbox(user.tenantId), getPendingEmailProposals(user.tenantId)]);
-  const items: BandejaItem[] = inbox.map((i) =>
-    i.kind === 'review'
-      ? {
-          kind: 'review',
-          id: i.req.id,
-          title: i.req.title,
-          person: i.req.assigneeName ?? '—',
-          note: i.req.doneNote,
-          taskUrl: i.req.clickupTaskUrl,
-          urgent: i.req.priority === 1,
-          wait: waitLabel(i.since, now)
-        }
-      : {
-          kind: 'blocker',
-          id: i.blocker.id,
-          title: i.req.title,
-          person: i.blocker.askedByName ?? '—',
-          question: i.blocker.question,
-          summary: i.blocker.aiSummary,
-          options: Array.isArray(i.blocker.aiOptions) ? (i.blocker.aiOptions as string[]) : [],
-          recommendation: i.blocker.aiRecommendation,
-          proposal: i.proposal,
-          taskUrl: i.req.clickupTaskUrl,
-          urgent: i.req.priority === 1,
-          wait: waitLabel(i.since, now)
-        }
-  );
+  const items = toBandejaItems(inbox, now);
 
   return (
     <div className="max-w-3xl space-y-4">

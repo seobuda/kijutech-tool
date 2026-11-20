@@ -5,11 +5,9 @@
 import 'server-only';
 import { and, asc, desc, eq, gte, inArray, isNull, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { agtTeamQuestions, clientMemory, estSuggestions, kbArticles, opsAgentActions, opsBlockers, opsClientActivity, opsRequests, opsTeamProfiles } from '@/lib/db/schema';
-import { errorStats, reportError } from '@/lib/core/errors';
-import { countByStatus as kbCountByStatus } from '@/lib/core/knowledge';
-import { getInbox } from '@/lib/operaciones/inbox';
-import { getPendingEmailProposals } from '@/lib/operaciones/owner-queue';
+import { agtTeamQuestions, kbArticles, opsAgentActions, opsBlockers, opsClientActivity, opsRequests, opsTeamProfiles } from '@/lib/db/schema';
+import { reportError } from '@/lib/core/errors';
+import { countByKind, getParaTi, KINDS } from '@/lib/inicio/para-ti';
 import { evaluateClient, getLevels, listClients } from '@/lib/operaciones/clients';
 import { getCurrentDays, getPersonDay, jornadaSettings } from '@/lib/operaciones/jornada';
 import type { DayStatus } from '@/lib/operaciones/jornada-core';
@@ -37,51 +35,17 @@ export type WaitingItem = {
   urgent?: boolean;
 };
 
-const ESCALATED: string[] = ['pendiente_aprobacion', 'escalada'];
-
-/** Todo lo que espera una decisión del dueño o de administración, agrupado por tipo y con su enlace. */
+/** Recuento de lo que espera una decisión, por tipo, con enlace a Para ti filtrado. Sale de la misma fuente que Para ti. */
 export async function getWaiting(tenantId: string): Promise<WaitingItem[]> {
-  const [inbox, emails, agentRows, questions, kb, suggestions, memory, errors] = await Promise.all([
-    getInbox(tenantId),
-    getPendingEmailProposals(tenantId),
-    db
-      .select({ n: sql<number>`count(*)::int`, oldest: sql<Date | null>`min(${opsAgentActions.createdAt})` })
-      .from(opsAgentActions)
-      // Las respuestas a bloqueos ya cuentan en «Mi bandeja» y las de correos en «Correos».
-      .where(and(eq(opsAgentActions.tenantId, tenantId), eq(opsAgentActions.status, 'propuesto'), inArray(opsAgentActions.kind, ['note_conversion', 'agent_tool']))),
-    db
-      .select({ n: sql<number>`count(*)::int`, oldest: sql<Date | null>`min(${agtTeamQuestions.createdAt})` })
-      .from(agtTeamQuestions)
-      .where(and(eq(agtTeamQuestions.tenantId, tenantId), inArray(agtTeamQuestions.status, ESCALATED))),
-    kbCountByStatus(tenantId),
-    db
-      .select({ n: sql<number>`count(*)::int`, oldest: sql<Date | null>`min(${estSuggestions.createdAt})` })
-      .from(estSuggestions)
-      .where(and(eq(estSuggestions.tenantId, tenantId), eq(estSuggestions.status, 'pendiente'))),
-    db
-      .select({ n: sql<number>`count(*)::int`, oldest: sql<Date | null>`min(${clientMemory.createdAt})` })
-      .from(clientMemory)
-      .where(and(eq(clientMemory.tenantId, tenantId), eq(clientMemory.status, 'propuesto'))),
-    errorStats(tenantId)
-  ]);
-
-  const reviews = inbox.filter((i) => i.kind === 'review');
-  const blockers = inbox.filter((i) => i.kind === 'blocker');
-  const oldestOf = (dates: Date[]) => (dates.length ? new Date(Math.min(...dates.map((d) => new Date(d).getTime()))) : null);
-  const asDate = (v: Date | string | null | undefined) => (v ? new Date(v) : null);
-
-  const items: WaitingItem[] = [
-    { key: 'bloqueos', label: 'Bloqueos del equipo', count: blockers.length, href: '/dashboard/operaciones/bandeja', oldest: oldestOf(blockers.map((b) => b.since)), urgent: blockers.length > 0 },
-    { key: 'revisiones', label: 'Encargos por revisar', count: reviews.length, href: '/dashboard/operaciones/bandeja', oldest: oldestOf(reviews.map((r) => r.since)) },
-    { key: 'correos', label: 'Correos por responder', count: emails.length, href: '/dashboard/operaciones/correos', oldest: oldestOf(emails.map((e) => e.since)) },
-    { key: 'dudas', label: 'Dudas del equipo escaladas', count: questions[0]?.n ?? 0, href: '/dashboard/agentes/equipo', oldest: asDate(questions[0]?.oldest), urgent: (questions[0]?.n ?? 0) > 0 },
-    { key: 'agente', label: 'Propuestas del agente', count: agentRows[0]?.n ?? 0, href: '/dashboard/operaciones/agente', oldest: asDate(agentRows[0]?.oldest) },
-    { key: 'estratega', label: 'Propuestas del estratega', count: suggestions[0]?.n ?? 0, href: '/dashboard/estrategia', oldest: asDate(suggestions[0]?.oldest) },
-    { key: 'fichas', label: 'Cambios propuestos en fichas', count: memory[0]?.n ?? 0, href: '/dashboard/clientes', oldest: asDate(memory[0]?.oldest) },
-    { key: 'base', label: 'Entradas de la base por revisar', count: kb.propuesta, href: '/dashboard/conocimiento?estado=propuesta', oldest: null },
-    { key: 'errores', label: 'Errores críticos abiertos', count: errors.critical, href: '/dashboard/errores', oldest: null, urgent: errors.critical > 0 }
-  ];
-  return items;
+  const { entries } = await getParaTi(tenantId);
+  return countByKind(entries).map((c) => ({
+    key: c.kind,
+    label: KINDS[c.kind].label,
+    count: c.count,
+    href: `/dashboard/para-ti?tipo=${c.kind}`,
+    oldest: c.oldest,
+    urgent: c.urgent
+  }));
 }
 
 // --- Clientes ---------------------------------------------------------------------------------------------------

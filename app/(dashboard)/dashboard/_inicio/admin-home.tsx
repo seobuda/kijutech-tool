@@ -64,7 +64,7 @@ async function WaitingBlock({ tenantId }: { tenantId: string }) {
     .sort((a, b) => Number(Boolean(b.urgent)) - Number(Boolean(a.urgent)) || (a.oldest?.getTime() ?? Infinity) - (b.oldest?.getTime() ?? Infinity));
   const total = pending.reduce((a, i) => a + i.count, 0);
   return (
-    <HomeCard title={total ? `Lo que espera de ti · ${total}` : 'Lo que espera de ti'} icon={Inbox} href="/dashboard/operaciones/bandeja" linkLabel="Ir a Mi bandeja" testId="inicio-pendiente">
+    <HomeCard title={total ? `Lo que espera de ti · ${total}` : 'Lo que espera de ti'} icon={Inbox} href="/dashboard/para-ti" linkLabel="Ir a Para ti" testId="inicio-pendiente">
       {pending.length === 0 ? (
         <p className="flex items-center gap-2 text-sm text-muted-foreground">
           <CheckCircle2 className="size-4 text-success" aria-hidden />

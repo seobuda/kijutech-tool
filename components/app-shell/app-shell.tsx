@@ -79,12 +79,14 @@ function NavList({
   groups,
   pathname,
   collapsed,
-  onNavigate
+  onNavigate,
+  count
 }: {
   groups: NavGroup[];
   pathname: string;
   collapsed?: boolean;
   onNavigate?: () => void;
+  count?: { count: number; urgent: number };
 }) {
   return (
     <nav className="flex flex-col gap-5" aria-label="Navegación principal">
@@ -102,7 +104,7 @@ function NavList({
             const current = kids.length ? activeChild(item, pathname) : null;
             return (
               <div key={item.href}>
-                <NavLink item={item} active={active} collapsed={collapsed} onNavigate={onNavigate} />
+                <NavLink item={item} active={active} collapsed={collapsed} onNavigate={onNavigate} count={count} />
                 {kids.length > 0 && (
                   <ul className="mb-1 mt-0.5 ml-[21px] flex flex-col gap-0.5 border-l border-sidebar-border pl-2" aria-label={`Dentro de ${item.label}`}>
                     {kids.map((c) => {
@@ -135,7 +137,26 @@ function NavList({
   );
 }
 
-function NavLink({ item, active, collapsed, onNavigate }: { item: NavItem; active: boolean; collapsed?: boolean; onNavigate?: () => void }) {
+// Número de Para ti en la barra (solo admin): se refresca cada minuto. Rojo si hay algo urgente.
+function useParaTiCount(enabled: boolean) {
+  const { data } = useSWR<{ count: number; urgent: number }>(enabled ? '/api/para-ti' : null, fetcher, { refreshInterval: 60_000 });
+  return data ?? { count: 0, urgent: 0 };
+}
+
+function NavLink({
+  item,
+  active,
+  collapsed,
+  onNavigate,
+  count
+}: {
+  item: NavItem;
+  active: boolean;
+  collapsed?: boolean;
+  onNavigate?: () => void;
+  count?: { count: number; urgent: number };
+}) {
+  const n = item.badge && count ? count.count : 0;
   return (
     <Link
       href={item.href}
@@ -152,6 +173,17 @@ function NavLink({ item, active, collapsed, onNavigate }: { item: NavItem; activ
       {active && <span className="absolute -left-3 top-1.5 bottom-1.5 w-1 rounded-r-full bg-brand" aria-hidden />}
       <item.icon className={cn('size-[18px] shrink-0 transition-colors', active ? 'text-brand' : 'text-muted-foreground group-hover:text-foreground')} />
       {!collapsed && <span className="truncate">{item.label}</span>}
+      {n > 0 &&
+        (collapsed ? (
+          <span className={cn('absolute right-2 top-1.5 size-2 rounded-full', count!.urgent ? 'bg-destructive' : 'bg-brand')} aria-label={`${n} pendientes`} />
+        ) : (
+          <span
+            className={cn('ml-auto rounded-full px-1.5 text-[11px] font-semibold tabular-nums text-white', count!.urgent ? 'bg-destructive' : 'bg-brand')}
+            aria-label={`${n} pendientes${count!.urgent ? `, ${count!.urgent} urgentes` : ''}`}
+          >
+            {n > 99 ? '99+' : n}
+          </span>
+        ))}
     </Link>
   );
 }
@@ -325,6 +357,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const roles = useRoles();
   const groups = visibleNav(roles);
   const actions = visibleActions(roles);
+  const paraTi = useParaTiCount(roles.isAdmin);
   const [userCollapsed, setCollapsed] = useState(false);
   // Portátiles con escala del 125-150 % tienen ~900-1250 px útiles: la barra se queda visible
   // pero en modo iconos para dejar sitio al contenido.
@@ -405,7 +438,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
         <div className="flex-1 overflow-y-auto px-3 py-2">
-          <NavList groups={groups} pathname={pathname} collapsed={collapsed} />
+          <NavList groups={groups} pathname={pathname} collapsed={collapsed} count={paraTi} />
         </div>
         <div className="flex flex-col gap-1 border-t border-sidebar-border p-3">
           <UserMenu collapsed={collapsed} />
@@ -438,7 +471,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <NewMenu actions={actions} onNavigate={() => setMobileOpen(false)} />
             </div>
             <div className="flex-1 overflow-y-auto px-3 py-2">
-              <NavList groups={groups} pathname={pathname} onNavigate={() => setMobileOpen(false)} />
+              <NavList groups={groups} pathname={pathname} onNavigate={() => setMobileOpen(false)} count={paraTi} />
             </div>
             <div className="border-t border-sidebar-border p-3">
               <UserMenu />
