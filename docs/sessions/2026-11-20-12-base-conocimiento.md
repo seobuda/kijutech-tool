@@ -1,7 +1,7 @@
 # Base de conocimiento (núcleo) y Mapa de contenido del cliente
 **Fecha:** 2026-11-20  
 **Rama:** feature/jefe-operaciones  
-**Commit:** a65166cb
+**Commit:** 58b05f57
 
 ## Qué se construyó
 Enric probó el bot de Sistema (funciona) y se pasó al departamento de Operaciones.
@@ -39,7 +39,7 @@ Se construyó la **fase 1**.
 
 **Operaciones:**
 - `lib/operaciones/clickup.ts`: `fetchSpaceTasksForKb`, una consulta de workspace paginada con la descripción en Markdown.
-- `lib/operaciones/kb-import.ts` / `kb-import-actions.ts`: importación del espacio de ClickUp a «Para más tarde». Solo admin.
+- `lib/operaciones/kb-import.ts` / `kb-import-actions.ts`: importación ÚNICA del espacio de ClickUp a «Para más tarde» (decisión de Enric: después, todo se gestiona en la herramienta). Solo admin. Solo entran tareas con contenido (descripción o adjuntos, con `getTaskAttachments` para las que no tienen descripción); lo alojado en ClickUp queda marcado «vídeo en clickup» y sin el token firmado de la URL. Prueba en local: 167 tareas → 127 importadas, 40 vacías fuera, 77 con archivos en ClickUp, 44 peticiones; repetirla no duplica.
 - `lib/operaciones/agent-capabilities.ts`: `mapa_contenido` en el tipo de cuenta del agente.
 
 **Agentes:** `lib/agentes/store.ts`. El Operations manager recibe `buscar_conocimiento` y `guardar_conocimiento` (mejora `2026-11-20-conocimiento`).
@@ -168,3 +168,9 @@ INSERT INTO "ai_prompts" (...) VALUES ('kb_redactar_entrada', ...) ON CONFLICT (
 - **Mapa de contenido:** más adelante, que el jefe de Operaciones y el estratega lean el Google Sheet (Google Sheets API).
 - **Votos «me sirve» / «no me sirve»:** hay columnas y peso en la búsqueda, pero se rellenarán en la fase 2.
 - Sigue pendiente lo de la sesión anterior: el texto del paso «Despliegue protegido» del mapa de Seguridad (necesita OK, `lib/auth/`) y el `TimeoutNegativeWarning` de producción.
+
+## Segunda parte (misma sesión): importación única y solo con contenido
+- Enric confirmó que la importación de ClickUp es **una sola vez**: después no se escribirá conocimiento en ClickUp. La pantalla muestra «ya importado».
+- **Solo entran tareas con contenido.** Las que no tienen descripción se revisan por sus adjuntos y, si no tienen, no entran.
+- **Falsos positivos de «contraseña»:** los enlaces de los adjuntos llevan `?token=` / `authz_token=`. La detección ya no mira dentro de los enlaces, y a los enlaces de ClickUp se les quita el token firmado (daba acceso y caduca).
+- **Pendiente:** los vídeos siguen alojados en ClickUp. Si se cancela ClickUp, podrían dejar de verse (sin verificar): pasarlos a Google Drive al revisar cada entrada.
