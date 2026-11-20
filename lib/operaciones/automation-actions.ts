@@ -134,6 +134,11 @@ export async function sendAutomationTestAction(key: string, draft?: string): Pro
       });
       void processNotifications(user.tenantId);
       return { ok: true, message: 'Prueba en cola: te llegará a Telegram en unos segundos.' };
+    } else if (key === 'system_digest') {
+      // El parte real de ahora, por el chat de Sistema (o el principal si aún no está listo).
+      const { queueSystemDigest } = await import('@/lib/operaciones/system-report');
+      await queueSystemDigest(user.tenantId, `sysdigest:test:${Date.now()}`);
+      return { ok: true, message: 'Parte en cola: te llegará por el chat de Sistema (o el principal) en unos segundos.' };
     } else if (key === 'startup') {
       body = await buildStartupText(user.tenantId, await getLastHeartbeat(user.tenantId));
     } else if (key === 'reports' || key === 'autopilot') {

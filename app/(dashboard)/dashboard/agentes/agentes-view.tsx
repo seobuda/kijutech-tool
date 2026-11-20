@@ -13,7 +13,7 @@ export type AgentRow = {
   id: string;
   key: string;
   name: string;
-  kind: 'principal' | 'subagente';
+  kind: 'principal' | 'jefe' | 'subagente';
   role: string;
   instructions: string;
   tools: string[];
@@ -55,7 +55,7 @@ export function AgentesView({ agents, tools, voices, autonomies }: { agents: Age
                   <Bot className="size-4 text-muted-foreground" aria-hidden /> {a.name}
                 </h2>
                 <p className="text-xs text-muted-foreground">
-                  {a.key} · {a.kind === 'principal' ? 'Principal (Telegram y correo)' : 'Subagente (trabajos)'}
+                  {a.key} · {a.kind === 'principal' ? 'Principal (Telegram y correo)' : a.kind === 'jefe' ? 'Jefe de departamento (su propio chat)' : 'Subagente (trabajos)'}
                 </p>
               </div>
               <div className="flex gap-1">
@@ -165,6 +165,7 @@ function AgentForm({ agent, tools, voices, onClose }: { agent: AgentRow; tools: 
             <select className="h-9 w-full rounded-md border bg-background px-2" value={a.kind} onChange={(e) => set('kind', e.target.value as AgentRow['kind'])}>
               <option value="subagente">Subagente (hace trabajos encargados)</option>
               <option value="principal">Principal (habla por Telegram y correo)</option>
+              <option value="jefe">Jefe de departamento (habla por el chat de su departamento)</option>
             </select>
           </label>
         </div>

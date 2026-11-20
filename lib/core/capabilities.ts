@@ -62,15 +62,25 @@ export type InboundMessage = {
   text: string;
   audio?: { data: ArrayBuffer; mimeType: string; seconds: number | null } | null;
   email?: { subject: string; messageId: string | null; references: string | null };
+  /** Bot de departamento por el que llegó (organigrama, 20 nov 2026). Sin él, llegó por el bot principal. */
+  bot?: string;
 };
+
+/**
+ * Bots de departamento (organigrama, 20 nov 2026). Un aviso o una respuesta puede decir por qué bot sale: si ese bot no
+ * está configurado o el dueño aún no pulsó «Iniciar», sale por el bot principal (nunca se pierde).
+ * SYSTEM_BOT es el del departamento de Sistema: errores, salud, gasto de IA, servidor y despliegues.
+ */
+export const SYSTEM_BOT = 'sistema';
+export type OutboundOptions = { bot?: string | null; /** Sin sonido (Telegram disable_notification). */ silent?: boolean };
 
 export type OutboundButton = { text: string; data: string };
 export type TelegramOutbound = {
-  sendText: (tenantId: string, chatId: string, html: string, buttons?: OutboundButton[][]) => Promise<void>;
-  sendVoice: (tenantId: string, chatId: string, ogg: Uint8Array, caption?: string) => Promise<boolean>;
-  sendTyping: (tenantId: string, chatId: string, action: 'typing' | 'record_voice') => Promise<void>;
+  sendText: (tenantId: string, chatId: string, html: string, buttons?: OutboundButton[][], opts?: OutboundOptions) => Promise<void>;
+  sendVoice: (tenantId: string, chatId: string, ogg: Uint8Array, caption?: string, opts?: OutboundOptions) => Promise<boolean>;
+  sendTyping: (tenantId: string, chatId: string, action: 'typing' | 'record_voice', opts?: OutboundOptions) => Promise<void>;
   /** Aviso fiable al dueño por la cola de avisos (para resultados que llegan más tarde, como un trabajo de subagente). */
-  notifyOwner: (tenantId: string, key: string, html: string, buttons?: OutboundButton[][]) => Promise<void>;
+  notifyOwner: (tenantId: string, key: string, html: string, buttons?: OutboundButton[][], opts?: OutboundOptions) => Promise<void>;
 };
 
 type Registry = {

@@ -383,7 +383,8 @@ export async function collectSnapshot(tenantId: string): Promise<Snapshot> {
 
 const lastRun = new Map<string, number>();
 
-async function notify(tenantId: string, dedupeKey: string, text: string) {
+// Va al chat de Sistema (enqueueNotification, tipo «health»). Solo suena lo crítico; lo resuelto y lo de aviso, en silencio.
+async function notify(tenantId: string, dedupeKey: string, text: string, silent = false) {
   const owner = await getOwnerMember(tenantId);
   if (!owner) return;
   await enqueueNotification({
@@ -392,7 +393,7 @@ async function notify(tenantId: string, dedupeKey: string, text: string) {
     dedupeKey,
     forClickupUserId: owner.clickupUserId,
     forName: owner.username,
-    payload: { text, toOwner: true }
+    payload: { text, toOwner: true, ...(silent ? { silent: true } : {}) }
   });
 }
 
@@ -419,7 +420,8 @@ export async function runHealthChecks(tenantId: string, now = Date.now()): Promi
         await notify(
           tenantId,
           `health:open:${created.id}`,
-          `${c.status === 'critico' ? '🔴' : '🟠'} <b>Salud: ${escapeHtml(c.label)}</b>\n${escapeHtml(c.detail)}\n\n💡 ${escapeHtml(c.recommendation)}\n\nDetalle en Operaciones → Salud.`
+          `${c.status === 'critico' ? '🔴' : '🟠'} <b>Salud: ${escapeHtml(c.label)}</b>\n${escapeHtml(c.detail)}\n\n💡 ${escapeHtml(c.recommendation)}\n\nDetalle en Operaciones → Salud.`,
+          c.status !== 'critico'
         );
         await db.update(opsHealthIncidents).set({ notifiedAt: new Date() }).where(eq(opsHealthIncidents.id, created.id));
       }
@@ -431,7 +433,7 @@ export async function runHealthChecks(tenantId: string, now = Date.now()): Promi
         .returning();
       if (closed) {
         const mins = Math.max(1, Math.round((Date.now() - current.openedAt.getTime()) / 60_000));
-        await notify(tenantId, `health:resolved:${current.id}`, `🟢 <b>Resuelto: ${escapeHtml(c.label)}</b> (duró ${mins} min).`);
+        await notify(tenantId, `health:resolved:${current.id}`, `🟢 <b>Resuelto: ${escapeHtml(c.label)}</b> (duró ${mins} min).`, true);
         await db.update(opsHealthIncidents).set({ resolvedNotifiedAt: new Date() }).where(eq(opsHealthIncidents.id, current.id));
       }
     } else if (c.status !== 'ok' && current && current.detail !== `${c.detail}\n${c.recommendation}`.trim()) {

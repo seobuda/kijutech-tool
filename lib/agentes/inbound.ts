@@ -9,8 +9,8 @@ import { reportError } from '@/lib/core/errors';
 //   - Un mensaje cada vez por conversación (si mandas dos seguidos, el segundo espera al primero).
 //   - Cada 20 mensajes se actualiza el resumen de la conversación (contexto corto y barato).
 // Fase 1: solo el dueño. El equipo podrá hablar con agentes con herramientas limitadas más adelante.
-import { emailOutbound, telegramOutbound, type InboundMessage, type ToolContext } from '@/lib/core/capabilities';
-import { addMessage, countMessages, getOrCreateConversation, principalAgent, recentMessages, setSummary } from '@/lib/agentes/store';
+import { emailOutbound, telegramOutbound, type InboundMessage, type OutboundButton, type ToolContext } from '@/lib/core/capabilities';
+import { addMessage, countMessages, departmentByBot, getAgent, getOrCreateConversation, principalAgent, recentMessages, setSummary } from '@/lib/agentes/store';
 import { runAgent, summarize, type HistoryItem } from '@/lib/agentes/engine';
 import { speak, speakableText, transcribe } from '@/lib/agentes/voice';
 
@@ -18,11 +18,24 @@ const chains = new Map<string, Promise<unknown>>();
 const VOICE_REQUEST_RE = /\b(resp[oó]ndeme|contesta(me)?|d[ií]melo)\b.{0,30}\b(audio|voz|nota de voz)\b|\ben (audio|voz)\b/i;
 const escape = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+/**
+ * A quién va el mensaje: por el bot de un departamento (organigrama, 20 nov 2026), a su jefe; si no, al principal.
+ * Si el departamento no tiene jefe activo, contesta el principal (por el mismo chat), para que nada quede sin respuesta.
+ */
+async function targetAgent(m: InboundMessage) {
+  if (m.bot) {
+    const dept = await departmentByBot(m.tenantId, m.bot);
+    const head = dept?.headAgentKey ? await getAgent(m.tenantId, dept.headAgentKey) : null;
+    if (head?.active) return head;
+  }
+  return principalAgent(m.tenantId);
+}
+
 export async function handleInbound(m: InboundMessage): Promise<boolean> {
   if (!m.isOwner) return false; // fase 1: solo quien lleva las operaciones
-  const agent = await principalAgent(m.tenantId);
+  const agent = await targetAgent(m);
   if (!agent) return false;
-  const key = `${m.tenantId}:${m.channel}:${m.peer}`;
+  const key = `${m.tenantId}:${m.channel}:${m.bot ?? ''}:${m.peer}`;
   const prev = chains.get(key) ?? Promise.resolve();
   const next = prev.catch(() => undefined).then(() => converse(m, agent));
   chains.set(key, next);
@@ -37,7 +50,16 @@ export async function handleInbound(m: InboundMessage): Promise<boolean> {
 }
 
 async function converse(m: InboundMessage, agent: NonNullable<Awaited<ReturnType<typeof principalAgent>>>): Promise<void> {
-  const tgOut = m.channel === 'telegram' ? telegramOutbound() : null;
+  const base = m.channel === 'telegram' ? telegramOutbound() : null;
+  // Se contesta por el mismo bot por el que llegó (el del departamento, o el principal).
+  const o = { bot: m.bot ?? null };
+  const tgOut = base
+    ? {
+        sendText: (t: string, c: string, h: string, b?: OutboundButton[][]) => base.sendText(t, c, h, b, o),
+        sendTyping: (t: string, c: string, a: 'typing' | 'record_voice') => base.sendTyping(t, c, a, o),
+        sendVoice: (t: string, c: string, ogg: Uint8Array) => base.sendVoice(t, c, ogg, undefined, o)
+      }
+    : null;
   const say = async (html: string) => {
     if (tgOut) await tgOut.sendText(m.tenantId, m.peer, html);
   };

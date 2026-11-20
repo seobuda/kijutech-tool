@@ -23,7 +23,7 @@ const agentSchema = z.object({
   id: z.string().uuid().nullable(),
   key: z.string().trim().regex(/^[a-z][a-z0-9_]{1,39}$/, 'La clave: minúsculas, números y guion bajo (p. ej. redactor_seo)'),
   name: z.string().trim().min(2).max(120),
-  kind: z.enum(['principal', 'subagente']),
+  kind: z.enum(['principal', 'jefe', 'subagente']),
   role: z.string().trim().max(1000),
   instructions: z.string().trim().max(20_000),
   tools: z.array(z.string().trim().max(64)).max(60),

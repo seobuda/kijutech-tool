@@ -29,6 +29,7 @@ import {
   getOwnerMember,
   getTelegramConfig
 } from '@/lib/operaciones/telegram-config';
+import { getDeptBot, markDeptBotReady, welcomeText } from '@/lib/operaciones/dept-bots';
 import { logEvent, type Actor } from '@/lib/operaciones/events';
 import { refreshNotice } from '@/lib/operaciones/notifications';
 import { acceptWork, addDoneNote, finishWork, getRequest, laterWork, returnWork, startWork } from '@/lib/operaciones/workflow';
@@ -58,9 +59,36 @@ export const AGENT_CALLBACK_RE = /^ag:([0-9a-f-]{36}):(ok|no|ed|re|pa|as:(\d{1,2
 // que genera noticeKeyboard (un `\d` olvidado dejó sin efecto los botones con varios responsables).
 export const FLOW_CALLBACK_RE = /^(st|lt|bl|dn|dr|ok|rt|rp):([0-9a-f-]{36})(?::(\d{1,20}))?$/;
 
-export async function handleUpdate(tenantId: string, token: string, update: TgUpdate): Promise<void> {
+export async function handleUpdate(tenantId: string, token: string, update: TgUpdate, bot?: string): Promise<void> {
+  if (bot) return handleDeptBotUpdate(tenantId, token, update, bot);
   if (update.message) return handleMessage(tenantId, token, update.message);
   if (update.callback_query) return handleCallback(tenantId, token, update.callback_query);
+}
+
+/**
+ * Bot de departamento (organigrama, 20 nov 2026; p. ej. «Kijutech Sistema»). Solo atiende al dueño: «Iniciar» deja el
+ * bot listo, los mensajes y audios van al jefe de ese departamento (el núcleo los entrega con `bot`) y los botones de sus
+ * avisos funcionan igual que en el bot principal. No hay conversación pendiente: lo que el bot principal espera por
+ * escrito se contesta en el bot principal.
+ */
+async function handleDeptBotUpdate(tenantId: string, token: string, update: TgUpdate, bot: string): Promise<void> {
+  const chat = update.message?.chat ?? update.callback_query?.message?.chat;
+  if (!chat || chat.type !== 'private') return;
+  const [member, owner] = await Promise.all([getMemberByChat(tenantId, chat.id), getOwnerMember(tenantId)]);
+  if (!member || !owner || member.id !== owner.id) {
+    if (update.message) await reply(token, chat.id, 'Este bot es solo para la dirección de la agencia.').catch(() => undefined);
+    return;
+  }
+  if (update.callback_query) return handleCallback(tenantId, token, update.callback_query);
+  const msg = update.message!;
+  const text = (msg.text ?? msg.caption ?? '').trim();
+  if (/^\/start(?:@\w+)?(?:\s|$)/.test(text)) {
+    const b = await getDeptBot(tenantId, bot);
+    await markDeptBotReady(tenantId, bot);
+    return void (await reply(token, chat.id, welcomeText(bot, b?.botName ?? null)));
+  }
+  if (!text && !msg.voice && !msg.audio) return;
+  await toAgent(tenantId, token, member, msg, text, bot);
 }
 
 /** Entrega la respuesta a una pregunta de otro módulo (registrada en el núcleo) y contesta lo que diga ese módulo. */
@@ -170,7 +198,7 @@ async function handleMessage(tenantId: string, token: string, msg: TgMessage): P
  * Mensaje libre o audio → al agente, por el registro del núcleo (el módulo Agentes lo atiende; Operaciones no lo importa).
  * Si nadie lo atiende (no es el dueño o no hay agente), se ignora como antes.
  */
-async function toAgent(tenantId: string, token: string, member: OpsTelegramMember, msg: TgMessage, text: string): Promise<void> {
+async function toAgent(tenantId: string, token: string, member: OpsTelegramMember, msg: TgMessage, text: string, bot?: string): Promise<void> {
   const owner = await getOwnerMember(tenantId);
   const file = msg.voice ?? msg.audio ?? null;
   let audio: { data: ArrayBuffer; mimeType: string; seconds: number | null } | null = null;
@@ -200,7 +228,8 @@ async function toAgent(tenantId: string, token: string, member: OpsTelegramMembe
     isOwner: owner?.id === member.id,
     clickupUserId: member.clickupUserId,
     text,
-    audio
+    audio,
+    ...(bot ? { bot } : {})
   });
   if (!handled && file) await reply(token, msg.chat.id, 'Por ahora solo entiendo audios de quien lleva las operaciones.');
 }

@@ -18,6 +18,7 @@ import {
   registerModuleButtons,
   registerScheduled,
   registerTools,
+  SYSTEM_BOT,
   telegramOutbound,
   type AgentTool,
   type ModuleCallbackInput,
@@ -73,13 +74,31 @@ type State = {
   sampleBudget: Map<string, { hour: number; n: number }>;
   alertBudget: Map<string, { hour: number; n: number }>;
   dropped: number;
+  consoleTenant: (() => string | null) | null;
 };
 const G = globalThis as unknown as { __kijuErrors?: State };
 function st(): State {
-  if (!G.__kijuErrors) G.__kijuErrors = { pending: new Map(), timer: null, flushing: false, orig: null, inside: false, sampleBudget: new Map(), alertBudget: new Map(), dropped: 0 };
+  if (!G.__kijuErrors) G.__kijuErrors = { pending: new Map(), timer: null, flushing: false, orig: null, inside: false, sampleBudget: new Map(), alertBudget: new Map(), dropped: 0, consoleTenant: null };
   return G.__kijuErrors;
 }
 const out = (...a: unknown[]) => (st().orig?.error ?? console.error)(...a);
+
+/**
+ * De qué cuenta es lo que se escribe ahora en la consola (20 nov 2026). Sin esto, un console.error sin cuenta se anota
+ * en la cuenta real (y puede avisar a Enric). Un módulo registra aquí cómo saberlo: las pruebas simuladas de Operaciones
+ * devuelven su cuenta de pruebas mientras corre un escenario (AsyncLocalStorage), así lo que falle durante una prueba
+ * queda en la cuenta de pruebas. Es genérico: el núcleo no sabe qué es una prueba.
+ */
+export function registerConsoleTenantResolver(fn: () => string | null): void {
+  st().consoleTenant = fn;
+}
+function consoleTenant(): string | null {
+  try {
+    return st().consoleTenant?.() ?? null;
+  } catch {
+    return null;
+  }
+}
 
 // --- Captura ---------------------------------------------------------------------------------------------------------
 
@@ -142,7 +161,7 @@ export function reportError(input: ReportInput): void {
     const severity = input.severity ?? 'error';
     out(`[${input.source}]${input.area ? ` ${input.area}` : ''}:`, message);
     enqueue({
-      tenantId: input.tenantId ?? null,
+      tenantId: input.tenantId ?? consoleTenant(),
       source: input.source,
       area: input.area ?? '',
       message,
@@ -177,7 +196,7 @@ export function captureConsole(): void {
     s.inside = true;
     try {
       const p = parseConsoleArgs(args);
-      enqueue({ tenantId: null, source: p.source, area: p.area, message: p.message, stack: p.stack, severity: guessSeverity(kind, p.message), sample: { userMessage: null, context: {}, actor: null, channel: null, path: null } });
+      enqueue({ tenantId: consoleTenant(), source: p.source, area: p.area, message: p.message, stack: p.stack, severity: guessSeverity(kind, p.message), sample: { userMessage: null, context: {}, actor: null, channel: null, path: null } });
     } catch {
       /* nunca rompe */
     } finally {
@@ -298,7 +317,8 @@ async function maybeAlert(groupId: string, p: Pending, occurrences: number, seve
   s.alertBudget.set(tenantId, budget);
   const base = (process.env.BASE_URL || '').replace(/\/$/, '');
   const html = alertMessage({ title: p.title, source: p.source, area: p.area, severity, occurrences, reopened, userMessage: p.samples[0]?.userMessage, link: base ? `${base}/dashboard/errores?id=${groupId}` : null });
-  await tg.notifyOwner(tenantId, `err:${groupId}:${reopened ? `r${Date.now()}` : 'n'}`, html, errorKeyboard(groupId));
+  // Organigrama (20 nov 2026): los errores van al chat de Sistema (si está listo; si no, al principal). Solo suena lo crítico.
+  await tg.notifyOwner(tenantId, `err:${groupId}:${reopened ? `r${Date.now()}` : 'n'}`, html, errorKeyboard(groupId), { bot: SYSTEM_BOT, silent: severity !== 'critico' });
   await db.update(sysErrorGroups).set({ notifiedAt: new Date() }).where(eq(sysErrorGroups.id, groupId));
 }
 

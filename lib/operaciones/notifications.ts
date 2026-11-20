@@ -14,6 +14,8 @@ import {
   type OpsTelegramMember
 } from '@/lib/db/schema';
 import { clampMessage, escapeHtml, htmlToPlain, isParseError, tg, TelegramError } from '@/lib/operaciones/telegram';
+import { readyDeptBotToken } from '@/lib/operaciones/dept-bots';
+import { SYSTEM_BOT } from '@/lib/core/capabilities';
 import {
   decodeBotToken,
   getMemberByUser,
@@ -35,6 +37,7 @@ import type { OpsTask } from '@/lib/operaciones/clickup';
 
 const MAX_ATTEMPTS = 6; // por defecto; se cambia en Automatizaciones → Envío
 const URGENT_KINDS = ['block_alert', 'review_request'];
+const SYSTEM_KINDS = new Set(['health', 'startup']);
 // Reserva al reclamar un lote: cubre el lote entero (hasta 10 envíos de hasta 20 s; con 90 s caducaba a mitad y otro
 // proceso volvía a reclamar los últimos: mensajes duplicados, 17 nov 2026). Si el proceso muere, se reintenta pasado este tiempo.
 const LEASE_SECONDS = 300;
@@ -52,6 +55,9 @@ type Payload = {
   skipped?: string; // resumen omitido (p. ej. "sin tareas")
   heldByJornada?: boolean; // retenido porque la persona está en pausa o fuera (jornada real)
   jwTasks?: { id: string; name: string }[]; // tareas de los botones «▶️ Empiezo con…» (jornada real)
+  bot?: string; // bot de departamento por el que sale (organigrama); si no está listo, el principal
+  silent?: boolean; // sin sonido (disable_notification): lo informativo no interrumpe
+  sentVia?: string; // bot por el que salió de verdad
 };
 
 export type { Payload as NotificationPayload };
@@ -177,6 +183,14 @@ export async function enqueueNotification(input: {
 }): Promise<boolean> {
   const cfg = await getTelegramConfig(input.tenantId);
   if (!cfg) return false;
+  // Organigrama (20 nov 2026): los avisos técnicos al dueño (salud, vigía de IA, servidor, «Sistema en marcha») van al
+  // chat de Sistema si está listo. «Sistema en marcha» no suena: es informativo.
+  const system = input.payload.toOwner && SYSTEM_KINDS.has(input.kind);
+  const payload: Payload = {
+    ...(system ? { bot: SYSTEM_BOT, ...(input.kind === 'startup' ? { silent: true } : {}) } : {}),
+    ...input.payload,
+    testMode: cfg.testMode
+  };
   const inserted = await db
     .insert(opsNotifications)
     .values({
@@ -186,7 +200,7 @@ export async function enqueueNotification(input: {
       forClickupUserId: input.forClickupUserId,
       forName: input.forName,
       requestId: input.requestId ?? null,
-      payload: { ...input.payload, testMode: cfg.testMode } satisfies Payload,
+      payload,
       status: input.skipped ? 'enviado' : 'pendiente',
       ...(input.notBefore ? { nextAttemptAt: input.notBefore } : {})
     })
@@ -411,6 +425,11 @@ async function sendOne(c: Claimed): Promise<void> {
       : '');
   const text = clampMessage(`${header}${c.payload.text}`);
 
+  // Bot de departamento (organigrama, 20 nov 2026): solo para avisos al dueño; si no está listo, sale por el principal.
+  const deptToken = c.payload.toOwner && c.payload.bot ? await readyDeptBotToken(c.tenant_id, c.payload.bot) : null;
+  const sendToken = deptToken ?? decodeBotToken(cfg);
+  const silent = c.payload.silent ? { disable_notification: true } : {};
+
   try {
     let keyboard: { text: string; callback_data: string }[][] | null = null;
     if (c.payload.actions) {
@@ -430,15 +449,17 @@ async function sendOne(c: Claimed): Promise<void> {
     // aviso urgente nunca debe perderse por un problema de formato.
     const send = (html: boolean) =>
       c.payload.photoFileId
-        ? tg<{ message_id: number }>(decodeBotToken(cfg), 'sendPhoto', {
+        ? tg<{ message_id: number }>(sendToken, 'sendPhoto', {
             chat_id: dest.chatId,
+            ...silent,
             photo: c.payload.photoFileId,
             caption: html ? clampMessage(text, 1000) : htmlToPlain(clampMessage(text, 1000)),
             ...(html ? { parse_mode: 'HTML' } : {}),
             ...markup
           }, SEND_TIMEOUT_MS)
-        : tg<{ message_id: number }>(decodeBotToken(cfg), 'sendMessage', {
+        : tg<{ message_id: number }>(sendToken, 'sendMessage', {
             chat_id: dest.chatId,
+            ...silent,
             text: html ? text : htmlToPlain(text),
             ...(html ? { parse_mode: 'HTML' } : {}),
             disable_web_page_preview: true,
@@ -460,7 +481,7 @@ async function sendOne(c: Claimed): Promise<void> {
         chatId: dest.chatId,
         telegramMessageId: msg.message_id,
         lastError: null,
-        payload: { ...c.payload, sentText: text }
+        payload: { ...c.payload, sentText: text, ...(deptToken ? { sentVia: c.payload.bot } : {}) }
       })
       .where(eq(opsNotifications.id, c.id));
   } catch (e) {

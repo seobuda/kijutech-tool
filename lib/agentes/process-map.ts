@@ -16,6 +16,19 @@ export const AGENTES_PROCESS_MAP: ProcessStep[] = [
     tables: ['agt_conversations', 'agt_messages', 'agt_agents']
   },
   {
+    id: 'agt-organigrama',
+    lane: 'Hablar con el agente',
+    name: 'Organigrama: departamentos y jefes',
+    description:
+      'Organigrama (20 nov 2026): la agencia en departamentos (Gabinete, Operaciones, Cuentas y Estrategia, Sistema y Plataforma, Seguridad), cada uno con su jefe (agente de tipo «jefe»), sus agentes y a quién reporta. El primero en funcionar es Sistema: su jefe habla con Enric por su propio bot de Telegram («Kijutech Sistema»). Pantalla Agentes → Departamentos.',
+    status: 'built',
+    file: 'lib/agentes/store.ts',
+    when: 'Los departamentos y el jefe de sistema se crean solos la primera vez; un mensaje al bot de un departamento va a su jefe.',
+    ai: 'El jefe de sistema (Claude Sonnet) contesta con estado_sistema, errores y diagnósticos; encarga al Técnico de mantenimiento lo que haya que diagnosticar.',
+    code: 'El núcleo entrega el mensaje con `bot`: si el departamento de ese bot tiene jefe activo, contesta él (por el mismo bot); si no, el principal, por el mismo chat. Conversación propia por agente (no se mezcla con la del principal). El informe de un trabajo vuelve al chat de quien lo encargó (el jefe de sistema, por su bot); sin conversación de origen, al chat del departamento del subagente. Los agentes que ya existían pasan a su departamento una sola vez (Operations manager → Gabinete, Revisor web → Cuentas, Técnico → Sistema). Departamentos sin jefe todavía: su trabajo lo sigue haciendo el principal.',
+    tables: ['agt_departments', 'agt_agents', 'agt_conversations']
+  },
+  {
     id: 'agt-motor',
     lane: 'Pensar y actuar',
     name: 'Motor: Claude con herramientas',

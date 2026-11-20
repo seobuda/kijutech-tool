@@ -22,6 +22,8 @@ HOST="root@207.154.216.13"
 KEY="$HOME/.ssh/kijutech_brain"
 REMOTE_DIR="/opt/kijutech"
 SSH=(ssh -i "$KEY" -o BatchMode=yes "$HOST")
+# Organigrama (20 nov 2026): cómo fue el despliegue, al chat de Sistema (cola de avisos de la app). Texto sin comillas simples.
+notify_sistema() { "${SSH[@]}" "bash $REMOTE_DIR/scripts/notify-sistema.sh $1 '$2'" >/dev/null 2>&1 || true; }
 
 MIGRATE=0
 if [[ "${1:-}" == "--migrate" ]]; then MIGRATE=1; fi
@@ -124,6 +126,7 @@ VERIFY="$("${SSH[@]}" "for i in 1 2 3 4 5 6 7 8 9 10 11 12; do sleep 5; C=\$(cur
 read -r WEB JSERR <<< "$VERIFY"
 if [[ "$WEB" != "200" || "$JSERR" != "0" ]]; then
   echo "  ✗ web: $WEB · errores de JavaScript: $JSERR" >&2
+  notify_sistema fallo "🔴 <b>Despliegue fallido</b> ($(git rev-parse --short main)): la verificación falló (web $WEB, errores de JavaScript $JSERR). $([[ $MIGRATE -eq 0 ]] && echo "Se vuelve sola a la versión anterior." || echo "Con migración no se vuelve sola: lo decides tú.")"
   if [[ $MIGRATE -eq 0 ]]; then
     echo "→ La versión nueva no está bien: volviendo sola a la anterior" >&2
     bash scripts/rollback.sh || echo "✗ La vuelta atrás también falló: hay que mirarlo YA (bash scripts/server-status.sh --logs)." >&2
@@ -139,6 +142,7 @@ if bash scripts/run-scenarios.sh --despliegue "$(git rev-parse --short main)" > 
   tail -1 "$TMP/sim.log" | sed 's/^/  /'
 else
   grep -E '✗' "$TMP/sim.log" | head -12 | sed 's/^/  /' >&2
+  notify_sistema fallo "🔴 <b>Despliegue fallido</b> ($(git rev-parse --short main)): una prueba simulada falla con la versión nueva. $([[ $MIGRATE -eq 0 ]] && echo "Se vuelve sola a la versión anterior." || echo "Con migración no se vuelve sola: lo decides tú.") Detalle en Sistema → Pruebas."
   if [[ $MIGRATE -eq 0 ]]; then
     echo "→ Una prueba simulada falla con la versión nueva: volviendo sola a la anterior" >&2
     bash scripts/rollback.sh || echo "✗ La vuelta atrás también falló: hay que mirarlo YA (bash scripts/server-status.sh --logs)." >&2
@@ -158,4 +162,7 @@ fi
   echo \"  web: \$(curl -s -o /dev/null -w '%{http_code}' https://brain.kijutech.com/sign-in)\"; \
   echo \"  telegram: \$(docker exec kijutech_db psql -U kijutech -d kijutech_db -tAc \"select receive_mode || ' / ' || coalesce(last_error,'sin error') from ops_telegram_config where receive_mode <> 'simulado'\")\"; \
   NI=\$(ps -o ni= -p \$(docker inspect -f '{{.State.Pid}}' kijutech_app) | tr -d ' '); echo \"  prioridad de la app: \$NI\$([ \"\$NI\" = 0 ] || echo '  ⚠ debería ser 0')\";   ERR=\$(docker logs --since 5m kijutech_app 2>&1 | grep -ciE 'ReferenceError|TypeError' || true); echo \"  errores en logs: \$ERR\";   echo \"  errores nuevos en el registro (10 min): \$(docker exec kijutech_db psql -U kijutech -d kijutech_db -tAc \"select count(*) from sys_error_groups where last_seen > now() - interval '10 minutes'\" 2>/dev/null || echo '—')\""
+# El vigilante externo usa el bot de Sistema en cuanto está listo (watchdog-env.mjs lo elige); si falla, se queda el que había.
+"${SSH[@]}" "cd $REMOTE_DIR && docker exec kijutech_app node scripts/watchdog-env.mjs > watchdog.env.new 2>/dev/null && chmod 600 watchdog.env.new && mv watchdog.env.new watchdog.env || rm -f watchdog.env.new" || true
+notify_sistema ok "🚀 <b>Desplegado</b> $(git rev-parse --short main)$([[ $MIGRATE -eq 1 ]] && echo " con migración"): verificación y pruebas simuladas correctas."
 echo "✓ Despliegue terminado"

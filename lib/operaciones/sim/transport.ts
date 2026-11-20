@@ -8,11 +8,12 @@ import { db } from '@/lib/db/drizzle';
 import { opsSimMessages } from '@/lib/db/schema';
 import { setSimTelegramTransport } from '@/lib/operaciones/telegram';
 import { simTenantFromToken } from '@/lib/operaciones/sim/env';
+import { registerConsoleTenantResolver } from '@/lib/core/errors';
 
 type Btn = { text: string; callback_data?: string; url?: string };
 
 /** La ejecución en curso: los mensajes que se generen dentro quedan asociados a ella. */
-export const simRunContext = new AsyncLocalStorage<{ runId: string | null }>();
+export const simRunContext = new AsyncLocalStorage<{ runId: string | null; simTenantId?: string }>();
 const runId = () => simRunContext.getStore()?.runId ?? null;
 
 // Las pulsaciones simuladas llevan un id «sim:<chat>:<aleatorio>»: así la ventanita de la respuesta va a su chat.
@@ -81,4 +82,6 @@ export function registerSimTransport(): void {
   if (registered) return;
   registered = true;
   setSimTelegramTransport(transport);
+  // Lo que se escriba en la consola durante un escenario es de la cuenta de pruebas, no de la real (registro de errores).
+  registerConsoleTenantResolver(() => simRunContext.getStore()?.simTenantId ?? null);
 }
