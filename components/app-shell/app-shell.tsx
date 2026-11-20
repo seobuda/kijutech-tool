@@ -13,6 +13,7 @@ import {
   Menu,
   Monitor,
   Moon,
+  Plus,
   Search,
   Sun,
   X
@@ -20,7 +21,7 @@ import {
 import { cn } from '@/lib/utils';
 import { signOut } from '@/app/(login)/actions';
 import type { SafeUser } from '@/lib/db/queries';
-import { breadcrumbs, isActive, visibleNav, type NavGroup } from './nav';
+import { ACCOUNT_LINKS, activeChild, breadcrumbs, isActive, visibleActions, visibleNav, type NavGroup, type NavItem } from './nav';
 import { CommandPalette } from './command-palette';
 import { useRoles } from './use-roles';
 
@@ -58,7 +59,7 @@ export function useTheme(): [Theme, (t: Theme) => void] {
 
 function Logo({ collapsed }: { collapsed?: boolean }) {
   return (
-    <Link href="/dashboard/operaciones" className="flex items-center gap-2.5 px-1 group" aria-label="Kijutech, inicio">
+    <Link href="/dashboard" className="flex items-center gap-2.5 px-1 group" aria-label="Kijutech, inicio">
       <span className="relative grid size-8 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-brand to-[oklch(0.6_0.2_25)] text-brand-foreground shadow-sm ring-1 ring-black/5">
         <span className="text-[15px] font-bold tracking-tight">K</span>
       </span>
@@ -96,36 +97,104 @@ function NavList({
           )}
           {g.items.map((item) => {
             const active = isActive(item, pathname);
+            // Las subentradas se despliegan solo dentro del espacio (y si hay más de una), para que la barra sea corta.
+            const kids = !collapsed && active && (item.children?.length ?? 0) > 1 ? item.children! : [];
+            const current = kids.length ? activeChild(item, pathname) : null;
             return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={onNavigate}
-                title={collapsed ? item.label : undefined}
-                aria-current={active ? 'page' : undefined}
-                className={cn(
-                  'group relative flex h-9 items-center gap-2.5 rounded-lg px-2.5 text-sm font-medium transition-colors',
-                  'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
-                  active && 'bg-sidebar-accent text-sidebar-accent-foreground',
-                  collapsed && 'justify-center px-0'
+              <div key={item.href}>
+                <NavLink item={item} active={active} collapsed={collapsed} onNavigate={onNavigate} />
+                {kids.length > 0 && (
+                  <ul className="mb-1 mt-0.5 ml-[21px] flex flex-col gap-0.5 border-l border-sidebar-border pl-2" aria-label={`Dentro de ${item.label}`}>
+                    {kids.map((c) => {
+                      const on = current?.href === c.href && current?.label === c.label;
+                      return (
+                        <li key={`${c.href}-${c.label}`}>
+                          <Link
+                            href={c.href}
+                            onClick={onNavigate}
+                            aria-current={on ? 'page' : undefined}
+                            className={cn(
+                              'flex h-8 items-center rounded-md px-2 text-[13px] transition-colors',
+                              'text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+                              on && 'bg-sidebar-accent font-medium text-sidebar-accent-foreground'
+                            )}
+                          >
+                            <span className="truncate">{c.label}</span>
+                          </Link>
+                        </li>
+                      );
+                    })}
+                  </ul>
                 )}
-              >
-                {active && (
-                  <span className="absolute -left-3 top-1.5 bottom-1.5 w-1 rounded-r-full bg-brand" aria-hidden />
-                )}
-                <item.icon
-                  className={cn(
-                    'size-[18px] shrink-0 transition-colors',
-                    active ? 'text-brand' : 'text-muted-foreground group-hover:text-foreground'
-                  )}
-                />
-                {!collapsed && <span className="truncate">{item.label}</span>}
-              </Link>
+              </div>
             );
           })}
         </div>
       ))}
     </nav>
+  );
+}
+
+function NavLink({ item, active, collapsed, onNavigate }: { item: NavItem; active: boolean; collapsed?: boolean; onNavigate?: () => void }) {
+  return (
+    <Link
+      href={item.href}
+      onClick={onNavigate}
+      title={collapsed ? item.label : undefined}
+      aria-current={active ? 'page' : undefined}
+      className={cn(
+        'group relative flex h-9 items-center gap-2.5 rounded-lg px-2.5 text-sm font-medium transition-colors',
+        'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+        active && 'bg-sidebar-accent text-sidebar-accent-foreground',
+        collapsed && 'justify-center px-0'
+      )}
+    >
+      {active && <span className="absolute -left-3 top-1.5 bottom-1.5 w-1 rounded-r-full bg-brand" aria-hidden />}
+      <item.icon className={cn('size-[18px] shrink-0 transition-colors', active ? 'text-brand' : 'text-muted-foreground group-hover:text-foreground')} />
+      {!collapsed && <span className="truncate">{item.label}</span>}
+    </Link>
+  );
+}
+
+// --- Botón «＋ Nuevo» ------------------------------------------------------------
+
+function NewMenu({ actions, collapsed, onNavigate }: { actions: NavItem[]; collapsed?: boolean; onNavigate?: () => void }) {
+  if (actions.length === 0) return null;
+  return (
+    <DM.Root>
+      <DM.Trigger
+        className={cn(
+          'flex h-9 w-full items-center gap-2 rounded-lg bg-brand px-2.5 text-sm font-medium text-white shadow-xs transition-colors hover:bg-brand/90 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+          collapsed && 'justify-center px-0'
+        )}
+        aria-label="Crear algo nuevo"
+        data-testid="nuevo-menu"
+      >
+        <Plus className="size-4 shrink-0" aria-hidden />
+        {!collapsed && <span>Nuevo</span>}
+      </DM.Trigger>
+      <DM.Portal>
+        <DM.Content
+          side={collapsed ? 'right' : 'bottom'}
+          align="start"
+          sideOffset={6}
+          className="z-50 min-w-56 rounded-xl border bg-popover p-1.5 text-popover-foreground shadow-lg data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95"
+        >
+          {actions.map((a) => (
+            <DM.Item key={a.href} asChild>
+              <Link
+                href={a.href}
+                onClick={onNavigate}
+                className="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-accent"
+              >
+                <a.icon className="size-4 text-muted-foreground" aria-hidden />
+                {a.label}
+              </Link>
+            </DM.Item>
+          ))}
+        </DM.Content>
+      </DM.Portal>
+    </DM.Root>
   );
 }
 
@@ -198,14 +267,17 @@ function UserMenu({ collapsed }: { collapsed?: boolean }) {
             ))}
           </div>
           <DM.Separator className="my-1 h-px bg-border" />
-          <DM.Item asChild>
-            <Link
-              href="/dashboard/general"
-              className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-accent"
-            >
-              Mi cuenta
-            </Link>
-          </DM.Item>
+          {ACCOUNT_LINKS.map((l) => (
+            <DM.Item key={l.href} asChild>
+              <Link
+                href={l.href}
+                className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-accent"
+              >
+                <l.icon className="size-4 text-muted-foreground" aria-hidden />
+                {l.label}
+              </Link>
+            </DM.Item>
+          ))}
           <DM.Item
             onSelect={() => void handleSignOut()}
             className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm text-destructive outline-none data-[highlighted]:bg-destructive-soft"
@@ -252,6 +324,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const roles = useRoles();
   const groups = visibleNav(roles);
+  const actions = visibleActions(roles);
   const [userCollapsed, setCollapsed] = useState(false);
   // Portátiles con escala del 125-150 % tienen ~900-1250 px útiles: la barra se queda visible
   // pero en modo iconos para dejar sitio al contenido.
@@ -327,6 +400,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </>
             )}
           </button>
+          <div className="mt-2">
+            <NewMenu actions={actions} collapsed={collapsed} />
+          </div>
         </div>
         <div className="flex-1 overflow-y-auto px-3 py-2">
           <NavList groups={groups} pathname={pathname} collapsed={collapsed} />
@@ -357,6 +433,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <DialogPrimitive.Close className="rounded-lg p-2 text-muted-foreground hover:bg-sidebar-accent" aria-label="Cerrar menú">
                 <X className="size-5" />
               </DialogPrimitive.Close>
+            </div>
+            <div className="px-3 pb-2">
+              <NewMenu actions={actions} onNavigate={() => setMobileOpen(false)} />
             </div>
             <div className="flex-1 overflow-y-auto px-3 py-2">
               <NavList groups={groups} pathname={pathname} onNavigate={() => setMobileOpen(false)} />

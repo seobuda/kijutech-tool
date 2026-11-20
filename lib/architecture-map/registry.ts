@@ -258,6 +258,25 @@ const CORE_NODES: SystemNode[] = [
     detailMapId: 'ops_integrations',
     group: 'infrastructure',
   },
+  {
+    id: 'core-inicio',
+    name: 'Inicio y navegación',
+    description:
+      'La portada y el menú (fase 1 de la reorganización UX, 20 nov 2026): cinco espacios (Inicio, Para ti, Clientes, Equipo y Conocimiento) con Ajustes aparte, y un Inicio según el rol. Administración ve lo que espera de ti y una tarjeta por área (clientes, equipo, agentes y sistema; el gasto de IA solo super_admin); el equipo ve un panel propio (lo urgente, sus cifras de la semana sin ranking, su día, su jornada, sus dudas y lo nuevo de la base) y tiene «Mis tareas» con toda su lista. Las tareas se leen con un tipo propio (WorkTask) para que, cuando la herramienta sustituya a ClickUp en 2027, solo cambie la fuente.',
+    status: 'built',
+    icon: 'Compass',
+    group: 'infrastructure',
+    technicalDetail: {
+      summary:
+        'Sin tablas propias: lib/inicio/panel.ts solo lee lo que ya calculan Operaciones (bandeja, correos, semáforo, jornada), Agentes (dudas y acciones), Conocimiento, Estrategia y Errores. Cada tarjeta carga por separado con Suspense; las tareas de ClickUp llegan después de pintar y usan la caché de getTeamToday. Las rutas no cambian: solo el menú (components/app-shell/nav.ts).',
+      stack: ['app/(dashboard)/dashboard/page.tsx + _inicio/', 'app/(dashboard)/dashboard/mis-tareas/', 'lib/inicio/panel.ts', 'lib/operaciones/my-tasks.ts (fuente de tareas, hoy ClickUp + encargos)', 'components/app-shell/nav.ts (espacios, subentradas y «＋ Nuevo»)'],
+      keyDecisions: [
+        'Lo accionable primero (lo que espera de ti), nunca un muro de gráficas',
+        'Un bloque que falla se registra y muestra «no disponible» sin tumbar el resto',
+        'Las direcciones antiguas se mantienen para no romper los enlaces de Telegram'
+      ]
+    },
+  },
 ];
 
 
@@ -275,6 +294,10 @@ const FUTURE_NODES: SystemNode[] = [
   { id: 'future-reglas', name: 'Reglas que aprenden de mis respuestas', status: 'planned', icon: 'Circle', group: 'future', description: 'Reglas de decisión que se aprenden de cómo respondes a bloqueos y revisiones, para que el agente resuelva más solo.' },
   { id: 'future-seo-auto', name: 'SEO automatizado', status: 'planned', icon: 'Circle', group: 'future', description: 'Auditoría por API, competidores desde la SERP y volúmenes de búsqueda con DataForSEO, sin cargas manuales.' },
   { id: 'future-deuda', name: 'Deuda técnica', status: 'planned', icon: 'Circle', group: 'future', detailMapId: 'tech_debt', description: 'Columnas obsoletas por borrar, datos y tareas de prueba, festivos en los días laborables y textos de «Respuesta» y «Devuelto» fijos en el código.' },
+  { id: 'future-ux-para-ti', name: 'Para ti (bandeja única)', status: 'planned', icon: 'Circle', group: 'future', description: 'Fase 2 de la reorganización UX: una sola bandeja con todo lo que espera una decisión (hoy en 7 sitios), con prioridad, filtro por departamento y su número en la barra.' },
+  { id: 'future-ux-equipo', name: 'Equipo humano + IA', status: 'planned', icon: 'Circle', group: 'future', description: 'Fase 3: organigrama como portada de Equipo, fichas unificadas de personas y agentes con foto o avatar (campo nuevo, pendiente de aprobar el esquema), su estado y la actividad del día en un solo feed.' },
+  { id: 'future-ux-cliente', name: 'Cliente en un solo sitio', status: 'planned', icon: 'Circle', group: 'future', description: 'Fase 4: la ficha del cliente reúne Rendimiento, Estrategia, SEO y Encargos como pestañas; las vistas de todos los clientes, como pestañas de Clientes.' },
+  { id: 'future-ux-ayuda', name: 'Ayuda y pulido', status: 'planned', icon: 'Circle', group: 'future', description: 'Fase 5: «¿Cómo funciona esto?» en cada pantalla enlazado a la base de conocimiento, primera vez guiada, glosario y pulido con las guías de Chrome.' },
 ];
 
 // Procesos de apoyo: funcionalidad real con su propio detailMapId, pero

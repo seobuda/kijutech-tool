@@ -175,7 +175,9 @@ En cada fase: Mapa Visual, ESTADO.md, pruebas y revisión en el navegador, como 
 
 Principio: **lo accionable primero**, nunca un muro de gráficas.
 
-**Pendiente de que Enric confirme** (preguntas de §6): la estructura de cinco espacios con Ajustes aparte, qué ve el equipo, empezar por la fase 1 y si quiere avatar o foto en el Equipo.
+**Confirmado por Enric (20 nov, noche)** (preguntas de §6): cinco espacios con Ajustes aparte; el equipo ve solo lo suyo (sus tareas, su jornada, sus dudas y lo nuevo de la base); empezar por la fase 1; **foto o avatar** en el Equipo (fase 3, necesitará un campo nuevo y su aprobación de esquema).
+
+**Fase 1 hecha (20 nov, rama `feature/ux-fase1`):** Inicio por rol, barra lateral en cinco espacios con subentradas y Ajustes aparte, botón «＋ Nuevo», nombres únicos y las mismas rutas de antes. Detalle en `docs/ESTADO.md` §6.31. Después, a petición de Enric: el Inicio del equipo es un panel (lo urgente, sus cifras sin ranking y su día) y hay **Mis tareas** con la lista completa. Enric decidió además que **en 2027 la herramienta sustituirá a ClickUp**: Mis tareas lee de una capa con tipo propio (`lib/operaciones/my-tasks.ts`) para que entonces solo cambie la fuente.
 
 **Plan para la siguiente sesión:**
 1. Confirmar con Enric las decisiones de §6.

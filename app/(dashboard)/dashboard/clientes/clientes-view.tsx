@@ -63,7 +63,8 @@ export function ClientesView({
   runInfo,
   missingOptions,
   duplicates,
-  isAdmin
+  isAdmin,
+  startCreating = false
 }: {
   rows: ClientRow[];
   levels: Level[];
@@ -72,12 +73,14 @@ export function ClientesView({
   missingOptions: number;
   duplicates: [string, string][];
   isAdmin: boolean;
+  /** Llega desde el botón «＋ Nuevo → Cliente» (?nuevo=1): abre directamente el formulario de alta. */
+  startCreating?: boolean;
 }) {
   const router = useRouter();
   const [msg, setMsg] = useState<Msg>(null);
   const [pending, startTransition] = useTransition();
   const [showConfig, setShowConfig] = useState(false);
-  const [creating, setCreating] = useState<null | 'form' | 'ia'>(null);
+  const [creating, setCreating] = useState<null | 'form' | 'ia'>(startCreating ? 'form' : null);
   const [newName, setNewName] = useState('');
   const [newStatus, setNewStatus] = useState<ClientStatus>('onboarding');
   const [q, setQ] = useState('');
