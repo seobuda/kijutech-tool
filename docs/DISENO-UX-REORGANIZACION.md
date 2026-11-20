@@ -1,6 +1,6 @@
 # Propuesta: que la herramienta se entienda sola (UX y organización)
 
-**Fecha:** 2026-11-20 · **Estado:** propuesta para Enric. Nada construido.
+**Fecha:** 2026-11-20 · **Estado:** propuesta para Enric. Nada construido. **Siguiente sesión: empezar por aquí** (ver §7).
 
 **Encargo de Enric (20 nov):** «Si le paso la herramienta a alguien, no sabe ni por dónde empezar». Él, después de 15 años con Semrush, Ahrefs, Sistrix, Adobe, SE Ranking y Google, siente que la estructura no transmite lo que la herramienta es: una agencia con departamentos, humanos y agentes de IA trabajando juntos. Objetivo: que el equipo entre sin que haya que explicarle cada sección, y que él mismo note un orden claro. Uso: Chrome en Windows (Mayi, en Mac); el móvil no se contempla de momento.
 
@@ -158,6 +158,41 @@ En cada fase: Mapa Visual, ESTADO.md, pruebas y revisión en el navegador, como 
 4. ¿Quieres **foto o avatar** para personas y agentes en el Equipo (fase 3)?
 
 ---
+
+## 7. Acordado el 20 nov y punto de partida de la siguiente sesión
+
+**Enric (20 nov):** el super administrador y los administradores tienen que entrar a un **panel (dashboard) con el resumen de todo**, como las grandes herramientas. Acordado; es el «Inicio» de §3.1 para administración, con este orden:
+1. **Arriba, lo que espera de ti:** aprobaciones, dudas escaladas, entradas por revisar y errores graves, con su número y un clic para resolverlo. Es el acceso a «Para ti».
+2. **Debajo, el resumen de cada área**, en tarjetas que llevan a su sección:
+   - clientes en alerta y rendimiento;
+   - el equipo hoy, humanos y agentes: quién trabaja en qué, retrasos y bloqueos;
+   - la actividad de los agentes y su acierto;
+   - el sistema: salud, errores y gasto de IA frente al presupuesto.
+3. **Roles:**
+   - super_admin: todo, con servidor y costes de la plataforma;
+   - admin: lo mismo, sin plataforma ni costes;
+   - equipo: su propio inicio (sus tareas de hoy, su jornada, sus dudas, lo nuevo de la base), sin datos de los demás.
+
+Principio: **lo accionable primero**, nunca un muro de gráficas.
+
+**Pendiente de que Enric confirme** (preguntas de §6): la estructura de cinco espacios con Ajustes aparte, qué ve el equipo, empezar por la fase 1 y si quiere avatar o foto en el Equipo.
+
+**Plan para la siguiente sesión:**
+1. Confirmar con Enric las decisiones de §6.
+2. Fase 1 en una rama nueva (`feature/ux-fase1`):
+   - **panel de inicio** de administración (el de este apartado) e inicio del equipo;
+   - barra lateral con los cinco espacios y Ajustes aparte;
+   - nombres únicos;
+   - botón «＋ Nuevo»;
+   - redirecciones para no romper los enlaces de Telegram;
+   - `/dashboard` lleva al panel (hoy redirige al Bloc de notas).
+3. Para el panel, reutilizar lo que ya existe:
+   - `pendientes_de_enric` y `getInbox` (lo que espera de Enric);
+   - `evaluateClient` y `ops_client_activity` (semáforo de clientes);
+   - `getTeamToday` y `getCurrentDays` (equipo);
+   - `listTeamQuestions`, `countByStatus` de la base y errores abiertos;
+   - `getAiOverview` (gasto de IA).
+4. Guías de Chrome (modern-web-guidance): ejecutarlas siempre en un contenedor Docker (`docker run --rm node:24-alpine npx -y modern-web-guidance@latest …`), nunca npm en Windows.
 
 ## Fuentes
 - Estudio de carga cognitiva en una app empresarial (AHFE 2026): https://openaccess.cms-conferences.org/publications/book/979-8-950676-08-6/article/979-8-950676-08-6_11
