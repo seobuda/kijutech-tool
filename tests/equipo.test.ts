@@ -212,6 +212,19 @@ describe('dudas del equipo al jefe de operaciones', () => {
     expect(toMember.at(-1)!.html).toContain('no te estoy ayudando');
   });
 
+  it('«/jefe <duda>»: Enric lo prueba desde su chat aunque esté apagado; le llegan la respuesta y la aprobación', async () => {
+    await db.update(agtAgents).set({ active: false }).where(and(eq(agtAgents.tenantId, tenant), eq(agtAgents.key, OPS_HEAD_KEY)));
+    h.script.push([tool('responder_al_equipo', { respuesta: 'Sugerencia de prueba', fuente: 'general', tema: 'prueba' })], [{ type: 'text', text: 'ok' }]);
+    const handled = await handleInbound({ tenantId: tenant, channel: 'telegram', peer: OWNER_CHAT, peerName: 'Enric', isOwner: true, clickupUserId: '1', text: '/jefe ¿Cómo se hace una prueba?' });
+    await waitTeamIdle();
+    expect(handled).toBe(true);
+    const q = await lastQuestion();
+    expect(q).toMatchObject({ askedByName: 'Enric (prueba)', chatId: OWNER_CHAT, question: '¿Cómo se hace una prueba?', status: 'pendiente_aprobacion' });
+    expect(toMember.at(-1)).toMatchObject({ chat: OWNER_CHAT });
+    expect(JSON.stringify(toOwner.at(-1)!.buttons)).toContain(`x:tq:se:${q.id}`);
+    expect(await handleTeamButton({ tenantId: tenant, data: `se:${q.id}`, chatId: OWNER_CHAT, by: 'Enric', isOwner: true })).toMatchObject({ answer: 'Enviada.' });
+  });
+
   it('el jefe escala solo cuando no le toca (escalar_a_enric) y el mensaje llega con el encargo al que responde', async () => {
     h.script.push([tool('escalar_a_enric', { motivo: 'tema_sensible', resumen: 'Pide cambiar la fecha de entrega', propuesta: '', tema: 'plazos' })], [{ type: 'text', text: 'ok' }]);
     await ask('¿Puedo entregarlo el lunes en vez del viernes?', { replyToRequestId: '11111111-1111-1111-1111-111111111111', replyToSummary: 'Encargo: «Artículo blog»\nCliente: Pepe' });

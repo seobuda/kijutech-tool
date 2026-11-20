@@ -16,6 +16,8 @@ import { speak, speakableText, transcribe } from '@/lib/agentes/voice';
 import { handleTeamInbound } from '@/lib/agentes/team';
 
 const chains = new Map<string, Promise<unknown>>();
+/** «/jefe ¿cómo hago…?» (también con audio: «/jefe» sin texto y el audio con la duda). */
+export const TEST_AS_TEAM_RE = /^\/jefe(?:@\w+)?(?:\s+([\s\S]*))?$/i;
 const VOICE_REQUEST_RE = /\b(resp[oó]ndeme|contesta(me)?|d[ií]melo)\b.{0,30}\b(audio|voz|nota de voz)\b|\ben (audio|voz)\b/i;
 const escape = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -35,6 +37,12 @@ async function targetAgent(m: InboundMessage) {
 export async function handleInbound(m: InboundMessage): Promise<boolean> {
   // El equipo (20 nov 2026): sus dudas van al jefe de Operaciones, si está encendido; si no, se ignoran como antes.
   if (!m.isOwner) return handleTeamInbound(m);
+  // «/jefe <duda>»: Enric prueba al jefe de Operaciones como si fuera alguien del equipo, desde su propio chat y aunque
+  // el jefe esté apagado para el equipo. Le llegan a la vez la respuesta con sus botones y las aprobaciones o escaladas.
+  const asTeam = m.text.match(TEST_AS_TEAM_RE);
+  if (asTeam && m.channel === 'telegram' && !m.bot) {
+    return handleTeamInbound({ ...m, isOwner: false, peerName: 'Enric (prueba)', text: asTeam[1] }, { force: true });
+  }
   const agent = await targetAgent(m);
   if (!agent) return false;
   const key = `${m.tenantId}:${m.channel}:${m.bot ?? ''}:${m.peer}`;

@@ -299,10 +299,11 @@ const feedbackButtons = (id: string): OutboundButton[][] => [
 ];
 
 /** Mensajes del equipo (no del dueño) por el bot principal. false = nadie lo atiende (jefe apagado): se ignora como antes. */
-export async function handleTeamInbound(m: InboundMessage): Promise<boolean> {
+export async function handleTeamInbound(m: InboundMessage, opts: { force?: boolean } = {}): Promise<boolean> {
   if (m.isOwner || m.channel !== 'telegram' || m.bot) return false;
   const jefe = await getAgent(m.tenantId, OPS_HEAD_KEY);
-  if (!jefe?.active) return false;
+  // force: la prueba de Enric con «/jefe» funciona aunque el jefe esté apagado para el equipo.
+  if (!jefe || (!jefe.active && !opts.force)) return false;
   void inChain(`${m.tenantId}:${m.peer}`, () => processTeamMessage(m, jefe));
   return true;
 }
