@@ -91,7 +91,9 @@ export function linksInText(text: string): KbLink[] {
 
 /** Un texto que parece llevar una contraseña o clave no entra en la base (los accesos solo se dicen dónde están). */
 export function looksLikeSecret(text: string): boolean {
-  return /(contrase[ñn]a|password|passwd|clave de acceso|api[ _-]?key|token)\s*[:=]\s*\S{4,}/i.test(String(text ?? ''));
+  // Los enlaces no cuentan: los adjuntos de ClickUp llevan «?token=…» en la URL y no son una contraseña escrita.
+  const withoutUrls = String(text ?? '').replace(/https?:\/\/[^\s<>()"']+/gi, ' ');
+  return /(contrase[ñn]a|password|passwd|clave de acceso|api[ _-]?key|token)\s*[:=]\s*\S{4,}/i.test(withoutUrls);
 }
 
 /** Texto con el que se calcula el embedding de una entrada (título, problema, solución y etiquetas). */

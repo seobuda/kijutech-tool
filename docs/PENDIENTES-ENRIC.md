@@ -8,7 +8,7 @@ Detalle paso a paso de la activación en `docs/PRUEBAS-EN-VIVO.md`.
 ## Base de conocimiento y Mapa de contenido (rama `feature/jefe-operaciones`, migración 0056, 20 nov)
 Aprobado: diseño (opción A, núcleo, escaladas por el chat principal, IA general con tu aprobación, categorías, solo publicas tú) y esquema. Detalle en `docs/ESTADO.md` §6.29.
 - [ ] **Desplegar con migración** (Claude lo lanza con tu OK; hace backup antes).
-- [ ] **Importar de ClickUp** en producción: Trabajo → Conocimiento → «Importar de ClickUp» (espacio «📚 Base de Conocimiento»). En local fueron 167 entradas a «Para más tarde» (25 sin categoría, 42 sin descripción porque son vídeos adjuntos).
+- [ ] **Importar de ClickUp (una sola vez)** en producción: Trabajo → Conocimiento → «Importar de ClickUp» (espacio «📚 Base de Conocimiento»). En local: 127 tareas con contenido a «Para más tarde» (40 vacías no entran; 77 con vídeos alojados en ClickUp, etiqueta «vídeo en clickup»: pásalos a Google Drive al revisarlos). Desde entonces, nada de conocimiento en ClickUp.
 - [ ] **Revisar por tandas** la pestaña «Para más tarde» (tus horas de conocimiento): publicar, editar o archivar.
 - [ ] **Embeddings:** la clave de Gemini local no tiene saldo (402). Si en producción pasa lo mismo, la búsqueda funciona solo por palabras: recarga Gemini o configura otro proveedor de embeddings en IA y modelos (coste de céntimos).
 - [ ] **Prueba por Telegram:** «apunta en la base: …» al Operations manager; te llega la propuesta con botones. Y «¿qué tenemos en la base sobre …?».

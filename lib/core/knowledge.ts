@@ -230,7 +230,12 @@ export async function countByStatus(tenantId: string): Promise<Record<KbStatus, 
   return out;
 }
 
-export type ImportItem = { sourceId: string; sourceUrl: string; title: string; solution: string; categoryKey: string | null; tags: string[]; links: KbLink[] };
+export async function countImported(tenantId: string, source: Extract<KbSource, 'clickup'>): Promise<number> {
+  const [r] = await db.select({ n: sql<number>`count(*)` }).from(kbArticles).where(and(eq(kbArticles.tenantId, tenantId), eq(kbArticles.sourceType, source)));
+  return Number(r?.n ?? 0);
+}
+
+export type ImportItem ={ sourceId: string; sourceUrl: string; title: string; solution: string; categoryKey: string | null; tags: string[]; links: KbLink[] };
 
 /**
  * Entradas importadas de otra herramienta (ClickUp). Entran en «Para más tarde» para que Enric las revise por tandas;

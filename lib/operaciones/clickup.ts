@@ -764,3 +764,9 @@ export async function fetchSpaceTasksForKb(token: string, workspaceId: string, s
     if (res.tasks.length < 100) return { tasks, truncated: false, requests };
   }
 }
+
+/** Adjuntos de una tarea (1 petición). Solo para las tareas sin descripción de la importación de conocimiento. */
+export async function getTaskAttachments(token: string, taskId: string): Promise<{ title: string; url: string }[]> {
+  const t = await cu<{ attachments?: { title?: string; url?: string; extension?: string }[] }>(token, `/task/${taskId}`);
+  return (t.attachments ?? []).filter((a) => a.url).map((a) => ({ title: a.title || `Adjunto${a.extension ? ` (${a.extension})` : ''}`, url: String(a.url) }));
+}

@@ -3,7 +3,7 @@ import { checkPermission, requirePagePermission } from '@/lib/auth/permissions';
 import { PageContainer, PageHeader } from '@/components/ui/page';
 import { countByStatus, listArticles, listCategories } from '@/lib/core/knowledge';
 import { isKbStatus, needsReview, type KbStatus } from '@/lib/core/knowledge-rules';
-import { kbSpaceOptions } from '@/lib/operaciones/kb-import';
+import { kbImportStatus, kbSpaceOptions } from '@/lib/operaciones/kb-import';
 import { ConocimientoView, type ArticleRow } from './conocimiento-view';
 
 export const dynamic = 'force-dynamic';
@@ -18,11 +18,12 @@ export default async function ConocimientoPage({ searchParams }: { searchParams:
   // Sin permiso de admin solo se ven las publicadas.
   const status: KbStatus = isAdmin ? (requested ?? 'publicada') : 'publicada';
   const q = (sp.q ?? '').slice(0, 200);
-  const [cats, counts, rows, spaces] = await Promise.all([
+  const [cats, counts, rows, spaces, importStatus] = await Promise.all([
     listCategories(user.tenantId, true),
     countByStatus(user.tenantId),
     listArticles(user.tenantId, { statuses: [status], q, categoryId: sp.cat && /^[0-9a-f-]{36}$/i.test(sp.cat) ? sp.cat : null }),
-    isAdmin ? kbSpaceOptions(user.tenantId) : Promise.resolve([])
+    isAdmin ? kbSpaceOptions(user.tenantId) : Promise.resolve([]),
+    isAdmin ? kbImportStatus(user.tenantId) : Promise.resolve({ imported: 0 })
   ]);
   const catName = new Map(cats.map((c) => [c.id, c.name]));
   const now = new Date();
@@ -59,6 +60,7 @@ export default async function ConocimientoPage({ searchParams }: { searchParams:
         rows={data}
         categories={cats.map((c) => ({ id: c.id, name: c.name, archived: Boolean(c.archivedAt) }))}
         spaces={spaces}
+        importedCount={importStatus.imported}
       />
     </PageContainer>
   );

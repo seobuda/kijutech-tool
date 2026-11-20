@@ -52,6 +52,7 @@ import {
   submitRequest,
   KNOWLEDGE_TOOLS
 } from '@/lib/core/knowledge';
+import { stripClickUpToken } from '@/lib/operaciones/kb-import';
 import { categoryFromClickUpName, cleanDraft, cleanLinks, cleanTags, fuseRankings, linksInText, looksLikeSecret, needsReview } from '@/lib/core/knowledge-rules';
 
 const SLUG = 'test-conocimiento';
@@ -77,6 +78,8 @@ describe('reglas puras', () => {
     expect(looksLikeSecret('contraseña: Hola1234')).toBe(true);
     expect(looksLikeSecret('API key = sk-abcdef')).toBe(true);
     expect(looksLikeSecret('Los accesos están en el gestor de contraseñas')).toBe(false);
+    // Un enlace con «?token=» (adjuntos de ClickUp) no es una contraseña.
+    expect(looksLikeSecret('Vídeo: https://t901.p.clickup-attachments.com/a/b.mp4?token=abcdef123')).toBe(false);
   });
   it('categoría por el nombre de la carpeta o lista de ClickUp', () => {
     expect(categoryFromClickUpName('Tutoriales - SEO Local', 'List')).toBe('seo');
@@ -85,6 +88,10 @@ describe('reglas puras', () => {
     expect(categoryFromClickUpName('Tutoriales - Herramientas', 'Microsoft Clarity')).toBe('herramientas');
     expect(categoryFromClickUpName('Tutoriales - Operation Manager')).toBe('operativa');
     expect(categoryFromClickUpName('')).toBeNull();
+  });
+  it('quita el token firmado de los enlaces de ClickUp (y no toca los demás)', () => {
+    expect(stripClickUpToken('https://t9.p.clickup-attachments.com/t9/a/v%C3%ADdeo.mp4?authz_token=eyJabc.def&view=1')).toBe('https://t9.p.clickup-attachments.com/t9/a/v%C3%ADdeo.mp4?view=1');
+    expect(stripClickUpToken('https://www.loom.com/share/x?token=1')).toBe('https://www.loom.com/share/x?token=1');
   });
   it('valida lo que devuelve la IA', () => {
     expect(cleanDraft({ titulo: '', solucion: 'x' }, ['web'])).toBeNull();

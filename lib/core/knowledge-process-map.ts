@@ -65,12 +65,12 @@ export const CONOCIMIENTO_PROCESS_MAP: ProcessStep[] = [
     lane: 'Entrar',
     name: 'Importar de ClickUp',
     description:
-      'Importación del espacio «Base de Conocimiento» de ClickUp: cada tarea pasa a ser una entrada en «Para más tarde», con su descripción, la categoría según la carpeta o la lista y el enlace a la tarea original (los clips de vídeo adjuntos siguen allí).',
+      'Importación ÚNICA del espacio «Base de Conocimiento» de ClickUp (decisión de Enric: después, todo el conocimiento se gestiona en la herramienta). Solo entran las tareas con contenido (descripción, o vídeos y archivos adjuntos), a «Para más tarde», con la categoría según la carpeta o la lista y el enlace a la tarea original.',
     status: 'built',
     file: 'lib/operaciones/kb-import.ts',
     when: 'Al pulsar «Importar de ClickUp» en Conocimiento (solo admin). Se puede repetir: lo ya importado no se duplica.',
     ai: 'Nada: la categoría sale del nombre de la carpeta o la lista (categoryFromClickUpName).',
-    code: 'UNA consulta de workspace paginada (fetchSpaceTasksForKb) por el cliente con contador de lib/operaciones/clickup.ts; los espacios salen de la caché. Los adjuntos no se piden (sería una petición por tarea). Lo que parece llevar una contraseña no entra y se cuenta aparte. Es de Operaciones (sabe de ClickUp) y escribe en la base a través del núcleo (insertImportedArticles).',
+    code: 'UNA consulta de workspace paginada (fetchSpaceTasksForKb) por el cliente con contador de lib/operaciones/clickup.ts; los espacios salen de la caché. Solo para las tareas sin descripción se piden sus adjuntos (getTaskAttachments, 1 petición cada una, con el contador): sin adjuntos no entran. Lo alojado en ClickUp (adjuntos, clips) queda con la etiqueta «vídeo en clickup» y un aviso para pasarlo a Google Drive al revisarlo; a sus enlaces se les quita el token firmado (authz_token: da acceso y caduca), así que se abren con la sesión de ClickUp. Lo que parece llevar una contraseña no entra. Tras importar, la pantalla dice «ya importado». Es de Operaciones (sabe de ClickUp) y escribe en la base a través del núcleo (insertImportedArticles).',
     tables: ['kb_articles', 'ops_clickup_spaces'],
     to: ['kb-entradas']
   },

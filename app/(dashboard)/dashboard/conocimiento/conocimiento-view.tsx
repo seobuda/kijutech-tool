@@ -52,8 +52,10 @@ export function ConocimientoView({
   counts,
   rows,
   categories,
-  spaces
+  spaces,
+  importedCount
 }: {
+  importedCount: number;
   isAdmin: boolean;
   status: KbStatus;
   q: string;
@@ -99,9 +101,9 @@ export function ConocimientoView({
                 Nueva entrada
               </Link>
             </Button>
-            <Button variant="outline" onClick={() => setPanel(panel === 'importar' ? null : 'importar')} aria-expanded={panel === 'importar'}>
+            <Button variant={importedCount ? 'ghost' : 'outline'} onClick={() => setPanel(panel === 'importar' ? null : 'importar')} aria-expanded={panel === 'importar'}>
               <Download aria-hidden />
-              Importar de ClickUp
+              {importedCount ? 'ClickUp (ya importado)' : 'Importar de ClickUp'}
             </Button>
             <Button variant="ghost" onClick={() => setPanel(panel === 'categorias' ? null : 'categorias')} aria-expanded={panel === 'categorias'}>
               <Settings2 aria-hidden />
@@ -112,7 +114,7 @@ export function ConocimientoView({
       </div>
 
       {panel === 'proponer' && <ProposePanel isAdmin={isAdmin} onClose={() => setPanel(null)} />}
-      {panel === 'importar' && isAdmin && <ImportPanel spaces={spaces} onClose={() => setPanel(null)} />}
+      {panel === 'importar' && isAdmin && <ImportPanel spaces={spaces} importedCount={importedCount} onClose={() => setPanel(null)} />}
       {panel === 'categorias' && isAdmin && <CategoriesPanel categories={categories} onClose={() => setPanel(null)} />}
 
       {visibleTabs.length > 1 && (
@@ -326,14 +328,19 @@ function ProposePanel({ isAdmin, onClose }: { isAdmin: boolean; onClose: () => v
   );
 }
 
-function ImportPanel({ spaces, onClose }: { spaces: Space[]; onClose: () => void }) {
+function ImportPanel({ spaces, importedCount, onClose }: { spaces: Space[]; importedCount: number; onClose: () => void }) {
   const [spaceId, setSpaceId] = useState(spaces.find((s) => s.suggested)?.id ?? spaces[0]?.id ?? '');
   const [result, setResult] = useState<string | null>(null);
   const { run, pending, msg } = useRun();
   return (
-    <PanelBox title="Importar de ClickUp" onClose={onClose}>
+    <PanelBox title="Importar de ClickUp (una sola vez)" onClose={onClose}>
+      {importedCount > 0 && (
+        <p className="rounded-lg bg-success-soft px-3 py-2 text-sm text-success">
+          Ya importado: {importedCount} {importedCount === 1 ? 'entrada vino' : 'entradas vinieron'} de ClickUp. Desde ahora el conocimiento se gestiona aquí; no hace falta escribir nada en ClickUp. Volver a importar solo traería lo que falte.
+        </p>
+      )}
       <p className="text-sm text-muted-foreground text-pretty">
-        Copia cada tarea del espacio como una entrada en «Para más tarde», para revisarlas por tandas. Se guarda el título, la descripción y el enlace a la tarea original (los vídeos adjuntos siguen allí). Lo ya importado no se duplica, y lo que parezca llevar una contraseña no entra.
+        Trae a «Para más tarde» las tareas del espacio que tienen contenido (descripción, o vídeos y archivos adjuntos), para revisarlas por tandas; las vacías no entran. Cada entrada guarda el enlace a la tarea original. Los vídeos alojados en ClickUp quedan marcados para pasarlos a Google Drive al revisarlos. Lo ya importado no se duplica, y lo que parezca llevar una contraseña no entra.
       </p>
       {spaces.length === 0 ? (
         <p className="text-sm">No hay espacios de ClickUp en la caché. Conecta ClickUp en Sistema → ClickUp.</p>
@@ -355,7 +362,7 @@ function ImportPanel({ spaces, onClose }: { spaces: Space[]; onClose: () => void
                   const r = await importKnowledgeAction(spaceId);
                   if (r.ok)
                     setResult(
-                      `${r.found} tareas en ClickUp: ${r.imported} importadas${r.existing ? `, ${r.existing} ya estaban` : ''}${r.withSecrets ? `, ${r.withSecrets} no entran porque parecen llevar contraseñas (revísalas en ClickUp)` : ''}. ${r.requests} ${r.requests === 1 ? 'petición' : 'peticiones'} a ClickUp.${r.truncated ? ' Había más de 3.000 tareas: vuelve a importar para traer el resto.' : ''}`
+                      `${r.found} tareas en ClickUp: ${r.imported} importadas${r.existing ? `, ${r.existing} ya estaban` : ''}${r.empty ? `, ${r.empty} vacías (no entran)` : ''}${r.withSecrets ? `, ${r.withSecrets} no entran porque parecen llevar contraseñas (revísalas en ClickUp)` : ''}.${r.withClickUpFiles ? ` ${r.withClickUpFiles} tienen vídeos o archivos alojados en ClickUp (etiqueta «vídeo en clickup»).` : ''} ${r.requests} ${r.requests === 1 ? 'petición' : 'peticiones'} a ClickUp.${r.truncated ? ' Había más de 3.000 tareas: vuelve a importar para traer el resto.' : ''}`
                     );
                   return r;
                 },
