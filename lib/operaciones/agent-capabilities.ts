@@ -617,7 +617,7 @@ const CLIENT_PROPS = {
     items: {
       type: 'object',
       properties: {
-        tipo: { type: 'string', enum: ['web', 'dominio', 'search_console', 'analytics', 'business_profile', 'google_ads', 'meta', 'instagram', 'tiktok', 'linkedin', 'youtube', 'tienda', 'crm', 'otro'] },
+        tipo: { type: 'string', enum: ['web', 'dominio', 'search_console', 'analytics', 'business_profile', 'google_ads', 'meta', 'instagram', 'tiktok', 'linkedin', 'youtube', 'tienda', 'crm', 'mapa_contenido', 'otro'] },
         nombre: { type: 'string' },
         url: { type: 'string', description: 'URL o identificador (p. ej. sc-domain:cliente.com)' },
         acceso: { type: 'string', enum: ['si', 'pendiente', 'no', 'no_aplica'] },

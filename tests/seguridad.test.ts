@@ -9,6 +9,8 @@ import { aiProposeClient, applyClientProposal, saveClientOps } from '@/lib/opera
 import { addTestRequestAction, createSimRequestAction, getPruebasAction, pressSimButtonAction, runScenariosAction, sendSimTextAction, withdrawTestRequestAction } from '@/lib/operaciones/sim/actions';
 import { POST as pruebasRunPost } from '@/app/api/pruebas/run/route';
 import { checkDeptBotAction, removeDeptBotAction, saveDeptBotAction } from '@/lib/operaciones/dept-bot-actions';
+import { archiveCategoryAction, deleteArticleAction, markReviewedAction, redraftArticleAction, reviseArticleAction, saveArticleAction, saveCategoryAction, setArticleStatusAction, submitRequestAction } from '@/lib/core/knowledge-actions';
+import { importKnowledgeAction } from '@/lib/operaciones/kb-import-actions';
 import { deleteAnnotationAction, getClientPerformanceAction, getMonthlyReportAction, resyncClientAction, saveAnnotationAction, savePerfSettingsAction } from '@/lib/rendimiento/actions';
 import { errorBriefAction, requestDiagnosisAction, saveErrorNoteAction, saveErrorSettingsAction, setErrorStatusAction } from '@/app/(dashboard)/dashboard/errores/actions';
 import { addKeywordsAction, backfillWorkAction, closeObjectiveAction, decideSuggestionAction, requestAnalysisAction, saveStrategistSettingsAction, deleteEventAction, deleteKeywordAction, deleteObjectiveAction, deletePlanAction, deleteTrackedUrlAction, getClientStrategyAction, objectiveBaselineAction, pauseClientAction, runProcessNowAction, saveClientOverrideAction, saveEstSettingsAction, saveEventAction, saveObjectiveAction, savePlanAction, setClientPlanAction, setSignalStatusAction, setWorkUrlAction, suggestKeywordsAction, updateKeywordAction } from '@/lib/estrategia/actions';
@@ -122,6 +124,15 @@ const form = (data: Record<string, string>) => {
 // Acciones que NO hacen nada si llegaran a ejecutarse (ids que no existen, entradas vacías): así
 // una regresión en un guard hace fallar la prueba sin tocar datos reales.
 const ACCIONES_ADMIN: [string, () => unknown][] = [
+  ['saveArticleAction (conocimiento: guardar/publicar)', () => saveArticleAction(ZERO, { title: '', problem: '', solution: '', categoryId: null, tags: [], links: [] })],
+  ['setArticleStatusAction (conocimiento: estado)', () => setArticleStatusAction(ZERO, 'publicada')],
+  ['markReviewedAction (conocimiento: revisada)', () => markReviewedAction(ZERO)],
+  ['deleteArticleAction (conocimiento: borrar)', () => deleteArticleAction(ZERO)],
+  ['reviseArticleAction (conocimiento: rehacer con IA)', () => reviseArticleAction(ZERO, 'x')],
+  ['redraftArticleAction (conocimiento: volver a redactar)', () => redraftArticleAction(ZERO)],
+  ['saveCategoryAction (conocimiento: categorías)', () => saveCategoryAction(null, '')],
+  ['archiveCategoryAction (conocimiento: archivar categoría)', () => archiveCategoryAction(ZERO, true)],
+  ['importKnowledgeAction (conocimiento: importar de ClickUp)', () => importKnowledgeAction('no_valido')],
   ['saveDeptBotAction (organigrama: token del bot de un departamento)', () => saveDeptBotAction('no_existe', 'x')],
   ['checkDeptBotAction (organigrama: comprobar bot)', () => checkDeptBotAction('no_existe')],
   ['removeDeptBotAction (organigrama: quitar bot)', () => removeDeptBotAction('no_existe')],
@@ -274,6 +285,13 @@ describe('sin sesión no se accede a nada privado', () => {
     expect(
       (await getSuggestionPhotoRoute(new Request('http://x'), { params: Promise.resolve({ id: ZERO }) })).status
     ).toBe(401);
+  });
+
+  it('proponer una entrada de conocimiento exige sesión (y un rol)', async () => {
+    await loginAs(null);
+    expect(await outcome(() => submitRequestAction({ text: 'Texto de prueba suficientemente largo', links: [] }))).toBe('denegado');
+    await loginAs(fx.users.sinRol);
+    expect(await outcome(() => submitRequestAction({ text: 'Texto de prueba suficientemente largo', links: [] }))).toBe('denegado');
   });
 
   it('/api/user no devuelve nada', async () => {

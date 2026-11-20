@@ -136,7 +136,7 @@ export type Channel = (typeof CHANNELS)[number];
 export const CHANNEL_LABEL: Record<Channel, string> = { email: 'Correo', telefono: 'Teléfono', whatsapp: 'WhatsApp', otro: 'Otro' };
 export const isChannel = (v: string): v is Channel => (CHANNELS as readonly string[]).includes(v);
 
-export const ASSET_KINDS = ['web', 'dominio', 'search_console', 'analytics', 'business_profile', 'google_ads', 'meta', 'instagram', 'tiktok', 'linkedin', 'youtube', 'tienda', 'crm', 'otro'] as const;
+export const ASSET_KINDS = ['web', 'dominio', 'search_console', 'analytics', 'business_profile', 'google_ads', 'meta', 'instagram', 'tiktok', 'linkedin', 'youtube', 'tienda', 'crm', 'mapa_contenido', 'otro'] as const;
 export type AssetKind = (typeof ASSET_KINDS)[number];
 export const ASSET_KIND_LABEL: Record<AssetKind, string> = {
   web: 'Web',
@@ -152,6 +152,7 @@ export const ASSET_KIND_LABEL: Record<AssetKind, string> = {
   youtube: 'YouTube',
   tienda: 'Tienda online',
   crm: 'CRM',
+  mapa_contenido: 'Mapa de contenido (SEO)',
   otro: 'Otro'
 };
 /** Qué pueden hacer los agentes con cada tipo de activo (las integraciones se conectan una vez en Agentes → Integraciones). */

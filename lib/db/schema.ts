@@ -212,7 +212,8 @@ export const clientAssets = pgTable(
   (table) => [
     index('client_assets_client_idx').on(table.clientId),
     uniqueIndex('client_assets_email_domain_unique').on(table.tenantId, table.emailDomain).where(sql`${table.emailDomain} IS NOT NULL`),
-    check('client_assets_kind_check', sql`${table.kind} IN ('web', 'dominio', 'search_console', 'analytics', 'business_profile', 'google_ads', 'meta', 'instagram', 'tiktok', 'linkedin', 'youtube', 'tienda', 'crm', 'otro')`),
+    // mapa_contenido (20 nov 2026): enlace al Google Sheet del mapa de contenidos SEO del cliente (lo lleva Mayi).
+    check('client_assets_kind_check', sql`${table.kind} IN ('web', 'dominio', 'search_console', 'analytics', 'business_profile', 'google_ads', 'meta', 'instagram', 'tiktok', 'linkedin', 'youtube', 'tienda', 'crm', 'mapa_contenido', 'otro')`),
     check('client_assets_access_check', sql`${table.access} IN ('sin_revisar', 'si', 'pendiente', 'no', 'no_aplica')`),
   ]
 );
@@ -241,6 +242,88 @@ export const clientCompetitors = pgTable(
   ]
 );
 export type ClientCompetitor = typeof clientCompetitors.$inferSelect;
+
+// --- Base de conocimiento (NÚCLEO, 20 nov 2026; diseño docs/DISENO-JEFE-OPERACIONES.md) -----------------------------
+// Lo que la agencia sabe hacer y resolver. La usan el jefe de Operaciones (dudas del equipo) y el resto de agentes.
+// Solo Enric publica: el equipo envía solicitudes, la IA las redacta y él aprueba, edita o deja «para más tarde».
+
+export const kbCategories = pgTable(
+  'kb_categories',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    key: varchar('key', { length: 40 }).notNull(),
+    name: varchar('name', { length: 100 }).notNull(),
+    sortOrder: integer('sort_order').notNull().default(0),
+    archivedAt: timestamp('archived_at'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [unique('kb_categories_tenant_key_unique').on(table.tenantId, table.key)]
+);
+export type KbCategory = typeof kbCategories.$inferSelect;
+
+export const kbArticles = pgTable(
+  'kb_articles',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    categoryId: uuid('category_id').references(() => kbCategories.id, { onDelete: 'set null' }),
+    title: varchar('title', { length: 255 }).notNull(),
+    // La pregunta o el síntoma («El cliente dice que su web va lenta») y la solución (pasos, con formato Markdown).
+    problem: text('problem').notNull().default(''),
+    solution: text('solution').notNull().default(''),
+    tags: text('tags').array().notNull().default(sql`'{}'::text[]`),
+    // Enlaces y vídeos: [{ title, url }].
+    links: jsonb('links').notNull().default([]),
+    // borrador (Enric la escribe) | propuesta (espera su revisión) | mas_tarde (cola para sus horas de conocimiento) |
+    // publicada (la usan los agentes) | archivada
+    status: varchar('status', { length: 12 }).notNull().default('borrador'),
+    // manual | equipo (solicitud de un miembro) | respuesta (de Enric a una duda) | clickup (importada) | dictado | agente
+    sourceType: varchar('source_type', { length: 12 }).notNull().default('manual'),
+    sourceId: varchar('source_id', { length: 100 }),
+    sourceUrl: varchar('source_url', { length: 500 }),
+    // Solicitudes del equipo: quién la pidió y el texto tal cual lo escribió.
+    requestedByName: varchar('requested_by_name', { length: 255 }),
+    requestedByUserId: integer('requested_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    requestText: text('request_text'),
+    // Aprender de las correcciones: la primera versión de la IA y cada indicación de Enric al pedir otra versión.
+    aiDraft: jsonb('ai_draft'),
+    editNotes: jsonb('edit_notes').notNull().default([]),
+    // Chat de Telegram en el que Enric pulsó «Cambiar»: su siguiente mensaje es la indicación para la IA.
+    awaitingChatId: varchar('awaiting_chat_id', { length: 40 }),
+    embedding: vector('embedding', { dimensions: 1536 }),
+    embeddingModel: varchar('embedding_model', { length: 80 }),
+    embeddedAt: timestamp('embedded_at'),
+    timesUsed: integer('times_used').notNull().default(0),
+    helpfulCount: integer('helpful_count').notNull().default(0),
+    notHelpfulCount: integer('not_helpful_count').notNull().default(0),
+    lastUsedAt: timestamp('last_used_at'),
+    reviewedAt: timestamp('reviewed_at'),
+    reviewedBy: integer('reviewed_by').references(() => users.id, { onDelete: 'set null' }),
+    createdBy: integer('created_by').references(() => users.id, { onDelete: 'set null' }),
+    updatedBy: integer('updated_by').references(() => users.id, { onDelete: 'set null' }),
+    publishedAt: timestamp('published_at'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    index('kb_articles_status_idx').on(table.tenantId, table.status, table.updatedAt),
+    // Importar dos veces lo mismo (ClickUp) no duplica.
+    uniqueIndex('kb_articles_source_unique').on(table.tenantId, table.sourceType, table.sourceId).where(sql`${table.sourceId} IS NOT NULL`),
+    // Búsqueda por palabras en español.
+    index('kb_articles_fts_idx').using(
+      'gin',
+      sql`to_tsvector('spanish', coalesce(${table.title}, '') || ' ' || coalesce(${table.problem}, '') || ' ' || coalesce(${table.solution}, ''))`
+    ),
+    check('kb_articles_status_check', sql`${table.status} IN ('borrador', 'propuesta', 'mas_tarde', 'publicada', 'archivada')`),
+    check('kb_articles_source_check', sql`${table.sourceType} IN ('manual', 'equipo', 'respuesta', 'clickup', 'dictado', 'agente')`),
+  ]
+);
+export type KbArticle = typeof kbArticles.$inferSelect;
 
 export const aiProviderSettings = pgTable(
   'ai_provider_settings',

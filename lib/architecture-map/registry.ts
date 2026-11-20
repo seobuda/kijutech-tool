@@ -8,6 +8,7 @@ import { CLIENTES_PROCESS_MAP } from '@/lib/core/clients-process-map';
 import { RENDIMIENTO_PROCESS_MAP } from '@/lib/rendimiento/process-map';
 import { ESTRATEGIA_PROCESS_MAP } from '@/lib/estrategia/process-map';
 import { ERRORES_PROCESS_MAP } from '@/lib/core/errors-process-map';
+import { CONOCIMIENTO_PROCESS_MAP } from '@/lib/core/knowledge-process-map';
 
 export interface SystemNode {
   id: string;
@@ -68,6 +69,27 @@ const CORE_NODES: SystemNode[] = [
         'Tablas del núcleo clients, client_contacts, client_locations, client_assets, client_competitors y client_memory (14 nov 2026, migración 0048). Operaciones guarda sus ajustes en ops_clients con el mismo id. Sección propia /dashboard/clientes con pestañas.',
       stack: ['lib/core/clients.ts (datos)', 'lib/core/client-rules.ts (reglas puras y completitud)', 'lib/core/client-actions.ts (acciones con permisos)'],
       keyDecisions: ['Cliente ≠ activo ≠ integración (patrón Semrush/AgencyAnalytics)', 'Mismo id que ops_clients: ninguna referencia se reescribió', 'Nunca contraseñas; contrato solo para administradores']
+    },
+  },
+  {
+    id: 'core-conocimiento',
+    name: 'Base de conocimiento',
+    description:
+      'Lo que la agencia sabe hacer y resolver (procedimientos, soluciones, tutoriales con vídeo). El equipo propone, la IA redacta y solo Enric publica. La usan el equipo y los agentes; en la fase 2, el jefe de Operaciones para contestar dudas.',
+    status: 'built',
+    icon: 'BookOpen',
+    detailMapId: 'conocimiento',
+    group: 'infrastructure',
+    edgesTo: [{ id: 'agentes', label: 'buscar_conocimiento y guardar_conocimiento' }],
+    technicalDetail: {
+      summary:
+        'Núcleo (20 nov 2026, migración 0056): tablas kb_articles y kb_categories. Búsqueda híbrida con pgvector y texto completo en español. Revisión por Telegram con botones (x:kb:…). Importación del espacio de ClickUp desde Operaciones. Sección Trabajo → Conocimiento.',
+      stack: ['lib/core/knowledge.ts (datos, búsqueda, IA, botones, herramientas)', 'lib/core/knowledge-rules.ts (reglas puras)', 'lib/core/knowledge-actions.ts (acciones con permisos)', 'lib/operaciones/kb-import.ts (importación de ClickUp)'],
+      keyDecisions: [
+        'En el núcleo y no en Operaciones: la usarán todos los agentes',
+        'Tablas propias en vez de leer ClickUp: búsqueda por significado, sin límite de peticiones y para poder dejar ClickUp',
+        'Nada se publica sin el OK de Enric; se guardan la primera versión de la IA y sus correcciones para aprender'
+      ]
     },
   },
   {
@@ -330,7 +352,7 @@ export function getSystemMap(): SystemNode[] {
 }
 
 // Todos los mapas de detalle conocidos (el Server Component los resuelve y los pasa al cliente).
-export const PROCESS_MAP_IDS = ['clustering', 'competitor_analysis', 'security', 'agentes', 'clientes', 'rendimiento', 'estrategia', 'errores', ...Object.keys(OPS_MAPS)];
+export const PROCESS_MAP_IDS = ['clustering', 'competitor_analysis', 'security', 'agentes', 'clientes', 'rendimiento', 'estrategia', 'errores', 'conocimiento', ...Object.keys(OPS_MAPS)];
 
 export function getProcessMap(detailMapId: string): ProcessStep[] {
   switch (detailMapId) {
@@ -350,6 +372,8 @@ export function getProcessMap(detailMapId: string): ProcessStep[] {
       return ESTRATEGIA_PROCESS_MAP;
     case 'errores':
       return ERRORES_PROCESS_MAP;
+    case 'conocimiento':
+      return CONOCIMIENTO_PROCESS_MAP;
     default:
       return OPS_MAPS[detailMapId] ?? [];
   }

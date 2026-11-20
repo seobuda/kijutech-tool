@@ -3,16 +3,26 @@
 Lista viva de lo que solo puede hacer Enric (accesos, decisiones, el equipo). Claude la actualiza al terminar cada bloque.
 Detalle paso a paso de la activación en `docs/PRUEBAS-EN-VIVO.md`.
 
-**Última actualización:** 20 nov 2026. En producción: `main` `2e1158d1` (hasta las pruebas simuladas fase 2), 55 migraciones; organigrama y chat de Sistema listos para desplegar (0055).
+**Última actualización:** 20 nov 2026. En producción: `main` `b6ccc511` (organigrama y chat de Sistema), 56 migraciones; base de conocimiento lista para desplegar (0056).
+
+## Base de conocimiento y Mapa de contenido (rama `feature/jefe-operaciones`, migración 0056, 20 nov)
+Aprobado: diseño (opción A, núcleo, escaladas por el chat principal, IA general con tu aprobación, categorías, solo publicas tú) y esquema. Detalle en `docs/ESTADO.md` §6.29.
+- [ ] **Desplegar con migración** (Claude lo lanza con tu OK; hace backup antes).
+- [ ] **Importar de ClickUp (una sola vez)** en producción: Trabajo → Conocimiento → «Importar de ClickUp» (espacio «📚 Base de Conocimiento»). En local: 127 tareas con contenido a «Para más tarde» (40 vacías no entran; 77 con vídeos alojados en ClickUp, etiqueta «vídeo en clickup»: pásalos a Google Drive al revisarlos). Desde entonces, nada de conocimiento en ClickUp.
+- [ ] **Revisar por tandas** la pestaña «Para más tarde» (tus horas de conocimiento): publicar, editar o archivar.
+- [ ] **Embeddings:** la clave de Gemini local no tiene saldo (402). Si en producción pasa lo mismo, la búsqueda funciona solo por palabras: recarga Gemini o configura otro proveedor de embeddings en IA y modelos (coste de céntimos).
+- [ ] **Prueba por Telegram:** «apunta en la base: …» al Operations manager; te llega la propuesta con botones. Y «¿qué tenemos en la base sobre …?».
+- [ ] **Mapa de contenido:** que Mayi añada el enlace del Google Sheet en cada cliente con SEO (ficha → Webs y cuentas → tipo «Mapa de contenido»).
+- [ ] **Explicar al equipo** el botón «Proponer una entrada» de Conocimiento (necesitan usuario en la herramienta; por Telegram llegará con la fase 2).
 
 ## Organigrama y chat de Sistema (rama `feature/departamentos-sistema`, migración 0055, 20 nov)
 Aprobado: esquema, núcleo, despliegue con migración y el arreglo de raíz de los errores de las pruebas. Detalle en `docs/ESTADO.md` §6.28.
 - [x] Crear el bot «Kijutech Sistema» en @BotFather (hecho el 20 nov).
-- [ ] **Desplegar con migración** (Claude lo lanza con tu OK; hace backup antes).
-- [ ] **Agentes → Departamentos → Sistema y Plataforma:** pega el token del bot y pulsa Guardar.
-- [ ] **Abre el chat con el bot y pulsa «Iniciar»** (si al guardar no te escribió) y vuelve a pulsar «Comprobar».
+- [x] **Desplegar con migración** (Claude lo lanza con tu OK; hace backup antes).
+- [x] **Agentes → Departamentos → Sistema y Plataforma:** pega el token del bot y pulsa Guardar.
+- [x] **Abre el chat con el bot y pulsa «Iniciar»** (si al guardar no te escribió) y vuelve a pulsar «Comprobar».
 - [ ] **Hora del parte** en Automatizaciones → «Parte de Sistema» (por defecto 09:00). «Enviarme una prueba» te lo manda al momento.
-- [ ] **Prueba:** escríbele o mándale un audio al bot de Sistema: «¿cómo está el sistema?».
+- [x] **Prueba:** escríbele o mándale un audio al bot de Sistema: «¿cómo está el sistema?».
 - [ ] **Mira la pantalla Agentes → Departamentos** (también en móvil): Claude no la ha podido ver en el navegador.
 - [ ] Marca como resuelto en Sistema → Errores el grupo que crearon las pruebas el 19 nov («[jornada] tareas de hoy sin ClickUp»).
 - [ ] (Pendiente de tu OK) Actualizar el texto del paso «Despliegue protegido» del bloque Seguridad del Mapa Visual (`lib/auth/`).

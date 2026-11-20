@@ -5,7 +5,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, Brain, Building2, CircleCheck, CircleDashed, Compass, Globe, LayoutDashboard, LineChart, Settings2, Sparkles, Swords, Trash2, Users } from 'lucide-react';
+import { ArrowLeft, Brain, Building2, CircleCheck, CircleDashed, Compass, Globe, LayoutDashboard, LineChart, Map as MapIcon, Settings2, Sparkles, Swords, Trash2, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/page';
 import { cn } from '@/lib/utils';
@@ -88,6 +88,35 @@ const TABS = [
 ] as const;
 type TabKey = (typeof TABS)[number]['key'];
 
+/**
+ * Mapa de contenido (20 nov 2026): en los clientes con servicio SEO, acceso directo al Google Sheet que lleva Mayi
+ * (artículos, URLs transaccionales, enlazado, pilares y satélites). Si falta, invita a añadirlo en «Webs y cuentas».
+ */
+function ContentMapLink({ data, onAdd }: { data: FichaData; onAdd: () => void }) {
+  const maps = data.assets.filter((a) => a.kind === 'mapa_contenido' && a.value);
+  if (!data.ops.services.some((s) => s.key === 'seo') && maps.length === 0) return null;
+  if (maps.length === 0) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        Sin mapa de contenido.{' '}
+        <button type="button" className="text-brand hover:underline" onClick={onAdd}>
+          Añadir el enlace
+        </button>
+      </p>
+    );
+  }
+  return (
+    <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+      {maps.map((m) => (
+        <a key={m.id} href={m.value} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-brand hover:underline">
+          <MapIcon className="size-4" aria-hidden />
+          {m.label || 'Mapa de contenido'}
+        </a>
+      ))}
+    </p>
+  );
+}
+
 export function FichaView({ data }: { data: FichaData }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -127,6 +156,7 @@ export function FichaView({ data }: { data: FichaData }) {
           {c.summary && <p className="max-w-3xl text-sm text-foreground/80 text-pretty">{c.summary}</p>}
           {c.aliases.length > 0 && <p className="text-xs text-muted-foreground">También se le llama: {c.aliases.join(', ')}</p>}
           <CompletenessBar pct={data.completeness.pct} />
+          <ContentMapLink data={data} onAdd={() => go('webs')} />
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           <label className="flex items-center gap-2 text-sm">

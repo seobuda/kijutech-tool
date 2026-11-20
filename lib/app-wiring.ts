@@ -9,6 +9,7 @@ import { registerAgentesCapabilities } from '@/lib/agentes/register';
 import { registerRendimientoCapabilities } from '@/lib/rendimiento/register';
 import { registerEstrategiaCapabilities } from '@/lib/estrategia/register';
 import { registerErrorCapabilities } from '@/lib/core/errors';
+import { registerKnowledgeCapabilities } from '@/lib/core/knowledge';
 
 let wired = false;
 export function wireApp(): void {
@@ -19,4 +20,5 @@ export function wireApp(): void {
   registerRendimientoCapabilities();
   registerEstrategiaCapabilities();
   registerErrorCapabilities(); // registro de errores del núcleo: herramientas del Técnico de mantenimiento, botones y limpieza
+  registerKnowledgeCapabilities(); // base de conocimiento del núcleo: herramientas, botones de revisión y embeddings
 }
