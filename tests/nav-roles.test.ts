@@ -68,14 +68,14 @@ describe('Barra lateral en cinco espacios (fase 1 UX)', () => {
     }
   });
 
-  it('los espacios son Inicio, Para ti, Clientes, Equipo y Conocimiento, y lo técnico va en Ajustes', () => {
-    expect(NAV[0].items.map((i) => i.label)).toEqual(['Inicio', 'Para ti', 'Clientes', 'Equipo', 'Conocimiento']);
+  it('los espacios son Inicio, Mis tareas, Para ti, Clientes, Equipo y Conocimiento, y lo técnico va en Ajustes', () => {
+    expect(NAV[0].items.map((i) => i.label)).toEqual(['Inicio', 'Mis tareas', 'Para ti', 'Clientes', 'Equipo', 'Conocimiento']);
     expect(NAV.map((g) => g.label)).toEqual(['Espacios', 'Ajustes', 'Cuenta']);
   });
 
   it('el lector ve un menú corto y sin nada de administración ni de crear', () => {
     const labels = flatNav(visibleNav(LECTOR)).map((x) => x.item.label);
-    expect(labels).toEqual(['Inicio', 'Equipo', 'Personas', 'Conocimiento', 'Mi cuenta']);
+    expect(labels).toEqual(['Inicio', 'Mis tareas', 'Equipo', 'Personas', 'Conocimiento', 'Mi cuenta']);
     expect(visibleActions(LECTOR)).toHaveLength(0);
   });
 

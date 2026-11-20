@@ -262,14 +262,14 @@ const CORE_NODES: SystemNode[] = [
     id: 'core-inicio',
     name: 'Inicio y navegación',
     description:
-      'La portada y el menú (fase 1 de la reorganización UX, 20 nov 2026): cinco espacios (Inicio, Para ti, Clientes, Equipo y Conocimiento) con Ajustes aparte, y un Inicio según el rol. Administración ve lo que espera de ti y una tarjeta por área (clientes, equipo, agentes y sistema; el gasto de IA solo super_admin); el equipo ve sus tareas de hoy, su jornada, sus dudas y lo nuevo de la base.',
+      'La portada y el menú (fase 1 de la reorganización UX, 20 nov 2026): cinco espacios (Inicio, Para ti, Clientes, Equipo y Conocimiento) con Ajustes aparte, y un Inicio según el rol. Administración ve lo que espera de ti y una tarjeta por área (clientes, equipo, agentes y sistema; el gasto de IA solo super_admin); el equipo ve un panel propio (lo urgente, sus cifras de la semana sin ranking, su día, su jornada, sus dudas y lo nuevo de la base) y tiene «Mis tareas» con toda su lista. Las tareas se leen con un tipo propio (WorkTask) para que, cuando la herramienta sustituya a ClickUp en 2027, solo cambie la fuente.',
     status: 'built',
     icon: 'Compass',
     group: 'infrastructure',
     technicalDetail: {
       summary:
         'Sin tablas propias: lib/inicio/panel.ts solo lee lo que ya calculan Operaciones (bandeja, correos, semáforo, jornada), Agentes (dudas y acciones), Conocimiento, Estrategia y Errores. Cada tarjeta carga por separado con Suspense; las tareas de ClickUp llegan después de pintar y usan la caché de getTeamToday. Las rutas no cambian: solo el menú (components/app-shell/nav.ts).',
-      stack: ['app/(dashboard)/dashboard/page.tsx + _inicio/', 'lib/inicio/panel.ts', 'components/app-shell/nav.ts (espacios, subentradas y «＋ Nuevo»)'],
+      stack: ['app/(dashboard)/dashboard/page.tsx + _inicio/', 'app/(dashboard)/dashboard/mis-tareas/', 'lib/inicio/panel.ts', 'lib/operaciones/my-tasks.ts (fuente de tareas, hoy ClickUp + encargos)', 'components/app-shell/nav.ts (espacios, subentradas y «＋ Nuevo»)'],
       keyDecisions: [
         'Lo accionable primero (lo que espera de ti), nunca un muro de gráficas',
         'Un bloque que falla se registra y muestra «no disponible» sin tumbar el resto',

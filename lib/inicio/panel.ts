@@ -3,9 +3,9 @@
 // Errores, para que la portada cuente en un vistazo qué espera de ti y cómo va cada área.
 // Cada bloque es independiente: si uno falla, se registra y su tarjeta muestra «no disponible» sin tumbar el resto.
 import 'server-only';
-import { and, desc, eq, gte, inArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNull, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { agtTeamQuestions, clientMemory, estSuggestions, kbArticles, opsAgentActions, opsClientActivity, opsTeamProfiles } from '@/lib/db/schema';
+import { agtTeamQuestions, clientMemory, estSuggestions, kbArticles, opsAgentActions, opsBlockers, opsClientActivity, opsRequests, opsTeamProfiles } from '@/lib/db/schema';
 import { errorStats, reportError } from '@/lib/core/errors';
 import { countByStatus as kbCountByStatus } from '@/lib/core/knowledge';
 import { getInbox } from '@/lib/operaciones/inbox';
@@ -13,6 +13,7 @@ import { getPendingEmailProposals } from '@/lib/operaciones/owner-queue';
 import { evaluateClient, getLevels, listClients } from '@/lib/operaciones/clients';
 import { getCurrentDays, getPersonDay, jornadaSettings } from '@/lib/operaciones/jornada';
 import type { DayStatus } from '@/lib/operaciones/jornada-core';
+import { getMyTimes } from '@/lib/operaciones/tiempos-overview';
 
 /** Ejecuta un bloque del panel; si falla, lo registra y devuelve null (la tarjeta dice «no disponible»). */
 export async function safeBlock<T>(tenantId: string, name: string, fn: () => Promise<T>): Promise<T | null> {
@@ -226,4 +227,75 @@ export async function getNewKnowledge(tenantId: string, now = new Date()) {
     .where(and(eq(kbArticles.tenantId, tenantId), eq(kbArticles.status, 'publicada'), gte(kbArticles.publishedAt, since)))
     .orderBy(desc(kbArticles.publishedAt))
     .limit(5);
+}
+
+// --- Lo urgente y las cifras de cada persona -----------------------------------------------------------------------
+
+export type MyUrgent = {
+  returned: { id: string; title: string; clientName: string | null; since: Date }[];
+  blocked: { id: string; question: string; status: string; since: Date }[];
+  /** Dudas respondidas a las que aún no ha dicho si le sirvió. */
+  toRate: number;
+};
+
+/** Lo que pide algo a la persona: encargos devueltos, bloqueos sin resolver y dudas por valorar. */
+export async function getMyUrgent(tenantId: string, clickupUserId: string): Promise<MyUrgent> {
+  const [returned, blocked, rate] = await Promise.all([
+    db
+      .select({ id: opsRequests.id, title: opsRequests.title, clientName: opsRequests.clientName, since: opsRequests.workStatusAt })
+      .from(opsRequests)
+      .where(and(eq(opsRequests.tenantId, tenantId), eq(opsRequests.assigneeClickupId, clickupUserId), eq(opsRequests.workStatus, 'devuelto')))
+      .orderBy(asc(opsRequests.workStatusAt))
+      .limit(10),
+    db
+      .select({ id: opsBlockers.id, question: opsBlockers.question, status: opsBlockers.status, since: opsBlockers.createdAt })
+      .from(opsBlockers)
+      .where(and(eq(opsBlockers.tenantId, tenantId), eq(opsBlockers.askedByClickupId, clickupUserId), inArray(opsBlockers.status, ['abierto', 'escalado'])))
+      .orderBy(asc(opsBlockers.createdAt))
+      .limit(10),
+    db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(agtTeamQuestions)
+      .where(and(eq(agtTeamQuestions.tenantId, tenantId), eq(agtTeamQuestions.askedByClickupId, clickupUserId), eq(agtTeamQuestions.status, 'respondida'), isNull(agtTeamQuestions.feedback)))
+  ]);
+  return { returned, blocked, toRate: rate[0]?.n ?? 0 };
+}
+
+export type MyStats = {
+  days: number;
+  /** Tareas terminadas con tiempo registrado. */
+  finished: number;
+  /** % de tareas dentro del margen de su tipo. */
+  pctInside: number | null;
+  /** % de veces que acertó su propia estimación. */
+  precision: number | null;
+  /** Tiempos pasados del margen pendientes de explicar (se hace desde Telegram). */
+  pendingJustify: number;
+  /** Encargos de la herramienta completados en el periodo y cuántos a tiempo. */
+  completed: number;
+  onTime: number;
+};
+
+const madridDay = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Madrid', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+
+/** Cifras propias de los últimos días: sin ranking ni comparación con nadie. */
+export async function getMyStats(tenantId: string, clickupUserId: string, days = 7, now = new Date()): Promise<MyStats> {
+  const since = new Date(now.getTime() - days * 86_400_000);
+  const [times, done] = await Promise.all([
+    getMyTimes(tenantId, clickupUserId, days),
+    db
+      .select({ dueDate: opsRequests.dueDate, at: opsRequests.workStatusAt })
+      .from(opsRequests)
+      .where(and(eq(opsRequests.tenantId, tenantId), eq(opsRequests.assigneeClickupId, clickupUserId), eq(opsRequests.workStatus, 'completado'), gte(opsRequests.workStatusAt, since)))
+  ]);
+  const withDue = done.filter((r) => r.dueDate);
+  return {
+    days,
+    finished: times.stats.n,
+    pctInside: times.stats.pctInside,
+    precision: times.stats.precision,
+    pendingJustify: times.stats.pendingJustify,
+    completed: withDue.length,
+    onTime: withDue.filter((r) => madridDay(new Date(r.at)) <= String(r.dueDate)).length
+  };
 }

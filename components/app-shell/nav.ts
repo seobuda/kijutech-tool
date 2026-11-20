@@ -5,6 +5,7 @@ import {
   Bug,
   BookOpen,
   Library,
+  ListTodo,
   Bot,
   Brain,
   CalendarCheck,
@@ -151,6 +152,7 @@ export const NAV: NavGroup[] = [
     label: 'Espacios',
     items: [
       { href: '/dashboard', label: 'Inicio', icon: Home, keywords: 'inicio panel resumen hoy portada' },
+      { href: '/dashboard/mis-tareas', label: 'Mis tareas', icon: ListTodo, keywords: 'tareas pendientes vencidas hoy semana mis encargos' },
       {
         href: '/dashboard/operaciones/bandeja',
         label: 'Para ti',
@@ -296,6 +298,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   admin: 'Administración',
   cards: 'Fichas SEO',
   general: 'Mi cuenta',
+  'mis-tareas': 'Mis tareas',
   security: 'Seguridad',
   activity: 'Actividad',
   new: 'Nuevo',

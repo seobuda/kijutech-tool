@@ -177,7 +177,7 @@ Principio: **lo accionable primero**, nunca un muro de gráficas.
 
 **Confirmado por Enric (20 nov, noche)** (preguntas de §6): cinco espacios con Ajustes aparte; el equipo ve solo lo suyo (sus tareas, su jornada, sus dudas y lo nuevo de la base); empezar por la fase 1; **foto o avatar** en el Equipo (fase 3, necesitará un campo nuevo y su aprobación de esquema).
 
-**Fase 1 hecha (20 nov, rama `feature/ux-fase1`):** Inicio por rol, barra lateral en cinco espacios con subentradas y Ajustes aparte, botón «＋ Nuevo», nombres únicos y las mismas rutas de antes. Detalle en `docs/ESTADO.md` §6.31. Diferencia con el plan: el equipo no tiene entrada «Mis tareas» aparte, porque sus tareas ya están en su Inicio (su menú queda en Inicio, Clientes si es editor, Equipo, Conocimiento y Mi cuenta).
+**Fase 1 hecha (20 nov, rama `feature/ux-fase1`):** Inicio por rol, barra lateral en cinco espacios con subentradas y Ajustes aparte, botón «＋ Nuevo», nombres únicos y las mismas rutas de antes. Detalle en `docs/ESTADO.md` §6.31. Después, a petición de Enric: el Inicio del equipo es un panel (lo urgente, sus cifras sin ranking y su día) y hay **Mis tareas** con la lista completa. Enric decidió además que **en 2027 la herramienta sustituirá a ClickUp**: Mis tareas lee de una capa con tipo propio (`lib/operaciones/my-tasks.ts`) para que entonces solo cambie la fuente.
 
 **Plan para la siguiente sesión:**
 1. Confirmar con Enric las decisiones de §6.
