@@ -1370,6 +1370,34 @@ export const opsTelegramConfig = pgTable('ops_telegram_config', {
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
 
+// Bots de departamento (20 nov 2026, organigrama): además del bot de Operaciones (ops_telegram_config), cada jefe de
+// departamento puede tener su propio bot (p. ej. «Kijutech Sistema»). Solo hablan con el dueño (en un chat privado
+// el id del chat es el del usuario, el mismo que con el bot principal) y solo por webhook. Los avisos llevan
+// payload.bot = key; si el bot no está listo, salen por el bot principal (nunca se pierden).
+export const opsTelegramBots = pgTable(
+  'ops_telegram_bots',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    key: varchar('key', { length: 40 }).notNull(),
+    botTokenEncrypted: text('bot_token_encrypted').notNull(),
+    botTokenIv: text('bot_token_iv').notNull(),
+    botUsername: varchar('bot_username', { length: 100 }),
+    botName: varchar('bot_name', { length: 255 }),
+    // El dueño pulsó «Iniciar» (o el bot ya le pudo escribir): desde entonces los avisos salen por aquí.
+    readyAt: timestamp('ready_at'),
+    webhookSetAt: timestamp('webhook_set_at'),
+    lastError: text('last_error'),
+    lastErrorAt: timestamp('last_error_at'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [unique('ops_telegram_bots_tenant_key_unique').on(table.tenantId, table.key)]
+);
+export type OpsTelegramBot = typeof opsTelegramBots.$inferSelect;
+
 // Una fila por miembro de ClickUp: su vinculación con Telegram y su horario.
 export const opsTelegramMembers = pgTable(
   'ops_telegram_members',
@@ -2173,16 +2201,45 @@ export const agtAgents = pgTable(
     model: varchar('model', { length: 80 }),
     voice: varchar('voice', { length: 30 }),
     monthlyBudgetUsd: decimal('monthly_budget_usd', { precision: 10, scale: 2 }),
+    // Organigrama (0055): departamento al que pertenece (agt_departments.key). El jefe de un departamento es kind «jefe».
+    departmentKey: varchar('department_key', { length: 40 }),
     active: boolean('active').notNull().default(true),
     createdAt: timestamp('created_at').notNull().defaultNow(),
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
   },
   (table) => [
     unique('agt_agents_tenant_key_unique').on(table.tenantId, table.key),
-    check('agt_agents_kind_check', sql`${table.kind} IN ('principal', 'subagente')`),
+    check('agt_agents_kind_check', sql`${table.kind} IN ('principal', 'jefe', 'subagente')`),
   ]
 );
 export type AgtAgent = typeof agtAgents.$inferSelect;
+
+// Organigrama (0055, 20 nov 2026): departamentos de la agencia, su jefe (agente) y a quién reporta. Un departamento con
+// bot (bot_key = ops_telegram_bots.key) habla con el dueño por su propio chat de Telegram.
+export const agtDepartments = pgTable(
+  'agt_departments',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    key: varchar('key', { length: 40 }).notNull(),
+    name: varchar('name', { length: 120 }).notNull(),
+    description: text('description').notNull().default(''),
+    headAgentKey: varchar('head_agent_key', { length: 40 }),
+    reportsTo: varchar('reports_to', { length: 20 }).notNull().default('direccion'),
+    botKey: varchar('bot_key', { length: 40 }),
+    sort: integer('sort').notNull().default(0),
+    active: boolean('active').notNull().default(true),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    unique('agt_departments_tenant_key_unique').on(table.tenantId, table.key),
+    check('agt_departments_reports_check', sql`${table.reportsTo} IN ('direccion', 'gabinete')`),
+  ]
+);
+export type AgtDepartment = typeof agtDepartments.$inferSelect;
 
 export const agtConversations = pgTable(
   'agt_conversations',

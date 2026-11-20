@@ -25,7 +25,7 @@ export const ERRORES_PROCESS_MAP: ProcessStep[] = [
     file: 'lib/core/errors.ts',
     when: 'Al guardar el lote en el que aparece por primera vez (o se reabre).',
     ai: 'Nada aquí.',
-    code: 'Solo si los avisos están activos y la gravedad llega a la mínima de los ajustes (por defecto «error»). Como mucho 6 avisos por hora y cuenta; el resto se ve en Errores. Pasa por la cola de avisos de Operaciones (notifyOwner, clave única). Los errores del sistema sin cuenta avisan a la cuenta dueña de la plataforma.',
+    code: 'Solo si los avisos están activos y la gravedad llega a la mínima de los ajustes (por defecto «error»). Como mucho 6 avisos por hora y cuenta; el resto se ve en Errores. Pasa por la cola de avisos de Operaciones (notifyOwner, clave única) y, desde el 20 nov 2026, por el chat de Sistema (bot «sistema»; si no está listo, el principal); solo suena lo crítico. Los errores del sistema sin cuenta avisan a la cuenta dueña de la plataforma; lo que se escribe en la consola durante una prueba simulada se anota en la cuenta de pruebas (registerConsoleTenantResolver), no en la real.',
     tables: ['sys_error_groups', 'sys_error_settings']
   },
   {

@@ -31,6 +31,7 @@ import { runReports } from '@/lib/operaciones/reports';
 import { runAutopilot } from '@/lib/operaciones/autopilot';
 import { runAiWatch } from '@/lib/operaciones/ai-watch';
 import { runInfraWatch } from '@/lib/operaciones/infra-watch';
+import { runSystemDigest } from '@/lib/operaciones/system-report';
 import { runRetentionCleanup } from '@/lib/operaciones/retention';
 import { runScheduled } from '@/lib/core/capabilities';
 
@@ -264,6 +265,7 @@ async function schedulerLoop(state: WorkerState) {
         await step('piloto automático', () => runAutopilot(t)); // limpieza semanal y autonomía del agente
         await step('vigía de IA', () => runAiWatch(t)); // cada 15 min: picos, previsión y umbrales del presupuesto de IA
         await step('servidor y costes', () => runInfraWatch(t)); // cada hora: DigitalOcean (coste del mes y capacidad del servidor)
+        await step('parte de sistema', () => runSystemDigest(t)); // una vez al día: el parte del departamento de Sistema (organigrama)
         await step('limpieza de registros', () => runRetentionCleanup(t)); // domingo de madrugada: registros antiguos y textos de IA
         await step('tareas de módulos', () => runScheduled(t)); // las que registran otros módulos en el núcleo (trabajos de subagentes)
         await step('actividad de clientes', () => runActivityDaily(t)); // una vez al día, de madrugada

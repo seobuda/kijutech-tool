@@ -212,6 +212,19 @@ export const AUTOMATIONS: AutomationDef[] = [
     ]
   },
   {
+    // Organigrama (20 nov 2026): el parte diario del departamento de Sistema, por su chat de Telegram.
+    key: 'system_digest',
+    title: 'Parte de Sistema',
+    what: 'Una vez al día te manda, por el chat de Sistema y sin sonido, cómo está la plataforma: salud, pruebas simuladas, errores, gasto de IA y servidor. Lo prepara el código (sin IA); si el bot de Sistema no está listo, llega por el chat principal.',
+    canDisable: true,
+    link: { href: '/dashboard/agentes/departamentos', label: 'El bot de Sistema se configura en Agentes → Departamentos' },
+    fields: [
+      { key: 'time', label: 'Hora del parte', type: 'time', default: '09:00', help: 'En tu zona horaria (la de tu ficha de Equipo), todos los días' },
+      { key: 'windowMin', label: 'Margen si el servidor estaba apagado', type: 'number', unit: 'min', min: 30, max: 360, default: 180 }
+    ],
+    testNote: 'Te envía el parte de Sistema con el estado actual.'
+  },
+  {
     key: 'digest',
     title: 'Resúmenes de mi bandeja',
     what: 'A las horas indicadas (lunes a viernes) te manda lo completado, lo que ha resuelto el agente solo y lo que necesita de ti.',

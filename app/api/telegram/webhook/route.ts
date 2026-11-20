@@ -1,5 +1,6 @@
 import { timingSafeEqual } from 'crypto';
 import { getTelegramConfig, decodeBotToken, webhookSecret } from '@/lib/operaciones/telegram-config';
+import { decodeDeptBotToken, DEPT_BOT_KEY_RE, deptWebhookSecret, getDeptBot } from '@/lib/operaciones/dept-bots';
 import { handleUpdate } from '@/lib/operaciones/telegram-handler';
 import { wireApp } from '@/lib/app-wiring';
 
@@ -10,16 +11,26 @@ import type { TgUpdate } from '@/lib/operaciones/telegram';
 // En local no se usa (se escucha por consulta periódica). Se activa desde Ajustes →
 // Telegram → «Activar webhook»; entonces Telegram envía aquí cada mensaje con el secreto
 // derivado de AUTH_SECRET, y esta ruta rechaza cualquier petición que no lo traiga.
+// Bots de departamento (organigrama, 20 nov 2026): llegan con &b=<clave> y su propio secreto (dept-bots.ts).
+const same = (given: string, expected: string) => {
+  const a = Buffer.from(given);
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
+};
+
 export async function POST(request: Request) {
-  const tenantId = new URL(request.url).searchParams.get('t');
-  if (!tenantId) return new Response('Not found', { status: 404 });
+  const params = new URL(request.url).searchParams;
+  const tenantId = params.get('t');
+  const botKey = params.get('b');
+  if (!tenantId || (botKey !== null && !DEPT_BOT_KEY_RE.test(botKey))) return new Response('Not found', { status: 404 });
 
   const cfg = await getTelegramConfig(tenantId);
   if (!cfg || cfg.receiveMode !== 'webhook') return new Response('Not found', { status: 404 });
+  const dept = botKey ? await getDeptBot(tenantId, botKey) : null;
+  if (botKey && !dept) return new Response('Not found', { status: 404 });
 
-  const given = Buffer.from(request.headers.get('x-telegram-bot-api-secret-token') ?? '');
-  const expected = Buffer.from(webhookSecret(tenantId));
-  if (given.length !== expected.length || !timingSafeEqual(given, expected)) {
+  const given = request.headers.get('x-telegram-bot-api-secret-token') ?? '';
+  if (!same(given, botKey ? deptWebhookSecret(tenantId, botKey) : webhookSecret(tenantId))) {
     return new Response('Forbidden', { status: 403 });
   }
 
@@ -31,9 +42,10 @@ export async function POST(request: Request) {
   }
 
   try {
-    await handleUpdate(tenantId, decodeBotToken(cfg), update);
+    if (dept && botKey) await handleUpdate(tenantId, decodeDeptBotToken(dept), update, botKey);
+    else await handleUpdate(tenantId, decodeBotToken(cfg), update);
   } catch (e) {
-    console.error('[telegram] webhook:', e instanceof Error ? e.message : e);
+    console.error(`[telegram] webhook${botKey ? ` (${botKey})` : ''}:`, e instanceof Error ? e.message : e);
   }
   // Siempre 200: si no, Telegram reintenta la misma actualización una y otra vez.
   return Response.json({ ok: true });

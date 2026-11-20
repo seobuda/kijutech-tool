@@ -10,7 +10,7 @@ import { and, desc, eq, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { agtAgents, agtJobs, type AgtJob } from '@/lib/db/schema';
 import { telegramOutbound, type AgentTool, type ToolContext } from '@/lib/core/capabilities';
-import { addMessage, getAgent, listAgents } from '@/lib/agentes/store';
+import { addMessage, botForAgent, conversationAgent, getAgent, listAgents } from '@/lib/agentes/store';
 import { runAgent } from '@/lib/agentes/engine';
 
 const STALE_MS = 15 * 60_000;
@@ -91,10 +91,16 @@ export async function processJob(job: AgtJob): Promise<void> {
   const out = telegramOutbound();
   const preview = run.text.length > 2500 ? `${run.text.slice(0, 2500)}…\n\n(Informe completo en Agentes → Trabajos)` : run.text;
   if (out) {
+    // Organigrama (20 nov 2026): el informe vuelve al chat de quien lo encargó (p. ej. el jefe de Sistema, por su bot);
+    // sin conversación de origen, al chat del departamento del subagente.
+    const asker = job.conversationId ? await conversationAgent(job.conversationId) : null;
+    const bot = await botForAgent(job.tenantId, asker ?? agent);
     await out.notifyOwner(
       job.tenantId,
       `agtjob:${job.id}`,
-      `${failed ? '⚠️' : '📋'} <b>${escape(agent.name)}: ${escape(job.title)}</b>\n\n${escape(preview)}`
+      `${failed ? '⚠️' : '📋'} <b>${escape(agent.name)}: ${escape(job.title)}</b>\n\n${escape(preview)}`,
+      undefined,
+      bot ? { bot } : undefined
     );
   }
   if (job.conversationId) {

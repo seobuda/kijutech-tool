@@ -857,7 +857,7 @@ const OPS_RELIABILITY: ProcessStep[] = [
     file: 'lib/operaciones/sim/scenarios.ts',
     when: 'A mano en Sistema → Pruebas (todas o una), con bash scripts/run-scenarios.sh (Claude, tras un cambio) y después de cada despliegue.',
     ai: 'Nada.',
-    code: 'lib/operaciones/sim/runner.ts: una tanda a la vez, 60 s como máximo por escenario, cada paso queda guardado (✓/✗ con detalle). Limpia lo de más de 30 días y guarda las últimas 30 ejecuciones por escenario. /api/pruebas/run solo responde con el secreto derivado de AUTH_SECRET (404 sin él). Jornada y tiempos (scenarios-jornada.ts) se encienden en la cuenta de pruebas solo mientras corre su escenario, sin retener avisos ni mandar correos, y se apagan siempre al terminar; el reloj simulado pasa una hora inventada al planificador y mueve hacia atrás las horas guardadas de la cuenta de pruebas. El escenario de ClickUp real (scenarios-clickup.ts) sale a internet: no entra en «todas» ni en el despliegue; usa siempre la misma tarea sin responsable, con la marca [kiju:…] que la vigilancia ignora.',
+    code: 'lib/operaciones/sim/runner.ts: una tanda a la vez, 60 s como máximo por escenario, cada paso queda guardado (✓/✗ con detalle). Limpia lo de más de 30 días y guarda las últimas 30 ejecuciones por escenario. /api/pruebas/run solo responde con el secreto derivado de AUTH_SECRET (404 sin él). Mientras corre un escenario, lo que se escriba en la consola se anota en la cuenta de pruebas (el ejecutor registra en el núcleo cómo saberlo, con AsyncLocalStorage): un fallo de prueba nunca cuenta como error de la cuenta real ni avisa a Enric. Jornada y tiempos (scenarios-jornada.ts) se encienden en la cuenta de pruebas solo mientras corre su escenario, sin retener avisos ni mandar correos, y se apagan siempre al terminar; el reloj simulado pasa una hora inventada al planificador y mueve hacia atrás las horas guardadas de la cuenta de pruebas. El escenario de ClickUp real (scenarios-clickup.ts) sale a internet: no entra en «todas» ni en el despliegue; usa siempre la misma tarea sin responsable, con la marca [kiju:…] que la vigilancia ignora.',
     tables: ['ops_sim_runs', 'ops_requests', 'ops_notifications', 'ops_clickup_outbox', 'ops_request_events', 'ops_telegram_pending', 'ops_work_events', 'ops_task_times', 'ops_automations', 'ops_team_profiles', 'ops_work_types'],
   },
   {
@@ -1070,6 +1070,21 @@ const OPS_AUTONOMIA: ProcessStep[] = [
     tables: ['ops_settings', 'ops_notifications', 'ops_health_incidents'],
     settings: [{ automation: 'infra' }],
     runs: ['runInfraWatch'],
+  },
+  {
+    id: 'ops-au-sysdigest',
+    lane: 'Vigía de IA',
+    name: 'Parte de Sistema y estado del sistema',
+    description:
+      'Organigrama (20 nov 2026): una vez al día, por el chat de Sistema y sin sonido, cómo está la plataforma (salud, pruebas simuladas, errores, gasto de IA y servidor). El mismo informe es la herramienta estado_sistema del jefe de sistema, para contestar «¿cómo está el sistema?».',
+    status: 'built',
+    file: 'lib/operaciones/system-report.ts',
+    when: 'A la hora del panel (zona horaria del dueño), una vez al día, desde el planificador; la herramienta, cuando el jefe de sistema la usa.',
+    ai: 'Nada: lecturas y cuentas. La conversación con el jefe de sistema sí es IA (módulo Agentes).',
+    code: 'Secciones aisladas (si una falla, las demás salen): comprobaciones de salud e incidencias resueltas en 24 h y última pasada del vigilante; última ejecución de cada escenario de pruebas y el último despliegue con pruebas; grupos de error con actividad en 24 h (los críticos cuentan como atención); gasto de IA de hoy y del mes frente al presupuesto; capacidad y coste del servidor (de la caché, sin llamar a DigitalOcean). Clave única sysdigest:<fecha>.',
+    tables: ['ops_notifications', 'ops_health_incidents', 'ops_sim_runs', 'ops_settings'],
+    settings: [{ automation: 'system_digest' }],
+    runs: ['runSystemDigest'],
   },
   {
     id: 'ops-au-retention',
@@ -1349,6 +1364,19 @@ const OPS_INTEGRATIONS: ProcessStep[] = [
     tables: ['ops_telegram_config', 'ops_telegram_pending'],
     settings: [{ automation: 'delivery' }],
     live: 'telegram',
+  },
+  {
+    id: 'ops-int-dept-bots',
+    lane: 'Conexiones',
+    name: 'Bots de departamento (chat de Sistema)',
+    description:
+      'Organigrama (20 nov 2026): además del bot principal, cada jefe de departamento puede tener su propio bot de Telegram. El primero es «Kijutech Sistema»: por él llegan los avisos técnicos (errores, salud, gasto de IA, servidor, «Sistema en marcha», despliegues y el parte diario) y Enric habla con el jefe de sistema. Se configura en Agentes → Departamentos.',
+    status: 'built',
+    file: 'lib/operaciones/dept-bots.ts',
+    when: 'Al guardar el token (comprueba con getMe, pone el webhook y saluda); cada mensaje al bot llega por /api/telegram/webhook?t=…&b=<clave>; cada aviso con payload.bot decide al enviarse.',
+    ai: 'Nada aquí: los mensajes del dueño al bot los atiende el jefe del departamento (módulo Agentes, por el núcleo).',
+    code: 'Solo el dueño (en un chat privado el id es el del usuario, así que no hay que vincular: basta «Iniciar»; otros chats reciben «solo para la dirección»). Solo por webhook, con secreto propio derivado de AUTH_SECRET y de la clave. Token cifrado; no puede ser el del bot principal. Un aviso con payload.bot sale por ese bot si está listo (ready_at); si no, por el principal: nunca se pierde. Los avisos «health» y «startup» al dueño llevan bot «sistema» solos; solo suena lo crítico (disable_notification en lo demás). Los errores del registro también (núcleo, notifyOwner con bot). El vigilante externo usa este bot cuando está listo (watchdog-env.mjs, regenerado en cada despliegue) y deploy.sh deja en la cola el resultado de cada despliegue (scripts/notify-sistema.sh: correcto sin sonido, fallido con sonido).',
+    tables: ['ops_telegram_bots', 'ops_notifications', 'ops_telegram_members'],
   },
   {
     id: 'ops-int-email',

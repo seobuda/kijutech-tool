@@ -79,7 +79,7 @@ export async function runScenarios(
       let error: string | null = null;
       try {
         const startId = await simLastId(env.simTenantId);
-        await simRunContext.run({ runId: run.id }, () =>
+        await simRunContext.run({ runId: run.id, simTenantId: env.simTenantId }, () =>
           withTimeout(sc.run({ ownerTenantId, simTenantId: env.simTenantId, emp: ids.employee, own: ids.owner, createdBy, startId, steps }), SCENARIO_TIMEOUT_MS)
         );
       } catch (e) {

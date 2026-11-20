@@ -2,11 +2,12 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { AudioLines, Bot, MessagesSquare, ListChecks, Plug } from 'lucide-react';
+import { AudioLines, Bot, Building2, MessagesSquare, ListChecks, Plug } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const TABS = [
   { href: '/dashboard/agentes', label: 'Agentes', icon: Bot },
+  { href: '/dashboard/agentes/departamentos', label: 'Departamentos', icon: Building2 },
   { href: '/dashboard/agentes/conversaciones', label: 'Conversaciones', icon: MessagesSquare },
   { href: '/dashboard/agentes/trabajos', label: 'Trabajos', icon: ListChecks },
   { href: '/dashboard/agentes/voz', label: 'Voz', icon: AudioLines },

@@ -8,6 +8,7 @@ import { cleanupFixtures, createFixtures, emailFor, FIXTURE_PASSWORD, loginAs, P
 import { aiProposeClient, applyClientProposal, saveClientOps } from '@/lib/operaciones/client-actions';
 import { addTestRequestAction, createSimRequestAction, getPruebasAction, pressSimButtonAction, runScenariosAction, sendSimTextAction, withdrawTestRequestAction } from '@/lib/operaciones/sim/actions';
 import { POST as pruebasRunPost } from '@/app/api/pruebas/run/route';
+import { checkDeptBotAction, removeDeptBotAction, saveDeptBotAction } from '@/lib/operaciones/dept-bot-actions';
 import { deleteAnnotationAction, getClientPerformanceAction, getMonthlyReportAction, resyncClientAction, saveAnnotationAction, savePerfSettingsAction } from '@/lib/rendimiento/actions';
 import { errorBriefAction, requestDiagnosisAction, saveErrorNoteAction, saveErrorSettingsAction, setErrorStatusAction } from '@/app/(dashboard)/dashboard/errores/actions';
 import { addKeywordsAction, backfillWorkAction, closeObjectiveAction, decideSuggestionAction, requestAnalysisAction, saveStrategistSettingsAction, deleteEventAction, deleteKeywordAction, deleteObjectiveAction, deletePlanAction, deleteTrackedUrlAction, getClientStrategyAction, objectiveBaselineAction, pauseClientAction, runProcessNowAction, saveClientOverrideAction, saveEstSettingsAction, saveEventAction, saveObjectiveAction, savePlanAction, setClientPlanAction, setSignalStatusAction, setWorkUrlAction, suggestKeywordsAction, updateKeywordAction } from '@/lib/estrategia/actions';
@@ -121,6 +122,9 @@ const form = (data: Record<string, string>) => {
 // Acciones que NO hacen nada si llegaran a ejecutarse (ids que no existen, entradas vacías): así
 // una regresión en un guard hace fallar la prueba sin tocar datos reales.
 const ACCIONES_ADMIN: [string, () => unknown][] = [
+  ['saveDeptBotAction (organigrama: token del bot de un departamento)', () => saveDeptBotAction('no_existe', 'x')],
+  ['checkDeptBotAction (organigrama: comprobar bot)', () => checkDeptBotAction('no_existe')],
+  ['removeDeptBotAction (organigrama: quitar bot)', () => removeDeptBotAction('no_existe')],
   ['runScenariosAction (pruebas simuladas: ejecutar)', () => runScenariosAction(['botones-estado'])],
   ['getPruebasAction (pruebas simuladas: ver)', () => getPruebasAction('employee', null)],
   ['pressSimButtonAction (pruebas simuladas: pulsar)', () => pressSimButtonAction(1, 0, 0)],

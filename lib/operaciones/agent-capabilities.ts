@@ -30,6 +30,8 @@ import { getStructure, selectedSpaces, validClient, type CachedStructure } from 
 import { syncToClickUp } from '@/lib/operaciones/sync';
 import { decodeBotToken, getOwnerMember, getTelegramConfig } from '@/lib/operaciones/telegram-config';
 import { clampMessage, escapeHtml, htmlToPlain, tg, tgSendVoice } from '@/lib/operaciones/telegram';
+import { readyDeptBotToken } from '@/lib/operaciones/dept-bots';
+import { estadoSistemaTool } from '@/lib/operaciones/system-report';
 import { getTeamToday } from '@/lib/operaciones/team-today';
 import type { ProposalItem } from '@/lib/operaciones/note-types';
 
@@ -730,7 +732,10 @@ export const OPS_AGENT_TOOLS: AgentTool[] = [estadoEquipo, tareasPersona, pendie
 
 // --- Salida por Telegram para los agentes -------------------------------------------------------------
 
-async function botToken(tenantId: string): Promise<string | null> {
+// Con bot de departamento (organigrama, 20 nov 2026), el suyo si está listo; si no, el principal.
+async function botToken(tenantId: string, bot?: string | null): Promise<string | null> {
+  const dept = await readyDeptBotToken(tenantId, bot);
+  if (dept) return dept;
   const cfg = await getTelegramConfig(tenantId);
   return cfg ? decodeBotToken(cfg) : null;
 }
@@ -740,6 +745,7 @@ export function registerOperacionesCapabilities(): void {
   if (registered) return;
   registered = true;
   registerTools(OPS_AGENT_TOOLS);
+  registerTools([estadoSistemaTool]); // organigrama: herramienta del jefe de Sistema
   // El motor de propuestas queda disponible para las herramientas de cambio de otros módulos (núcleo: proposeChange).
   setChangeProposer(proposeOrRun);
   // Encargos terminados, carga del cliente y preguntas sobre un encargo, para otros módulos (Estrategia).
@@ -767,10 +773,10 @@ export function registerOperacionesCapabilities(): void {
     }
   });
   setTelegramOutbound({
-    async sendText(tenantId, chatId, html, buttons) {
-      const token = await botToken(tenantId);
+    async sendText(tenantId, chatId, html, buttons, opts) {
+      const token = await botToken(tenantId, opts?.bot);
       if (!token) return;
-      const params = { chat_id: chatId, text: clampMessage(html), parse_mode: 'HTML', disable_web_page_preview: true, ...(buttons?.length ? { reply_markup: { inline_keyboard: buttons.map((r) => r.map((b) => ({ text: b.text, callback_data: b.data }))) } } : {}) };
+      const params = { chat_id: chatId, text: clampMessage(html), parse_mode: 'HTML', disable_web_page_preview: true, ...(opts?.silent ? { disable_notification: true } : {}), ...(buttons?.length ? { reply_markup: { inline_keyboard: buttons.map((r) => r.map((b) => ({ text: b.text, callback_data: b.data }))) } } : {}) };
       try {
         await tg(token, 'sendMessage', params);
       } catch {
@@ -778,18 +784,25 @@ export function registerOperacionesCapabilities(): void {
         await tg(token, 'sendMessage', { ...params, text: htmlToPlain(html).slice(0, 4000), parse_mode: undefined }).catch(() => undefined);
       }
     },
-    async sendVoice(tenantId, chatId, ogg, caption) {
-      const token = await botToken(tenantId);
+    async sendVoice(tenantId, chatId, ogg, caption, opts) {
+      const token = await botToken(tenantId, opts?.bot);
       return token ? tgSendVoice(token, chatId, ogg, caption) : false;
     },
-    async sendTyping(tenantId, chatId, action) {
-      const token = await botToken(tenantId);
+    async sendTyping(tenantId, chatId, action, opts) {
+      const token = await botToken(tenantId, opts?.bot);
       if (token) await tg(token, 'sendChatAction', { chat_id: chatId, action }).catch(() => undefined);
     },
-    async notifyOwner(tenantId, key, html, buttons) {
+    async notifyOwner(tenantId, key, html, buttons, opts) {
       const owner = await getOwnerMember(tenantId);
       if (!owner) return;
-      await enqueueNotification({ tenantId, kind: 'digest', dedupeKey: key.slice(0, 200), forClickupUserId: owner.clickupUserId, forName: owner.username, payload: { text: clampMessage(html), toOwner: true, buttons: buttons?.length ? buttons : undefined } });
+      await enqueueNotification({
+        tenantId,
+        kind: 'digest',
+        dedupeKey: key.slice(0, 200),
+        forClickupUserId: owner.clickupUserId,
+        forName: owner.username,
+        payload: { text: clampMessage(html), toOwner: true, buttons: buttons?.length ? buttons : undefined, ...(opts?.bot ? { bot: opts.bot } : {}), ...(opts?.silent ? { silent: true } : {}) }
+      });
     }
   });
 }

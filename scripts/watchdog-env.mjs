@@ -8,13 +8,18 @@ import postgres from 'postgres';
 
 const sql = postgres(process.env.POSTGRES_URL, { max: 1 });
 try {
-  const [cfg] = await sql`select tenant_id, bot_token_encrypted, bot_token_iv from ops_telegram_config limit 1`;
+  const [cfg] = await sql`select tenant_id, bot_token_encrypted, bot_token_iv from ops_telegram_config where receive_mode <> 'simulado' limit 1`;
   if (!cfg) throw new Error('No hay bot de Telegram configurado');
   const key = Buffer.from(process.env.AI_ENCRYPTION_KEY, 'hex');
-  const buf = Buffer.from(cfg.bot_token_encrypted, 'hex');
-  const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(cfg.bot_token_iv, 'hex'));
-  decipher.setAuthTag(buf.subarray(buf.length - 16));
-  const token = Buffer.concat([decipher.update(buf.subarray(0, buf.length - 16)), decipher.final()]).toString('utf8');
+  const decrypt = (enc, iv) => {
+    const buf = Buffer.from(enc, 'hex');
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(iv, 'hex'));
+    decipher.setAuthTag(buf.subarray(buf.length - 16));
+    return Buffer.concat([decipher.update(buf.subarray(0, buf.length - 16)), decipher.final()]).toString('utf8');
+  };
+  // Organigrama (20 nov 2026): si el bot de Sistema está listo, el vigilante avisa por él; si no, por el principal.
+  const [sys] = await sql`select bot_token_encrypted, bot_token_iv from ops_telegram_bots where tenant_id = ${cfg.tenant_id} and key = 'sistema' and ready_at is not null limit 1`.catch(() => []);
+  const token = sys ? decrypt(sys.bot_token_encrypted, sys.bot_token_iv) : decrypt(cfg.bot_token_encrypted, cfg.bot_token_iv);
   const [owner] = await sql`
     select m.telegram_chat_id from ops_telegram_members m
     join ops_clickup_connections c on c.tenant_id = m.tenant_id and c.me_clickup_id = m.clickup_user_id

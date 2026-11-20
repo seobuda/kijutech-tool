@@ -3,7 +3,19 @@
 Lista viva de lo que solo puede hacer Enric (accesos, decisiones, el equipo). Claude la actualiza al terminar cada bloque.
 Detalle paso a paso de la activación en `docs/PRUEBAS-EN-VIVO.md`.
 
-**Última actualización:** 16 nov 2026. En producción: `main` `4426ae3b` (todo lo anterior + Rendimiento del cliente), 50 migraciones.
+**Última actualización:** 20 nov 2026. En producción: `main` `2e1158d1` (hasta las pruebas simuladas fase 2), 55 migraciones; organigrama y chat de Sistema listos para desplegar (0055).
+
+## Organigrama y chat de Sistema (rama `feature/departamentos-sistema`, migración 0055, 20 nov)
+Aprobado: esquema, núcleo, despliegue con migración y el arreglo de raíz de los errores de las pruebas. Detalle en `docs/ESTADO.md` §6.28.
+- [x] Crear el bot «Kijutech Sistema» en @BotFather (hecho el 20 nov).
+- [ ] **Desplegar con migración** (Claude lo lanza con tu OK; hace backup antes).
+- [ ] **Agentes → Departamentos → Sistema y Plataforma:** pega el token del bot y pulsa Guardar.
+- [ ] **Abre el chat con el bot y pulsa «Iniciar»** (si al guardar no te escribió) y vuelve a pulsar «Comprobar».
+- [ ] **Hora del parte** en Automatizaciones → «Parte de Sistema» (por defecto 09:00). «Enviarme una prueba» te lo manda al momento.
+- [ ] **Prueba:** escríbele o mándale un audio al bot de Sistema: «¿cómo está el sistema?».
+- [ ] **Mira la pantalla Agentes → Departamentos** (también en móvil): Claude no la ha podido ver en el navegador.
+- [ ] Marca como resuelto en Sistema → Errores el grupo que crearon las pruebas el 19 nov («[jornada] tareas de hoy sin ClickUp»).
+- [ ] (Pendiente de tu OK) Actualizar el texto del paso «Despliegue protegido» del bloque Seguridad del Mapa Visual (`lib/auth/`).
 
 ## Estrategia de clientes, fase 1 (rama `feature/estrategia-viva`, migración 0050)
 Diseño v4 aprobado («ok a todo, adelante con la fase 1»; posiciones solo con Search Console). Detalle en `docs/ESTADO.md` §6.24.

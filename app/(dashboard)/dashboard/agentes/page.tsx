@@ -17,7 +17,7 @@ export default async function AgentesPage() {
       id: a.id,
       key: a.key,
       name: a.name,
-      kind: a.kind as 'principal' | 'subagente',
+      kind: a.kind as 'principal' | 'jefe' | 'subagente',
       role: a.role,
       instructions: a.instructions,
       tools: a.tools,
