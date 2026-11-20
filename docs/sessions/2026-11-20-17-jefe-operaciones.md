@@ -136,3 +136,8 @@ CREATE INDEX IF NOT EXISTS "agt_team_questions_person_idx" ON "agt_team_question
 - Enric preguntó por qué no usar el entorno de pruebas simulado para probar el circuito. Ese entorno tiene la IA bloqueada a propósito y su cuenta está vacía (sin base ni fichas), así que el jefe no podría responder nada útil.
 - Se añadió **«/jefe tu duda»** en el chat principal (`lib/agentes/inbound.ts`, `TEST_AS_TEAM_RE`). El jefe trata a Enric como si fuera del equipo, **aunque esté apagado** (`handleTeamInbound(…, { force: true })`), y en su mismo chat le llegan la respuesta con sus botones y las aprobaciones o escaladas. Usa la IA, la base y las fichas reales. Las dudas quedan como «Enric (prueba)».
 - Se añadió a la ayuda del bot (`/ayuda`). Prueba nueva en `tests/equipo.test.ts`. Pasan 454 de 454.
+
+## Tercera parte: vuelta atrás automática y arreglo de una prueba intermitente
+- El despliegue de `/jefe` (`8be6ea3b`) falló en la verificación: la prueba simulada «encargo-borrado» no encontró el botón del aviso. `deploy.sh` volvió solo a `326a1a07`, sin efecto en producción.
+- **Causa:** no tenía que ver con `/jefe`. `processNotifications` tiene un candado por proceso. Justo tras reiniciar la app en producción, el planificador real envía sus avisos de arranque por Telegram (segundos), y el `flush` de las pruebas hacía 4 intentos en unos 250 ms, todos con el candado ocupado. El aviso del encargo no salía y la prueba fallaba. En local no pasa porque no hay bot real enviando a la vez.
+- **Arreglo:** `lib/operaciones/sim/kit.ts` → `flush` espera, hasta 15 s, a que la cola de la cuenta de pruebas quede vacía, contando lo que ya toca enviar o está reservado por otro envío. Pasan 454 de 454.

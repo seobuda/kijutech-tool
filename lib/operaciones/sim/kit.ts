@@ -3,9 +3,9 @@ import 'server-only';
 // simulada. Lo usan scenarios.ts (avisos y flujo), scenarios-jornada.ts (jornada y tiempos, con reloj simulado) y
 // scenarios-clickup.ts (ClickUp de verdad en la lista «Pruebas Kiju»).
 import { randomUUID } from 'node:crypto';
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { opsClickupOutbox, opsRequests, type OpsRequest, type OpsSimMessage } from '@/lib/db/schema';
+import { opsClickupOutbox, opsNotifications, opsRequests, type OpsRequest, type OpsSimMessage } from '@/lib/db/schema';
 import { enqueueNewRequestNotification, processNotifications } from '@/lib/operaciones/notifications';
 import { SIM_EMPLOYEE_ID, SIM_LIST_ID, SIM_LIST_NAME } from '@/lib/operaciones/sim/env';
 import { simMessagesSince, simPress, simSay } from '@/lib/operaciones/sim/actor';
@@ -46,10 +46,28 @@ export function check(ctx: ScenarioCtx, label: string, ok: boolean, detail?: str
 }
 
 /** Envía lo que haya en la cola de avisos de la cuenta de pruebas (como haría el planificador). */
+/**
+ * Envía lo que haya en la cola de avisos de la cuenta de pruebas y ESPERA a que salga (hasta 15 s).
+ * 20 nov 2026: antes eran 4 intentos en ~250 ms. El envío tiene un candado por proceso (processNotifications sale sin
+ * hacer nada si otro envío está en marcha) y, en producción, justo tras reiniciar la app, el planificador real está
+ * mandando sus avisos de arranque por Telegram (segundos): los 4 intentos se agotaban con el candado ocupado, el aviso del
+ * encargo no salía y la prueba «encargo-borrado» falló sin que hubiera ningún fallo real (vuelta atrás de 8be6ea3b).
+ * Cuenta como pendiente lo que ya toca enviar y lo que alguien está enviando (reservado: attempts > 0); lo programado
+ * para más tarde a propósito (attempts = 0 y fecha futura) no se espera.
+ */
 export async function flush(ctx: ScenarioCtx) {
-  for (let i = 0; i < 4; i++) {
+  const deadline = Date.now() + 15_000;
+  for (let i = 0; ; i++) {
     await processNotifications(ctx.simTenantId);
     await sleep(60);
+    if (i < 3) continue; // como mínimo, las 4 pasadas de siempre
+    const [row] = await db
+      .select({ id: opsNotifications.id })
+      .from(opsNotifications)
+      .where(and(eq(opsNotifications.tenantId, ctx.simTenantId), eq(opsNotifications.status, 'pendiente'), sql`(${opsNotifications.nextAttemptAt} <= now() OR ${opsNotifications.attempts} > 0)`))
+      .limit(1);
+    if (!row || Date.now() > deadline) return;
+    await sleep(200);
   }
 }
 

@@ -468,6 +468,7 @@ ClickUp de verdad (`scenarios-clickup.ts`, fase 2, **externo**): con el token re
 - «Empezar» guardaba cuándo se vio el aviso pero no quién. Corregido en `startWork`.
 - (Fase 2) Las automatizaciones **apagadas de serie** (jornada, tiempos) **no se podían encender desde el panel**: al encender se guardaba «por defecto», que para ellas es apagada. Corregido en `saveAutomation` (y con prueba).
 - (Fase 2) Si ClickUp no respondía, los buenos días de la jornada y «¿Con qué sigues?» no salían. Ahora salen sin la lista de tareas.
+- (20 nov) **Prueba intermitente en producción arreglada:** tras reiniciar la app, el planificador real ocupa el candado de envío de avisos y el `flush` de las pruebas se rendía a los 250 ms (falló «encargo-borrado» y el despliegue volvió atrás solo). Ahora `flush` espera hasta 15 s a que la cola de la cuenta de pruebas quede vacía.
 - (Fase 2, tras desplegar) Una tanda de pruebas no puede escribir errores en el log: el registro de errores captura la consola sin saber de qué cuenta es y lo tomaría por un fallo de la cuenta real (pasó con los buenos días sin ClickUp de la cuenta de pruebas). Lo vigila una prueba. **Arreglado de raíz el 20 nov** (con OK de Enric, toca el núcleo): `registerConsoleTenantResolver` en `lib/core/errors.ts`; mientras corre un escenario, lo que se escriba en la consola se anota en la cuenta de pruebas (el ejecutor lo dice con `AsyncLocalStorage`, ver §6.28).
 
 ### 6.28 Organigrama y departamento de Sistema con su propio chat (20 nov)
