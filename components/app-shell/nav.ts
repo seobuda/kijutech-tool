@@ -30,6 +30,7 @@ import {
   Workflow,
   Building2,
   Gauge,
+  Home,
   FlaskConical,
   HeartPulse,
   Clock,
@@ -42,7 +43,7 @@ import {
   type LucideIcon
 } from 'lucide-react';
 
-export type Roles = { isAdmin: boolean; isSuperAdmin: boolean; canAccessAi: boolean };
+export type Roles = { isAdmin: boolean; isSuperAdmin: boolean; canAccessAi: boolean; /** editor o más: puede crear y editar. */ canEdit: boolean };
 
 export type NavItem = {
   href: string;
@@ -54,6 +55,8 @@ export type NavItem = {
   prefix?: boolean;
   /** Sección del módulo Operaciones a la que lleva (se marca activa en todas sus pestañas). */
   section?: SectionKey;
+  /** Subentradas de un espacio: se despliegan bajo él cuando estás dentro. */
+  children?: NavItem[];
 };
 
 export type NavGroup = { label: string; items: NavItem[] };
@@ -70,18 +73,18 @@ const adminOnly = (r: Roles) => r.isAdmin;
 export const OPS_SECTIONS: TabSection[] = [
   {
     key: 'operaciones',
-    label: 'Operaciones',
+    label: 'Día a día',
     icon: LayoutGrid,
-    description: 'El centro de mando del agente: entrada de trabajo, encargos y correos con datos en directo de ClickUp.',
+    description: 'El trabajo que entra y lo que espera tu decisión: notas, bandeja, encargos y correos, con datos en directo de ClickUp.',
     tabs: [
       { href: '/dashboard/operaciones', label: 'Bloc de notas', icon: NotebookPen, keywords: 'nota dictar audio' },
       { href: '/dashboard/operaciones/bandeja', label: 'Mi bandeja', icon: Inbox, keywords: 'revisiones bloqueos pendientes' },
       { href: '/dashboard/operaciones/encargos', label: 'Encargos', icon: ClipboardList, keywords: 'tareas clickup' },
       { href: '/dashboard/operaciones/nuevo', label: 'Nuevo encargo', icon: PlusCircle, keywords: 'crear tarea' },
       { href: '/dashboard/operaciones/correos', label: 'Correos', icon: Mail, keywords: 'email entrada' },
-      { href: '/dashboard/operaciones/agente', label: 'Agente', icon: Bot, keywords: 'propuestas aprobación autonomía acierto', show: adminOnly },
+      { href: '/dashboard/operaciones/agente', label: 'Propuestas del agente', icon: Bot, keywords: 'agente propuestas aprobación autonomía acierto', show: adminOnly },
       { href: '/dashboard/operaciones/informes', label: 'Informes', icon: FileBarChart, keywords: 'informe semanal mensual parte resumen', show: adminOnly },
-      { href: '/dashboard/operaciones/piloto', label: 'Piloto', icon: Gauge, keywords: 'métricas rendimiento', show: adminOnly }
+      { href: '/dashboard/operaciones/piloto', label: 'Métricas del agente', icon: Gauge, keywords: 'piloto métricas rendimiento agente', show: adminOnly }
     ]
   },
   {
@@ -100,7 +103,7 @@ export const OPS_SECTIONS: TabSection[] = [
   },
   {
     key: 'sistema',
-    label: 'Sistema',
+    label: 'Ajustes del sistema',
     icon: Cog,
     description: 'Lo técnico: automatizaciones, salud del sistema, pruebas simuladas, bot de Telegram y conexión con ClickUp.',
     tabs: [
@@ -138,75 +141,148 @@ export function sectionOf(pathname: string): TabSection {
   return best?.s ?? OPS_SECTIONS[0];
 }
 
+// Barra lateral en cinco espacios (fase 1 de la reorganización UX, 20 nov 2026): Inicio · Para ti · Clientes · Equipo ·
+// Conocimiento, y Ajustes aparte con lo técnico. Las rutas no cambian (los enlaces de Telegram siguen valiendo): solo
+// cambia dónde aparece cada pantalla. Cada espacio despliega sus subentradas cuando estás dentro.
+const canEdit = (r: Roles) => r.canEdit;
+
 export const NAV: NavGroup[] = [
   {
-    label: 'Trabajo',
+    label: 'Espacios',
     items: [
-      { href: '/dashboard/operaciones', label: 'Operaciones', icon: LayoutGrid, section: 'operaciones', keywords: 'agente encargos clickup' },
-      { href: '/dashboard/clientes', label: 'Clientes', icon: Building2, prefix: true, keywords: 'fichas cliente contactos webs cuentas competencia semáforo alertas onboarding' },
-      { href: '/dashboard/rendimiento', label: 'Rendimiento', icon: LineChart, keywords: 'search console analytics business profile ficha google clics sesiones llamadas métricas histórico informe mensual caídas' },
-      { href: '/dashboard/conocimiento', label: 'Conocimiento', icon: Library, prefix: true, keywords: 'base de conocimiento tutoriales procedimientos soluciones dudas vídeos cómo se hace' },
-      { href: '/dashboard/estrategia', label: 'Estrategia', icon: Compass, keywords: 'objetivos planes seguimiento palabras clave salud web velocidad oportunidades señales frecuencias calendario google updates' },
-      { href: '/dashboard/operaciones/equipo-hoy', label: 'Equipo', icon: UsersRound, section: 'equipo', keywords: 'jornada fichas personas' },
-      { href: '/dashboard/projects', label: 'Proyectos SEO', icon: FolderKanban, prefix: true, keywords: 'seo keywords clusters' },
-      { href: '/dashboard/agentes', label: 'Agentes', icon: Bot, prefix: true, keywords: 'agente ia telegram audio subagentes integraciones search console analytics dataforseo clarity', show: (r) => r.isAdmin }
+      { href: '/dashboard', label: 'Inicio', icon: Home, keywords: 'inicio panel resumen hoy portada' },
+      {
+        href: '/dashboard/operaciones/bandeja',
+        label: 'Para ti',
+        icon: Inbox,
+        keywords: 'pendiente decisión bandeja aprobar revisar',
+        show: adminOnly,
+        children: [
+          { href: '/dashboard/operaciones/bandeja', label: 'Mi bandeja', icon: Inbox, keywords: 'revisiones bloqueos' },
+          { href: '/dashboard/operaciones/agente', label: 'Propuestas del agente', icon: Bot, keywords: 'agente aprobación autonomía' },
+          { href: '/dashboard/operaciones/correos', label: 'Correos', icon: Mail, keywords: 'email entrada responder' },
+          { href: '/dashboard/agentes/equipo', label: 'Dudas del equipo', icon: MessageCircle, keywords: 'dudas escaladas jefe de operaciones' },
+          { href: '/dashboard/errores', label: 'Errores', icon: Bug, keywords: 'errores fallos incidencias diagnóstico mantenimiento técnico registro logs' },
+          { href: '/dashboard/operaciones', label: 'Bloc de notas', icon: NotebookPen, keywords: 'nota dictar audio' }
+        ]
+      },
+      {
+        href: '/dashboard/clientes',
+        label: 'Clientes',
+        icon: Building2,
+        prefix: true,
+        keywords: 'fichas cliente contactos webs cuentas competencia semáforo alertas onboarding',
+        show: canEdit,
+        children: [
+          { href: '/dashboard/clientes', label: 'Fichas', icon: IdCard, prefix: true, keywords: 'fichas cliente' },
+          { href: '/dashboard/operaciones/encargos', label: 'Encargos', icon: ClipboardList, prefix: true, keywords: 'tareas clickup encargos' },
+          { href: '/dashboard/rendimiento', label: 'Rendimiento web', icon: LineChart, keywords: 'search console analytics business profile ficha google clics sesiones llamadas métricas histórico informe mensual caídas' },
+          { href: '/dashboard/estrategia', label: 'Estrategia', icon: Compass, keywords: 'objetivos planes seguimiento palabras clave salud web velocidad oportunidades señales frecuencias calendario google updates estratega' },
+          { href: '/dashboard/projects', label: 'Proyectos SEO', icon: FolderKanban, prefix: true, keywords: 'seo keywords clusters' }
+        ]
+      },
+      {
+        href: '/dashboard/operaciones/equipo-hoy',
+        label: 'Equipo',
+        icon: UsersRound,
+        section: 'equipo',
+        keywords: 'jornada fichas personas hoy',
+        children: [
+          { href: '/dashboard/operaciones/equipo-hoy', label: 'Personas', icon: UsersRound, section: 'equipo', keywords: 'equipo hoy jornada tiempos fichas' },
+          { href: '/dashboard/agentes', label: 'Agentes de IA', icon: Bot, prefix: true, keywords: 'agente ia telegram audio subagentes integraciones conversaciones trabajos voz', show: adminOnly },
+          { href: '/dashboard/agentes/departamentos', label: 'Organigrama', icon: Network, keywords: 'departamentos jefes organigrama', show: adminOnly },
+          { href: '/dashboard/operaciones/informes', label: 'Informes', icon: FileBarChart, keywords: 'informe semanal mensual parte resumen', show: adminOnly }
+        ]
+      },
+      { href: '/dashboard/conocimiento', label: 'Conocimiento', icon: Library, prefix: true, keywords: 'base de conocimiento tutoriales procedimientos soluciones dudas vídeos cómo se hace ayuda' }
     ]
   },
   {
-    label: 'Inteligencia',
+    label: 'Ajustes',
     items: [
-      {
-        href: '/dashboard/ai/settings',
-        label: 'IA y modelos',
-        icon: Sparkles,
-        prefix: true,
-        keywords: 'prompts proveedores claves',
-        show: (r) => r.isSuperAdmin
-      },
+      { href: '/dashboard/operaciones/automatizaciones', label: 'Sistema', icon: Cog, section: 'sistema', keywords: 'automatizaciones salud telegram clickup servidor pruebas gasto', show: adminOnly },
+      { href: '/dashboard/usuarios', label: 'Usuarios', icon: Users, show: (r) => r.isSuperAdmin },
+      { href: '/dashboard/ai/settings', label: 'IA y modelos', icon: Sparkles, prefix: true, keywords: 'prompts proveedores claves', show: (r) => r.isSuperAdmin },
       { href: '/dashboard/ai/my-keys', label: 'Mis claves de IA', icon: Bot, show: (r) => r.canAccessAi && !r.isSuperAdmin },
       { href: '/dashboard/ai/brain', label: 'Cerebro', icon: Brain, keywords: 'aprendizaje costes', show: (r) => r.isSuperAdmin },
-      { href: '/dashboard/architecture', label: 'Mapa del sistema', icon: Network, keywords: 'arquitectura procesos', show: (r) => r.isSuperAdmin }
-    ]
-  },
-  {
-    label: 'Administración',
-    items: [
-      { href: '/dashboard/operaciones/automatizaciones', label: 'Sistema', icon: Cog, section: 'sistema', keywords: 'automatizaciones salud telegram clickup', show: (r) => r.isAdmin },
-      { href: '/dashboard/errores', label: 'Errores', icon: Bug, keywords: 'errores fallos incidencias diagnóstico mantenimiento técnico registro logs', show: (r) => r.isAdmin },
-      { href: '/dashboard/usuarios', label: 'Usuarios', icon: Users, show: (r) => r.isSuperAdmin },
-      { href: '/dashboard/seo/admin/cards', label: 'Conocimiento SEO', icon: BookOpen, show: (r) => r.isAdmin },
+      { href: '/dashboard/architecture', label: 'Mapa del sistema', icon: Network, keywords: 'arquitectura procesos', show: (r) => r.isSuperAdmin },
+      { href: '/dashboard/seo/admin/cards', label: 'Fichas SEO', icon: BookOpen, keywords: 'conocimiento seo tarjetas', show: adminOnly },
       { href: '/dashboard/seo/admin/settings', label: 'Configuración SEO', icon: SlidersHorizontal, show: (r) => r.isSuperAdmin }
     ]
   },
   {
     label: 'Cuenta',
-    items: [
-      { href: '/dashboard/general', label: 'Mi cuenta', icon: Settings },
-      { href: '/dashboard/security', label: 'Seguridad', icon: Shield },
-      { href: '/dashboard/activity', label: 'Actividad', icon: Activity }
-    ]
+    items: [{ href: '/dashboard/general', label: 'Mi cuenta', icon: Settings, keywords: 'perfil contraseña seguridad actividad' }]
   }
 ];
 
-export function visibleNav(roles: Roles): NavGroup[] {
-  return NAV.map((g) => ({ ...g, items: g.items.filter((i) => !i.show || i.show(roles)) })).filter((g) => g.items.length);
+/** Entradas del menú de usuario (fuera de la barra para que sea corta). */
+export const ACCOUNT_LINKS: NavItem[] = [
+  { href: '/dashboard/general', label: 'Mi cuenta', icon: Settings },
+  { href: '/dashboard/security', label: 'Seguridad', icon: Shield, keywords: 'contraseña' },
+  { href: '/dashboard/activity', label: 'Actividad', icon: Activity, keywords: 'registro' }
+];
+
+/** Acciones del botón «＋ Nuevo»: crear sin tener que saber en qué sección vive cada cosa. */
+export const NEW_ACTIONS: NavItem[] = [
+  { href: '/dashboard/operaciones', label: 'Nota', icon: NotebookPen, keywords: 'dictar idea apunte', show: canEdit },
+  { href: '/dashboard/operaciones/nuevo', label: 'Encargo', icon: ClipboardList, keywords: 'tarea clickup', show: canEdit },
+  { href: '/dashboard/clientes?nuevo=1', label: 'Cliente', icon: Building2, keywords: 'ficha', show: canEdit },
+  { href: '/dashboard/conocimiento/nueva', label: 'Entrada de conocimiento', icon: Library, keywords: 'tutorial procedimiento', show: adminOnly },
+  { href: '/dashboard/projects/new', label: 'Proyecto SEO', icon: FolderKanban, keywords: 'seo', show: canEdit }
+];
+
+function filterItems(items: NavItem[], roles: Roles): NavItem[] {
+  return items
+    .filter((i) => !i.show || i.show(roles))
+    .map((i) => (i.children ? { ...i, children: filterItems(i.children, roles) } : i));
 }
 
-export function isActive(item: NavItem, pathname: string): boolean {
+export function visibleNav(roles: Roles): NavGroup[] {
+  return NAV.map((g) => ({ ...g, items: filterItems(g.items, roles) })).filter((g) => g.items.length);
+}
+
+export function visibleActions(roles: Roles): NavItem[] {
+  return filterItems(NEW_ACTIONS, roles);
+}
+
+/** Todas las entradas (espacios y subentradas) en una lista plana: para la paleta de comandos. */
+export function flatNav(groups: NavGroup[]): { item: NavItem; group: string }[] {
+  return groups.flatMap((g) => g.items.flatMap((i) => [{ item: i, group: g.label }, ...(i.children ?? []).map((c) => ({ item: c, group: i.label }))]));
+}
+
+function matches(item: NavItem, pathname: string): boolean {
   if (item.section) {
     return (pathname === '/dashboard/operaciones' || pathname.startsWith('/dashboard/operaciones/')) && sectionOf(pathname).key === item.section;
   }
-  if (pathname === item.href) return true;
-  return Boolean(item.prefix) && pathname.startsWith(`${item.href}/`);
+  const href = item.href.split('?')[0];
+  if (pathname === href) return true;
+  return Boolean(item.prefix) && pathname.startsWith(`${href}/`);
+}
+
+/** Subentrada activa: la que mejor encaja (la más concreta), para que «Agentes de IA» no se marque en «Organigrama». */
+export function activeChild(item: NavItem, pathname: string): NavItem | null {
+  let best: NavItem | null = null;
+  for (const c of item.children ?? []) {
+    if (!matches(c, pathname)) continue;
+    // Una entrada de sección (Personas) encaja en todas las pestañas del Equipo: gana cualquier otra más concreta.
+    if (!best || (best.section && !c.section) || (!c.section && !best.section && c.href.length > best.href.length)) best = c;
+  }
+  return best;
+}
+
+export function isActive(item: NavItem, pathname: string): boolean {
+  if (matches(item, pathname)) return true;
+  return Boolean(item.children?.length) && activeChild(item, pathname) !== null;
 }
 
 // Migas: título legible de cada tramo conocido de la ruta.
 const SEGMENT_LABELS: Record<string, string> = {
   dashboard: 'Inicio',
-  operaciones: 'Operaciones',
+  operaciones: 'Día a día',
   errores: 'Errores',
   clientes: 'Clientes',
-  rendimiento: 'Rendimiento',
+  rendimiento: 'Rendimiento web',
   estrategia: 'Estrategia',
   projects: 'Proyectos SEO',
   ai: 'IA',
@@ -218,7 +294,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   usuarios: 'Usuarios',
   seo: 'SEO',
   admin: 'Administración',
-  cards: 'Conocimiento',
+  cards: 'Fichas SEO',
   general: 'Mi cuenta',
   security: 'Seguridad',
   activity: 'Actividad',

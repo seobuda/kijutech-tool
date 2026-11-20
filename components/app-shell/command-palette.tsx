@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import { Dialog as DialogPrimitive } from 'radix-ui';
 import { CornerDownLeft, Search, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { OPERACIONES_TABS, visibleTabs, type NavGroup, type Roles } from './nav';
+import { flatNav, OPERACIONES_TABS, visibleActions, visibleTabs, type NavGroup, type Roles } from './nav';
 
 type Cmd = { id: string; label: string; group: string; href: string; icon: LucideIcon; keywords?: string };
 
@@ -44,18 +44,18 @@ export function CommandPalette({
   const listRef = useRef<HTMLDivElement>(null);
 
   const all = useMemo<Cmd[]>(() => {
-    const nav = groups.flatMap((g) =>
-      g.items.map((i) => ({ id: i.href, label: i.label, group: g.label, href: i.href, icon: i.icon, keywords: i.keywords }))
-    );
+    const nav = flatNav(groups).map(({ item: i, group }) => ({ id: `${group}:${i.href}`, label: i.label, group, href: i.href, icon: i.icon, keywords: i.keywords }));
+    const create = visibleActions(roles).map((a) => ({ id: `new:${a.href}`, label: `Nuevo: ${a.label}`, group: 'Crear', href: a.href, icon: a.icon, keywords: `nuevo crear ${a.keywords ?? ''}` }));
     const ops = visibleTabs(OPERACIONES_TABS, roles).map((t) => ({
       id: `ops:${t.href}`,
       label: t.label,
-      group: 'Operaciones',
+      group: 'Día a día',
       href: t.href,
       icon: t.icon,
       keywords: t.keywords
     }));
-    return [...ops, ...nav.filter((n) => !ops.some((o) => o.href === n.href))];
+    const seen = new Set<string>();
+    return [...nav, ...ops, ...create].filter((c) => (seen.has(c.href) ? false : (seen.add(c.href), true)));
   }, [groups, roles]);
 
   const results = useMemo(

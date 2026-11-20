@@ -13,5 +13,6 @@ export function useRoles(): Roles {
   const isSuperAdmin = roles.includes('super_admin');
   const isAdmin = isSuperAdmin || roles.includes('admin');
   const byok = (data?.aiKeyModeAllowed ?? 'platform_only') !== 'platform_only';
-  return { isAdmin, isSuperAdmin, canAccessAi: isSuperAdmin || (roles.includes('admin') && byok) };
+  const canEdit = isAdmin || roles.includes('editor');
+  return { isAdmin, isSuperAdmin, canAccessAi: isSuperAdmin || (roles.includes('admin') && byok), canEdit };
 }

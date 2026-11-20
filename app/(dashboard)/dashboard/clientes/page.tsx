@@ -12,7 +12,8 @@ import { ClientProposals } from './client-proposals';
 export const dynamic = 'force-dynamic';
 
 // Clientes (NÚCLEO, 14 nov 2026): lista de fichas con su estado, lo completas que están y el semáforo de Operaciones.
-export default async function ClientesPage() {
+export default async function ClientesPage({ searchParams }: { searchParams: Promise<{ nuevo?: string }> }) {
+  const { nuevo } = await searchParams;
   const user = await requirePagePermission('edit');
   const [clients, levels, services, structure, counts, activityRows, runInfo, completeness, isAdmin] = await Promise.all([
     listClients(user.tenantId),
@@ -69,7 +70,7 @@ export default async function ClientesPage() {
   return (
     <div className="space-y-4">
       {incomplete > 0 && <ClientProposals incomplete={incomplete} />}
-      <ClientesView rows={rows} levels={levels} services={services} runInfo={runInfo} missingOptions={missingOptions} duplicates={possibleDuplicates(clients.filter((c) => c.active))} isAdmin={isAdmin} />
+      <ClientesView rows={rows} levels={levels} services={services} runInfo={runInfo} missingOptions={missingOptions} duplicates={possibleDuplicates(clients.filter((c) => c.active))} isAdmin={isAdmin} startCreating={nuevo === '1'} />
     </div>
   );
 }
