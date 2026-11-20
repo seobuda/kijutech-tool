@@ -718,3 +718,49 @@ export async function fetchWatchTasks(
     if (res.tasks.length < 100) return { tasks, truncated: false, requests };
   }
 }
+
+// --- Base de conocimiento (20 nov 2026) ---------------------------------------------------------------------------
+// UNA consulta de workspace (paginada de 100 en 100) con todas las tareas de un espacio, abiertas y cerradas, con la
+// descripción en Markdown. La usa la importación de la base de conocimiento (lib/operaciones/kb-import.ts). Los adjuntos
+// (clips de vídeo) no vienen en esta consulta: pedirlos sería una petición por tarea, así que se guarda el enlace a la
+// tarea original, donde siguen.
+export type KbSourceTask = { id: string; name: string; url: string; markdown: string; listName: string; folderName: string; updatedMs: number };
+type RawKbTask = {
+  id: string;
+  name: string;
+  url: string;
+  markdown_description?: string;
+  description?: string;
+  text_content?: string;
+  list?: { id: string; name: string };
+  folder?: { id: string; name: string; hidden?: boolean };
+  date_updated?: string;
+};
+
+export async function fetchSpaceTasksForKb(token: string, workspaceId: string, spaceId: string): Promise<{ tasks: KbSourceTask[]; truncated: boolean; requests: number }> {
+  const tasks: KbSourceTask[] = [];
+  let requests = 0;
+  for (let page = 0; ; page++) {
+    if (page >= MAX_TASK_PAGES) return { tasks, truncated: true, requests };
+    const q = new URLSearchParams();
+    q.set('page', String(page));
+    q.set('subtasks', 'true');
+    q.set('include_closed', 'true');
+    q.set('include_markdown_description', 'true');
+    q.append('space_ids[]', spaceId);
+    const res = await cu<{ tasks: RawKbTask[] }>(token, `/team/${workspaceId}/task?${q.toString()}`);
+    requests++;
+    for (const t of res.tasks) {
+      tasks.push({
+        id: t.id,
+        name: t.name,
+        url: t.url,
+        markdown: t.markdown_description || t.text_content || t.description || '',
+        listName: t.list?.name ?? '',
+        folderName: t.folder && !t.folder.hidden ? t.folder.name : '',
+        updatedMs: Number(t.date_updated) || 0
+      });
+    }
+    if (res.tasks.length < 100) return { tasks, truncated: false, requests };
+  }
+}

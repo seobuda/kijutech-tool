@@ -108,13 +108,22 @@ const errSrc = read('lib/core/errors-process-map.ts');
 for (const f of uniq(all(/file: '([^']+)'/g, errSrc))) if (!fs.existsSync(path.join(root, f))) fail(`El mapa de Errores cita un archivo que no existe: ${f}`);
 for (const t of uniq(all(/pgTable\(\s*'(sys_\w+)'/g, schemaSrc))) if (!errSrc.includes(`'${t}'`)) fail(`La tabla «${t}» (registro de errores) no aparece en el mapa de Errores.`);
 if (!/registerScheduled\('registro de errores'/.test(read('lib/core/errors.ts'))) fail('La tarea del planificador del registro de errores no está registrada (lib/core/errors.ts).');
+// 5h. Base de conocimiento (núcleo, lib/core/knowledge-process-map.ts): archivos, todas sus tablas kb_*, sus prompts de
+// IA (cadenas 'kb_...' de lib/core/knowledge.ts que no son tablas) y la tarea del planificador.
+const kbSrc = read('lib/core/knowledge-process-map.ts');
+for (const f of uniq(all(/file: '([^']+)'/g, kbSrc))) if (!fs.existsSync(path.join(root, f))) fail(`El mapa de Conocimiento cita un archivo que no existe: ${f}`);
+const kbTables = uniq(all(/pgTable\(\s*'(kb_\w+)'/g, schemaSrc));
+for (const t of kbTables) if (!kbSrc.includes(`'${t}'`)) fail(`La tabla «${t}» (base de conocimiento) no aparece en el mapa de Conocimiento.`);
+const kbCode = read('lib/core/knowledge.ts');
+for (const k of uniq(all(/'(kb_[a-z_]+)'/g, kbCode))) if (!kbTables.includes(k) && !kbSrc.includes(`prompts: ['${k}'`)) fail(`Prompt de IA «${k}» (base de conocimiento) sin entrada en el mapa de Conocimiento.`);
+if (!/registerScheduled\('base de conocimiento'/.test(kbCode)) fail('La tarea del planificador de la base de conocimiento no está registrada (lib/core/knowledge.ts).');
 function schemaSrcForAgt() {
   return read('lib/db/schema.ts');
 }
 
 // 6. Enlaces entre mapas
 const mapIds = all(/^ {2}(\w+): [A-Z_]+,$/gm, mapSrc.slice(mapSrc.indexOf('export const OPS_MAPS')));
-const known = new Set([...mapIds, 'clustering', 'competitor_analysis', 'security', 'agentes', 'clientes', 'rendimiento', 'estrategia', 'errores']);
+const known = new Set([...mapIds, 'clustering', 'competitor_analysis', 'security', 'agentes', 'clientes', 'rendimiento', 'estrategia', 'errores', 'conocimiento']);
 for (const id of uniq([...all(/detailMapId: '(\w+)'/g, mapSrc), ...all(/detailMapId: '(\w+)'/g, registrySrc)])) {
   if (!known.has(id)) fail(`detailMapId «${id}» no corresponde a ningún mapa registrado en OPS_MAPS.`);
 }

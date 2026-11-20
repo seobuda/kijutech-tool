@@ -1,6 +1,6 @@
 # Diseño: jefe de Operaciones y base de conocimiento
 
-**Fecha:** 2026-11-20 · **Estado:** propuesta, pendiente del OK de Enric. Nada construido.
+**Fecha:** 2026-11-20 · **Estado:** aprobado por Enric el 20 nov (opción A; base en el núcleo; escaladas por el chat principal; IA general con su aprobación y aprendiendo de sus correcciones; categorías; solo publica Enric y el equipo envía solicitudes que la IA redacta). **Fase 1 construida** (rama `feature/jefe-operaciones`, migración 0056, ver `docs/ESTADO.md` §6.29), con el Mapa de contenido en la ficha. Fases 2 y 3, pendientes.
 
 Parte del organigrama (ver `docs/ESTADO.md` §6.28). Tras el piloto de Sistema, el siguiente departamento es Operaciones.
 Decisión de Enric del 20 nov: **el equipo pregunta por el mismo chat privado donde le llegan los encargos** (opción A).

@@ -32,7 +32,7 @@ export const CLIENTES_PROCESS_MAP: ProcessStep[] = [
     id: 'cli-webs',
     lane: 'La ficha',
     name: 'Webs y cuentas',
-    description: 'Webs, dominios y cuentas del cliente (Search Console, Analytics, ficha de Google, Ads, redes, tienda, CRM) con si tenemos acceso y dónde están los accesos, y qué pueden hacer los agentes con ellas.',
+    description: 'Webs, dominios y cuentas del cliente (Search Console, Analytics, ficha de Google, Ads, redes, tienda, CRM y, desde el 20 nov 2026, el Mapa de contenido SEO en Google Sheets, con acceso directo en la cabecera de la ficha de los clientes con SEO) con si tenemos acceso y dónde están los accesos, y qué pueden hacer los agentes con ellas.',
     status: 'built',
     file: 'lib/core/clients.ts',
     when: 'Desde la pestaña «Webs y cuentas» y al aprobar una propuesta. Las herramientas de Google de los agentes (gsc_rendimiento, ga4_informe, gbp_rendimiento) usan la cuenta principal de cada tipo (primaryAsset) cuando se les dice solo el cliente.',

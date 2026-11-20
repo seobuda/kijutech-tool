@@ -98,7 +98,9 @@ export const DEFAULT_AGENTS: Omit<typeof agtAgents.$inferInsert, 'tenantId'>[] =
       'estrategia_cliente',
       'encargar_a_agente',
       'estado_trabajos',
-      'errores_lista'
+      'errores_lista',
+      'buscar_conocimiento',
+      'guardar_conocimiento'
     ],
     voice: 'marin'
   },
@@ -217,6 +219,12 @@ const UPGRADES: { id: string; agent: string; addTools: string[]; instructions?: 
     id: '2026-11-17-errores',
     agent: PRINCIPAL_KEY,
     addTools: ['errores_lista']
+  },
+  {
+    // 20 nov 2026: base de conocimiento (núcleo). «¿Qué tenemos sobre…?» y «apunta en la base: …» por Telegram.
+    id: '2026-11-20-conocimiento',
+    agent: PRINCIPAL_KEY,
+    addTools: ['buscar_conocimiento', 'guardar_conocimiento']
   }
 ];
 const SYSTEM_PROVIDER = 'sistema';

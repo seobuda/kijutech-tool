@@ -26,7 +26,8 @@ const PLACEHOLDER: Partial<Record<AssetKind, string>> = {
   analytics: 'properties/123456789',
   business_profile: 'locations/123456789',
   google_ads: 'ID de cuenta (123-456-7890)',
-  instagram: 'https://instagram.com/cliente'
+  instagram: 'https://instagram.com/cliente',
+  mapa_contenido: 'https://docs.google.com/spreadsheets/d/…'
 };
 
 export function WebsTab({ clientId, assets, integrations }: { clientId: string; assets: AssetView[]; integrations: { google: boolean; dataforseo: boolean } }) {

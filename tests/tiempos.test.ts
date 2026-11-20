@@ -3,7 +3,7 @@
 // como lo ve el sistema (filas de ops_task_times, registros de la jornada, pestaña Tiempos). Telegram y
 // «Equipo hoy» se interceptan; el reloj se simula. Todo lo demás es código real contra la base de datos.
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { and, eq } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 
 const h = vi.hoisted(() => ({
   tenant: '' as string,
@@ -262,7 +262,7 @@ describe('circuito de tiempos de tarea (persona y sistema)', () => {
     await press(`jw:br:5:${EMP}`);
     at(15);
     await press(`jw:bk:-:${EMP}`);
-    const evs = await db.select().from(opsWorkEvents).where(eq(opsWorkEvents.tenantId, h.tenant));
+    const evs = await db.select().from(opsWorkEvents).where(eq(opsWorkEvents.tenantId, h.tenant)).orderBy(asc(opsWorkEvents.at));
     expect(evs.map((e) => e.kind)).toEqual(['entrada', 'descanso', 'vuelta']);
   });
 
