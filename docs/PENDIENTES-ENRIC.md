@@ -3,11 +3,19 @@
 Lista viva de lo que solo puede hacer Enric (accesos, decisiones, el equipo). Claude la actualiza al terminar cada bloque.
 Detalle paso a paso de la activación en `docs/PRUEBAS-EN-VIVO.md`.
 
-**Última actualización:** 20 nov 2026. En producción: `main` `b6ccc511` (organigrama y chat de Sistema), 56 migraciones; base de conocimiento lista para desplegar (0056).
+**Última actualización:** 20 nov 2026. En producción: `main` `f2a06802` (base de conocimiento), 57 migraciones; jefe de operaciones listo para desplegar (0057).
+
+## Jefe de operaciones: dudas del equipo (rama `feature/jefe-operaciones-fase2`, migración 0057, 20 nov)
+Aprobado: agente libre con garantías en código, Opus 5.5 para los jefes y el esquema. Detalle en `docs/ESTADO.md` §6.30.
+- [ ] **Desplegar con migración** (Claude lo lanza con tu OK; hace backup antes). Con el despliegue, el Operations manager y el jefe de sistema pasan a Opus 5.5.
+- [ ] **Probarlo antes de encenderlo para todos:** en Agentes → Dudas del equipo, enciéndelo y escríbele tú desde otra cuenta de Telegram vinculada (o pide a una persona de confianza que pruebe). Prueba una duda que esté en la base, una que no, «No me sirve» y algo de plazos.
+- [ ] **Avisar al equipo** antes de dejarlo encendido: pueden preguntar por su chat de siempre (texto o audio, o respondiendo al aviso de un encargo); verán la fuente y los botones Me sirve / No me sirve / Que lo vea Enric.
+- [ ] **Decidir cuándo pasar la IA general a «Las envía solo»** (de serie, con tu aprobación).
+- [ ] Vigilar el coste del jefe los primeros días (cada duda muestra su coste; presupuesto del jefe: 30 $/mes, editable en Agentes).
 
 ## Base de conocimiento y Mapa de contenido (rama `feature/jefe-operaciones`, migración 0056, 20 nov)
 Aprobado: diseño (opción A, núcleo, escaladas por el chat principal, IA general con tu aprobación, categorías, solo publicas tú) y esquema. Detalle en `docs/ESTADO.md` §6.29.
-- [ ] **Desplegar con migración** (Claude lo lanza con tu OK; hace backup antes).
+- [x] **Desplegar con migración** (Claude lo lanza con tu OK; hace backup antes).
 - [ ] **Importar de ClickUp (una sola vez)** en producción: Trabajo → Conocimiento → «Importar de ClickUp» (espacio «📚 Base de Conocimiento»). En local: 127 tareas con contenido a «Para más tarde» (40 vacías no entran; 77 con vídeos alojados en ClickUp, etiqueta «vídeo en clickup»: pásalos a Google Drive al revisarlos). Desde entonces, nada de conocimiento en ClickUp.
 - [ ] **Revisar por tandas** la pestaña «Para más tarde» (tus horas de conocimiento): publicar, editar o archivar.
 - [ ] **Embeddings:** la clave de Gemini local no tiene saldo (402). Si en producción pasa lo mismo, la búsqueda funciona solo por palabras: recarga Gemini o configura otro proveedor de embeddings en IA y modelos (coste de céntimos).

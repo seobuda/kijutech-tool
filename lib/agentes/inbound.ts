@@ -13,6 +13,7 @@ import { emailOutbound, telegramOutbound, type InboundMessage, type OutboundButt
 import { addMessage, countMessages, departmentByBot, getAgent, getOrCreateConversation, principalAgent, recentMessages, setSummary } from '@/lib/agentes/store';
 import { runAgent, summarize, type HistoryItem } from '@/lib/agentes/engine';
 import { speak, speakableText, transcribe } from '@/lib/agentes/voice';
+import { handleTeamInbound } from '@/lib/agentes/team';
 
 const chains = new Map<string, Promise<unknown>>();
 const VOICE_REQUEST_RE = /\b(resp[oó]ndeme|contesta(me)?|d[ií]melo)\b.{0,30}\b(audio|voz|nota de voz)\b|\ben (audio|voz)\b/i;
@@ -32,7 +33,8 @@ async function targetAgent(m: InboundMessage) {
 }
 
 export async function handleInbound(m: InboundMessage): Promise<boolean> {
-  if (!m.isOwner) return false; // fase 1: solo quien lleva las operaciones
+  // El equipo (20 nov 2026): sus dudas van al jefe de Operaciones, si está encendido; si no, se ignoran como antes.
+  if (!m.isOwner) return handleTeamInbound(m);
   const agent = await targetAgent(m);
   if (!agent) return false;
   const key = `${m.tenantId}:${m.channel}:${m.bot ?? ''}:${m.peer}`;

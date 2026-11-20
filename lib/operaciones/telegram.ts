@@ -23,6 +23,8 @@ export type TgMessage = {
   photo?: { file_id: string; width: number; height: number }[];
   voice?: { file_id: string; duration?: number; mime_type?: string; file_size?: number };
   audio?: { file_id: string; duration?: number; mime_type?: string; file_size?: number };
+  /** Mensaje al que responde (jefe de Operaciones, 20 nov 2026: si es un aviso de encargo, la duda es de ese encargo). */
+  reply_to_message?: { message_id: number };
 };
 export type TgCallbackQuery = { id: string; from: TgUser; message?: TgMessage; data?: string };
 export type TgUpdate = { update_id: number; message?: TgMessage; callback_query?: TgCallbackQuery };

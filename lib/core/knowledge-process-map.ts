@@ -115,14 +115,26 @@ export const CONOCIMIENTO_PROCESS_MAP: ProcessStep[] = [
   },
   {
     id: 'kb-fase2',
-    lane: 'Próximamente',
+    lane: 'Usar',
     name: 'Jefe de Operaciones: dudas del equipo',
     description:
-      'Fase 2: el equipo pregunta por su chat de siempre y el jefe responde con la ficha del cliente, la base y los casos anteriores; si no hay nada, con IA general (con aprobación de Enric la primera semana). «No me sirve / ya lo probé» lo escala a Enric, y su respuesta se convierte en una entrada propuesta.',
+      'Fase 2 (construida el 20 nov): el equipo pregunta por su chat de siempre y el jefe de operaciones responde con la ficha, la base (buscar_conocimiento) y los casos anteriores; si no hay nada, con IA general (con aprobación de Enric). «Me sirve / no me sirve» suma o resta a las entradas usadas, y cada respuesta de Enric sale como entrada propuesta (origen «respuesta»). Detalle en el mapa de Agentes.',
+    status: 'built',
+    file: 'lib/agentes/team.ts',
+    when: 'Con cada duda del equipo, si el jefe está encendido.',
+    ai: 'El jefe de operaciones (Opus 5.5) decide qué consultar y responde.',
+    code: 'La fuente se comprueba contra lo consultado (publishedIds); los votos van a recordFeedback; las respuestas de Enric, a submitRequest.',
+    tables: ['kb_articles']
+  },
+  {
+    id: 'kb-fase3',
+    lane: 'Próximamente',
+    name: 'Bloqueos con la base y huecos de conocimiento',
+    description: 'Fase 3: el triaje de «Bloqueado» usará la misma búsqueda (ficha, base, casos) y una pestaña Huecos enseñará los temas que más se preguntan sin entrada en la base (lo que conviene escribir en las horas de conocimiento).',
     status: 'planned',
     file: 'docs/DISENO-JEFE-OPERACIONES.md',
     when: 'Pendiente de construir.',
-    ai: 'Clasificar el mensaje (Haiku) y redactar la respuesta (Sonnet).',
-    code: 'Por diseñar el esquema de preguntas del equipo (necesita OK de Enric).'
+    ai: 'La del triaje de bloqueos.',
+    code: 'Los temas que más cuestan ya salen en el informe semanal (Dudas del equipo).'
   }
 ];

@@ -220,6 +220,7 @@ async function toAgent(tenantId: string, token: string, member: OpsTelegramMembe
     }
     if (!audio) return void (await reply(token, msg.chat.id, `No he podido descargar el audio (${escapeHtml(lastError.slice(0, 200) || 'sin detalle')}). Prueba otra vez.`));
   }
+  const replyTo = msg.reply_to_message ? await repliedRequest(tenantId, msg.chat.id, msg.reply_to_message.message_id) : null;
   const handled = await dispatchInbound({
     tenantId,
     channel: 'telegram',
@@ -229,7 +230,8 @@ async function toAgent(tenantId: string, token: string, member: OpsTelegramMembe
     clickupUserId: member.clickupUserId,
     text,
     audio,
-    ...(bot ? { bot } : {})
+    ...(bot ? { bot } : {}),
+    ...(replyTo ? { replyToRequestId: replyTo.id, replyToSummary: replyTo.summary } : {})
   });
   if (!handled && file) await reply(token, msg.chat.id, 'Por ahora solo entiendo audios de quien lleva las operaciones.');
 }
@@ -585,6 +587,32 @@ async function closeButtons(token: string, chatId: number, messageId: number) {
     message_id: messageId,
     reply_markup: { inline_keyboard: [] }
   }).catch(() => undefined);
+}
+
+/**
+ * Encargo del aviso al que responde un mensaje (jefe de Operaciones, 20 nov 2026). Los avisos guardan el id del mensaje
+ * de Telegram (ops_notifications), así que basta una consulta, sin pedir nada a ClickUp. Resumen corto para el agente.
+ */
+async function repliedRequest(tenantId: string, chatId: number, messageId: number): Promise<{ id: string; summary: string } | null> {
+  const [n] = await db
+    .select({ requestId: opsNotifications.requestId })
+    .from(opsNotifications)
+    .where(and(eq(opsNotifications.tenantId, tenantId), eq(opsNotifications.chatId, chatId), eq(opsNotifications.telegramMessageId, messageId)))
+    .limit(1);
+  if (!n?.requestId) return null;
+  const req = await getRequest(tenantId, n.requestId);
+  if (!req) return null;
+  const desc = (req.preparedDescription || '').replace(/\s+/g, ' ').trim();
+  const summary = [
+    `Encargo: «${req.title}»`,
+    req.clientName ? `Cliente: ${req.clientName}` : 'Sin cliente',
+    `Estado: ${req.workStatus}${req.dueDate ? ` · fecha de entrega ${req.dueDate}` : ''}${req.assigneeName ? ` · responsable ${req.assigneeName}` : ''}`,
+    req.clickupTaskUrl ? `ClickUp: ${req.clickupTaskUrl}` : '',
+    desc ? `Descripción: ${desc.length > 1500 ? `${desc.slice(0, 1500)}…` : desc}` : ''
+  ]
+    .filter(Boolean)
+    .join('\n');
+  return { id: req.id, summary };
 }
 
 // Los avisos sueltos de revisión pierden sus botones al aceptarse; el resumen conserva los suyos.

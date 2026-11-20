@@ -64,5 +64,32 @@ export const AGENTES_PROCESS_MAP: ProcessStep[] = [
     ai: 'Nada (el agente interpreta los datos).',
     code: 'Credenciales cifradas en agt_integrations (nunca vuelven al navegador). Google: OAuth con estado firmado y token de refresco cifrado. Clarity: caché del día (10 consultas al día). Desde el 15 nov: gsc_rendimiento, ga4_informe y gbp_rendimiento (vistas, llamadas, clics a la web y cómo llegar de la ficha de Google) aceptan «cliente» y usan la propiedad principal de su ficha (si falta, lo dicen en vez de adivinar). Agentes registra en el núcleo el directorio de Google (webs de Search Console, propiedades de Analytics con la web de su flujo, fichas de Business Profile con su web) para asignarlas a las fichas.',
     tables: ['agt_integrations']
+  },
+  {
+    id: 'agt-equipo',
+    lane: 'Equipo',
+    name: 'Jefe de operaciones: dudas del equipo',
+    description:
+      'Las personas del equipo escriben (o mandan un audio) por su chat de siempre y el jefe de operaciones (Opus 5.5, agente libre de solo lectura) les responde con la ficha del cliente, sus encargos, la base de conocimiento y los casos ya resueltos; si no hay nada propio, con su conocimiento general y diciéndolo. Si responden a un aviso de encargo, la duda llega con ese encargo. Botones: Me sirve · No me sirve (pide qué probó y escala) · Que lo vea Enric.',
+    status: 'built',
+    file: 'lib/agentes/team.ts',
+    when: 'Cada mensaje libre de alguien del equipo por el bot principal, si el jefe está encendido (Agentes → Dudas del equipo; apagado de serie). Un mensaje en los minutos siguientes (30 por defecto) sigue la duda anterior.',
+    ai: 'El jefe decide qué consultar, cómo responder y si escala. Termina con responder_al_equipo (respuesta, fuente, ids, tema) o escalar_a_enric.',
+    code: 'Garantías: la fuente se comprueba (base o casos sin consultarlos, o con ids que no existen = IA general); la IA general pasa por Enric mientras el ajuste esté en «aprobación»; red de seguridad (contraseñas, sueldo, despidos, quejas de clientes) que escala siempre; sin bucles: N dudas del mismo tema en 24 h sin resolver (3 por defecto) → «creo que no te estoy ayudando» y a Enric. «Me sirve» suma a las entradas de la base usadas; «no me sirve», resta. Operaciones solo pone el canal: el encargo respondido llega por el núcleo (replyToRequestId).',
+    tables: ['agt_team_questions', 'agt_agents', 'agt_conversations', 'agt_messages', 'agt_integrations'],
+    to: ['agt-equipo-enric']
+  },
+  {
+    id: 'agt-equipo-enric',
+    lane: 'Equipo',
+    name: 'Lo que decide Enric y lo que se aprende',
+    description:
+      'Respuestas de IA general para aprobar y dudas escaladas llegan a Enric por el chat principal: ✅ Enviar · ✏️ Cambiar (dice qué y el jefe lo vuelve a analizar) · 📝 Responder yo · 🗑 Lo hablo yo. También en Agentes → Dudas del equipo. Cada respuesta suya o aprobada se envía a la persona y sale como propuesta de entrada para la base de conocimiento.',
+    status: 'built',
+    file: 'lib/agentes/team.ts',
+    when: 'Al escalar o al proponer una respuesta de IA general; cuando Enric pulsa un botón o responde en la pantalla.',
+    ai: 'Al pulsar «Cambiar», el jefe rehace la respuesta con la indicación de Enric (vuelve a Enric para aprobarla).',
+    code: 'Botones x:tq:… registrados en el núcleo; los de Enric solo los acepta el dueño y los de la persona solo quien preguntó. Para aprender se guardan la primera propuesta, cada indicación de Enric con la versión anterior y la respuesta final; en dudas parecidas, el jefe recibe esos ejemplos (no se reentrena nada). Las dudas resueltas se vectorizan para casos_anteriores. Sección «Dudas del equipo» en el informe semanal (por fuente, escaladas, si sirvió, coste y temas que más cuestan).',
+    tables: ['agt_team_questions', 'kb_articles']
   }
 ];

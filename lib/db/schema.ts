@@ -2426,6 +2426,64 @@ export const agtIntegrations = pgTable(
 );
 export type AgtIntegration = typeof agtIntegrations.$inferSelect;
 
+// Preguntas del equipo al jefe de Operaciones (20 nov 2026, fase 2 de docs/DISENO-JEFE-OPERACIONES.md). Cada duda que un
+// miembro del equipo escribe por su chat: de dónde salió la respuesta, si sirvió, si se escaló a Enric y lo que corrigió
+// (para aprender). request_id no lleva clave foránea: el encargo es del módulo Operaciones.
+export const agtTeamQuestions = pgTable(
+  'agt_team_questions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    askedByClickupId: varchar('asked_by_clickup_id', { length: 50 }),
+    askedByName: varchar('asked_by_name', { length: 255 }).notNull(),
+    chatId: varchar('chat_id', { length: 40 }).notNull(),
+    requestId: uuid('request_id'),
+    clientId: uuid('client_id').references(() => clients.id, { onDelete: 'set null' }),
+    question: text('question').notNull(),
+    followups: jsonb('followups').notNull().default([]),
+    // respondida | pendiente_aprobacion | escalada | resuelta | cerrada | descartada
+    status: varchar('status', { length: 22 }).notNull().default('respondida'),
+    // ficha | base | casos | general | enric
+    tier: varchar('tier', { length: 10 }),
+    // Área del tema (la pone el agente al responder): cuenta los intentos sin resolver de una persona.
+    topicKey: varchar('topic_key', { length: 60 }),
+    sources: jsonb('sources').notNull().default([]),
+    toolCalls: jsonb('tool_calls').notNull().default([]),
+    aiFirstAnswer: text('ai_first_answer'),
+    aiAnswer: text('ai_answer'),
+    revisions: jsonb('revisions').notNull().default([]),
+    finalAnswer: text('final_answer'),
+    // ia | enric
+    answeredBy: varchar('answered_by', { length: 8 }),
+    // sirve | no_sirve
+    feedback: varchar('feedback', { length: 10 }),
+    feedbackNote: text('feedback_note'),
+    // no_sirve | pide_enric | tema_sensible | sin_respuesta | intentos
+    escalationReason: varchar('escalation_reason', { length: 16 }),
+    escalatedAt: timestamp('escalated_at'),
+    awaitingChatId: varchar('awaiting_chat_id', { length: 40 }),
+    // nota (la persona dice qué probó) | cambio (indicación de Enric) | respuesta (Enric responde)
+    awaitingKind: varchar('awaiting_kind', { length: 12 }),
+    kbArticleId: uuid('kb_article_id').references(() => kbArticles.id, { onDelete: 'set null' }),
+    embedding: vector('embedding', { dimensions: 1536 }),
+    embeddingModel: varchar('embedding_model', { length: 80 }),
+    costUsd: decimal('cost_usd', { precision: 10, scale: 6 }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+    answeredAt: timestamp('answered_at'),
+    closedAt: timestamp('closed_at'),
+  },
+  (table) => [
+    index('agt_team_questions_status_idx').on(table.tenantId, table.status, table.createdAt),
+    index('agt_team_questions_person_idx').on(table.tenantId, table.chatId, table.createdAt),
+    check('agt_team_questions_status_check', sql`${table.status} IN ('respondida', 'pendiente_aprobacion', 'escalada', 'resuelta', 'cerrada', 'descartada')`),
+    check('agt_team_questions_tier_check', sql`${table.tier} IS NULL OR ${table.tier} IN ('ficha', 'base', 'casos', 'general', 'enric')`),
+  ]
+);
+export type AgtTeamQuestion = typeof agtTeamQuestions.$inferSelect;
+
 // --- Módulo Rendimiento (0049): histórico diario de Search Console, Analytics 4 y Business Profile por cliente ---------
 // Lo llena lib/rendimiento/sync.ts con las fuentes de métricas que registran otros módulos en el núcleo (Agentes: Google).
 

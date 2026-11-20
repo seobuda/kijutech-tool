@@ -417,6 +417,35 @@ export async function searchKnowledge(tenantId: string, query: string, limit = 5
     .map((r) => ({ id: r.id, title: r.title, problem: r.problem, solution: r.solution, links: (r.links as KbLink[]) ?? [], category: cats.find((c) => c.id === r.categoryId)?.name ?? null, reviewedAt: r.reviewedAt }));
 }
 
+/** Lo que dijo el equipo de una respuesta que se apoyó en estas entradas (sube o baja en la búsqueda). */
+export async function recordFeedback(tenantId: string, ids: string[], helpful: boolean): Promise<void> {
+  const valid = ids.filter((id) => /^[0-9a-f-]{36}$/i.test(id));
+  if (valid.length === 0) return;
+  await db
+    .update(kbArticles)
+    .set(helpful ? { helpfulCount: sql`${kbArticles.helpfulCount} + 1` } : { notHelpfulCount: sql`${kbArticles.notHelpfulCount} + 1` })
+    .where(and(eq(kbArticles.tenantId, tenantId), inArray(kbArticles.id, valid)));
+}
+
+/** Ids publicados de entre estos (para comprobar que un agente cita entradas reales). */
+export async function publishedIds(tenantId: string, ids: string[]): Promise<string[]> {
+  const valid = ids.filter((id) => /^[0-9a-f-]{36}$/i.test(id));
+  if (valid.length === 0) return [];
+  const rows = await db.select({ id: kbArticles.id }).from(kbArticles).where(and(eq(kbArticles.tenantId, tenantId), eq(kbArticles.status, 'publicada'), inArray(kbArticles.id, valid)));
+  return rows.map((r) => r.id);
+}
+
+/**
+ * Vector de significado de un texto con el proveedor de embeddings de la cuenta (para que otros módulos busquen por
+ * significado en lo suyo, p. ej. los casos anteriores del jefe de Operaciones). null si no hay embeddings disponibles.
+ */
+export async function embedQuery(tenantId: string, text: string): Promise<{ vector: number[]; model: string } | null> {
+  const c = await embeddingConfig(tenantId);
+  if (!c) return null;
+  const vec = (await safeEmbed(tenantId, c, [text.slice(0, 8000)]))?.[0];
+  return vec ? { vector: vec, model: modelTag(c) } : null;
+}
+
 /** Contar un uso de una entrada (lo llaman los agentes al apoyarse en ella). */
 export async function recordUse(tenantId: string, ids: string[]): Promise<void> {
   if (ids.length === 0) return;
@@ -625,7 +654,7 @@ const buscarConocimiento: AgentTool = {
   module: 'nucleo',
   title: 'Buscar en la base de conocimiento',
   description:
-    'Busca en la base de conocimiento de la agencia (lo que sabemos hacer y resolver: procedimientos, soluciones, tutoriales con vídeo). Úsala antes de responder una duda de cómo se hace algo. Devuelve las entradas publicadas más parecidas con su solución y enlaces. Cita la entrada en la que te apoyes.',
+    'Busca en la base de conocimiento de la agencia (lo que sabemos hacer y resolver: procedimientos, soluciones, tutoriales con vídeo). Úsala antes de responder una duda de cómo se hace algo. Devuelve las entradas publicadas más parecidas con su id, su solución y sus enlaces. Cita la entrada en la que te apoyes (título y enlace del vídeo si lo hay).',
   risk: 'lectura',
   inputSchema: { type: 'object', properties: { pregunta: { type: 'string' } }, required: ['pregunta'], additionalProperties: false },
   async run(ctx, input) {
@@ -639,7 +668,7 @@ const buscarConocimiento: AgentTool = {
       content: hits
         .map(
           (h, n) =>
-            `${n + 1}. ${h.title}${h.category ? ` [${h.category}]` : ''}${h.reviewedAt ? ` (revisada ${h.reviewedAt.toISOString().slice(0, 10)})` : ''}\nProblema: ${clip(h.problem, 400)}\nSolución:\n${clip(h.solution, 2500)}${h.links.length ? `\nEnlaces: ${h.links.map((l) => `${l.title} ${l.url}`).join(' | ')}` : ''}`
+            `${n + 1}. ${h.title} (id ${h.id})${h.category ? ` [${h.category}]` : ''}${h.reviewedAt ? ` (revisada ${h.reviewedAt.toISOString().slice(0, 10)})` : ''}\nProblema: ${clip(h.problem, 400)}\nSolución:\n${clip(h.solution, 2500)}${h.links.length ? `\nEnlaces: ${h.links.map((l) => `${l.title} ${l.url}`).join(' | ')}` : ''}`
         )
         .join('\n\n')
     };
