@@ -58,6 +58,8 @@ export type NavItem = {
   section?: SectionKey;
   /** Subentradas de un espacio: se despliegan bajo él cuando estás dentro. */
   children?: NavItem[];
+  /** Muestra un número al lado (p. ej. lo que espera en Para ti). */
+  badge?: 'paraTi';
 };
 
 export type NavGroup = { label: string; items: NavItem[] };
@@ -154,13 +156,14 @@ export const NAV: NavGroup[] = [
       { href: '/dashboard', label: 'Inicio', icon: Home, keywords: 'inicio panel resumen hoy portada' },
       { href: '/dashboard/mis-tareas', label: 'Mis tareas', icon: ListTodo, keywords: 'tareas pendientes vencidas hoy semana mis encargos' },
       {
-        href: '/dashboard/operaciones/bandeja',
+        href: '/dashboard/para-ti',
         label: 'Para ti',
         icon: Inbox,
-        keywords: 'pendiente decisión bandeja aprobar revisar',
+        keywords: 'pendiente decisión bandeja aprobar revisar urgente',
         show: adminOnly,
+        badge: 'paraTi',
         children: [
-          { href: '/dashboard/operaciones/bandeja', label: 'Mi bandeja', icon: Inbox, keywords: 'revisiones bloqueos' },
+          { href: '/dashboard/para-ti', label: 'Todo lo pendiente', icon: Inbox, keywords: 'bandeja única revisiones bloqueos' },
           { href: '/dashboard/operaciones/agente', label: 'Propuestas del agente', icon: Bot, keywords: 'agente aprobación autonomía' },
           { href: '/dashboard/operaciones/correos', label: 'Correos', icon: Mail, keywords: 'email entrada responder' },
           { href: '/dashboard/agentes/equipo', label: 'Dudas del equipo', icon: MessageCircle, keywords: 'dudas escaladas jefe de operaciones' },
@@ -299,6 +302,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   cards: 'Fichas SEO',
   general: 'Mi cuenta',
   'mis-tareas': 'Mis tareas',
+  'para-ti': 'Para ti',
   security: 'Seguridad',
   activity: 'Actividad',
   new: 'Nuevo',
