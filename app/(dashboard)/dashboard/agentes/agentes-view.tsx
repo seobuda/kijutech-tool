@@ -35,8 +35,9 @@ const area = 'w-full rounded-lg border border-input bg-background px-3 py-2 text
 
 const empty = (): AgentRow => ({ id: '', key: '', name: '', kind: 'subagente', role: '', instructions: '', tools: [], model: null, voice: null, monthlyBudgetUsd: 10, active: true, spentMonth: 0 });
 
-export function AgentesView({ agents, tools, voices, autonomies }: { agents: AgentRow[]; tools: ToolOption[]; voices: string[]; autonomies: { name: string; title: string; autonomy: string }[] }) {
-  const [editing, setEditing] = useState<AgentRow | null>(null);
+export function AgentesView({ agents, tools, voices, autonomies, editKey = null }: { agents: AgentRow[]; tools: ToolOption[]; voices: string[]; autonomies: { name: string; title: string; autonomy: string }[]; editKey?: string | null }) {
+  // ?editar=<clave> (desde la ficha del agente en Equipo) abre directamente su formulario.
+  const [editing, setEditing] = useState<AgentRow | null>(() => agents.find((a) => a.key === editKey) ?? null);
   const [chatWith, setChatWith] = useState<AgentRow | null>(null);
   return (
     <div className="space-y-6">

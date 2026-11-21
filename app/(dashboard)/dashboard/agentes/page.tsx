@@ -8,7 +8,8 @@ import { AgentesView, type AgentRow, type ToolOption } from './agentes-view';
 
 export const dynamic = 'force-dynamic';
 
-export default async function AgentesPage() {
+export default async function AgentesPage({ searchParams }: { searchParams: Promise<{ editar?: string }> }) {
+  const { editar } = await searchParams;
   const user = await requirePagePermission('admin');
   wireApp();
   const agents = await listAgents(user.tenantId);
@@ -32,5 +33,5 @@ export default async function AgentesPage() {
     ...listTools().map((t) => ({ name: t.name, title: t.title, module: t.module, risk: t.risk })),
     ...Object.entries(SERVER_TOOLS).map(([name, t]) => ({ name, title: t.title, module: 'anthropic', risk: 'lectura' as const }))
   ];
-  return <AgentesView agents={rows} tools={tools} voices={[...VOICES]} autonomies={await listToolAutonomies(user.tenantId)} />;
+  return <AgentesView editKey={editar ?? null} agents={rows} tools={tools} voices={[...VOICES]} autonomies={await listToolAutonomies(user.tenantId)} />;
 }
