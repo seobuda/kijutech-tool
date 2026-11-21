@@ -177,6 +177,11 @@ Principio: **lo accionable primero**, nunca un muro de gráficas.
 
 **Confirmado por Enric (20 nov, noche)** (preguntas de §6): cinco espacios con Ajustes aparte; el equipo ve solo lo suyo (sus tareas, su jornada, sus dudas y lo nuevo de la base); empezar por la fase 1; **foto o avatar** en el Equipo (fase 3, necesitará un campo nuevo y su aprobación de esquema).
 
+**Fase 5 hecha (21 nov, rama `feature/ux-fase5-ayuda`). La reorganización está completa.** (`docs/ESTADO.md` §6.35)
+- **Visita guiada** con ventanitas ancladas y botones Atrás, Siguiente y Saltar, en dos versiones: administración y equipo. Enric la pidió así en lugar de la lista de pasos del plan.
+- Sale sola la primera vez y se repite desde el botón **Ayuda**, siempre visible.
+- **Ayuda de cada pantalla** en Conocimiento y **glosario**.
+
 **Fase 4 hecha (21 nov, rama `feature/ux-fase4-cliente`):** el cliente en un solo sitio (`docs/ESTADO.md` §6.34). La ficha tiene Encargos, Rendimiento, Estrategia y SEO como pestañas, con lo demás en «Ficha y ajustes», y las vistas de todos los clientes son pestañas de Clientes.
 
 **Fase 3 hecha (21 nov, rama `feature/ux-fase3-equipo`, migración 0058 aprobada por Enric):** Equipo humano + IA (`docs/ESTADO.md` §6.33). El organigrama es la portada de Equipo, con personas y agentes juntos; hay una ficha común con foto o avatar; cada persona tiene departamento; y la actividad del día está en un solo registro.
