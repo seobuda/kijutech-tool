@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "ask": [
+      "Edit(lib/db/schema.ts)",
+      "Edit(lib/db/migrations/**)",
+      "Edit(lib/auth/**)",
+      "Edit(app/?login?/**)",
+      "Edit(docker-compose*.yml)",
+      "Edit(Dockerfile*)",
+      "Edit(.env)",
+      "Bash(pnpm *)",
+      "Bash(npm *)",
+      "Bash(npx *)",
+      "Bash(corepack *)",
+      "Bash(docker run *)",
+      "Bash(docker compose down*)",
+      "Bash(docker volume *)",
+      "Bash(rm *)",
+      "Bash(git rm *)",
+      "Bash(git clean*)",
+      "Bash(git reset --hard*)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(bash scripts/deploy.sh --migrate*)",
+      "Bash(* db:migrate*)",
+      "Bash(* db:generate*)",
+      "Bash(*DROP TABLE*)",
+      "Bash(*DROP COLUMN*)",
+      "Bash(*TRUNCATE*)",
+      "Bash(*DELETE FROM*)"
+    ]
+  }
+}
