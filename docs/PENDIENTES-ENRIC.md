@@ -3,11 +3,21 @@
 Lista viva de lo que solo puede hacer Enric (accesos, decisiones, el equipo). Claude la actualiza al terminar cada bloque.
 Detalle paso a paso de la activación en `docs/PRUEBAS-EN-VIVO.md`.
 
-**Última actualización:** 20 nov 2026. En producción: `main` `f2a06802` (base de conocimiento), 57 migraciones; jefe de operaciones listo para desplegar (0057).
+**Última actualización:** 21 nov 2026. En producción: `main` `654e90a9` (reorganización UX completa, fases 1 a 5), 59 migraciones.
+
+## Reorganización UX: Inicio, Para ti, Equipo, cliente en un solo sitio y guía (20-21 nov, migración 0058)
+Todo desplegado. Detalle en `docs/ESTADO.md` §6.31 a §6.35 y en `docs/DISENO-UX-REORGANIZACION.md`.
+- [ ] **Enlazar cada usuario a su ficha** (Equipo → Tareas y jornada → Fichas). Sin ese enlace, la persona no ve su Inicio, ni Mis tareas, ni sus cifras: solo el aviso «Tu usuario aún no está enlazado».
+- [ ] **Departamento y foto de cada persona:** Equipo → abre su ficha → «Departamento» y «Subir foto». Cada persona puede subir la suya. Opcional: fotos de los agentes.
+- [ ] **Ver tu visita guiada** (sale sola la primera vez que entras en Inicio; después, Ayuda → «Ver la guía»). Dime si algún texto no es como lo explicarías. La de administración solo está comprobada con pruebas automáticas.
+- [ ] **Una entrada de Conocimiento por pantalla** (con vídeo si lo grabas), para que «Ayuda sobre esta pantalla» encuentre algo. Mientras tanto, el glosario (Ayuda → Glosario) cubre los términos.
+- [ ] **Revisar el glosario** (`/dashboard/ayuda`): que cada definición sea como tú la explicarías.
+- [ ] **Avisar al equipo** del cambio de menú (Inicio, Mis tareas, Clientes, Equipo, Conocimiento) y de que la guía les saldrá sola al entrar.
+- [ ] **Cerrar en ClickUp las tareas de prueba vencidas** que tienes asignadas (`[PRUEBA 6C-2]…` y la de Indautxu en «Pruebas Kiju», del 30 oct).
 
 ## Jefe de operaciones: dudas del equipo (rama `feature/jefe-operaciones-fase2`, migración 0057, 20 nov)
 Aprobado: agente libre con garantías en código, Opus 5.5 para los jefes y el esquema. Detalle en `docs/ESTADO.md` §6.30.
-- [ ] **Desplegar con migración** (Claude lo lanza con tu OK; hace backup antes). Con el despliegue, el Operations manager y el jefe de sistema pasan a Opus 5.5.
+- [x] **Desplegar con migración** (desplegado el 20 nov, `326a1a07`). El Operations manager y el jefe de sistema ya usan Opus 5.5.
 - [ ] **Probarlo antes de encenderlo para todos:** desde tu chat principal escribe «/jefe tu duda» (funciona aunque esté apagado; te llegan la respuesta con sus botones y las aprobaciones). Prueba una duda que esté en la base, una que no, «No me sirve» y algo de plazos.
 - [ ] **Avisar al equipo** antes de dejarlo encendido: pueden preguntar por su chat de siempre (texto o audio, o respondiendo al aviso de un encargo); verán la fuente y los botones Me sirve / No me sirve / Que lo vea Enric.
 - [ ] **Decidir cuándo pasar la IA general a «Las envía solo»** (de serie, con tu aprobación).
@@ -140,6 +150,8 @@ Incluye el paso A (propiedades de Google por cliente) y los pasos B1, B2 y B3 (s
   (redactor, auditor…).
 
 ## Decisiones que esperan tu aprobación (Claude no las hace sin tu OK)
+- [ ] **Proyectos SEO con su cliente de verdad** (21 nov): al crearlos el cliente se guarda solo como texto, y la ficha los encuentra por nombre o alias. Guardar `projects.client_id` con un selector de cliente toca el núcleo.
+- [ ] **Recordar en la base de datos quién ha visto la guía** (21 nov), para que no vuelva a salir en otro navegador. Hoy se recuerda en cada navegador. Necesita esquema.
 - [x] **Reasignar desde el parte con un botón:** aprobada y desplegada (migración 0046).
 - [x] **IA de reserva:** aprobada y construida (falta la segunda clave, ver arriba).
 - [ ] **5C: temporadas, niveles y misiones.** El diseño está aprobado; falta aprobar su esquema de base de datos. Mejor después de
