@@ -75,7 +75,7 @@ describe('Barra lateral en cinco espacios (fase 1 UX)', () => {
 
   it('el lector ve un menú corto y sin nada de administración ni de crear', () => {
     const labels = flatNav(visibleNav(LECTOR)).map((x) => x.item.label);
-    expect(labels).toEqual(['Inicio', 'Mis tareas', 'Equipo', 'Personas', 'Conocimiento', 'Mi cuenta']);
+    expect(labels).toEqual(['Inicio', 'Mis tareas', 'Equipo', 'Organigrama', 'Tareas y jornada', 'Conocimiento', 'Mi cuenta']);
     expect(visibleActions(LECTOR)).toHaveLength(0);
   });
 
@@ -93,9 +93,10 @@ describe('Barra lateral en cinco espacios (fase 1 UX)', () => {
     const inicio = espacios.items.find((i) => i.label === 'Inicio')!;
     expect(isActive(inicio, '/dashboard')).toBe(true);
     expect(isActive(inicio, '/dashboard/clientes')).toBe(false);
-    expect(activeChild(equipo, '/dashboard/agentes/departamentos')?.label).toBe('Organigrama');
+    expect(activeChild(equipo, '/dashboard/agentes/departamentos')?.label).toBe('Departamentos');
+    expect(activeChild(equipo, '/dashboard/equipo/persona/0000')?.label).toBe('Organigrama');
     expect(activeChild(equipo, '/dashboard/agentes/conversaciones')?.label).toBe('Agentes de IA');
-    expect(activeChild(equipo, '/dashboard/operaciones/jornada')?.label).toBe('Personas');
+    expect(activeChild(equipo, '/dashboard/operaciones/jornada')?.label).toBe('Tareas y jornada');
     expect(activeChild(paraTi, '/dashboard/operaciones')?.label).toBe('Bloc de notas');
     expect(isActive(paraTi, '/dashboard/operaciones/equipo-hoy')).toBe(false);
   });

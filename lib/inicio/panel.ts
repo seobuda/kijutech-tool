@@ -154,11 +154,11 @@ export async function getAgentsSummary(tenantId: string, now = new Date()): Prom
 
 // --- Inicio de cada persona -------------------------------------------------------------------------------------
 
-export type MyProfile = { name: string; clickupUserId: string | null } | null;
+export type MyProfile = { id: string; name: string; clickupUserId: string | null } | null;
 
 export async function getMyProfile(tenantId: string, userId: number): Promise<MyProfile> {
   const [p] = await db
-    .select({ name: opsTeamProfiles.name, clickupUserId: opsTeamProfiles.clickupUserId })
+    .select({ id: opsTeamProfiles.id, name: opsTeamProfiles.name, clickupUserId: opsTeamProfiles.clickupUserId })
     .from(opsTeamProfiles)
     .where(and(eq(opsTeamProfiles.tenantId, tenantId), eq(opsTeamProfiles.userId, userId)))
     .limit(1);

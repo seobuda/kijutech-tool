@@ -20,13 +20,13 @@ export const AGENTES_PROCESS_MAP: ProcessStep[] = [
     lane: 'Hablar con el agente',
     name: 'Organigrama: departamentos y jefes',
     description:
-      'Organigrama (20 nov 2026): la agencia en departamentos (Gabinete, Operaciones, Cuentas y Estrategia, Sistema y Plataforma, Seguridad), cada uno con su jefe (agente de tipo «jefe»), sus agentes y a quién reporta. El primero en funcionar es Sistema: su jefe habla con Enric por su propio bot de Telegram («Kijutech Sistema»). Pantalla Agentes → Departamentos.',
+      'Organigrama (20 nov 2026): la agencia en departamentos (Gabinete, Operaciones, Cuentas y Estrategia, Sistema y Plataforma, Seguridad), cada uno con su jefe (agente de tipo «jefe»), sus agentes y a quién reporta. El primero en funcionar es Sistema: su jefe habla con Enric por su propio bot de Telegram («Kijutech Sistema»). Pantalla Agentes → Departamentos. Desde el 21 nov, la portada de Equipo dibuja este organigrama con personas y agentes juntos, cada uno con su foto o avatar (agt_agent_avatars para los agentes).',
     status: 'built',
     file: 'lib/agentes/store.ts',
     when: 'Los departamentos y el jefe de sistema se crean solos la primera vez; un mensaje al bot de un departamento va a su jefe.',
     ai: 'El jefe de sistema (Claude Sonnet) contesta con estado_sistema, errores y diagnósticos; encarga al Técnico de mantenimiento lo que haya que diagnosticar.',
     code: 'El núcleo entrega el mensaje con `bot`: si el departamento de ese bot tiene jefe activo, contesta él (por el mismo bot); si no, el principal, por el mismo chat. Conversación propia por agente (no se mezcla con la del principal). El informe de un trabajo vuelve al chat de quien lo encargó (el jefe de sistema, por su bot); sin conversación de origen, al chat del departamento del subagente. Los agentes que ya existían pasan a su departamento una sola vez (Operations manager → Gabinete, Revisor web → Cuentas, Técnico → Sistema). Departamentos sin jefe todavía: su trabajo lo sigue haciendo el principal.',
-    tables: ['agt_departments', 'agt_agents', 'agt_conversations']
+    tables: ['agt_departments', 'agt_agents', 'agt_conversations', 'agt_agent_avatars']
   },
   {
     id: 'agt-motor',
@@ -64,7 +64,8 @@ export const AGENTES_PROCESS_MAP: ProcessStep[] = [
     ai: 'Nada (el agente interpreta los datos).',
     code: 'Credenciales cifradas en agt_integrations (nunca vuelven al navegador). Google: OAuth con estado firmado y token de refresco cifrado. Clarity: caché del día (10 consultas al día). Desde el 15 nov: gsc_rendimiento, ga4_informe y gbp_rendimiento (vistas, llamadas, clics a la web y cómo llegar de la ficha de Google) aceptan «cliente» y usan la propiedad principal de su ficha (si falta, lo dicen en vez de adivinar). Agentes registra en el núcleo el directorio de Google (webs de Search Console, propiedades de Analytics con la web de su flujo, fichas de Business Profile con su web) para asignarlas a las fichas.',
     tables: ['agt_integrations']
-  },
+  }
+,
   {
     id: 'agt-equipo',
     lane: 'Equipo',

@@ -187,15 +187,16 @@ export const NAV: NavGroup[] = [
         ]
       },
       {
-        href: '/dashboard/operaciones/equipo-hoy',
+        href: '/dashboard/equipo',
         label: 'Equipo',
         icon: UsersRound,
-        section: 'equipo',
-        keywords: 'jornada fichas personas hoy',
+        prefix: true,
+        keywords: 'equipo personas agentes organigrama jornada fichas hoy',
         children: [
-          { href: '/dashboard/operaciones/equipo-hoy', label: 'Personas', icon: UsersRound, section: 'equipo', keywords: 'equipo hoy jornada tiempos fichas' },
-          { href: '/dashboard/agentes', label: 'Agentes de IA', icon: Bot, prefix: true, keywords: 'agente ia telegram audio subagentes integraciones conversaciones trabajos voz', show: adminOnly },
-          { href: '/dashboard/agentes/departamentos', label: 'Organigrama', icon: Network, keywords: 'departamentos jefes organigrama', show: adminOnly },
+          { href: '/dashboard/equipo', label: 'Organigrama', icon: Network, prefix: true, keywords: 'organigrama personas agentes ia actividad fotos' },
+          { href: '/dashboard/operaciones/equipo-hoy', label: 'Tareas y jornada', icon: UsersRound, section: 'equipo', keywords: 'equipo hoy jornada tiempos fichas horario' },
+          { href: '/dashboard/agentes', label: 'Agentes de IA', icon: Bot, prefix: true, keywords: 'agente ia telegram audio subagentes integraciones conversaciones trabajos voz instrucciones', show: adminOnly },
+          { href: '/dashboard/agentes/departamentos', label: 'Departamentos', icon: Network, keywords: 'departamentos jefes bots telegram', show: adminOnly },
           { href: '/dashboard/operaciones/informes', label: 'Informes', icon: FileBarChart, keywords: 'informe semanal mensual parte resumen', show: adminOnly }
         ]
       },
@@ -303,6 +304,9 @@ const SEGMENT_LABELS: Record<string, string> = {
   general: 'Mi cuenta',
   'mis-tareas': 'Mis tareas',
   'para-ti': 'Para ti',
+  equipo: 'Equipo',
+  persona: 'Persona',
+  agente: 'Agente',
   security: 'Seguridad',
   activity: 'Actividad',
   new: 'Nuevo',

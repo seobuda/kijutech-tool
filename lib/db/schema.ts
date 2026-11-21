@@ -1711,11 +1711,31 @@ export const opsTeamProfiles = pgTable(
     quietStart: varchar('quiet_start', { length: 5 }),
     quietEnd: varchar('quiet_end', { length: 5 }),
     urgentBypassQuiet: boolean('urgent_bypass_quiet').notNull().default(false),
+    // Organigrama (0058, 21 nov 2026): departamento en el que trabaja (agt_departments.key). null = sin departamento.
+    departmentKey: varchar('department_key', { length: 40 }),
     active: boolean('active').notNull().default(true),
     createdAt: timestamp('created_at').notNull().defaultNow(),
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
   },
   (table) => [unique('ops_team_profiles_tenant_clickup_unique').on(table.tenantId, table.clickupUserId)]
+);
+
+// Foto o avatar de cada persona (0058, 21 nov 2026). Tabla aparte para no cargar la imagen en cada consulta de las fichas.
+// La imagen llega reducida desde el navegador (256 px); si no hay, se muestran iniciales con un color.
+export const opsTeamAvatars = pgTable(
+  'ops_team_avatars',
+  {
+    profileId: uuid('profile_id')
+      .primaryKey()
+      .references(() => opsTeamProfiles.id, { onDelete: 'cascade' }),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    mime: varchar('mime', { length: 30 }).notNull(),
+    data: bytea('data').notNull(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [check('ops_team_avatars_mime_check', sql`${table.mime} IN ('image/webp', 'image/png', 'image/jpeg')`)]
 );
 
 export const opsTeamProfileWorkTypes = pgTable(
@@ -2296,6 +2316,23 @@ export const agtAgents = pgTable(
   ]
 );
 export type AgtAgent = typeof agtAgents.$inferSelect;
+
+// Foto o avatar de cada agente (0058, 21 nov 2026). Igual que ops_team_avatars; si no hay, se muestra un icono.
+export const agtAgentAvatars = pgTable(
+  'agt_agent_avatars',
+  {
+    agentId: uuid('agent_id')
+      .primaryKey()
+      .references(() => agtAgents.id, { onDelete: 'cascade' }),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    mime: varchar('mime', { length: 30 }).notNull(),
+    data: bytea('data').notNull(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [check('agt_agent_avatars_mime_check', sql`${table.mime} IN ('image/webp', 'image/png', 'image/jpeg')`)]
+);
 
 // Organigrama (0055, 20 nov 2026): departamentos de la agencia, su jefe (agente) y a quién reporta. Un departamento con
 // bot (bot_key = ops_telegram_bots.key) habla con el dueño por su propio chat de Telegram.
