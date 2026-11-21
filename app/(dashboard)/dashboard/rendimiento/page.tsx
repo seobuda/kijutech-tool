@@ -1,4 +1,5 @@
 import { LineChart } from 'lucide-react';
+import { ClientesTabs } from '@/components/clientes-tabs';
 import { checkPermission, requirePagePermission } from '@/lib/auth/permissions';
 import { PageContainer, PageHeader } from '@/components/ui/page';
 import { tenantOverview } from '@/lib/rendimiento/report';
@@ -14,6 +15,7 @@ export default async function RendimientoPage() {
   const [rows, isAdmin, settings] = await Promise.all([tenantOverview(user.tenantId, 28), checkPermission('admin').then((r) => r.ok), getSettings(user.tenantId)]);
   return (
     <PageContainer className="space-y-6">
+      <ClientesTabs active="rendimiento" />
       <PageHeader
         icon={LineChart}
         title="Rendimiento de los clientes"

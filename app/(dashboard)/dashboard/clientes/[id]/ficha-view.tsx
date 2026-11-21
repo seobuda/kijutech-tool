@@ -5,7 +5,8 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, Brain, Building2, CircleCheck, CircleDashed, Compass, Globe, LayoutDashboard, LineChart, Map as MapIcon, Settings2, Sparkles, Swords, Trash2, Users } from 'lucide-react';
+import { ArrowLeft, Brain, Building2, ChevronDown, CircleCheck, CircleDashed, ClipboardList, Compass, FolderKanban, Globe, LayoutDashboard, LineChart, Map as MapIcon, Settings2, Sparkles, Swords, Trash2, Users } from 'lucide-react';
+import { DropdownMenu as DM } from 'radix-ui';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/page';
 import { cn } from '@/lib/utils';
@@ -22,6 +23,7 @@ import { WebsTab } from './tab-webs';
 import { CompetenciaTab } from './tab-competencia';
 import { ClienteRendimiento } from '../../rendimiento/cliente-rendimiento';
 import { ClienteEstrategia } from '../../estrategia/cliente-estrategia';
+import { EncargosTab, openRequests, SeoTab, type ProjectView, type RequestView } from './tab-trabajo';
 
 export type ClientView = {
   id: string;
@@ -73,18 +75,24 @@ export type FichaData = {
   isAdmin: boolean;
   /** Lo que el cliente tiene en los módulos (solo para un administrador): con algo, borrar exige baja + su nombre (D6). */
   history: string[];
+  /** El trabajo del cliente (fase 4 UX): sus encargos y sus proyectos SEO. */
+  work: { requests: RequestView[]; projects: ProjectView[] };
 };
 
+// Fase 4 UX (21 nov 2026): a la vista, lo del día a día (como mucho 5 + «Más»); los datos de la ficha, en «Más».
+// Las claves no cambian, así que los enlaces ?tab= de siempre siguen valiendo.
 const TABS = [
-  { key: 'resumen', label: 'Resumen', icon: LayoutDashboard },
-  { key: 'empresa', label: 'Empresa y negocio', icon: Building2 },
-  { key: 'contactos', label: 'Contactos', icon: Users },
-  { key: 'webs', label: 'Webs y cuentas', icon: Globe },
-  { key: 'competencia', label: 'Competencia', icon: Swords },
-  { key: 'rendimiento', label: 'Rendimiento', icon: LineChart },
-  { key: 'estrategia', label: 'Estrategia', icon: Compass },
-  { key: 'memoria', label: 'Memoria', icon: Brain },
-  { key: 'operaciones', label: 'Operaciones', icon: Settings2 }
+  { key: 'resumen', label: 'Resumen', icon: LayoutDashboard, more: false },
+  { key: 'encargos', label: 'Encargos', icon: ClipboardList, more: false },
+  { key: 'rendimiento', label: 'Rendimiento', icon: LineChart, more: false },
+  { key: 'estrategia', label: 'Estrategia', icon: Compass, more: false },
+  { key: 'seo', label: 'SEO', icon: FolderKanban, more: false },
+  { key: 'empresa', label: 'Empresa y negocio', icon: Building2, more: true },
+  { key: 'contactos', label: 'Contactos', icon: Users, more: true },
+  { key: 'webs', label: 'Webs y cuentas', icon: Globe, more: true },
+  { key: 'competencia', label: 'Competencia', icon: Swords, more: true },
+  { key: 'memoria', label: 'Memoria', icon: Brain, more: true },
+  { key: 'operaciones', label: 'Operaciones', icon: Settings2, more: true }
 ] as const;
 type TabKey = (typeof TABS)[number]['key'];
 
@@ -131,7 +139,14 @@ export function FichaView({ data }: { data: FichaData }) {
   const [typedName, setTypedName] = useState('');
   const { run, pending, msg } = useRun();
   const c = data.client;
-  const counts: Partial<Record<TabKey, number>> = { contactos: data.contacts.length + data.locations.length, webs: data.assets.length, competencia: data.competitors.length };
+  const counts: Partial<Record<TabKey, number>> = {
+    contactos: data.contacts.length + data.locations.length,
+    webs: data.assets.length,
+    competencia: data.competitors.length,
+    encargos: openRequests(data.work.requests),
+    seo: data.work.projects.length
+  };
+  const moreActive = TABS.find((t) => t.more && t.key === tab);
 
   const changeStatus = (s: string) => {
     if (s === 'baja') return setAskBaja(true);
@@ -249,7 +264,7 @@ export function FichaView({ data }: { data: FichaData }) {
 
       {/* Pestañas */}
       <div role="tablist" aria-label="Secciones de la ficha" className="-mx-1 flex gap-1 overflow-x-auto border-b px-1">
-        {TABS.map((t) => (
+        {TABS.filter((t) => !t.more).map((t) => (
           <button
             key={t.key}
             role="tab"
@@ -265,6 +280,41 @@ export function FichaView({ data }: { data: FichaData }) {
             {counts[t.key] ? <span className="rounded-full bg-muted px-1.5 text-xs tabular-nums">{counts[t.key]}</span> : null}
           </button>
         ))}
+        <DM.Root>
+          <DM.Trigger
+            role="tab"
+            aria-selected={Boolean(moreActive)}
+            className={cn(
+              'inline-flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition-colors outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand',
+              moreActive ? 'border-brand text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'
+            )}
+          >
+            {moreActive ? (
+              <>
+                <moreActive.icon className="size-4" aria-hidden />
+                {moreActive.label}
+              </>
+            ) : (
+              'Ficha y ajustes'
+            )}
+            <ChevronDown className="size-3.5" aria-hidden />
+          </DM.Trigger>
+          <DM.Portal>
+            <DM.Content align="end" sideOffset={4} className="z-50 min-w-56 rounded-xl border bg-popover p-1.5 text-popover-foreground shadow-lg">
+              {TABS.filter((t) => t.more).map((t) => (
+                <DM.Item
+                  key={t.key}
+                  onSelect={() => go(t.key)}
+                  className={cn('flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-accent', tab === t.key && 'font-medium')}
+                >
+                  <t.icon className="size-4 text-muted-foreground" aria-hidden />
+                  <span className="flex-1">{t.label}</span>
+                  {counts[t.key] ? <span className="rounded-full bg-muted px-1.5 text-xs tabular-nums">{counts[t.key]}</span> : null}
+                </DM.Item>
+              ))}
+            </DM.Content>
+          </DM.Portal>
+        </DM.Root>
       </div>
 
       <div role="tabpanel" aria-label={TABS.find((t) => t.key === tab)?.label}>
@@ -273,6 +323,8 @@ export function FichaView({ data }: { data: FichaData }) {
         {tab === 'contactos' && <ContactosTab clientId={c.id} contacts={data.contacts} locations={data.locations} isAdmin={data.isAdmin} />}
         {tab === 'webs' && <WebsTab clientId={c.id} assets={data.assets} integrations={data.integrations} />}
         {tab === 'competencia' && <CompetenciaTab clientId={c.id} competitors={data.competitors} />}
+        {tab === 'encargos' && <EncargosTab requests={data.work.requests} linked={Boolean(data.ops.clickupOptionId)} />}
+        {tab === 'seo' && <SeoTab projects={data.work.projects} clientName={c.name} />}
         {tab === 'rendimiento' && <ClienteRendimiento clientId={c.id} clientName={c.name} />}
         {tab === 'estrategia' && <ClienteEstrategia clientId={c.id} isAdmin={data.isAdmin} />}
         {tab === 'memoria' && (
@@ -309,6 +361,7 @@ function Resumen({ data, go }: { data: FichaData; go: (t: TabKey) => void }) {
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
       <div className="space-y-4">
+        <WorkStrip data={data} go={go} />
         <div className="grid gap-3 sm:grid-cols-2">
           <Card title="Contacto principal" onEdit={() => go('contactos')}>
             {primary ? (
@@ -421,6 +474,25 @@ function Resumen({ data, go }: { data: FichaData; go: (t: TabKey) => void }) {
           </dl>
         </Card>
       </div>
+    </div>
+  );
+}
+
+/** Trabajo del cliente en una línea (fase 4 UX): encargos abiertos y proyectos SEO, con un clic a su pestaña. */
+function WorkStrip({ data, go }: { data: FichaData; go: (t: TabKey) => void }) {
+  const open = openRequests(data.work.requests);
+  const blocked = data.work.requests.filter((r) => r.workStatus === 'bloqueado' || r.workStatus === 'devuelto').length;
+  return (
+    <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl border bg-card px-4 py-3 text-sm shadow-xs">
+      <button type="button" onClick={() => go('encargos')} className="inline-flex items-center gap-1.5 hover:underline">
+        <ClipboardList className="size-4 text-muted-foreground" aria-hidden />
+        <span className="font-semibold tabular-nums">{open}</span> encargo(s) abierto(s)
+        {blocked > 0 && <span className="text-destructive">· {blocked} bloqueado(s) o devuelto(s)</span>}
+      </button>
+      <button type="button" onClick={() => go('seo')} className="inline-flex items-center gap-1.5 hover:underline">
+        <FolderKanban className="size-4 text-muted-foreground" aria-hidden />
+        <span className="font-semibold tabular-nums">{data.work.projects.length}</span> proyecto(s) SEO
+      </button>
     </div>
   );
 }

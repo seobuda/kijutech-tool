@@ -16,9 +16,11 @@ type ActionState = {
 
 type Props = {
   project?: Project;
+  /** Cliente ya escrito al crear (desde la ficha del cliente). */
+  defaultClientName?: string;
 };
 
-export function ProjectForm({ project }: Props) {
+export function ProjectForm({ project, defaultClientName }: Props) {
   const isEditing = Boolean(project);
   const action = isEditing ? updateProject : createProject;
   const [state, formAction, isPending] = useActionState<ActionState, FormData>(
@@ -54,7 +56,7 @@ export function ProjectForm({ project }: Props) {
               id="clientName"
               name="clientName"
               placeholder="Nombre del cliente"
-              defaultValue={project?.clientName ?? ''}
+              defaultValue={project?.clientName ?? defaultClientName ?? ''}
             />
           </div>
           <div>

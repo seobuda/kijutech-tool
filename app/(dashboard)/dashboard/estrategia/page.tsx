@@ -1,4 +1,5 @@
 import { Compass } from 'lucide-react';
+import { ClientesTabs } from '@/components/clientes-tabs';
 import { checkPermission, requirePagePermission } from '@/lib/auth/permissions';
 import { PageContainer, PageHeader } from '@/components/ui/page';
 import { wireApp } from '@/lib/app-wiring';
@@ -32,6 +33,7 @@ export default async function EstrategiaPage({ searchParams }: { searchParams: P
   const names = new Map([...overview.rows.map((r) => [r.clientId, r.name] as const), ...overview.withoutPlan.map((c) => [c.id, c.name] as const)]);
   return (
     <PageContainer className="space-y-6">
+      <ClientesTabs active="estrategia" />
       <PageHeader
         icon={Compass}
         title="Estrategia de los clientes"
