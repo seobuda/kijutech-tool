@@ -1,4 +1,5 @@
 import { eq } from 'drizzle-orm';
+import { ClientesTabs } from '@/components/clientes-tabs';
 import { checkPermission, requirePagePermission } from '@/lib/auth/permissions';
 import { db } from '@/lib/db/drizzle';
 import { opsClientActivity } from '@/lib/db/schema';
@@ -69,6 +70,7 @@ export default async function ClientesPage({ searchParams }: { searchParams: Pro
 
   return (
     <div className="space-y-4">
+      <ClientesTabs active="fichas" />
       {incomplete > 0 && <ClientProposals incomplete={incomplete} />}
       <ClientesView rows={rows} levels={levels} services={services} runInfo={runInfo} missingOptions={missingOptions} duplicates={possibleDuplicates(clients.filter((c) => c.active))} isAdmin={isAdmin} startCreating={nuevo === '1'} />
     </div>

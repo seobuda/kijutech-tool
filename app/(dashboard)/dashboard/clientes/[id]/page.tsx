@@ -1,19 +1,20 @@
 import { notFound } from 'next/navigation';
-import { and, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray, ne, or, sql } from 'drizzle-orm';
 import { checkPermission, requirePagePermission } from '@/lib/auth/permissions';
 import { db } from '@/lib/db/drizzle';
-import { opsClientActivity } from '@/lib/db/schema';
+import { opsClientActivity, opsRequests, projects } from '@/lib/db/schema';
 import { completeness } from '@/lib/core/client-rules';
 import { clientHistory, getClientSheet } from '@/lib/core/clients';
 import { getStructure, selectedSpaces } from '@/lib/operaciones/structure';
 import { evaluateClient, getLevels, getServices, listClients } from '@/lib/operaciones/clients';
 import { isConnected } from '@/lib/agentes/integrations';
 import { FichaView, type FichaData } from './ficha-view';
+import type { ProjectView, RequestView } from './tab-trabajo';
 
 export const dynamic = 'force-dynamic';
 
-// Ficha del cliente (NÚCLEO, 14 nov 2026): pestañas Resumen, Empresa y negocio, Contactos, Webs y cuentas, Competencia,
-// Memoria y Operaciones. El contrato (cuota y fechas) solo llega al navegador de un administrador.
+// Ficha del cliente (NÚCLEO, 14 nov 2026): pestañas Resumen, Encargos, Rendimiento, Estrategia y SEO, y en «Ficha y
+// ajustes» Empresa y negocio, Contactos, Webs y cuentas, Competencia, Memoria y Operaciones (fase 4 UX, 21 nov). El contrato (cuota y fechas) solo llega al navegador de un administrador.
 export default async function FichaClientePage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requirePagePermission('edit');
   const { id } = await params;
@@ -104,7 +105,43 @@ export default async function FichaClientePage({ params }: { params: Promise<{ i
     spaces: selectedSpaces(structure).map((s) => ({ id: s.id, name: s.name, lists: s.lists.map((l) => ({ id: l.id, name: l.folder ? `${l.folder} / ${l.name}` : l.name })) })),
     options: [...options].map(([oid, label]) => ({ id: oid, label })).sort((a, b) => a.label.localeCompare(b.label, 'es')),
     isAdmin,
-    history: isAdmin ? await clientHistory(user.tenantId, id).catch(() => []) : []
+    history: isAdmin ? await clientHistory(user.tenantId, id).catch(() => []) : [],
+    work: await clientWork(user.tenantId, id, ops.clickupOptionId, [c.name, ...c.aliases])
   };
   return <FichaView data={data} />;
+}
+
+/**
+ * El trabajo del cliente para su ficha (fase 4 UX, 21 nov 2026):
+ * - encargos: por su opción de ClickUp (si está vinculado) o por el nombre de cliente guardado en el encargo;
+ * - proyectos SEO: por su id o, como el formulario de proyectos solo guarda el nombre, por su nombre o sus alias.
+ */
+async function clientWork(tenantId: string, clientId: string, optionId: string | null, names: string[]): Promise<FichaData['work']> {
+  const lower = [...new Set(names.map((n) => n.trim().toLowerCase()).filter(Boolean))];
+  const byName = (col: typeof opsRequests.clientName | typeof projects.clientName) => (lower.length ? inArray(sql<string>`lower(${col})`, lower) : sql`false`);
+  const [reqs, projs] = await Promise.all([
+    db
+      .select({
+        id: opsRequests.id,
+        title: opsRequests.title,
+        assigneeName: opsRequests.assigneeName,
+        dueDate: opsRequests.dueDate,
+        workStatus: opsRequests.workStatus,
+        syncStatus: opsRequests.status,
+        url: opsRequests.clickupTaskUrl,
+        createdAt: opsRequests.createdAt
+      })
+      .from(opsRequests)
+      .where(and(eq(opsRequests.tenantId, tenantId), or(optionId ? eq(opsRequests.clientOptionId, optionId) : sql`false`, byName(opsRequests.clientName))))
+      .orderBy(desc(opsRequests.createdAt))
+      .limit(150),
+    db
+      .select({ id: projects.id, name: projects.name, status: projects.status, createdAt: projects.createdAt, clientId: projects.clientId })
+      .from(projects)
+      .where(and(eq(projects.tenantId, tenantId), ne(projects.status, 'archived'), or(eq(projects.clientId, clientId), byName(projects.clientName))))
+      .orderBy(desc(projects.createdAt))
+  ]);
+  const requests: RequestView[] = reqs.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() }));
+  const projectViews: ProjectView[] = projs.map((p) => ({ id: p.id, name: p.name, status: p.status, createdAt: p.createdAt.toISOString(), linkedById: p.clientId === clientId }));
+  return { requests, projects: projectViews };
 }

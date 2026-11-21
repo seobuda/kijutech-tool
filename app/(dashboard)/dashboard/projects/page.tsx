@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { ClientesTabs } from '@/components/clientes-tabs';
 import { Button } from '@/components/ui/button';
 import { Archive, ArrowUpRight, FolderKanban, Globe, Pencil, PlusCircle } from 'lucide-react';
 import { getProjectsForUser, getUser, getUserTenantRoleNames } from '@/lib/db/queries';
@@ -32,6 +33,7 @@ export default async function ProjectsPage() {
 
   return (
     <PageContainer className="space-y-6">
+      <ClientesTabs active="seo" />
       <PageHeader
         icon={FolderKanban}
         title="Proyectos SEO"
