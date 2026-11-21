@@ -6,6 +6,9 @@ import { usePathname, useRouter } from 'next/navigation';
 import useSWR, { mutate } from 'swr';
 import { Dialog as DialogPrimitive, DropdownMenu as DM } from 'radix-ui';
 import {
+  BookOpen,
+  CircleHelp,
+  Compass,
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
@@ -24,6 +27,7 @@ import type { SafeUser } from '@/lib/db/queries';
 import { ACCOUNT_LINKS, activeChild, breadcrumbs, isActive, visibleActions, visibleNav, type NavGroup, type NavItem } from './nav';
 import { CommandPalette } from './command-palette';
 import { useRoles } from './use-roles';
+import { GuideProvider, useGuide } from '@/components/guia/guide';
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -161,6 +165,7 @@ function NavLink({
     <Link
       href={item.href}
       onClick={onNavigate}
+      data-tour={`nav:${item.href}`}
       title={collapsed ? item.label : undefined}
       aria-current={active ? 'page' : undefined}
       className={cn(
@@ -201,6 +206,7 @@ function NewMenu({ actions, collapsed, onNavigate }: { actions: NavItem[]; colla
         )}
         aria-label="Crear algo nuevo"
         data-testid="nuevo-menu"
+        data-tour="nuevo"
       >
         <Plus className="size-4 shrink-0" aria-hidden />
         {!collapsed && <span>Nuevo</span>}
@@ -350,6 +356,51 @@ function Breadcrumbs({ pathname }: { pathname: string }) {
   );
 }
 
+// --- Ayuda (siempre a mano) --------------------------------------------------------
+
+function HelpMenu({ pageLabel, onSearch }: { pageLabel: string; onSearch: () => void }) {
+  const { start } = useGuide();
+  const item = 'flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-accent';
+  return (
+    <DM.Root>
+      <DM.Trigger
+        data-tour="ayuda"
+        className="inline-flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        aria-label="Ayuda"
+      >
+        <CircleHelp className="size-[18px]" aria-hidden />
+        <span className="hidden sm:inline">Ayuda</span>
+      </DM.Trigger>
+      <DM.Portal>
+        <DM.Content align="end" sideOffset={6} className="z-50 min-w-64 rounded-xl border bg-popover p-1.5 text-popover-foreground shadow-lg">
+          <DM.Item className={item} onSelect={() => start()}>
+            <Compass className="size-4 text-muted-foreground" aria-hidden />
+            Ver la guía de la herramienta
+          </DM.Item>
+          <DM.Item asChild>
+            <Link href={`/dashboard/conocimiento?q=${encodeURIComponent(pageLabel)}`} className={item}>
+              <BookOpen className="size-4 text-muted-foreground" aria-hidden />
+              Ayuda sobre «{pageLabel}»
+            </Link>
+          </DM.Item>
+          <DM.Item asChild>
+            <Link href="/dashboard/ayuda" className={item}>
+              <CircleHelp className="size-4 text-muted-foreground" aria-hidden />
+              Glosario: qué significa cada cosa
+            </Link>
+          </DM.Item>
+          <DM.Separator className="my-1 h-px bg-border" />
+          <DM.Item className={item} onSelect={() => onSearch()}>
+            <Search className="size-4 text-muted-foreground" aria-hidden />
+            <span className="flex-1">Buscar en la herramienta</span>
+            <kbd className="rounded border bg-muted px-1.5 py-0.5 font-mono text-[10px]">Ctrl K</kbd>
+          </DM.Item>
+        </DM.Content>
+      </DM.Portal>
+    </DM.Root>
+  );
+}
+
 // --- Armazón ---------------------------------------------------------------------
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -403,8 +454,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  const crumbs = breadcrumbs(pathname);
+  const pageLabel = crumbs.length ? crumbs[crumbs.length - 1].label : 'Inicio';
+
   return (
-    <div className="flex min-h-[100dvh] w-full bg-background">
+    <GuideProvider isAdmin={roles.isAdmin}>
+    <div id="app-root" className="flex min-h-[100dvh] w-full bg-background">
       {/* Barra lateral (escritorio) */}
       <aside
         className={cn(
@@ -424,6 +479,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               collapsed && 'justify-center px-0'
             )}
             aria-label="Buscar (Ctrl+K)"
+            data-tour="buscar"
           >
             <Search className="size-4 shrink-0" />
             {!collapsed && (
@@ -493,6 +549,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </button>
           <Breadcrumbs pathname={pathname} />
           <div className="ml-auto flex items-center gap-1">
+            <HelpMenu pageLabel={pageLabel} onSearch={() => setPaletteOpen(true)} />
             <button
               type="button"
               onClick={() => setPaletteOpen(true)}
@@ -509,5 +566,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} groups={groups} roles={roles} />
     </div>
+    </GuideProvider>
   );
 }

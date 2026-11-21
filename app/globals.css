@@ -242,3 +242,42 @@
     @apply border-b-0;
   }
 }
+
+/* Visita guiada (fase 5 UX, 21 nov 2026): la ventanita se ancla al elemento que se explica con CSS Anchor
+   Positioning. Sin soporte, queda abajo en el centro (no en la esquina 0,0). Ver components/guia/tour.tsx. */
+.tour-step {
+  position-anchor: --tour-target;
+}
+/* Pasos sin elemento (bienvenida): centrados. El reinicio de Tailwind pone margin: 0 y anula el centrado nativo. */
+.tour-step:not([data-anchored='true']) {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  height: fit-content;
+}
+@supports (position-area: right) {
+  .tour-step[data-anchored='true'] {
+    inset: auto;
+    margin: 12px;
+    position-try-fallbacks: flip-inline, flip-block, flip-block flip-inline;
+  }
+  .tour-step[data-anchored='true'][data-placement='right'] {
+    position-area: right span-bottom;
+  }
+  .tour-step[data-anchored='true'][data-placement='left'] {
+    position-area: left span-bottom;
+  }
+  .tour-step[data-anchored='true'][data-placement='bottom'] {
+    position-area: bottom span-right;
+  }
+  .tour-step[data-anchored='true'][data-placement='top'] {
+    position-area: top span-right;
+  }
+}
+@supports not (position-area: right) {
+  .tour-step[data-anchored='true'] {
+    position: fixed;
+    inset: auto 0 1.5rem 0;
+    margin-inline: auto;
+  }
+}
