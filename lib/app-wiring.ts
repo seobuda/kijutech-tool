@@ -10,6 +10,7 @@ import { registerRendimientoCapabilities } from '@/lib/rendimiento/register';
 import { registerEstrategiaCapabilities } from '@/lib/estrategia/register';
 import { registerErrorCapabilities } from '@/lib/core/errors';
 import { registerKnowledgeCapabilities } from '@/lib/core/knowledge';
+import { registerOperacionesPromptEvals } from '@/lib/operaciones/prompt-evals';
 
 let wired = false;
 export function wireApp(): void {
@@ -21,4 +22,5 @@ export function wireApp(): void {
   registerEstrategiaCapabilities();
   registerErrorCapabilities(); // registro de errores del núcleo: herramientas del Técnico de mantenimiento, botones y limpieza
   registerKnowledgeCapabilities(); // base de conocimiento del núcleo: herramientas, botones de revisión y embeddings
+  registerOperacionesPromptEvals(); // examen del prompt «Convertir nota en encargos» (IA → Prompts)
 }

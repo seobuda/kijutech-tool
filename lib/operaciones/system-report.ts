@@ -6,6 +6,7 @@ import { and, desc, eq, gte, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { opsHealthIncidents, opsNotifications, opsSettings } from '@/lib/db/schema';
 import { moduleHealthChecks, SYSTEM_BOT, type AgentTool } from '@/lib/core/capabilities';
+import { defaultTenantId } from '@/lib/core/errors';
 import { collectSnapshot, evaluate } from '@/lib/operaciones/health';
 import { getAiOverview } from '@/lib/operaciones/ai-watch';
 import { getInfraOverview } from '@/lib/operaciones/infra-watch';
@@ -14,6 +15,7 @@ import { enqueueNotification, localParts, toMinutes } from '@/lib/operaciones/no
 import { getOwnerMember } from '@/lib/operaciones/telegram-config';
 import { getOwnerTimezone } from '@/lib/operaciones/team-profiles';
 import { escapeHtml } from '@/lib/operaciones/telegram';
+import { promptEvalOverview } from '@/lib/ai/prompt-evals';
 
 export const SYSTEM_SECTIONS = ['salud', 'pruebas', 'errores', 'gasto', 'servidor'] as const;
 export type SystemSection = (typeof SYSTEM_SECTIONS)[number];
@@ -80,6 +82,18 @@ export async function buildSystemReport(tenantId: string, now = new Date(), only
     if (deploy) sections.pruebas.push(`Último despliegue con pruebas: ${deploy.commit ? deploy.commit.slice(0, 8) : 'sin commit'}, ${ago(new Date(deploy.started_at), t)}.`);
   });
 
+  // Exámenes de prompts (22 nov 2026): un prompt cambiado sin examinar o que suspende su último examen pide atención.
+  // Prompts globales de la plataforma: solo en el parte de la cuenta dueña.
+  await safe('pruebas', async () => {
+    if ((await defaultTenantId()) !== tenantId) return;
+    const exams = await promptEvalOverview();
+    const bad = exams.filter((e) => e.state === 'sin-examinar' || e.state === 'sin-examen' || e.state === 'suspendido' || e.state === 'error');
+    attention += bad.length;
+    const why = { 'sin-examinar': 'cambiado sin examinar', 'sin-examen': 'nunca examinado', suspendido: 'suspende su último examen', error: 'su último examen no terminó' } as Record<string, string>;
+    for (const e of bad) sections.pruebas.push(`🟠 Prompt «${e.name}» (v${e.version}): ${why[e.state]}. Se pasa en IA → Prompts.`);
+    if (exams.length && !bad.length) sections.pruebas.push(`Prompts con examen: ${exams.length}, todos aprobados en su versión actual.`);
+  });
+
   await safe('errores', async () => {
     const rows = (await db.execute(sql`
       SELECT title, area, severity, status, occurrences, last_seen, diagnosis IS NOT NULL AS diagnosed
@@ -139,7 +153,7 @@ export const estadoSistemaTool: AgentTool = {
   module: 'operaciones',
   title: 'Estado del sistema',
   description:
-    'Cómo está la plataforma ahora: salud (comprobaciones e incidencias), pruebas simuladas (cuáles fallan y el último despliegue), errores de las últimas 24 h, gasto de IA frente al presupuesto y servidor (memoria, disco, coste). Opcional: «secciones» para pedir solo algunas.',
+    'Cómo está la plataforma ahora: salud (comprobaciones e incidencias), pruebas simuladas (cuáles fallan y el último despliegue) y exámenes de prompts, errores de las últimas 24 h, gasto de IA frente al presupuesto y servidor (memoria, disco, coste). Opcional: «secciones» para pedir solo algunas.',
   risk: 'lectura',
   inputSchema: {
     type: 'object',

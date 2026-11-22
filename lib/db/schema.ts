@@ -410,6 +410,33 @@ export const aiPrompts = pgTable('ai_prompts', {
   updatedBy: integer('updated_by').references(() => users.id, { onDelete: 'set null' }),
 });
 
+// Exámenes de prompts (22 nov 2026, aprobado por Enric): cada pasada de la batería de referencia de un prompt desde el
+// panel (IA → Prompts → el prompt). Guarda la nota, con qué versión se pasó y qué casos fallaron, para ver si un prompt
+// empeora con el tiempo. `draft` = se examinó el borrador del formulario sin guardarlo (prompt_version null).
+export const aiPromptEvals = pgTable('ai_prompt_evals', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  promptKey: varchar('prompt_key', { length: 100 }).notNull(),
+  promptVersion: integer('prompt_version'),
+  draft: boolean('draft').notNull().default(false),
+  // Cuenta cuyos datos (clientes, miembros, caché de ClickUp) se usaron para construir los casos; paga la IA.
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  status: varchar('status', { length: 20 }).notNull().default('en_curso'), // en_curso | ok | error
+  passedChecks: integer('passed_checks').notNull().default(0),
+  totalChecks: integer('total_checks').notNull().default(0),
+  minScorePct: integer('min_score_pct').notNull().default(100),
+  passed: boolean('passed'),
+  // { cases: [{ key, checks: [{ name, pass, detail }] }], skipped: string[] }
+  result: jsonb('result').notNull().default({}),
+  error: text('error'),
+  costUsd: decimal('cost_usd', { precision: 10, scale: 6 }),
+  startedBy: integer('started_by').references(() => users.id, { onDelete: 'set null' }),
+  startedAt: timestamp('started_at').notNull().defaultNow(),
+  finishedAt: timestamp('finished_at'),
+}, (table) => [
+  index('ai_prompt_evals_key_started_idx').on(table.promptKey, table.startedAt),
+  check('ai_prompt_evals_status_check', sql`${table.status} IN ('en_curso', 'ok', 'error')`),
+]);
+
 export const aiClusteringExamples = pgTable('ai_clustering_examples', {
   id: uuid('id').primaryKey().defaultRandom(),
   tenantId: uuid('tenant_id')
@@ -1107,6 +1134,7 @@ export type NewAiModelPricing = typeof aiModelPricing.$inferInsert;
 export type AiJob = typeof aiJobs.$inferSelect;
 export type NewAiJob = typeof aiJobs.$inferInsert;
 export type AiPrompt = typeof aiPrompts.$inferSelect;
+export type AiPromptEval = typeof aiPromptEvals.$inferSelect;
 export type NewAiPrompt = typeof aiPrompts.$inferInsert;
 export type AiClusteringExample = typeof aiClusteringExamples.$inferSelect;
 export type NewAiClusteringExample = typeof aiClusteringExamples.$inferInsert;

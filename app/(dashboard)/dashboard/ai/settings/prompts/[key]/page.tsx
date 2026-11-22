@@ -4,7 +4,9 @@ import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
 import { getUser, getUserTenantRoleNames, getProjectsForUser } from '@/lib/db/queries';
 import { getAiPrompt } from '@/lib/ai/queries';
-import { PromptEditForm } from './prompt-edit-form';
+import { PromptEditForm, type PromptExam } from './prompt-edit-form';
+import { wireApp } from '@/lib/app-wiring';
+import { evalState, getPromptEvalSuite, listPromptEvals } from '@/lib/ai/prompt-evals';
 
 export default async function PromptEditPage({
   params,
@@ -27,6 +29,35 @@ export default async function PromptEditPage({
 
   if (!prompt) {
     notFound();
+  }
+
+  // Examen del prompt, si tiene batería de referencia (los conecta wireApp).
+  wireApp();
+  const suite = getPromptEvalSuite(prompt.key);
+  let exam: PromptExam | null = null;
+  if (suite) {
+    const runs = await listPromptEvals(prompt.key);
+    exam = {
+      state: evalState(prompt.version, runs),
+      summary: suite.summary,
+      costHint: suite.costHint,
+      minScore: suite.minScore,
+      runs: runs.map((r) => ({
+        id: r.id,
+        promptVersion: r.promptVersion,
+        draft: r.draft,
+        status: r.status,
+        passedChecks: r.passedChecks,
+        totalChecks: r.totalChecks,
+        minScorePct: r.minScorePct,
+        passed: r.passed,
+        result: (r.result ?? {}) as PromptExam['runs'][number]['result'],
+        error: r.error,
+        costUsd: r.costUsd,
+        startedAt: r.startedAt,
+        finishedAt: r.finishedAt
+      }))
+    };
   }
 
   return (
@@ -58,6 +89,7 @@ export default async function PromptEditPage({
           updatedByLabel: prompt.updatedByName ?? prompt.updatedByEmail ?? '—',
         }}
         projects={projects.map((p) => ({ id: p.id, name: p.name }))}
+        exam={exam}
       />
     </section>
   );

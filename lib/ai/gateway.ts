@@ -9,6 +9,7 @@ import { geminiAdapter } from '@/lib/ai/adapters/gemini';
 import { deepseekAdapter } from '@/lib/ai/adapters/deepseek';
 import { AIBilledError, type AIAdapter, type AIMessage, type AIResponse } from '@/lib/ai/types';
 import { reportError } from '@/lib/core/errors';
+import { currentEvalRunId } from '@/lib/ai/eval-tag';
 
 const ADAPTERS: Record<string, AIAdapter> = {
   anthropic: anthropicAdapter,
@@ -310,6 +311,8 @@ export async function callAI(
         preferredProvider: preferredProvider ?? null,
         promptKey: promptKey ?? null,
         promptFoundActive: promptKey ? Boolean(promptUsed) : null,
+        // Llamada hecha dentro de un examen de prompt (lib/ai/prompt-evals.ts): así se suma su coste exacto.
+        ...(currentEvalRunId() ? { evalRunId: currentEvalRunId() } : {}),
       },
     })
     .returning();

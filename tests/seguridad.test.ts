@@ -74,6 +74,7 @@ import { generateShareToken, deleteKwCluster } from '@/lib/seo/kw-actions';
 import { createProject } from '@/lib/projects/actions';
 import { createUserAction } from '@/app/(dashboard)/dashboard/usuarios/actions';
 import { toggleAiPrompt } from '@/lib/ai/actions';
+import { startPromptEvalAction } from '@/app/(dashboard)/dashboard/ai/settings/prompts/[key]/eval-actions';
 import { signIn, updateAccount, updatePassword } from '@/app/(login)/actions';
 import { getUser } from '@/lib/db/queries';
 import { hashPassword } from '@/lib/auth/session';
@@ -383,6 +384,8 @@ describe('un editor no puede tocar tokens, automatizaciones ni usuarios', () => 
   it('no puede tocar los ajustes de IA (solo super_admin)', async () => {
     await loginAs(fx.users.editor);
     expect(await outcome(() => toggleAiPrompt('seg-test-no-existe', true))).toBe('denegado');
+    // Examen de prompts (gasta IA): tampoco lo puede lanzar.
+    expect(await outcome(() => startPromptEvalAction('seg-test-no-existe'))).toBe('denegado');
   });
 
   it('Mi bandeja no es suya', async () => {
@@ -406,6 +409,8 @@ describe('un editor no puede tocar tokens, automatizaciones ni usuarios', () => 
     await loginAs(fx.users.admin);
     await expect(requirePagePermission('users')).rejects.toThrow('NEXT_REDIRECT:/dashboard');
     await expect(requirePagePermission('admin')).resolves.toBeTruthy();
+    // El examen de prompts es solo de super_admin (gasta IA de la plataforma).
+    expect(await outcome(() => startPromptEvalAction('seg-test-no-existe'))).toBe('denegado');
   });
 
   it('un super_admin sí da de alta usuarios (control positivo)', async () => {

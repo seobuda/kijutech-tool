@@ -18,6 +18,8 @@ import { UsageMonitor } from './usage-monitor';
 import { SettingsTabs } from './settings-tabs';
 import { decrypt } from '@/lib/ai/encryption';
 import { maskSecret } from '@/lib/auth/mask';
+import { wireApp } from '@/lib/app-wiring';
+import { promptEvalOverview } from '@/lib/ai/prompt-evals';
 
 export default async function AiSettingsPage() {
   const user = await getUser();
@@ -30,7 +32,8 @@ export default async function AiSettingsPage() {
     redirect('/dashboard');
   }
 
-  const [platformSettings, pricing, tenantsList, prompts, recentJobs, monthlyTotals] =
+  wireApp(); // registra los exámenes de prompts de los módulos
+  const [platformSettings, pricing, tenantsList, prompts, recentJobs, monthlyTotals, examOverview] =
     await Promise.all([
       getAiProviderSettings(user.tenantId, 'platform'),
       getAiModelPricing(),
@@ -38,7 +41,9 @@ export default async function AiSettingsPage() {
       getAiPromptsWithUpdater(),
       getAiJobs(user.tenantId, 20),
       getAiJobsMonthlyTotals(user.tenantId),
+      promptEvalOverview(),
     ]);
+  const exams = Object.fromEntries(examOverview.map((o) => [o.promptKey, o.state]));
 
   const providerRows: ProviderRowData[] = AI_PROVIDERS.map((provider) => {
     const existing = platformSettings.find((s) => s.provider === provider);
@@ -120,7 +125,7 @@ export default async function AiSettingsPage() {
           {
             key: 'prompts',
             label: 'Prompts',
-            content: <PromptsSection prompts={prompts} />,
+            content: <PromptsSection prompts={prompts} exams={exams} />,
           },
         ]}
       />

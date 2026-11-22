@@ -414,6 +414,13 @@
       "when": 1795400000000,
       "tag": "0058_equipo_avatares",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1795500000000,
+      "tag": "0059_examen_prompts",
+      "breakpoints": true
     }
   ]
 }
