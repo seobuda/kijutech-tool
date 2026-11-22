@@ -66,27 +66,13 @@ Esta regla cuesta horas de debugging si se rompe. El motivo: en una sesión ante
 
 
 
-\## Estado actual / Roadmap Fase A
+\- Estas reglas (núcleo sin módulos, un módulo no importa a otro, prefijo de tabla, ClickUp por su cliente y su bandeja de salida) las comprueba `tests/arquitectura-guardrails.test.ts`: si se incumplen, las pruebas fallan y `deploy.sh` no despliega. Una excepción nueva se añade allí con su motivo, nunca en silencio.
 
 
 
-Completado:
+\## Estado actual
 
-\- ✅ Docker Compose (Postgres 16 + Next.js) funcionando
-
-\- ✅ Tablas del starter migradas (`users`, `teams`, `team\_members`, `invitations`, `activity\_logs`)
-
-\- ✅ Auth verificada de extremo a extremo (registro, hash bcrypt, sesión JWT, panel protegido)
-
-\- ✅ Esquema núcleo añadido de forma aditiva: tablas `tenants`, `roles`, `user\_roles`, `projects`, más `users.tenant\_id` (`teams`/`team\_members` se mantienen intactas sin usar, pendientes de limpieza en una migración futura)
-
-\- ✅ Tenant "Kijutech" creado, con los 4 roles fijos del sistema (`super\_admin`/`admin`/`editor`/`lector`); `team\_members` migrado a `user\_roles`
-
-\- ✅ Pantalla de lista de proyectos + botón "nuevo proyecto" (`/dashboard/projects`)
-
-
-
-Pendiente: sin próximos pasos definidos todavía — pregúntale a Enric antes de asumir el siguiente bloque de trabajo de la Fase A.
+El estado vivo del proyecto (qué existe, qué está en producción, qué falta y la hoja de ruta) está en `docs/ESTADO.md`. La Fase A (Docker, auth, esquema núcleo, tenant Kijutech con sus 4 roles y la lista de proyectos) está terminada desde agosto de 2026. Antes de empezar un bloque nuevo, confírmalo con Enric.
 
 
 
@@ -426,6 +412,13 @@ La seguridad es parte de "terminado", igual que el Mapa Visual y ESTADO.md. Deta
   falla si una acción exportada no tiene guard. Si añades una acción o pantalla con un permiso nuevo,
   añade su prueba en `tests/seguridad.test.ts`; si cambia una capa de seguridad, actualiza el bloque
   Seguridad del Mapa Visual (`lib/auth/security-process-map.ts`).
+- **El arnés también pregunta:** `.claude/settings.json` (versionado) obliga a pedir permiso antes de editar
+  el esquema, las migraciones, `lib/auth/`, `app/(login)/`, `docker-compose*.yml`, `Dockerfile*` y `.env`, y
+  antes de `pnpm`/`npm`/`npx` en el host, `docker run`, borrar (`rm`, `git rm`, `git clean`, `git reset --hard`,
+  `DROP`, `TRUNCATE`, `DELETE FROM`), forzar un push o migrar. No sustituye a las reglas de arriba: las respalda.
+- **Cambiar un prompt de IA:** antes de dejarlo activo, pasar su batería de referencia si la tiene
+  (`RUN_REAL_EVALS=true ./node_modules/.bin/vitest run tests/ia-prompts-evals.test.ts`, dentro del contenedor;
+  céntimos por pasada). Hoy la tiene `ops_note_to_requests`.
 - **Cambiar dependencias sin tocar Windows** (nunca `pnpm` en el host): montar el repo en un contenedor
   temporal con un volumen anónimo para `node_modules`, por ejemplo
   `docker run --rm -v "C:\dev\kijutech-tool:/work" -v /work/node_modules -w /work node:24-alpine sh -c "corepack enable && pnpm add -D <paquete>"`
