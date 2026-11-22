@@ -13,9 +13,14 @@ import 'server-only';
 //   - ficha de Equipo del empleado simulado (todos los días, sin comida ni silencio) y un tipo de tarea con margen, para
 //     las pruebas de jornada y tiempos. Jornada y tiempos están APAGADAS en la cuenta de pruebas: solo las encienden
 //     sus escenarios mientras corren (y las apagan al terminar).
-import { and, eq, inArray } from 'drizzle-orm';
+import { randomBytes } from 'node:crypto';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
+import { hashPassword } from '@/lib/auth/session';
 import {
+  roles,
+  userRoles,
+  users,
   opsClickupConnections,
   opsSimEnvironments,
   opsStatusMap,
@@ -150,6 +155,55 @@ export async function ensureSimEnvironment(ownerTenantId: string): Promise<SimEn
     .values({ tenantId: t, clickupListId: SIM_LIST_ID, inProgressStatus: SIM_STATUSES.inProgress, inReviewStatus: SIM_STATUSES.inReview, doneStatus: SIM_STATUSES.done, edited: true })
     .onConflictDoNothing();
   return env;
+}
+
+// --- Usuarios de la cuenta de pruebas (22 nov 2026) -----------------------------------------------------------------
+// Las pruebas «pantallas-*» recorren las pantallas con una sesión de cada rol. Tres usuarios, uno por rol, NUNCA
+// super_admin: hoy un super_admin de cualquier cuenta puede cambiar ajustes de toda la plataforma (riesgo S2/S3 de la
+// revisión del 17 nov). Nadie conoce su contraseña (aleatoria y descartada al crearla): no se puede entrar con ellos por
+// el formulario; solo el servidor les abre sesión, dentro de una prueba.
+export const SIM_USER_ROLES = ['admin', 'editor', 'lector'] as const;
+export type SimUserRole = (typeof SIM_USER_ROLES)[number];
+
+export function simUserEmail(simTenantId: string, role: SimUserRole): string {
+  return `pruebas-${role}@${simTenantId.replace(/-/g, '').slice(0, 12)}.pruebas.invalid`;
+}
+
+/** Crea (si faltan) los tres usuarios de la cuenta de pruebas con su rol, y quita cualquier super_admin de esa cuenta. */
+export async function ensureSimUsers(simTenantId: string): Promise<Record<SimUserRole, number>> {
+  if (!(await isSimTenant(simTenantId))) throw new Error('Solo se crean usuarios de prueba en una cuenta de pruebas');
+  const roleRows = await db.select({ id: roles.id, name: roles.name }).from(roles);
+  const roleId = (name: string) => roleRows.find((r) => r.name === name)?.id ?? null;
+  const out = {} as Record<SimUserRole, number>;
+  for (const role of SIM_USER_ROLES) {
+    const rid = roleId(role);
+    if (!rid) throw new Error(`Falta el rol ${role}`);
+    const email = simUserEmail(simTenantId, role);
+    let [u] = await db.select({ id: users.id, tenantId: users.tenantId }).from(users).where(eq(users.email, email)).limit(1);
+    if (!u) {
+      const passwordHash = await hashPassword(randomBytes(32).toString('base64url'));
+      [u] = await db
+        .insert(users)
+        .values({ tenantId: simTenantId, email, name: `Pruebas · ${role}`, passwordHash, role: 'member' })
+        .onConflictDoNothing()
+        .returning({ id: users.id, tenantId: users.tenantId });
+      if (!u) [u] = await db.select({ id: users.id, tenantId: users.tenantId }).from(users).where(eq(users.email, email)).limit(1);
+    }
+    if (!u || u.tenantId !== simTenantId) throw new Error(`El usuario de pruebas ${role} no es de la cuenta de pruebas`);
+    // Exactamente un rol de cuenta: el suyo.
+    const current = await db.select({ id: userRoles.id, roleId: userRoles.roleId }).from(userRoles).where(and(eq(userRoles.userId, u.id), isNull(userRoles.projectId)));
+    const wrong = current.filter((r) => r.roleId !== rid).map((r) => r.id);
+    if (wrong.length) await db.delete(userRoles).where(inArray(userRoles.id, wrong));
+    if (!current.some((r) => r.roleId === rid)) await db.insert(userRoles).values({ userId: u.id, roleId: rid });
+    out[role] = u.id;
+  }
+  // Ningún super_admin en la cuenta de pruebas, aunque alguien lo asigne a mano.
+  const superId = roleId('super_admin');
+  if (superId) {
+    const simUserIds = db.select({ id: users.id }).from(users).where(eq(users.tenantId, simTenantId));
+    await db.delete(userRoles).where(and(eq(userRoles.roleId, superId), inArray(userRoles.userId, simUserIds)));
+  }
+  return out;
 }
 
 /** Token del bot simulado (el mismo valor que guarda cifrado ops_telegram_config). */

@@ -67,16 +67,21 @@ describe('pruebas simuladas', () => {
     // de pruebas no puede escribir ninguno (pasó en el despliegue del 19 nov con los buenos días sin ClickUp).
     const logged: string[] = [];
     const spy = vi.spyOn(console, 'error').mockImplementation((...a: unknown[]) => void logged.push(a.map(String).join(' ')));
-    const r = await runScenarios(owner, 'all', 'claude', 'vitest');
+    // Las de pantallas necesitan la app en marcha (aquí no la hay): se prueban con run-scenarios.sh y en el despliegue.
+    const internal = SCENARIOS.filter((s) => !s.external && !s.needsServer);
+    const r = await runScenarios(owner, internal.map((s) => s.key), 'claude', 'vitest');
     spy.mockRestore();
     expect(logged).toEqual([]);
     const failed = r.results.filter((x) => x.status !== 'ok').map((x) => `${x.key}: ${x.error}`);
     expect(r.error).toBeUndefined();
     expect(failed).toEqual([]);
     // «Todas» = las internas: el escenario que sale a ClickUp de verdad no entra (ni en las del despliegue).
-    const internal = SCENARIOS.filter((s) => !s.external);
     expect(SCENARIOS.some((s) => s.external)).toBe(true);
     expect(r.results.map((x) => x.key)).toEqual(internal.map((s) => s.key));
+    // Las de pantallas son internas: entran en «todas» y, por tanto, en las pruebas de después de desplegar.
+    const pantallas = SCENARIOS.filter((s) => s.needsServer);
+    expect(pantallas.map((s) => s.key)).toEqual(['pantallas-admin', 'pantallas-editor', 'pantallas-lector']);
+    expect(pantallas.every((s) => !s.external)).toBe(true);
     const runs = await db.select().from(opsSimRuns).where(eq(opsSimRuns.tenantId, owner));
     expect(runs.every((x) => x.status === 'ok' && x.finishedAt)).toBe(true);
   }, 240_000);

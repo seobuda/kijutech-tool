@@ -11,8 +11,10 @@ import 'server-only';
 import { and, desc, eq, gte, inArray, isNull, lt, or, sql, type SQL } from 'drizzle-orm';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
+import { workUnitAsyncStorage } from 'next/dist/server/app-render/work-unit-async-storage.external';
 import { db } from '@/lib/db/drizzle';
-import { aiJobs, sysErrorEvents, sysErrorGroups, sysErrorSettings, tenants, type SysErrorGroup } from '@/lib/db/schema';
+import { aiJobs, sysErrorEvents, sysErrorGroups, sysErrorSettings, tenants, users, type SysErrorGroup } from '@/lib/db/schema';
+import { verifyToken } from '@/lib/auth/session';
 import {
   agentJobCreator,
   registerModuleButtons,
@@ -100,6 +102,88 @@ function consoleTenant(): string | null {
   }
 }
 
+// --- De qué cuenta es una petición web (22 nov 2026) -----------------------------------------------------------------
+// Un fallo dentro de una petición web (una pantalla, una acción) se anota en la cuenta de quien tiene la sesión. Antes iba
+// siempre a la cuenta dueña de la plataforma: una pantalla rota de la cuenta de pruebas (la recorre el despliegue) habría
+// avisado a Enric como si fuera de la cuenta real. La cuenta dueña sigue anotándose como «sistema» (null), igual que
+// hasta ahora, para no duplicar los grupos que ya existen ni volver a avisar de lo que Enric ya ignoró.
+
+/** El valor de la cookie `session` de una cabecera Cookie (onRequestError recibe las cabeceras, no las cookies). */
+export function sessionFromCookieHeader(header: string | string[] | undefined | null): string | null {
+  const raw = Array.isArray(header) ? header.join('; ') : header;
+  if (!raw) return null;
+  for (const part of raw.split(';')) {
+    const i = part.indexOf('=');
+    if (i > 0 && part.slice(0, i).trim() === 'session') {
+      const v = part.slice(i + 1).trim();
+      try {
+        return decodeURIComponent(v) || null;
+      } catch {
+        return v || null;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * La sesión de la petición web en curso, leída al momento (console.error es síncrono y no puede esperar a cookies()).
+ * Usa el almacén interno de Next con el que cookies() sabe en qué petición está: solo lee, no marca la página como
+ * dinámica. Fuera de una petición (planificador, arranque, pruebas) devuelve null. Si una versión futura de Next lo
+ * cambia, vuelve a null (lo de antes: cuenta dueña) y tests/pantallas.test.ts lo detecta.
+ */
+export function currentRequestSession(): string | null {
+  try {
+    const store = workUnitAsyncStorage.getStore() as { type?: string; cookies?: { get(name: string): { value?: string } | undefined } } | undefined;
+    if (!store || store.type !== 'request' || !store.cookies) return null;
+    return store.cookies.get('session')?.value || null;
+  } catch {
+    return null;
+  }
+}
+
+const SESSION_TENANT_TTL_MS = 5 * 60_000;
+const sessionTenantCache = new Map<number, { tenantId: string | null; at: number }>();
+
+/** La cuenta del usuario de una sesión firmada (null si la firma no vale o el usuario no existe). Nunca lanza. */
+export async function tenantOfSession(token: string): Promise<string | null> {
+  try {
+    const s = await verifyToken(token);
+    const id = s?.user?.id;
+    if (typeof id !== 'number') return null;
+    const hit = sessionTenantCache.get(id);
+    if (hit && Date.now() - hit.at < SESSION_TENANT_TTL_MS) return hit.tenantId;
+    const [u] = await db.select({ tenantId: users.tenantId }).from(users).where(eq(users.id, id)).limit(1);
+    const tenantId = u?.tenantId ?? null;
+    if (sessionTenantCache.size > 1000) sessionTenantCache.clear();
+    sessionTenantCache.set(id, { tenantId, at: Date.now() });
+    return tenantId;
+  } catch {
+    return null;
+  }
+}
+
+/** Cuenta en la que anotar un fallo de esta sesión: la suya, salvo la cuenta dueña (sigue como «sistema», null). */
+async function tenantForSession(token: string): Promise<string | null> {
+  const t = await tenantOfSession(token);
+  if (!t) return null;
+  return t === (await defaultTenantId()) ? null : t;
+}
+
+type EnqueueInput = Parameters<typeof enqueue>[0];
+/** Encola con la cuenta indicada; si no la hay pero el fallo viene de una petición con sesión, primero la averigua. */
+function enqueueFor(p: Omit<EnqueueInput, 'tenantId'>, tenantId: string | null, session: string | null): void {
+  if (tenantId || !session) return enqueue({ ...p, tenantId });
+  const put = (t: string | null) => {
+    try {
+      enqueue({ ...p, tenantId: t });
+    } catch {
+      /* registrar un error nunca rompe nada */
+    }
+  };
+  void tenantForSession(session).then(put, () => put(null));
+}
+
 // --- Captura ---------------------------------------------------------------------------------------------------------
 
 function messageOf(e: unknown): { message: string; stack: string | null } {
@@ -152,6 +236,10 @@ function enqueue(p: { tenantId: string | null; source: string; area: string; mes
 
 /** Registra un error con su contexto. Nunca lanza. También lo escribe en la consola (sigue en docker logs). */
 export function reportError(input: ReportInput): void {
+  report(input, currentRequestSession());
+}
+
+function report(input: ReportInput, session: string | null): void {
   const s = st();
   if (s.inside) return;
   s.inside = true;
@@ -160,8 +248,7 @@ export function reportError(input: ReportInput): void {
     const message = [input.message, m.message].filter((x) => x && x.trim()).join(': ') || '(sin mensaje)';
     const severity = input.severity ?? 'error';
     out(`[${input.source}]${input.area ? ` ${input.area}` : ''}:`, message);
-    enqueue({
-      tenantId: input.tenantId ?? consoleTenant(),
+    enqueueFor({
       source: input.source,
       area: input.area ?? '',
       message,
@@ -174,7 +261,7 @@ export function reportError(input: ReportInput): void {
         channel: input.channel ? input.channel.slice(0, 20) : null,
         path: input.path ? input.path.split('?')[0].slice(0, 300) : null
       }
-    });
+    }, input.tenantId ?? consoleTenant(), session);
   } catch {
     /* registrar un error nunca rompe nada */
   } finally {
@@ -195,8 +282,16 @@ export function captureConsole(): void {
     if (s.inside) return;
     s.inside = true;
     try {
+      // Next escribe en la consola («⨯ …») cada fallo de una petición, que ya llega con su ruta por onRequestError: el
+      // error lleva su código (digest). Sin esto, cada pantalla rota quedaba dos veces (web y sistema) y avisaba dos veces.
+      if (args.some((a) => a instanceof Error && typeof (a as { digest?: unknown }).digest === 'string')) return;
       const p = parseConsoleArgs(args);
-      enqueue({ tenantId: consoleTenant(), source: p.source, area: p.area, message: p.message, stack: p.stack, severity: guessSeverity(kind, p.message), sample: { userMessage: null, context: {}, actor: null, channel: null, path: null } });
+      const tenantId = consoleTenant();
+      enqueueFor(
+        { source: p.source, area: p.area, message: p.message, stack: p.stack, severity: guessSeverity(kind, p.message), sample: { userMessage: null, context: {}, actor: null, channel: null, path: null } },
+        tenantId,
+        tenantId ? null : currentRequestSession()
+      );
     } catch {
       /* nunca rompe */
     } finally {
@@ -214,16 +309,25 @@ export function captureConsole(): void {
 }
 
 /** Error de una petición de Next (páginas, acciones, rutas de API): lo llama onRequestError de instrumentation.ts. */
-export function reportRequestError(err: unknown, request: { path?: string; method?: string }, context: { routerKind?: string; routePath?: string; routeType?: string }): void {
+export function reportRequestError(
+  err: unknown,
+  request: { path?: string; method?: string; headers?: Record<string, string | string[] | undefined> },
+  context: { routerKind?: string; routePath?: string; routeType?: string }
+): void {
   const digest = (err as { digest?: string } | null)?.digest;
   if (typeof digest === 'string' && /^NEXT_(REDIRECT|NOT_FOUND|HTTP_ERROR_FALLBACK)/.test(digest)) return;
-  reportError({
-    error: err,
-    source: 'web',
-    area: `${context.routeType ?? 'petición'} ${context.routePath ?? ''}`.trim(),
-    path: request.path ?? null,
-    context: { method: request.method, digest: digest ?? null }
-  });
+  // La cuenta sale de la cookie de la propia petición (Next pasa sus cabeceras); si no viniera, del almacén de la petición.
+  const session = sessionFromCookieHeader(request.headers?.cookie) ?? currentRequestSession();
+  report(
+    {
+      error: err,
+      source: 'web',
+      area: `${context.routeType ?? 'petición'} ${context.routePath ?? ''}`.trim(),
+      path: request.path ?? null,
+      context: { method: request.method, digest: digest ?? null }
+    },
+    session
+  );
 }
 
 // --- Escritura -------------------------------------------------------------------------------------------------------

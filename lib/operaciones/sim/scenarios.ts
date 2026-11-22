@@ -12,6 +12,7 @@ import { simPressStale } from '@/lib/operaciones/sim/actor';
 import { botMsgs, check, flush, labels, lastBot, lastToast, newRequest, outbox, press, reload, say, statusesSent, type Scenario } from '@/lib/operaciones/sim/kit';
 import { JORNADA_SCENARIOS } from '@/lib/operaciones/sim/scenarios-jornada';
 import { CLICKUP_SCENARIOS } from '@/lib/operaciones/sim/scenarios-clickup';
+import { PANTALLAS_SCENARIOS } from '@/lib/operaciones/sim/scenarios-pantallas';
 
 export { StepFailed, createSimRequest, type Scenario, type ScenarioCtx, type SimStep } from '@/lib/operaciones/sim/kit';
 
@@ -195,6 +196,6 @@ const BASE_SCENARIOS: Scenario[] = [
   }
 ];
 
-export const SCENARIOS: Scenario[] = [...BASE_SCENARIOS, ...JORNADA_SCENARIOS, ...CLICKUP_SCENARIOS];
+export const SCENARIOS: Scenario[] = [...BASE_SCENARIOS, ...JORNADA_SCENARIOS, ...PANTALLAS_SCENARIOS, ...CLICKUP_SCENARIOS];
 
 export const scenarioByKey = (key: string) => SCENARIOS.find((s) => s.key === key);
