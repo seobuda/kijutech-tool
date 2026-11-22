@@ -18,7 +18,7 @@ export async function register() {
 }
 
 // Errores de las peticiones (páginas, acciones del servidor, rutas de API): al registro central con su ruta.
-export async function onRequestError(err: unknown, request: { path?: string; method?: string }, context: { routerKind?: string; routePath?: string; routeType?: string }) {
+export async function onRequestError(err: unknown, request: { path?: string; method?: string; headers?: Record<string, string | string[] | undefined> }, context: { routerKind?: string; routePath?: string; routeType?: string }) {
   if (process.env.NEXT_RUNTIME !== 'nodejs') return;
   const { reportRequestError } = await import('./lib/core/errors');
   reportRequestError(err, request, context);

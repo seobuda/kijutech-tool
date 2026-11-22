@@ -80,7 +80,7 @@ export async function runScenarios(
       try {
         const startId = await simLastId(env.simTenantId);
         await simRunContext.run({ runId: run.id, simTenantId: env.simTenantId }, () =>
-          withTimeout(sc.run({ ownerTenantId, simTenantId: env.simTenantId, emp: ids.employee, own: ids.owner, createdBy, startId, steps }), SCENARIO_TIMEOUT_MS)
+          withTimeout(sc.run({ ownerTenantId, simTenantId: env.simTenantId, emp: ids.employee, own: ids.owner, createdBy, startId, steps }), sc.timeoutMs ?? SCENARIO_TIMEOUT_MS)
         );
       } catch (e) {
         error = e instanceof StepFailed ? e.message : `Error inesperado: ${e instanceof Error ? e.message : String(e)}`;

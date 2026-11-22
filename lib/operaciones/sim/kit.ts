@@ -33,6 +33,10 @@ export type Scenario = {
   external?: boolean;
   /** Id de la petición de Sistema → Pruebas («Pedir una prueba») que dio origen al escenario. */
   fromRequest?: string;
+  /** Necesita la app en marcha (abre pantallas por HTTP): corre en «todas» y en el despliegue, no en `pnpm test`. */
+  needsServer?: boolean;
+  /** Tiempo máximo propio (por defecto 60 s): las que recorren todas las pantallas necesitan más. */
+  timeoutMs?: number;
   run: (ctx: ScenarioCtx) => Promise<void>;
 };
 

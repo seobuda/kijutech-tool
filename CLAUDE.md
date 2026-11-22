@@ -370,6 +370,9 @@ pantalla que llamaba a ClickUp en directo tardaba segundos (el Bloc y
   con ese usuario en `http://127.0.0.1:3000`, recorre Bloc de notas, Equipo hoy
   y Encargos comprobando que cargan sin errores, que el autoguardado confirma
   el guardado, y que `docker logs kijutech_app` no muestra `ReferenceError`.
+- Desde el 22 nov 2026, el despliegue abre además TODAS las pantallas fijas del panel con un usuario admin, editor
+  y lector de la cuenta de pruebas (pruebas `pantallas-*`) y vuelve atrás si alguna se rompe. Esos usuarios nunca son
+  `super_admin` y nadie sabe su contraseña. Una pantalla nueva entra sola (sale del manifiesto de `next build`).
 - Para crear tareas reales en ClickUp durante las pruebas se usa SOLO la lista
   "Pruebas Kiju", asignadas al dueño del token. Las notas de prueba se eliminan
   al terminar.

@@ -19,7 +19,8 @@ export default function ErrorPage({
     sendClientError('pantalla', error.message || 'Página de error', error.stack ?? null, error.digest ?? null);
   }, [error]);
   return (
-    <div className="flex items-center justify-center min-h-[100dvh]">
+    // data-pagina-error: la marca que buscan las pruebas «pantallas-*» (lib/operaciones/sim/pantallas-rules.ts).
+    <div data-pagina-error="" className="flex items-center justify-center min-h-[100dvh]">
       <div className="max-w-md space-y-6 p-4 text-center">
         <div className="flex justify-center">
           <CircleIcon className="size-12 text-brand" />

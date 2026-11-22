@@ -30,12 +30,27 @@ if [[ -n "$KEYS" ]]; then
   BODY="{\"scenarios\":[\"$(echo $KEYS | sed 's/ /","/g')\"]$EXTRA}"
 fi
 
+# http.request y no fetch (22 nov 2026): fetch corta a los 300 s esperando la respuesta, y con las pruebas de pantallas la
+# tanda puede durar más; un corte así haría que deploy.sh volviera atrás sin ningún fallo real. Límite propio: 15 min.
 NODE_SCRIPT='
 const c = require("crypto");
+const http = require("http");
 const s = c.createHmac("sha256", process.env.AUTH_SECRET).update("kiju-pruebas-simuladas").digest("hex");
-fetch("http://127.0.0.1:3000/api/pruebas/run", { method: "POST", headers: { "x-kiju-pruebas": s, "content-type": "application/json" }, body: process.env.KIJU_BODY || "{}" })
+const body = process.env.KIJU_BODY || "{}";
+new Promise((resolve, reject) => {
+  const req = http.request({ host: "127.0.0.1", port: 3000, path: "/api/pruebas/run", method: "POST", headers: { "x-kiju-pruebas": s, "content-type": "application/json", "content-length": Buffer.byteLength(body) } }, (res) => {
+    let data = "";
+    res.setEncoding("utf8");
+    res.on("data", (d) => (data += d));
+    res.on("end", () => resolve({ status: res.statusCode, data }));
+  });
+  req.setTimeout(15 * 60 * 1000, () => req.destroy(new Error("sin respuesta en 15 minutos")));
+  req.on("error", reject);
+  req.end(body);
+})
   .then(async (r) => {
-    const j = await r.json().catch(() => null);
+    let j = null;
+    try { j = JSON.parse(r.data); } catch {}
     if (!j) { console.log("✗ Respuesta no válida (" + r.status + ")"); process.exit(1); }
     if (j.error) console.log("✗ " + j.error);
     for (const x of j.results || []) console.log((x.status === "ok" ? "  ✓ " : "  ✗ ") + x.key + " — " + x.title + (x.error ? "\n      " + x.error : ""));
