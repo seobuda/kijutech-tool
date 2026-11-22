@@ -128,6 +128,7 @@ const CORE_NODES: SystemNode[] = [
         '4 adaptadores: Anthropic, OpenAI, Gemini, DeepSeek',
         'AES-256-GCM para las claves (crypto nativo de Node)',
         'Tabla ai_jobs — tracking de cada llamada',
+        'Exámenes de prompts (22 nov 2026): lib/ai/prompt-evals.ts, historial en ai_prompt_evals; el módulo dueño del prompt pone los casos (registerPromptEvalSuite) y se pasan desde IA → Prompts',
       ],
       keyDecisions: [
         'Timeout de 60s por llamada',

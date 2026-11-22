@@ -4,10 +4,11 @@ import { asc } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { tenants } from '@/lib/db/schema';
 import { getPrompt } from '@/lib/ai/gateway';
-import { ALL_SPACES, NOTE_PROMPT_KEY, proposeRequests, type NotePrompt } from '@/lib/operaciones/request-proposer';
-import { getStructure } from '@/lib/operaciones/structure';
-import { listClients, normText, type ClientWithServices } from '@/lib/operaciones/clients';
+import { NOTE_PROMPT_KEY, type NotePrompt } from '@/lib/operaciones/request-proposer';
 import type { ProposalItem } from '@/lib/operaciones/note-types';
+import { gradeNoteItems as grade } from '@/lib/operaciones/prompt-evals-rules';
+import { runNoteEval } from '@/lib/operaciones/prompt-evals';
+import { evalState, scoreOf, type EvalCaseResult } from '@/lib/ai/prompt-evals';
 
 /**
  * Batería de referencia del prompt «Convertir nota en encargos» (ops_note_to_requests).
@@ -17,6 +18,8 @@ import type { ProposalItem } from '@/lib/operaciones/note-types';
  *
  * Cómo se usa (dentro del contenedor, nunca en Windows):
  *   RUN_REAL_EVALS=true ./node_modules/.bin/vitest run tests/ia-prompts-evals.test.ts
+ * Lo normal es pasarla desde el panel (IA → Prompts → el prompt), que guarda el historial; esta prueba usa el mismo
+ * código (lib/operaciones/prompt-evals.ts). ~0,20 $ por pasada.
  * Opcional:
  *   EVAL_PROMPT_FILE=/ruta/prompt.json  prueba un prompt candidato sin guardarlo ({ system_prompt, user_prompt_template });
  *                                       sin él se usa el de la base de datos en la que se ejecuta.
@@ -33,42 +36,6 @@ import type { ProposalItem } from '@/lib/operaciones/note-types';
  * una fecha; por eso solo se exige en el caso que la dice. Los casos se construyen al ejecutarse con los clientes y
  * miembros de la propia base de datos: no hay nombres de clientes escritos en este archivo.
  */
-
-type Check = { name: string; pass: boolean; detail: string };
-type CaseResult = { key: string; checks: Check[] };
-
-// --- Corrector (puro) ------------------------------------------------------------------------------------------------
-
-const same = (a: string | null | undefined, b: string | null | undefined) => Boolean(a && b && normText(a) === normText(b));
-
-export function grade(
-  items: ProposalItem[],
-  expect: {
-    count?: number;
-    minCount?: number;
-    clientNames?: string[];
-    listIn?: string[];
-    assignee?: string;
-    dueDate?: string;
-  }
-): Check[] {
-  const checks: Check[] = [];
-  const first = items[0];
-  if (expect.count !== undefined) checks.push({ name: 'número de encargos', pass: items.length === expect.count, detail: `${items.length} (esperado ${expect.count})` });
-  if (expect.minCount !== undefined) checks.push({ name: 'hay encargo', pass: items.length >= expect.minCount, detail: `${items.length}` });
-  if (expect.clientNames) {
-    checks.push({ name: 'cliente', pass: Boolean(first && expect.clientNames.some((n) => same(first.clientName, n))), detail: `«${first?.clientName ?? ''}»` });
-  }
-  if (expect.listIn) checks.push({ name: 'lista habitual', pass: Boolean(first && expect.listIn.includes(first.listId)), detail: first?.listId || '(sin lista)' });
-  if (expect.assignee) checks.push({ name: 'responsable', pass: Boolean(first && same(first.assigneeName, expect.assignee)), detail: `«${first?.assigneeName ?? ''}»` });
-  if (expect.dueDate) checks.push({ name: 'fecha de la nota', pass: first?.dueDate === expect.dueDate, detail: `${first?.dueDate || '(sin fecha)'} (esperado ${expect.dueDate})` });
-  return checks;
-}
-
-const scoreOf = (results: CaseResult[]) => {
-  const all = results.flatMap((r) => r.checks);
-  return all.length ? all.filter((c) => c.pass).length / all.length : 0;
-};
 
 describe('evals de prompts: el corrector', () => {
   const item = (p: Partial<ProposalItem>): ProposalItem =>
@@ -91,7 +58,22 @@ describe('evals de prompts: el corrector', () => {
   });
 
   it('la nota es la proporción de comprobaciones aprobadas', () => {
-    expect(scoreOf([{ key: 'a', checks: [{ name: '', pass: true, detail: '' }, { name: '', pass: false, detail: '' }] }])).toBe(0.5);
+    const c: EvalCaseResult[] = [{ key: 'a', checks: [{ name: '', pass: true, detail: '' }, { name: '', pass: false, detail: '' }] }];
+    expect(scoreOf(c)).toEqual({ passed: 1, total: 2, score: 0.5 });
+    expect(scoreOf([]).score).toBe(0);
+  });
+
+  it('estado del prompt en el panel: sin examen, sin examinar tras cambiarlo, aprobado, suspendido, en curso', () => {
+    const run = (p: Partial<{ promptVersion: number | null; draft: boolean; status: string; passed: boolean | null }>) => ({ promptVersion: 3, draft: false, status: 'ok', passed: true, ...p });
+    expect(evalState(3, [])).toBe('sin-examen');
+    expect(evalState(3, [run({ draft: true, promptVersion: null })])).toBe('sin-examen');
+    expect(evalState(3, [run({})])).toBe('aprobado');
+    expect(evalState(3, [run({ passed: false })])).toBe('suspendido');
+    expect(evalState(4, [run({})])).toBe('sin-examinar');
+    // Un examen del borrador no cuenta como examen de la versión guardada.
+    expect(evalState(4, [run({ draft: true, promptVersion: null }), run({})])).toBe('sin-examinar');
+    expect(evalState(3, [run({ status: 'en_curso', passed: null }), run({})])).toBe('en-curso');
+    expect(evalState(3, [run({ status: 'error', passed: null })])).toBe('error');
   });
 });
 
@@ -100,69 +82,6 @@ describe('evals de prompts: el corrector', () => {
 const REAL = process.env.RUN_REAL_EVALS === 'true';
 const REPEAT = Math.max(1, Math.min(5, Number(process.env.EVAL_REPEAT ?? 1) || 1));
 const MIN_SCORE = Math.min(1, Number(process.env.EVAL_MIN_SCORE ?? 1) || 1);
-
-const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
-function inDays(days: number): { iso: string; text: string } {
-  const d = new Date(Date.now() + days * 86_400_000);
-  const [y, m, dd] = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Madrid', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d).split('-');
-  return { iso: `${y}-${m}-${dd}`, text: `${Number(dd)} de ${MONTHS[Number(m) - 1]} de ${y}` };
-}
-
-type EvalCase = { key: string; text: string; expect: Parameters<typeof grade>[1] };
-
-function buildCases(clients: ClientWithServices[], members: string[], me: string | null): { cases: EvalCase[]; skipped: string[] } {
-  const skipped: string[] = [];
-  const linked = clients.filter((c) => c.active && c.clickupOptionId).sort((a, b) => a.name.localeCompare(b.name));
-  const names = (c: ClientWithServices) => [c.clickupOptionLabel ?? '', c.name].filter(Boolean);
-  const withAlias = linked.find((c) => c.aliases.length > 0 && c.usualListIds.length > 0) ?? linked.find((c) => c.aliases.length > 0);
-  const pick = (i: number) => linked[i % Math.max(1, linked.length)];
-  const other = members.find((m) => !same(m, me));
-  const date = inDays(24);
-  const cases: EvalCase[] = [];
-
-  if (withAlias) {
-    cases.push({
-      key: 'cliente-por-alias',
-      text: `Para ${withAlias.aliases[0]}: hay que actualizar los horarios de verano en la página de contacto de su web.`,
-      expect: { minCount: 1, clientNames: names(withAlias), ...(withAlias.usualListIds.length ? { listIn: withAlias.usualListIds } : {}) }
-    });
-  } else skipped.push('cliente-por-alias (no hay clientes con alias)');
-
-  if (linked.length) {
-    const c = pick(1);
-    cases.push({
-      key: 'fecha-de-la-nota',
-      text: `Revisar el informe SEO mensual de ${c.name} y enviarlo antes del ${date.text}.`,
-      expect: { minCount: 1, clientNames: names(c), dueDate: date.iso }
-    });
-    const c2 = pick(2);
-    cases.push({
-      key: 'dos-encargos',
-      text: `Dos cosas para ${c2.name}: cambiar el logo del pie de página de la web, y por otro lado escribir un artículo de blog sobre sus servicios.`,
-      expect: { count: 2, clientNames: names(c2) }
-    });
-  } else skipped.push('fecha-de-la-nota y dos-encargos (no hay clientes vinculados a ClickUp)');
-
-  if (linked.length && other) {
-    const c = pick(3);
-    cases.push({
-      key: 'responsable-nombrado',
-      text: `${other} tiene que maquetar la landing nueva de ${c.name} esta semana.`,
-      expect: { minCount: 1, clientNames: names(c), assignee: other }
-    });
-  } else skipped.push('responsable-nombrado (faltan clientes o miembros)');
-
-  if (linked.length && me) {
-    const c = pick(4);
-    cases.push({
-      key: 'tarea-propia',
-      text: `Llamar a ${c.name} para pedirle los accesos de Google Analytics.`,
-      expect: { minCount: 1, assignee: me }
-    });
-  } else skipped.push('tarea-propia (no se sabe quién lleva las operaciones)');
-
-  return { cases, skipped };
-}
 
 describe.skipIf(!REAL)('evals de prompts: ops_note_to_requests con la IA real (RUN_REAL_EVALS=true)', () => {
   it(
@@ -176,29 +95,10 @@ describe.skipIf(!REAL)('evals de prompts: ops_note_to_requests con la IA real (R
         : await getPrompt(NOTE_PROMPT_KEY);
       expect(prompt?.system_prompt && prompt?.user_prompt_template, 'el prompt no existe o está desactivado').toBeTruthy();
 
-      const structure = await getStructure(t.id);
-      const { cases, skipped } = buildCases(
-        await listClients(t.id),
-        structure.members.map((m) => m.username),
-        structure.meUsername
-      );
-      expect(cases.length, 'sin datos para construir casos (¿caché de ClickUp vacía?)').toBeGreaterThan(0);
+      const { cases: results, skipped } = await runNoteEval(t.id, prompt!, REPEAT);
+      expect(results.length, 'sin datos para construir casos (¿caché de ClickUp vacía?)').toBeGreaterThan(0);
 
-      const results: CaseResult[] = [];
-      for (const c of cases) {
-        for (let i = 0; i < REPEAT; i++) {
-          let checks: Check[];
-          try {
-            const { items } = await proposeRequests(t.id, { text: c.text, spaceId: ALL_SPACES, spaceName: 'todos los espacios', assigneeClickupId: null, assigneeName: null }, prompt!);
-            checks = grade(items, c.expect);
-          } catch (e) {
-            checks = [{ name: 'respuesta', pass: false, detail: e instanceof Error ? e.message : String(e) }];
-          }
-          results.push({ key: REPEAT > 1 ? `${c.key} #${i + 1}` : c.key, checks });
-        }
-      }
-
-      const score = scoreOf(results);
+      const { score } = scoreOf(results);
       const lines = results.map((r) => `  ${r.checks.every((c) => c.pass) ? '✓' : '✗'} ${r.key}: ${r.checks.map((c) => `${c.pass ? '✓' : '✗'} ${c.name} ${c.detail}`).join(' · ')}`);
       console.log(
         [`Evals ops_note_to_requests${process.env.EVAL_PROMPT_FILE ? ' (prompt candidato)' : ''}: nota ${score.toFixed(2)} (mínimo ${MIN_SCORE})`, ...lines, ...skipped.map((s) => `  – sin caso: ${s}`)].join('\n')

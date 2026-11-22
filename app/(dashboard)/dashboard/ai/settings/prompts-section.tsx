@@ -8,6 +8,7 @@ import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { Pencil } from 'lucide-react';
 import { toggleAiPrompt } from '@/lib/ai/actions';
+import { Badge } from '@/components/ui/page';
 
 type PromptRow = {
   id: string;
@@ -21,7 +22,18 @@ type PromptRow = {
   updatedByEmail: string | null;
 };
 
-export function PromptsSection({ prompts }: { prompts: PromptRow[] }) {
+// Estado del examen de cada prompt que tiene batería (22 nov 2026): se ve en la lista sin tener que entrar.
+type ExamState = 'sin-examen' | 'sin-examinar' | 'aprobado' | 'suspendido' | 'en-curso' | 'error';
+const EXAM: Record<ExamState, { label: string; tone: 'success' | 'warning' | 'danger' | 'info' }> = {
+  'sin-examen': { label: 'Examen: nunca pasado', tone: 'warning' },
+  'sin-examinar': { label: 'Examen: cambiado sin examinar', tone: 'warning' },
+  aprobado: { label: 'Examen: aprobado', tone: 'success' },
+  suspendido: { label: 'Examen: suspendido', tone: 'danger' },
+  'en-curso': { label: 'Examinando…', tone: 'info' },
+  error: { label: 'Examen: no terminó', tone: 'danger' }
+};
+
+export function PromptsSection({ prompts, exams = {} }: { prompts: PromptRow[]; exams?: Record<string, ExamState> }) {
   if (prompts.length === 0) {
     return (
       <Card>
@@ -38,13 +50,13 @@ export function PromptsSection({ prompts }: { prompts: PromptRow[] }) {
   return (
     <div className="space-y-4">
       {prompts.map((prompt) => (
-        <PromptRow key={prompt.id} prompt={prompt} />
+        <PromptRow key={prompt.id} prompt={prompt} exam={exams[prompt.key] ?? null} />
       ))}
     </div>
   );
 }
 
-function PromptRow({ prompt }: { prompt: PromptRow }) {
+function PromptRow({ prompt, exam }: { prompt: PromptRow; exam: ExamState | null }) {
   const router = useRouter();
   const [isActive, setIsActive] = useState(prompt.isActive);
   const [isPending, startTransition] = useTransition();
@@ -71,7 +83,14 @@ function PromptRow({ prompt }: { prompt: PromptRow }) {
       <CardContent className="pt-6 space-y-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="font-medium">{prompt.name}</p>
+            <p className="font-medium flex flex-wrap items-center gap-2">
+              {prompt.name}
+              {exam && (
+                <Badge tone={EXAM[exam].tone} dot>
+                  {EXAM[exam].label}
+                </Badge>
+              )}
+            </p>
             {prompt.description && (
               <p className="text-sm text-muted-foreground mt-0.5">{prompt.description}</p>
             )}

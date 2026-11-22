@@ -419,9 +419,11 @@ La seguridad es parte de "terminado", igual que el Mapa Visual y ESTADO.md. Deta
   el esquema, las migraciones, `lib/auth/`, `app/(login)/`, `docker-compose*.yml`, `Dockerfile*` y `.env`, y
   antes de `pnpm`/`npm`/`npx` en el host, `docker run`, borrar (`rm`, `git rm`, `git clean`, `git reset --hard`,
   `DROP`, `TRUNCATE`, `DELETE FROM`), forzar un push o migrar. No sustituye a las reglas de arriba: las respalda.
-- **Cambiar un prompt de IA:** antes de dejarlo activo, pasar su batería de referencia si la tiene
-  (`RUN_REAL_EVALS=true ./node_modules/.bin/vitest run tests/ia-prompts-evals.test.ts`, dentro del contenedor;
-  céntimos por pasada). Hoy la tiene `ops_note_to_requests`.
+- **Cambiar un prompt de IA:** antes de dejarlo activo, pasar su examen si lo tiene: desde el panel (IA → Prompts →
+  el prompt → «Examinar el borrador sin guardarlo» o «Pasar examen»; queda en el historial) o con
+  `RUN_REAL_EVALS=true ./node_modules/.bin/vitest run tests/ia-prompts-evals.test.ts` dentro del contenedor (~0,20 $
+  por pasada). Hoy lo tiene `ops_note_to_requests`. Un examen nuevo se registra con `registerPromptEvalSuite`
+  (`lib/ai/prompt-evals.ts`) desde el módulo dueño del prompt y se conecta en `wireApp()`.
 - **Cambiar dependencias sin tocar Windows** (nunca `pnpm` en el host): montar el repo en un contenedor
   temporal con un volumen anónimo para `node_modules`, por ejemplo
   `docker run --rm -v "C:\dev\kijutech-tool:/work" -v /work/node_modules -w /work node:24-alpine sh -c "corepack enable && pnpm add -D <paquete>"`

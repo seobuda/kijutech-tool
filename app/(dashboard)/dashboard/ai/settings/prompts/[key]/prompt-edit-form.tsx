@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, Check, FlaskConical } from 'lucide-react';
 import { saveAiPrompt } from '@/lib/ai/actions';
 import { testAiPrompt } from '@/lib/seo/kw-ai-actions';
+import { PromptEvalPanel, type EvalRunView, type EvalState } from './prompt-eval-panel';
 
 const textareaClassName =
   'flex w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-2 text-sm font-mono shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]';
@@ -29,9 +30,13 @@ type PromptData = {
   updatedByLabel: string;
 };
 
+// Examen del prompt (22 nov 2026): solo los prompts que tienen batería de referencia.
+export type PromptExam = { state: EvalState; summary: string; costHint: string; minScore: number; runs: EvalRunView[] };
+
 type Props = {
   prompt: PromptData;
   projects: { id: string; name: string }[];
+  exam?: PromptExam | null;
 };
 
 type TestResult = {
@@ -43,7 +48,7 @@ type TestResult = {
   model: string;
 };
 
-export function PromptEditForm({ prompt, projects }: Props) {
+export function PromptEditForm({ prompt, projects, exam }: Props) {
   const router = useRouter();
   const [name, setName] = useState(prompt.name);
   const [description, setDescription] = useState(prompt.description);
@@ -94,8 +99,24 @@ export function PromptEditForm({ prompt, projects }: Props) {
     });
   }
 
+  const dirty = systemPrompt.trim() !== prompt.systemPrompt.trim() || userPromptTemplate.trim() !== prompt.userPromptTemplate.trim();
+
   return (
     <div className="space-y-6 max-w-3xl">
+      {exam && (
+        <PromptEvalPanel
+          promptKey={prompt.key}
+          version={prompt.version}
+          state={exam.state}
+          summary={exam.summary}
+          costHint={exam.costHint}
+          minScore={exam.minScore}
+          runs={exam.runs}
+          draft={{ systemPrompt, userPromptTemplate }}
+          dirty={dirty}
+        />
+      )}
+
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label>Nombre</Label>
@@ -125,10 +146,12 @@ export function PromptEditForm({ prompt, projects }: Props) {
           className={textareaClassName}
           style={{ minHeight: 300 }}
         />
-        <p className="text-xs text-muted-foreground">
-          Variables disponibles: <code>{'{count}'}</code> (número de keywords),{' '}
-          <code>{'{keywords_list}'}</code> (lista formateada)
-        </p>
+        {!exam && (
+          <p className="text-xs text-muted-foreground">
+            Variables disponibles: <code>{'{count}'}</code> (número de keywords),{' '}
+            <code>{'{keywords_list}'}</code> (lista formateada)
+          </p>
+        )}
       </div>
 
       <div className="flex items-center gap-2">
@@ -136,6 +159,8 @@ export function PromptEditForm({ prompt, projects }: Props) {
         <Label>{isActive ? 'Activo' : 'Inactivo'}</Label>
       </div>
 
+      {/* La prueba con keywords es de los prompts de SEO: en un prompt con examen propio no tiene sentido. */}
+      {!exam && (
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
@@ -193,6 +218,7 @@ export function PromptEditForm({ prompt, projects }: Props) {
           )}
         </CardContent>
       </Card>
+      )}
 
       <div className="text-xs text-muted-foreground">
         Versión actual: {prompt.version} · Última edición:{' '}
