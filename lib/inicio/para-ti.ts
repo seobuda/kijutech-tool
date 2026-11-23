@@ -6,10 +6,11 @@
 import 'server-only';
 import { and, asc, eq, inArray } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { agtDepartments, agtTeamQuestions, clientMemory, clients, estSuggestions, kbArticles, opsAgentActions } from '@/lib/db/schema';
+import { agtDepartments, agtTeamQuestions, clientMemory, clients, estSuggestions, kbArticles, opsAgentActions, opsInboundEmails, type AgtTeamQuestion } from '@/lib/db/schema';
 import { listErrorGroups } from '@/lib/core/errors';
 import { getInbox, type InboxItem } from '@/lib/operaciones/inbox';
 import { getPendingEmailProposals, type PendingEmail } from '@/lib/operaciones/owner-queue';
+import { pendingEmailProposal } from '@/lib/operaciones/email-agent';
 
 export type KindKey = 'bloqueos' | 'revisiones' | 'correos' | 'dudas' | 'agente' | 'estratega' | 'fichas' | 'base' | 'errores';
 export type DeptKey = 'operaciones' | 'cuentas' | 'sistema';
@@ -133,4 +134,82 @@ export function countByKind(entries: ParaTiEntry[]): { kind: KindKey; count: num
 /** Filtro puro de Para ti: por departamento y por tipo. */
 export function filterEntries(entries: ParaTiEntry[], f: { dept?: string | null; kind?: string | null }): ParaTiEntry[] {
   return entries.filter((e) => (!f.dept || KINDS[e.kind].dept === f.dept) && (!f.kind || e.kind === f.kind));
+}
+
+// --- Decidir aquí mismo (23 nov 2026) ------------------------------------------------------------------------------
+// Además de revisiones y bloqueos, Para ti deja decidir sin salir de la página los correos (la respuesta que propone el
+// agente), las propuestas de los agentes (✅ Hacerlo / ✖️ Descartar) y las dudas del equipo. Solo se carga al pintar la
+// página (el contador de la barra no lo necesita). Los demás tipos siguen enlazando a su pantalla.
+
+const DECIDE_LIMIT = 30;
+
+export type EmailDecision = {
+  key: string;
+  email: PendingEmail;
+  /** Lo que entendió el agente del correo y el principio del texto (solo texto: React lo escapa). */
+  aiSummary: string;
+  excerpt: string;
+  proposal: NonNullable<Awaited<ReturnType<typeof pendingEmailProposal>>>;
+};
+
+export type ToolDecision = { key: string; id: string; summary: string; agent: string | null; requestedBy: string | null; since: Date };
+
+export type ParaTiDecisions = { emails: EmailDecision[]; tools: ToolDecision[]; questions: AgtTeamQuestion[] };
+
+/** Clave de la entrada de Para ti que corresponde a cada decisión (para cruzarla con los filtros). */
+export const decisionKey = { email: (actionId: string) => `c-${actionId}`, tool: (id: string) => `a-${id}`, question: (id: string) => `q-${id}` };
+
+const EXCERPT = 600;
+
+export async function getParaTiDecisions(tenantId: string, emails: PendingEmail[]): Promise<ParaTiDecisions> {
+  const withEmail = emails.filter((e): e is PendingEmail & { emailId: string } => Boolean(e.emailId)).slice(0, DECIDE_LIMIT);
+  const [bodies, proposals, toolRows, questions] = await Promise.all([
+    withEmail.length
+      ? db
+          .select({ id: opsInboundEmails.id, bodyText: opsInboundEmails.bodyText, proposal: opsInboundEmails.proposal })
+          .from(opsInboundEmails)
+          .where(and(eq(opsInboundEmails.tenantId, tenantId), inArray(opsInboundEmails.id, withEmail.map((e) => e.emailId))))
+      : Promise.resolve([]),
+    Promise.all(withEmail.map((e) => pendingEmailProposal(tenantId, e.emailId))),
+    db
+      .select({ id: opsAgentActions.id, summary: opsAgentActions.summary, proposal: opsAgentActions.proposal, createdAt: opsAgentActions.createdAt })
+      .from(opsAgentActions)
+      .where(and(eq(opsAgentActions.tenantId, tenantId), eq(opsAgentActions.status, 'propuesto'), eq(opsAgentActions.kind, 'agent_tool')))
+      .orderBy(asc(opsAgentActions.createdAt))
+      .limit(DECIDE_LIMIT),
+    db
+      .select()
+      .from(agtTeamQuestions)
+      .where(and(eq(agtTeamQuestions.tenantId, tenantId), inArray(agtTeamQuestions.status, ['pendiente_aprobacion', 'escalada'])))
+      .orderBy(asc(agtTeamQuestions.createdAt))
+      .limit(DECIDE_LIMIT)
+  ]);
+  const byId = new Map(bodies.map((b) => [b.id, b]));
+  const emailDecisions: EmailDecision[] = [];
+  withEmail.forEach((e, i) => {
+    const p = proposals[i];
+    // Sin propuesta legible (o ya decidida entre las dos lecturas) se queda en la lista con su enlace.
+    if (!p || p.actionId !== e.actionId) return;
+    const b = byId.get(e.emailId);
+    const body = (b?.bodyText ?? '').trim();
+    emailDecisions.push({
+      key: decisionKey.email(e.actionId),
+      email: e,
+      aiSummary: String((b?.proposal as { resumen?: unknown } | null)?.resumen ?? ''),
+      excerpt: body.length > EXCERPT ? `${body.slice(0, EXCERPT - 1)}…` : body,
+      proposal: p
+    });
+  });
+  const tools: ToolDecision[] = toolRows.map((t) => {
+    const p = (t.proposal ?? {}) as { agent?: unknown; requestedBy?: unknown };
+    return {
+      key: decisionKey.tool(t.id),
+      id: t.id,
+      summary: t.summary,
+      agent: typeof p.agent === 'string' ? p.agent : null,
+      requestedBy: typeof p.requestedBy === 'string' ? p.requestedBy : null,
+      since: t.createdAt
+    };
+  });
+  return { emails: emailDecisions, tools, questions };
 }

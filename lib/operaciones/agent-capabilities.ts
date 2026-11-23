@@ -164,21 +164,27 @@ async function proposeOrRun(ctx: ToolContext, tool: string, summaryHtml: string,
   return { ok: true, proposed: true, content: `Propuesta enviada a ${owner.username} con los botones ✅ Hacerlo / ✖️ Descartar. No está hecha todavía: dilo así.` };
 }
 
-/** Botones at:ok/at:no (solo el dueño). Devuelve el texto de respuesta para el botón y la línea para el mensaje. */
+/** Botones at:ok/at:no (solo el dueño) y Para ti en la web (via «panel»). Devuelve el texto de respuesta para el botón y la línea para el mensaje. */
 export const AGENT_TOOL_CALLBACK_RE = /^at:(ok|no):([0-9a-f-]{36})$/;
 
-export async function decideAgentTool(tenantId: string, actionId: string, approve: boolean, byName: string): Promise<{ answer: string; line: string }> {
+export async function decideAgentTool(
+  tenantId: string,
+  actionId: string,
+  approve: boolean,
+  byName: string,
+  via: 'telegram' | 'panel' = 'telegram'
+): Promise<{ answer: string; line: string }> {
   const action = await getAction(tenantId, actionId);
   if (!action || action.kind !== 'agent_tool') return { answer: 'Esta propuesta ya no existe.', line: '' };
   if (action.status !== 'propuesto') return { answer: 'Esta propuesta ya estaba decidida.', line: '' };
   const p = action.proposal as { tool: string; data: Record<string, unknown> };
   if (!approve) {
-    await decideAction(tenantId, actionId, { status: 'rechazado', via: 'telegram', byName });
+    await decideAction(tenantId, actionId, { status: 'rechazado', via, byName });
     return { answer: 'Descartada.', line: '✖️ Descartada' };
   }
   const exec = EXECUTORS[p.tool] ?? changeExecutor(p.tool);
   if (!exec) return { answer: 'Esa acción ya no está disponible.', line: '' };
-  const decided = await decideAction(tenantId, actionId, { status: 'aprobado', via: 'telegram', byName });
+  const decided = await decideAction(tenantId, actionId, { status: 'aprobado', via, byName });
   if (!decided) return { answer: 'Esta propuesta ya estaba decidida.', line: '' };
   const res = await exec(tenantId, p.data, byName);
   return { answer: res.ok ? '✅ Hecho.' : 'No se pudo hacer.', line: `${res.ok ? '✅' : '⚠️'} ${res.content}` };

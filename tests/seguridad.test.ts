@@ -53,7 +53,7 @@ import { applyClientProposalAction, getClientProposalsAction } from '@/lib/opera
 import { connectAnthropicAdminAction, disconnectAnthropicAdminAction, refreshOrgCostAction } from '@/lib/operaciones/ai-watch-actions';
 import { connectDoTokenAction, disconnectDoTokenAction, refreshInfraAction } from '@/lib/operaciones/infra-actions';
 import { chatWithAgentAction, deleteAgentAction, deleteIntegrationAction, previewVoiceAction, retryJobAction, saveAgentAction, saveIntegrationAction, saveVoiceSettingsAction } from '@/lib/agentes/actions';
-import { setToolAutonomyAction } from '@/lib/operaciones/agent-capabilities-actions';
+import { decideAgentToolAction, setToolAutonomyAction } from '@/lib/operaciones/agent-capabilities-actions';
 import { deleteNote } from '@/lib/operaciones/note-actions';
 import { saveClickUpToken } from '@/lib/operaciones/actions';
 import { saveTelegramToken } from '@/lib/operaciones/telegram-actions';
@@ -396,6 +396,9 @@ describe('un editor no puede tocar tokens, automatizaciones ni usuarios', () => 
     expect(await outcome(() => inboxRejectProposal(ZERO))).toBe('denegado');
     expect(await outcome(() => approveEmailReplyAction(ZERO))).toBe('denegado');
     expect(await outcome(() => rejectEmailReplyAction(ZERO))).toBe('denegado');
+    // Para ti: tampoco decide las propuestas de los agentes (✅ Hacerlo / ✖️ Descartar).
+    expect(await outcome(() => decideAgentToolAction(ZERO, true))).toBe('denegado');
+    expect(await outcome(() => decideAgentToolAction(ZERO, false))).toBe('denegado');
   });
 
   it('no accede a las pantallas de administración, pero sí a las de edición (control positivo)', async () => {
