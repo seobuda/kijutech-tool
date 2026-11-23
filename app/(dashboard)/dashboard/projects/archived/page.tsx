@@ -15,10 +15,13 @@ import {
 } from '@/lib/db/queries';
 import { RestoreProjectButton } from './restore-project-button';
 import { DeleteProjectButton } from './delete-project-button';
+import { requirePagePermission } from '@/lib/auth/permissions';
 
 const MANAGE_ROLES = ['admin', 'super_admin'];
 
 export default async function ArchivedProjectsPage() {
+  // Sin rol no se ve nada (regla de seguridad): los archivados son de lector o más.
+  await requirePagePermission('view');
   const user = await getUser();
   if (!user) {
     redirect('/sign-in');

@@ -1,12 +1,15 @@
 import { notFound } from 'next/navigation';
 import { getProjectById } from '@/lib/db/queries';
 import { ProjectForm } from '../../project-form';
+import { requirePagePermission } from '@/lib/auth/permissions';
 
 export default async function EditProjectPage({
   params
 }: {
   params: Promise<{ projectId: string }>;
 }) {
+  // Editar un proyecto es de editor o más (la acción ya lo exige; la página también).
+  await requirePagePermission('edit');
   const { projectId } = await params;
   const project = await getProjectById(projectId);
 
