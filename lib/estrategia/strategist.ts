@@ -15,6 +15,8 @@ import { db } from '@/lib/db/drizzle';
 import { aiJobs, estAnalyses, estSuggestions, type EstAnalysis, type EstSuggestion } from '@/lib/db/schema';
 import { externalEvents, kpiProvider, telegramOutbound, workSource } from '@/lib/core/capabilities';
 import { getClientSheet, sheetText } from '@/lib/core/clients';
+import { recordIntervention } from '@/lib/core/interventions';
+import { techniqueFromCategory } from '@/lib/core/techniques';
 import { callAI, getPrompt } from '@/lib/ai/gateway';
 import { extractJsonFromLLMResponse } from '@/lib/ai/parsers/json-extractor';
 import { publicError } from '@/lib/errors';
@@ -573,6 +575,29 @@ export async function decideSuggestion(tenantId: string, id: string, d: Decision
     .update(estSuggestions)
     .set({ taskRef: r.ref, taskUrl: r.url, taskError: r.ok ? null : r.message.slice(0, 500), updatedAt: new Date() })
     .where(eq(estSuggestions.id, id));
+  // Registro de intervenciones del núcleo (Hito 1 SEO, 23 nov 2026): técnica e hipótesis del encargo, para medir después
+  // qué funciona. Un fallo aquí no deshace la aprobación.
+  try {
+    const pct = typeof s.expected?.cambio_pct === 'number' ? s.expected.cambio_pct : null;
+    await recordIntervention({
+      tenantId,
+      clientId: s.clientId,
+      domain: 'seo',
+      technique: techniqueFromCategory(s.category),
+      hypothesis: {
+        metric: s.expected?.metrica?.slice(0, 60) || undefined,
+        direction: pct !== null && pct < 0 ? 'baja' : 'sube',
+        magnitudePct: pct !== null ? Math.abs(pct) : undefined,
+        windowDays: s.expected?.dias || undefined
+      },
+      source: 'estrategia',
+      sourceRef: s.id,
+      requestRef: r.ref,
+      createdBy: by
+    });
+  } catch (e) {
+    console.error('[estrategia] registrar intervención:', e instanceof Error ? e.message : e);
+  }
   return r.ok ? { ok: true, message: `✅ ${r.message}`, url: r.url } : { ok: false, message: `Aprobada, pero el encargo no se creó: ${r.message}` };
 }
 

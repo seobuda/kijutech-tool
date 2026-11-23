@@ -55,6 +55,7 @@ export default async function FichaClientePage({ params }: { params: Promise<{ i
       sector: c.sector ?? '',
       summary: c.summary ?? '',
       logoUrl: c.logoUrl ?? '',
+      businessType: c.businessType ?? '',
       legalName: c.legalName ?? '',
       taxId: c.taxId ?? '',
       fiscalAddress: c.fiscalAddress ?? '',

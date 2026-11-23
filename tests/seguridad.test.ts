@@ -6,7 +6,9 @@ import { clientContacts, clientMemory, clients, opsInboundEmails, projects, user
 import { cleanupFixtures, createFixtures, emailFor, FIXTURE_PASSWORD, loginAs, PREFIX, type Fixtures } from './fixtures';
 
 import { aiProposeClient, applyClientProposal, saveClientOps } from '@/lib/operaciones/client-actions';
-import { decideSaludFindingAction, startSaludAuditAction } from '@/lib/seo/salud-actions';
+import { decideSaludFindingAction, startSaludAuditAction, saveSeoBusinessTypeAction } from '@/lib/seo/salud-actions';
+import { applyFactToFichaAction, collectDossierAction, decideDossierFactAction, savePersonaFactAction } from '@/lib/seo/expediente-actions';
+import { approvePlanItemAction, discardPlanItemAction, regeneratePlanAction, reopenPlanItemAction } from '@/lib/seo/plan-actions';
 import { addTestRequestAction, createSimRequestAction, getPruebasAction, pressSimButtonAction, runScenariosAction, sendSimTextAction, withdrawTestRequestAction } from '@/lib/operaciones/sim/actions';
 import { POST as pruebasRunPost } from '@/app/api/pruebas/run/route';
 import { checkDeptBotAction, removeDeptBotAction, saveDeptBotAction } from '@/lib/operaciones/dept-bot-actions';
@@ -222,6 +224,15 @@ const ACCIONES_ADMIN: [string, () => unknown][] = [
 const ACCIONES_EDITOR: [string, () => unknown][] = [
   ['startSaludAuditAction (SEO: rastrear y auditar)', () => startSaludAuditAction(ZERO)],
   ['decideSaludFindingAction (SEO: descartar hallazgo)', () => decideSaludFindingAction(ZERO, ZERO, 'descartado', 'x')],
+  ['saveSeoBusinessTypeAction (SEO: tipo de negocio a la ficha)', () => saveSeoBusinessTypeAction(ZERO, 'Dentist')],
+  ['collectDossierAction (SEO: recoger expediente)', () => collectDossierAction(ZERO)],
+  ['decideDossierFactAction (SEO: confirmar dato)', () => decideDossierFactAction(ZERO, ZERO, 'confirmado')],
+  ['savePersonaFactAction (SEO: escribir dato)', () => savePersonaFactAction(ZERO, 'telefono', '600000000')],
+  ['applyFactToFichaAction (SEO: pasar a la ficha)', () => applyFactToFichaAction(ZERO, ZERO)],
+  ['regeneratePlanAction (SEO: rehacer plan)', () => regeneratePlanAction(ZERO)],
+  ['approvePlanItemAction (SEO: aprobar propuesta)', () => approvePlanItemAction(ZERO, ZERO)],
+  ['discardPlanItemAction (SEO: descartar propuesta)', () => discardPlanItemAction(ZERO, ZERO, 'x')],
+  ['reopenPlanItemAction (SEO: recuperar propuesta)', () => reopenPlanItemAction(ZERO, ZERO)],
   ['deleteNote (Bloc)', () => deleteNote(ZERO)],
   ['getClientProposalsAction (fichas)', () => getClientProposalsAction()],
   ['applyClientProposalAction (fichas)', () => applyClientProposalAction({ clientId: ZERO, services: [], listIds: [] })],

@@ -23,6 +23,7 @@ import {
   type ClientMemory
 } from '@/lib/db/schema';
 import { clientDeleteBlockers } from '@/lib/core/capabilities';
+import { isBusinessType } from '@/lib/core/business-types';
 import {
   ACCESS_LABEL,
   ASSET_KIND_LABEL,
@@ -145,6 +146,8 @@ export type ClientProfileInput = Partial<{
   sector: string;
   summary: string;
   logoUrl: string;
+  /** Tipo de negocio de schema.org (lib/core/business-types.ts); vacío = sin elegir. */
+  businessType: string;
   legalName: string;
   taxId: string;
   fiscalAddress: string;
@@ -201,6 +204,11 @@ function profileValues(input: ClientProfileInput) {
     if (input[k] === undefined) continue;
     if (input[k] && !isDate(input[k])) throw new ClientError('Fecha no válida (AAAA-MM-DD).');
     v[k] = input[k] || null;
+  }
+  if (input.businessType !== undefined) {
+    const bt = input.businessType.trim();
+    if (bt && !isBusinessType(bt)) throw new ClientError('Tipo de negocio no válido.');
+    v.businessType = bt || null;
   }
   return v;
 }

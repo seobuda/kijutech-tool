@@ -244,4 +244,16 @@ async function createTask(tenantId: string, input: NewTaskInput): Promise<{ ok: 
   }
 }
 
-export const OPS_WORK_SOURCE: WorkSource = { completedSince, clientCompleted, workload, askAboutTask, clientOpen, effortByType, workTypes, createTask };
+/** Estado de varios encargos (registro de intervenciones del núcleo). Operaciones no tiene «cancelado»: un encargo
+ * borrado simplemente no aparece. */
+async function requestStatus(tenantId: string, refs: string[]): Promise<{ ref: string; doneAt: string | null; cancelled: boolean }[]> {
+  const ids = [...new Set(refs.filter((r) => /^[0-9a-f-]{36}$/i.test(r)))].slice(0, 500);
+  if (!ids.length) return [];
+  const rows = await db
+    .select({ id: opsRequests.id, workStatus: opsRequests.workStatus, at: opsRequests.workStatusAt })
+    .from(opsRequests)
+    .where(and(eq(opsRequests.tenantId, tenantId), inArray(opsRequests.id, ids)));
+  return rows.map((r) => ({ ref: r.id, doneAt: r.workStatus === 'completado' ? r.at.toISOString() : null, cancelled: false }));
+}
+
+export const OPS_WORK_SOURCE: WorkSource = { completedSince, clientCompleted, workload, askAboutTask, clientOpen, effortByType, workTypes, createTask, requestStatus };

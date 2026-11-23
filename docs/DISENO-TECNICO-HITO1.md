@@ -1,7 +1,7 @@
 # Diseño técnico del Hito 1 SEO: lo que necesita esquema (para aprobar)
 
 **Fecha:** 2026-11-23 · **Rama:** `feature/hito1-seo` · **Depende de:** `docs/DISENO-MODULO-SEO.md` v2 (§5, §7.3, §7.4, §10) y los cimientos (migración 0060, en producción).
-**Estado:** propuesta. No se ha tocado el esquema.
+**Estado:** aprobado por Enric el 23 nov y construido (migración 0061), con los cambios de la revisión del §9.
 
 ## 0. Lo que ya está hecho en esta rama (sin esquema)
 
@@ -149,6 +149,49 @@ Al crear el encargo, los hallazgos se enlazan (`findings.request_id`, ya existe)
 1. **Las 5 tablas** de arriba (migración 0061).
 2. **Tocar el núcleo** para `request_interventions` (opción **a**) y su enganche `registerRequestDoneListener` en Operaciones.
 3. **Places API** para el expediente y las reseñas. Hay que activarla en el proyecto de Google Cloud que ya usamos. **[NV]** En 2026 tiene una cuota gratuita mensual por tipo de consulta; lo compruebo antes de gastar.
+
+## 9. Revisión tras la aprobación (23 nov 2026, noche): lo que cambió y por qué
+
+Enric aprobó el diseño y pidió revisar cada decisión pensando en la escalabilidad. Al leer el código existente salieron
+cuatro cambios. Las tablas siguen siendo 5 más una columna (migración **0061**).
+
+**1. `request_interventions` → `interventions` (núcleo), y sin enganche nuevo en Operaciones.**
+- *Hipótesis inicial:* tabla del núcleo con `registerRequestDoneListener`, al que Operaciones avisa al cerrar un encargo.
+- *Cuestionamientos:*
+  - (a) ¿Por dónde se cierra un encargo? Por varios caminos: botón de Telegram, revisión, vigilancia de ClickUp y la herramienta que sustituirá a ClickUp en 2027. Un aviso habría que ponerlo en todos y se perdería si falla uno.
+  - (b) ¿Ya tenemos algo? Sí: `WorkSource` (contrato del núcleo) ya da «encargos terminados desde una fecha».
+  - (c) ¿Es solo de SEO? No: Estrategia ya guarda la hipótesis de sus propuestas (`est_suggestions.expected`) y nadie la mide.
+- *Decisión:* `interventions` en el núcleo, con `request_ref` que puede quedar vacío (trabajo hecho sin encargo), `client_id` obligatorio y `project_id` opcional (Estrategia trabaja por cliente), `source` y `source_ref` (una por propuesta, sin duplicar), la versión de la taxonomía, una copia del tipo de negocio, y `outcome` y `measured_at` ya preparados para la fase B (así no hay que volver a migrar).
+- *Fecha de hecho:* un trabajo del núcleo pregunta cada hora `workSource().requestStatus(refs)`, que Operaciones implementa con una consulta. No depende de que nadie avise y sirve igual cuando se sustituya ClickUp.
+- *Estrategia también registra sus propuestas aprobadas*, desde el primer día.
+
+| Alternativa | Coste | Riesgo | Qué se pierde |
+|---|---|---|---|
+| Aviso de Operaciones (diseño inicial) | Tocar cada camino de cierre | Eventos perdidos | — |
+| **Pregunta horaria por contrato (elegida)** | Un método más en `WorkSource` | Hasta 1 h de retraso (da igual para medir a 28-90 días) | — |
+| Leer `ops_requests` desde el núcleo | Mínimo | El núcleo dependería de un módulo (prohibido) | La regla del núcleo |
+| No guardar la fecha y calcularla al medir | Nada | Si se borra el encargo, se pierde | La fecha de hecho |
+
+**2. La bitácora de I+D es `kb_feed_items`, no `rd_feed_items`.**
+- La base de conocimiento ya es del núcleo con el prefijo `kb_`, y el resumen semanal termina como entrada propuesta de la base. Así no hace falta otra tabla del núcleo sin prefijo.
+- El resumen reutiliza el prompt `kb_redactar_entrada`, que ya tiene su examen, en vez de crear uno nuevo. Solo se llama si hubo novedades esa semana.
+- Las core updates se publican como «eventos externos» (`registerEventSource`). Así el estratega y las gráficas las ven sin que Estrategia importe nada.
+- Fuentes comprobadas el 23 nov: `status.search.google.com/incidents.json` (JSON) y `developers.google.com/search/blog/feed.xml` (RSS).
+
+**3. El plan de mejora se hace por reglas, sin IA (Sonnet quedaba en el diseño inicial).**
+- Directiva de optimización de IA: agrupar hallazgos por técnica, estimar horas (minutos por página) y ordenar por gravedad × páginas × impresiones son pasos de cálculo. Por reglas sale gratis, repetible y explicable. La IA queda para cuando una regla no baste.
+- Cada propuesta lleva como mucho 40 páginas (las más vistas primero). Así un encargo es manejable y el resto sale en la siguiente tanda.
+- Alternativa estudiada: que el estratega de Estrategia hiciera el plan leyendo los hallazgos (un solo plan, una sola bolsa de horas). Se descartó por ahora por tres motivos: el estratega solo trabaja con clientes que tienen plan de seguimiento, usa Opus en cada análisis y todavía no se ha probado en real. Las dos vías convergen en `interventions`. El riesgo de que dos planes compitan por las mismas horas queda acotado, porque ambos ven los encargos abiertos.
+
+**4. El tipo de negocio va a la ficha del cliente (`clients.business_type`), no solo al expediente.**
+- Es un dato del cliente que usarán el JSON-LD, la medición por tipo de negocio y, más adelante, Ads.
+- La lista de tipos pasa al núcleo (`lib/core/business-types.ts`).
+- El expediente puede proponerlo cuando la web ya lo declara, pero solo pasa a la ficha si una persona lo pide.
+
+**Otros ajustes:**
+- `seo_reviews` cuelga del cliente y de su ficha de Google, no del proyecto: varios proyectos comparten ficha.
+- `seo_plan_items` lleva `plan_key` (técnica#n) para no duplicar al rehacer el plan.
+- Places API no la puedo activar yo. La parte local se construirá cuando esté activada, y su tabla ya está creada.
 
 ## 8. Sin verificar
 

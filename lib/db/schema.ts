@@ -125,6 +125,9 @@ export const clients = pgTable(
     endReason: text('end_reason'),
     // Comunicaciones (23 nov 2026): heredar (lo de la cuenta) | siempre (pasan por aprobación) | nunca.
     commsApproval: varchar('comms_approval', { length: 10 }).notNull().default('heredar'),
+    // Tipo de negocio de schema.org (p. ej. «HomeAndConstructionBusiness»), 23 nov 2026, migración 0061. Es del cliente,
+    // no de un módulo: lo usan el JSON-LD de SEO, la medición de técnicas (por tipo de negocio) y, después, Ads.
+    businessType: varchar('business_type', { length: 60 }),
     createdAt: timestamp('created_at').notNull().defaultNow(),
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
   },
@@ -3719,3 +3722,215 @@ export const findings = pgTable(
   ]
 );
 export type Finding = typeof findings.$inferSelect;
+
+// =====================================================================================================================
+// HITO 1 SEO (23 nov 2026, migración 0061; docs/DISENO-TECNICO-HITO1.md, aprobado por Enric con la revisión del §9).
+// =====================================================================================================================
+
+// Núcleo: registro de intervenciones. Cada trabajo hecho (encargo) con su técnica y su hipótesis (qué métrica, en qué
+// dirección, en cuánto tiempo), escrito al aprobarlo: es el dato que no se puede recuperar después. Lo escriben SEO
+// (plan de mejora), Estrategia (propuestas aprobadas) y, después, Ads; la fecha de «hecho» la pone el núcleo
+// preguntando a la fuente de trabajo. Sirve para medir qué técnicas funcionan, por tipo de negocio.
+export type InterventionHypothesis = { metric?: string; direction?: 'sube' | 'baja'; magnitudePct?: number; windowDays?: number };
+export const interventions = pgTable(
+  'interventions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id').references(() => projects.id, { onDelete: 'set null' }),
+    // seo | ads | web | otro
+    domain: varchar('domain', { length: 20 }).notNull(),
+    // Clave de la taxonomía (lib/core/techniques.ts) y su versión.
+    technique: varchar('technique', { length: 40 }).notNull(),
+    taxonomyVersion: smallint('taxonomy_version').notNull().default(1),
+    // Copia del tipo de negocio al registrarla (la ficha puede cambiar).
+    businessType: varchar('business_type', { length: 60 }),
+    urls: text('urls').array().notNull().default(sql`'{}'::text[]`),
+    queries: text('queries').array().notNull().default(sql`'{}'::text[]`),
+    hypothesis: jsonb('hypothesis').$type<InterventionHypothesis>().notNull().default({}),
+    // Quién la registra y con qué id propio (p. ej. «seo.plan» + id de la propuesta, «estrategia» + id de la sugerencia).
+    source: varchar('source', { length: 40 }).notNull(),
+    sourceRef: varchar('source_ref', { length: 60 }).notNull(),
+    // El encargo (id de la fuente de trabajo). Null = hecho sin encargo (p. ej. el propio cliente).
+    requestRef: varchar('request_ref', { length: 60 }),
+    // prevista | hecha | cancelada
+    status: varchar('status', { length: 12 }).notNull().default('prevista'),
+    doneAt: timestamp('done_at'),
+    // Resultado medido (I+D fase B). Se deja preparado para no migrar otra vez.
+    outcome: jsonb('outcome').$type<Record<string, unknown>>(),
+    measuredAt: timestamp('measured_at'),
+    createdBy: varchar('created_by', { length: 120 }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    unique('interventions_source_unique').on(table.tenantId, table.source, table.sourceRef),
+    index('interventions_request_idx').on(table.tenantId, table.requestRef),
+    index('interventions_technique_idx').on(table.tenantId, table.domain, table.technique, table.doneAt),
+    index('interventions_client_idx').on(table.clientId, table.doneAt),
+    check('interventions_domain_check', sql`${table.domain} IN ('seo', 'ads', 'web', 'otro')`),
+    check('interventions_status_check', sql`${table.status} IN ('prevista', 'hecha', 'cancelada')`),
+  ]
+);
+export type Intervention = typeof interventions.$inferSelect;
+
+// Base de conocimiento (núcleo): bitácora de I+D. Lo publicado por fuentes oficiales (Google Search Central, panel de
+// incidencias…), leído sin IA. Las core updates avisan al momento; una vez por semana se resume y, si merece la pena,
+// se propone una entrada de la base (que solo publica Enric). Ads tendrá sus fuentes aquí (domain).
+export const kbFeedItems = pgTable(
+  'kb_feed_items',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    domain: varchar('domain', { length: 20 }).notNull(),
+    sourceKey: varchar('source_key', { length: 40 }).notNull(),
+    // Huella del elemento en su fuente (id, guid o hash de url+título): no se repite.
+    hash: varchar('hash', { length: 64 }).notNull(),
+    url: text('url'),
+    title: varchar('title', { length: 500 }).notNull(),
+    summary: text('summary'),
+    publishedAt: timestamp('published_at'),
+    // core_update | incidencia | documentacion | novedad
+    kind: varchar('kind', { length: 20 }).notNull().default('novedad'),
+    // Para una incidencia o core update: cuándo empieza y termina (si la fuente lo dice).
+    startsAt: timestamp('starts_at'),
+    endsAt: timestamp('ends_at'),
+    notifiedAt: timestamp('notified_at'),
+    digestWeek: date('digest_week'),
+    articleId: uuid('article_id').references(() => kbArticles.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    unique('kb_feed_items_unique').on(table.tenantId, table.sourceKey, table.hash),
+    index('kb_feed_items_recent_idx').on(table.tenantId, table.domain, table.publishedAt),
+    check('kb_feed_items_kind_check', sql`${table.kind} IN ('core_update', 'incidencia', 'documentacion', 'novedad')`),
+  ]
+);
+export type KbFeedItem = typeof kbFeedItems.$inferSelect;
+
+// SEO: expediente provisional del proyecto. Cada dato con origen, confianza y estado: el sistema lo recoge solo y una
+// persona confirma. Lo confirmado que es del cliente (teléfono, dirección, tipo de negocio) se propone a la ficha del
+// núcleo, nunca se sobrescribe solo.
+export const seoDossierFacts = pgTable(
+  'seo_dossier_facts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    field: varchar('field', { length: 40 }).notNull(),
+    value: jsonb('value').notNull(),
+    // ficha | web | places | wayback | gsc | busqueda | persona | ia
+    source: varchar('source', { length: 20 }).notNull(),
+    sourceRef: text('source_ref'),
+    confidence: smallint('confidence').notNull().default(50),
+    // provisional | confirmado | descartado
+    status: varchar('status', { length: 12 }).notNull().default('provisional'),
+    decidedBy: varchar('decided_by', { length: 120 }),
+    decidedAt: timestamp('decided_at'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    unique('seo_dossier_facts_unique').on(table.projectId, table.field, table.source),
+    check('seo_dossier_facts_source_check', sql`${table.source} IN ('ficha', 'web', 'places', 'wayback', 'gsc', 'busqueda', 'persona', 'ia')`),
+    check('seo_dossier_facts_status_check', sql`${table.status} IN ('provisional', 'confirmado', 'descartado')`),
+    check('seo_dossier_facts_confidence_check', sql`${table.confidence} BETWEEN 0 AND 100`),
+  ]
+);
+export type SeoDossierFact = typeof seoDossierFacts.$inferSelect;
+
+// SEO: plan de mejora del proyecto. Propuestas hechas por reglas a partir de los hallazgos abiertos (agrupadas por
+// técnica, con horas y prioridad por impacto en Search Console). Al aprobarse, se convierten en encargo con el contrato
+// del núcleo y se registra su intervención. «plan_key» evita duplicar al volver a generar el plan.
+export const seoPlanItems = pgTable(
+  'seo_plan_items',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    planKey: varchar('plan_key', { length: 120 }).notNull(),
+    title: varchar('title', { length: 300 }).notNull(),
+    description: text('description').notNull(),
+    technique: varchar('technique', { length: 40 }).notNull(),
+    findingIds: uuid('finding_ids').array().notNull().default(sql`'{}'::uuid[]`),
+    urls: text('urls').array().notNull().default(sql`'{}'::text[]`),
+    // 1 (alta) a 3 (baja)
+    priority: smallint('priority').notNull().default(2),
+    score: doublePrecision('score').notNull().default(0),
+    estHours: decimal('est_hours', { precision: 5, scale: 1 }).notNull(),
+    hypothesis: jsonb('hypothesis').$type<InterventionHypothesis>().notNull().default({}),
+    evidence: jsonb('evidence').$type<Record<string, unknown>>().notNull().default({}),
+    // pendiente | aprobada | descartada | hecha | caducada
+    status: varchar('status', { length: 12 }).notNull().default('pendiente'),
+    requestRef: varchar('request_ref', { length: 60 }),
+    requestUrl: text('request_url'),
+    requestError: text('request_error'),
+    decidedBy: varchar('decided_by', { length: 120 }),
+    decidedAt: timestamp('decided_at'),
+    rejectNote: text('reject_note'),
+    // reglas | ia | persona
+    origin: varchar('origin', { length: 10 }).notNull().default('reglas'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    unique('seo_plan_items_key_unique').on(table.projectId, table.planKey),
+    index('seo_plan_items_project_idx').on(table.projectId, table.status, table.priority),
+    check('seo_plan_items_status_check', sql`${table.status} IN ('pendiente', 'aprobada', 'descartada', 'hecha', 'caducada')`),
+    check('seo_plan_items_priority_check', sql`${table.priority} BETWEEN 1 AND 3`),
+    check('seo_plan_items_origin_check', sql`${table.origin} IN ('reglas', 'ia', 'persona')`),
+  ]
+);
+export type SeoPlanItem = typeof seoPlanItems.$inferSelect;
+
+// SEO: reseñas de la ficha de Google del cliente (es del cliente, no del proyecto: varios proyectos comparten ficha).
+// El borrador de respuesta siempre se aprueba antes de publicarse.
+export const seoReviews = pgTable(
+  'seo_reviews',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    clientAssetId: uuid('client_asset_id')
+      .notNull()
+      .references(() => clientAssets.id, { onDelete: 'cascade' }),
+    externalId: varchar('external_id', { length: 300 }).notNull(),
+    author: varchar('author', { length: 200 }),
+    rating: smallint('rating'),
+    text: text('text'),
+    publishedAt: timestamp('published_at'),
+    replyText: text('reply_text'),
+    replyAt: timestamp('reply_at'),
+    draft: text('draft'),
+    // sin_borrador | pendiente | aprobado | publicado | descartado
+    draftStatus: varchar('draft_status', { length: 12 }).notNull().default('sin_borrador'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    unique('seo_reviews_unique').on(table.clientAssetId, table.externalId),
+    index('seo_reviews_client_idx').on(table.clientId, table.publishedAt),
+    check('seo_reviews_draft_check', sql`${table.draftStatus} IN ('sin_borrador', 'pendiente', 'aprobado', 'publicado', 'descartado')`),
+    check('seo_reviews_rating_check', sql`${table.rating} IS NULL OR ${table.rating} BETWEEN 1 AND 5`),
+  ]
+);
+export type SeoReview = typeof seoReviews.$inferSelect;

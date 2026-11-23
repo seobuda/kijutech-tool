@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/page';
 import { saveClientContractAction, saveClientProfileAction } from '@/lib/core/client-actions';
+import { BUSINESS_TYPES } from '@/lib/core/business-types';
 import { areaClass, brandBtn, fieldHint, FormSection, MsgLine, useRun } from '../ui';
 import type { ClientView, ContractView } from './ficha-view';
 
@@ -20,6 +21,7 @@ export function EmpresaTab({ client, contract }: { client: ClientView; contract:
     sector: c.sector,
     summary: c.summary,
     logoUrl: c.logoUrl,
+    businessType: c.businessType,
     legalName: c.legalName,
     taxId: c.taxId,
     fiscalAddress: c.fiscalAddress,
@@ -105,7 +107,26 @@ export function EmpresaTab({ client, contract }: { client: ClientView; contract:
             {text('offerings', 'Qué vende u ofrece', 3)}
             {text('audience', 'Público objetivo', 3)}
           </div>
-          {line('area', 'Zona en la que trabaja', 'Ej.: Valencia y alrededores')}
+          <div className="grid gap-4 sm:grid-cols-2">
+            {line('area', 'Zona en la que trabaja', 'Ej.: Valencia y alrededores')}
+            <div className="space-y-1.5">
+              <Label htmlFor="businessType">Tipo de negocio (para Google)</Label>
+              <select
+                id="businessType"
+                className="h-9 w-full rounded-md border bg-background px-2 text-sm"
+                value={f.businessType}
+                onChange={(e) => set({ businessType: e.target.value })}
+              >
+                <option value="">Sin elegir</option>
+                {BUSINESS_TYPES.map((t) => (
+                  <option key={t.value} value={t.value}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+              <p className={fieldHint}>Lo usan los datos estructurados de la web y la medición de qué funciona por tipo de negocio.</p>
+            </div>
+          </div>
           {text('valueProposition', 'Propuesta de valor', 2, 'Qué le diferencia de la competencia')}
           {text('brandTone', 'Tono y marca', 2, 'Cómo habla la marca y cómo le gusta que le traten', 'Lo tienen en cuenta los textos y las respuestas a sus correos.')}
         </FormSection>

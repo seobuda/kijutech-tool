@@ -194,6 +194,9 @@ const CORE_TABLES = new Set([
   'project_assets', 'client_contact_subscriptions', 'client_messages', 'jobs', 'job_schedules',
   'gsc_properties', 'gsc_queries', 'gsc_pages', 'gsc_daily', 'gsc_daily_totals', 'gsc_daily_country', 'gsc_monthly',
   'crawl_runs', 'crawl_pages', 'crawl_links', 'findings',
+  // Hito 1 SEO (23 nov 2026, migración 0061, aprobado por Enric): registro de intervenciones (técnica + hipótesis de cada
+  // encargo), común a SEO, Estrategia y Ads. La bitácora de I+D va en kb_ (familia de la base de conocimiento).
+  'interventions',
   // Restos de la plantilla, pendientes de borrar con una migración (ESTADO §16).
   'teams', 'team_members', 'invitations', 'activity_logs'
 ]);
