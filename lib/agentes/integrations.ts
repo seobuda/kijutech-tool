@@ -14,6 +14,7 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { agtIntegrations, type AgtIntegration } from '@/lib/db/schema';
 import { decrypt, encrypt } from '@/lib/ai/encryption';
+import type { SerpResult } from '@/lib/core/capabilities';
 
 export type ProviderKey = 'dataforseo' | 'clarity' | 'google';
 
@@ -131,6 +132,31 @@ export async function dataForSeoSerp(tenantId: string, keyword: string, location
   const items = (r.tasks?.[0]?.result?.[0]?.items ?? []).filter((i) => i.type === 'organic').slice(0, depth);
   await markIntegration(tenantId, 'dataforseo', true);
   return [`SERP de «${keyword}» (${location}, ${language}) · coste ${r.cost ?? '?'} $`, ...items.map((i) => `${i.rank_absolute}. ${i.domain ?? ''} — ${i.title ?? ''} ${i.url ?? ''}`)].join('\n');
+}
+
+/** SERP estructurada (orgánico y paquete local) para la fuente de búsquedas del núcleo (registerSerpSource, Hito 2 SEO). */
+export async function dataForSeoSerpResult(tenantId: string, q: { keyword: string; location: string; language: string; depth?: number }): Promise<SerpResult> {
+  const creds = readCredentials(await getIntegration(tenantId, 'dataforseo'));
+  type Item = { type: string; rank_absolute: number; rank_group?: number; title?: string; url?: string; domain?: string; rating?: { value?: number; votes_count?: number } | null; items?: Item[] };
+  const r = await dfs<{ cost?: number; tasks?: { result?: { items?: Item[] }[] }[] }>(creds, '/serp/google/organic/live/advanced', [
+    { keyword: q.keyword.slice(0, 200), location_name: q.location, language_code: q.language, depth: Math.min(q.depth ?? 20, 50) }
+  ]);
+  const items = r.tasks?.[0]?.result?.[0]?.items ?? [];
+  await markIntegration(tenantId, 'dataforseo', true);
+  const host = (u: string | undefined) => {
+    try {
+      return u ? new URL(u).hostname.replace(/^www\./, '') : null;
+    } catch {
+      return null;
+    }
+  };
+  return {
+    organic: items.filter((i) => i.type === 'organic' && i.url).map((i) => ({ rank: i.rank_group ?? i.rank_absolute, domain: (i.domain ?? host(i.url) ?? '').replace(/^www\./, ''), url: i.url!, title: i.title ?? '' })),
+    localPack: items
+      .filter((i) => i.type === 'local_pack')
+      .map((i, n) => ({ rank: n + 1, title: i.title ?? '', domain: host(i.url) ?? (i.domain ? i.domain.replace(/^www\./, '') : null), rating: i.rating?.value ?? null, reviews: i.rating?.votes_count ?? null })),
+    costUsd: typeof r.cost === 'number' ? r.cost : null
+  };
 }
 
 export async function dataForSeoVolume(tenantId: string, keywords: string[], location: string, language: string): Promise<string> {

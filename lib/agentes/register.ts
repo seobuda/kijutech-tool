@@ -4,7 +4,7 @@ import 'server-only';
 //   - atiende los mensajes libres de Telegram y correo del dueño (agente principal);
 //   - publica sus herramientas: trabajos de subagentes e integraciones (DataForSEO, Clarity, Google);
 //   - programa los trabajos de los subagentes en el planificador.
-import { registerAssetDirectory, registerMetricSource, registerRetention, registerScheduled, registerTools, setAgentJobCreator, setInboundHandler, type AgentTool, type ToolContext } from '@/lib/core/capabilities';
+import { registerAssetDirectory, registerMetricSource, registerRetention, registerSerpSource, registerScheduled, registerTools, setAgentJobCreator, setInboundHandler, type AgentTool, type ToolContext } from '@/lib/core/capabilities';
 import { and, eq, lt } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { agtMessages } from '@/lib/db/schema';
@@ -17,6 +17,7 @@ import { registerTeamCapabilities } from '@/lib/agentes/team';
 import {
   clarityInsights,
   dataForSeoSerp,
+  dataForSeoSerpResult,
   dataForSeoVolume,
   ga4Properties,
   ga4PropertyList,
@@ -235,4 +236,6 @@ export function registerAgentesCapabilities(): void {
   registerAssetDirectory({ provider: 'google', kinds: ['search_console', 'analytics', 'business_profile'], isConnected: (t) => isConnected(t, 'google'), list: listGoogleDirectory });
   // Histórico diario para el módulo Rendimiento (lib/rendimiento/sync.ts), sin que Rendimiento sepa de Google.
   registerMetricSource(GOOGLE_METRIC_SOURCE);
+  // Resultados de Google por búsqueda (DataForSEO) para la competencia de SEO (Hito 2), sin que SEO sepa del proveedor.
+  registerSerpSource({ isConnected: (t) => isConnected(t, 'dataforseo'), search: dataForSeoSerpResult });
 }

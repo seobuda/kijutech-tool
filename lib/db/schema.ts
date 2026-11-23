@@ -250,13 +250,26 @@ export const clientCompetitors = pgTable(
     name: varchar('name', { length: 255 }).notNull(),
     domain: varchar('domain', { length: 255 }),
     notes: text('notes'),
-    // manual | agente
+    // manual | agente | serp (buscador orgánico) | local (paquete local de Google), Hito 2 SEO (0062)
     source: varchar('source', { length: 12 }).notNull().default('manual'),
+    // Hito 2 SEO (24 nov 2026, migración 0062): competencia por proyecto, propuesta por la búsqueda y confirmada por una
+    // persona. Lo manual o del agente entra confirmado; lo que detecta la búsqueda, propuesto.
+    projectId: uuid('project_id').references(() => projects.id, { onDelete: 'set null' }),
+    // propuesto | confirmado | descartado
+    status: varchar('status', { length: 12 }).notNull().default('confirmado'),
+    // directo | agregador (directorios, marketplaces) | medio
+    kind: varchar('kind', { length: 12 }).notNull().default('directo'),
+    // { consultas: [...], apariciones, posicionMedia, enPaqueteLocal, … }
+    evidence: jsonb('evidence').$type<Record<string, unknown>>().notNull().default({}),
+    lastSeen: timestamp('last_seen'),
     createdAt: timestamp('created_at').notNull().defaultNow(),
   },
   (table) => [
     index('client_competitors_client_idx').on(table.clientId),
-    check('client_competitors_source_check', sql`${table.source} IN ('manual', 'agente')`),
+    index('client_competitors_project_idx').on(table.projectId, table.status),
+    check('client_competitors_source_check', sql`${table.source} IN ('manual', 'agente', 'serp', 'local')`),
+    check('client_competitors_status_check', sql`${table.status} IN ('propuesto', 'confirmado', 'descartado')`),
+    check('client_competitors_kind_check', sql`${table.kind} IN ('directo', 'agregador', 'medio')`),
   ]
 );
 export type ClientCompetitor = typeof clientCompetitors.$inferSelect;
@@ -3067,6 +3080,8 @@ export const estAnalyses = pgTable(
     clientId: uuid('client_id')
       .notNull()
       .references(() => clients.id, { onDelete: 'cascade' }),
+    // Hito 2 SEO (0062): análisis de un proyecto concreto (null = del cliente entero, como hasta ahora).
+    projectId: uuid('project_id').references(() => projects.id, { onDelete: 'set null' }),
     trigger: varchar('trigger', { length: 12 }).notNull().default('programado'),
     reason: text('reason'),
     status: varchar('status', { length: 12 }).notNull().default('pendiente'),
@@ -3106,6 +3121,7 @@ export const estSuggestions = pgTable(
     analysisId: uuid('analysis_id')
       .notNull()
       .references(() => estAnalyses.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id').references(() => projects.id, { onDelete: 'set null' }),
     objectiveId: uuid('objective_id').references(() => estObjectives.id, { onDelete: 'set null' }),
     rank: smallint('rank').notNull(),
     title: varchar('title', { length: 200 }).notNull(),
@@ -3830,7 +3846,7 @@ export const seoDossierFacts = pgTable(
       .references(() => projects.id, { onDelete: 'cascade' }),
     field: varchar('field', { length: 40 }).notNull(),
     value: jsonb('value').notNull(),
-    // ficha | web | places | wayback | gsc | busqueda | persona | ia
+    // ficha | web | places | wayback | gsc | busqueda | persona | ia | cliente (respuesta del cliente a las 3 preguntas, 0062)
     source: varchar('source', { length: 20 }).notNull(),
     sourceRef: text('source_ref'),
     confidence: smallint('confidence').notNull().default(50),
@@ -3843,7 +3859,7 @@ export const seoDossierFacts = pgTable(
   },
   (table) => [
     unique('seo_dossier_facts_unique').on(table.projectId, table.field, table.source),
-    check('seo_dossier_facts_source_check', sql`${table.source} IN ('ficha', 'web', 'places', 'wayback', 'gsc', 'busqueda', 'persona', 'ia')`),
+    check('seo_dossier_facts_source_check', sql`${table.source} IN ('ficha', 'web', 'places', 'wayback', 'gsc', 'busqueda', 'persona', 'ia', 'cliente')`),
     check('seo_dossier_facts_status_check', sql`${table.status} IN ('provisional', 'confirmado', 'descartado')`),
     check('seo_dossier_facts_confidence_check', sql`${table.confidence} BETWEEN 0 AND 100`),
   ]
@@ -3934,3 +3950,79 @@ export const seoReviews = pgTable(
   ]
 );
 export type SeoReview = typeof seoReviews.$inferSelect;
+
+// =====================================================================================================================
+// HITO 2 SEO (24 nov 2026, migración 0062; docs/DISENO-TECNICO-HITO2.md, aprobado por Enric): mapa de palabras.
+// =====================================================================================================================
+
+// Un tema del mapa de palabras de un proyecto: consultas que Google trata como lo mismo (comparten página) o que se
+// parecen, con su URL (o null = hace falta una página nueva) y sus cifras de los últimos 90 días.
+export const seoTopics = pgTable(
+  'seo_topics',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    // Identifica el mismo tema entre ejecuciones (hash de sus consultas principales o de su URL).
+    topicKey: varchar('topic_key', { length: 80 }).notNull(),
+    name: varchar('name', { length: 200 }).notNull(),
+    // null = página nueva (nadie de la web lo cubre todavía)
+    url: text('url'),
+    // pagina (comparten URL en Search Console) | parecido (texto) | competencia (huecos)
+    origin: varchar('origin', { length: 12 }).notNull(),
+    // { clics, impresiones, posicion, ctr, tendenciaPct, volumen, consultas }
+    metrics: jsonb('metrics').$type<Record<string, number | null>>().notNull().default({}),
+    // activo | descartado
+    status: varchar('status', { length: 12 }).notNull().default('activo'),
+    namedBy: varchar('named_by', { length: 10 }).notNull().default('reglas'),
+    runAt: timestamp('run_at').notNull().defaultNow(),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    unique('seo_topics_key_unique').on(table.projectId, table.topicKey),
+    index('seo_topics_project_idx').on(table.projectId, table.status),
+    check('seo_topics_origin_check', sql`${table.origin} IN ('pagina', 'parecido', 'competencia')`),
+    check('seo_topics_status_check', sql`${table.status} IN ('activo', 'descartado')`),
+    check('seo_topics_named_check', sql`${table.namedBy} IN ('reglas', 'ia', 'persona')`),
+  ]
+);
+export type SeoTopic = typeof seoTopics.$inferSelect;
+
+export const seoTopicQueries = pgTable(
+  'seo_topic_queries',
+  {
+    topicId: uuid('topic_id')
+      .notNull()
+      .references(() => seoTopics.id, { onDelete: 'cascade' }),
+    queryHash: varchar('query_hash', { length: 40 }).notNull(),
+    query: text('query').notNull(),
+    // gsc | competencia | manual
+    source: varchar('source', { length: 12 }).notNull().default('gsc'),
+    clicks: integer('clicks').notNull().default(0),
+    impressions: integer('impressions').notNull().default(0),
+    position: doublePrecision('position'),
+    volume: integer('volume'),
+  },
+  (table) => [
+    primaryKey({ name: 'seo_topic_queries_pk', columns: [table.topicId, table.queryHash] }),
+    check('seo_topic_queries_source_check', sql`${table.source} IN ('gsc', 'competencia', 'manual')`),
+  ]
+);
+
+// Embeddings de textos cortos (consultas), guardados por texto y modelo: una consulta repetida entre proyectos o
+// ejecuciones no se vuelve a pagar. Sin tenant: el vector de un texto público es el mismo para todos.
+export const seoTextEmbeddings = pgTable(
+  'seo_text_embeddings',
+  {
+    textHash: varchar('text_hash', { length: 40 }).notNull(),
+    model: varchar('model', { length: 80 }).notNull(),
+    embedding: vector('embedding', { dimensions: 1536 }).notNull(),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ name: 'seo_text_embeddings_pk', columns: [table.textHash, table.model] })]
+);

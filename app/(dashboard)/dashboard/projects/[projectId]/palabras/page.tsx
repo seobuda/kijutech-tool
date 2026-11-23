@@ -1,0 +1,97 @@
+// Proyecto → Palabras (Hito 2 SEO, 24 nov 2026). El mapa de palabras sobre Search Console: cada tema con su página (o
+// «página nueva»), sus cifras de 90 días y su tendencia; la parte de clics anónimos y la canibalización.
+import Link from 'next/link';
+import { notFound } from 'next/navigation';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
+import { ArrowLeft, KeyRound } from 'lucide-react';
+import { db } from '@/lib/db/drizzle';
+import { clientCompetitors, clients, findings, jobs, projects, seoTopicQueries, seoTopics } from '@/lib/db/schema';
+import { checkPermission, requirePagePermission } from '@/lib/auth/permissions';
+import { PageContainer, PageHeader } from '@/components/ui/page';
+import { gscPropertiesForProject } from '@/lib/core/gsc';
+import { ProjectSeoNav } from '../seo-nav';
+import { PalabrasPanel, type TopicView } from './palabras-panel';
+
+export default async function PalabrasPage({ params }: { params: Promise<{ projectId: string }> }) {
+  const user = await requirePagePermission('view');
+  const { projectId } = await params;
+  if (!/^[0-9a-f-]{36}$/i.test(projectId)) notFound();
+  const [p] = await db
+    .select({ id: projects.id, name: projects.name, clientId: projects.clientId, clientName: clients.name })
+    .from(projects)
+    .leftJoin(clients, eq(clients.id, projects.clientId))
+    .where(and(eq(projects.id, projectId), eq(projects.tenantId, user.tenantId)))
+    .limit(1);
+  if (!p) notFound();
+  const [topics, props, canEdit, lastJobs, cannibal] = await Promise.all([
+    db.select().from(seoTopics).where(and(eq(seoTopics.projectId, projectId), eq(seoTopics.tenantId, user.tenantId))).orderBy(desc(sql`(${seoTopics.metrics}->>'impresiones')::float`)).limit(300),
+    gscPropertiesForProject(user.tenantId, projectId),
+    checkPermission('edit').then((r) => r.ok),
+    db
+      .select({ status: jobs.status, result: jobs.result, error: jobs.lastError, finishedAt: jobs.finishedAt })
+      .from(jobs)
+      .where(and(eq(jobs.tenantId, user.tenantId), eq(jobs.kind, 'seo.mapa.build'), eq(jobs.scopeId, projectId)))
+      .orderBy(desc(jobs.createdAt))
+      .limit(1),
+    db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(findings)
+      .where(and(eq(findings.projectId, projectId), eq(findings.source, 'seo.mapa:gsc'), eq(findings.status, 'abierto')))
+  ]);
+  const [comps, compJobs] = await Promise.all([
+    p.clientId
+      ? db.select().from(clientCompetitors).where(and(eq(clientCompetitors.clientId, p.clientId), eq(clientCompetitors.tenantId, user.tenantId))).orderBy(asc(clientCompetitors.status), desc(clientCompetitors.lastSeen))
+      : Promise.resolve([]),
+    db
+      .select({ status: jobs.status, result: jobs.result, error: jobs.lastError })
+      .from(jobs)
+      .where(and(eq(jobs.tenantId, user.tenantId), eq(jobs.kind, 'seo.competencia.find'), eq(jobs.scopeId, projectId)))
+      .orderBy(desc(jobs.createdAt))
+      .limit(1)
+  ]);
+  const ids = topics.map((t) => t.id);
+  const qs = ids.length
+    ? await db.select().from(seoTopicQueries).where(inArray(seoTopicQueries.topicId, ids)).orderBy(desc(seoTopicQueries.impressions), asc(seoTopicQueries.query))
+    : [];
+  const byTopic = new Map<string, typeof qs>();
+  for (const q of qs) byTopic.set(q.topicId, [...(byTopic.get(q.topicId) ?? []), q]);
+  const view: TopicView[] = topics.map((t) => ({
+    id: t.id,
+    name: t.name,
+    url: t.url,
+    origin: t.origin,
+    status: t.status,
+    metrics: t.metrics,
+    queries: (byTopic.get(t.id) ?? []).slice(0, 25).map((q) => ({ query: q.query, clicks: q.clicks, impressions: q.impressions, position: q.position }))
+  }));
+  const job = lastJobs[0];
+  return (
+    <PageContainer>
+      <Link href="/dashboard/projects" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+        <ArrowLeft className="size-3.5" />
+        Proyectos
+      </Link>
+      <PageHeader
+        icon={KeyRound}
+        title={`Palabras · ${p.name}`}
+        description={
+          <>
+            {p.clientName ? `Cliente: ${p.clientName}. ` : ''}
+            Las búsquedas por las que sale la web en Google (Search Console, 90 días), agrupadas en temas: cada uno con la página que Google le asigna o, si no hay ninguna clara, como «página nueva».
+          </>
+        }
+      />
+      <ProjectSeoNav projectId={projectId} active="palabras" />
+      <PalabrasPanel
+        projectId={projectId}
+        topics={view}
+        canEdit={canEdit}
+        hasGsc={props.length > 0}
+        job={job ? { status: job.status, result: (job.result ?? null) as Record<string, unknown> | null, error: job.error, finishedAt: job.finishedAt?.toISOString() ?? null } : null}
+        cannibal={Number(cannibal[0]?.n ?? 0)}
+        competitors={comps.map((c) => ({ id: c.id, name: c.name, domain: c.domain, status: c.status, kind: c.kind, source: c.source, evidence: c.evidence }))}
+        compJob={compJobs[0] ? { status: compJobs[0].status, result: (compJobs[0].result ?? null) as Record<string, unknown> | null, error: compJobs[0].error } : null}
+      />
+    </PageContainer>
+  );
+}

@@ -42,6 +42,7 @@ const RECIPES: Record<string, Recipe> = {
   enlazado_interno: { technique: 'enlazado_interno', title: (n) => `Enlazar ${n} página(s) que están aisladas o muy profundas`, how: 'Enlaza estas páginas desde el menú, el pie o páginas relacionadas, para que estén a 3 clics o menos de la portada.', minutesPerUrl: 5, baseHours: 1, metric: 'posicion', windowDays: 42 },
   schema_negocio: { technique: 'schema_negocio', title: () => 'Poner los datos estructurados del negocio', how: 'Pega el código JSON-LD de la pantalla Salud técnica (generado con la ficha del cliente) en todas las páginas y compruébalo con la prueba de resultados enriquecidos.', minutesPerUrl: 0, baseHours: 1, metric: 'impresiones', windowDays: 56 },
   schema_limpieza: { technique: 'schema_limpieza', title: (n) => `Quitar datos estructurados que no aportan en ${n} página(s)`, how: 'Quita el marcado de preguntas frecuentes (Google ya no lo muestra para casi ninguna web) y las valoraciones del propio negocio (no las admite).', minutesPerUrl: 3, baseHours: 0.5, metric: 'impresiones', windowDays: 56 },
+  canibalizacion_resuelta: { technique: 'canibalizacion_resuelta', title: (n) => `Resolver la canibalización de ${n} página(s)`, how: 'Para cada búsqueda afectada (en «Qué ha encontrado»), Google alterna entre varias páginas. Elige la buena: une el contenido de las demás en ella y redirígelas (301), o diferencia cada página para una intención distinta y enlaza a la buena con el texto de la búsqueda.', minutesPerUrl: 30, baseHours: 0.5, metric: 'posicion', windowDays: 42 },
   nap_coherente: { technique: 'nap_coherente', title: () => 'Unificar nombre, dirección y teléfono', how: 'El nombre, la dirección y el teléfono deben ser idénticos en la web (pie, contacto y datos estructurados), la ficha de Google y los directorios. Confirma con el cliente cuáles son los buenos, corrige la web y actualiza la ficha del cliente.', minutesPerUrl: 0, baseHours: 1, metric: 'impresiones', windowDays: 56 },
   nueva_landing_servicio: { technique: 'nueva_landing_servicio', title: (n) => `Crear la página de ${n} servicio(s)`, how: 'Cada servicio necesita su propia página: qué incluye, para quién, cómo se trabaja, zona, preguntas frecuentes y llamada a la acción. Enlázala desde el menú y desde la portada.', minutesPerUrl: 0, baseHours: 0, minutesPerFinding: 240, metric: 'impresiones', windowDays: 90 },
   indexacion_corregida: { technique: 'indexacion_corregida', title: (n) => `Revisar ${n} página(s) que salen en Google y no encontramos en la web`, how: 'Salen en Search Console pero el rastreo no llega a ellas: enlázalas si deben existir o redirígelas si sobran.', minutesPerUrl: 5, baseHours: 0.5, metric: 'impresiones', windowDays: 42 }
@@ -84,7 +85,8 @@ export const KIND_TECHNIQUE: Record<string, string> = {
   'seo.nap_phone_mismatch': 'nap_coherente',
   'seo.nap_phone_missing': 'nap_coherente',
   'seo.nap_address_mismatch': 'nap_coherente',
-  'seo.service_page_missing': 'nueva_landing_servicio'
+  'seo.service_page_missing': 'nueva_landing_servicio',
+  'seo.cannibalization': 'canibalizacion_resuelta'
 };
 
 const SEV_WEIGHT: Record<PlanSeverity, number> = { critico: 8, importante: 4, aviso: 2, info: 1 };

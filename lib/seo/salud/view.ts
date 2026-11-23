@@ -75,7 +75,7 @@ export async function getSaludView(tenantId: string, projectId: string, override
     listFindings(tenantId, projectId, { status: ['abierto', 'descartado', 'aceptado'], limit: 3000 }),
     gscPropertiesForProject(tenantId, projectId)
   ]);
-  const mine = findingsAll.filter((f) => f.source === SALUD_SOURCE || f.source === LOCAL_SOURCE);
+  const mine = findingsAll.filter((f) => f.source === SALUD_SOURCE || f.source === LOCAL_SOURCE || f.source === 'seo.mapa:gsc');
   // Estado real de la auditoría en la cola (antes se suponían 4 minutos tras el rastreo).
   const queue = await db
     .select({ kind: jobs.kind, status: jobs.status, error: jobs.lastError, payload: jobs.payload })

@@ -6,10 +6,18 @@ import { registerSaludAudit } from '@/lib/seo/salud/audit';
 import { registerDossierJobs } from '@/lib/seo/expediente/collect';
 import { registerPlanJobs } from '@/lib/seo/plan/plan';
 import { registerSeoWatch } from '@/lib/seo/id/watch';
+import { registerMapaJobs } from '@/lib/seo/mapa/mapa';
+import { registerCompetenciaJobs } from '@/lib/seo/competencia/competencia';
+import { registerProjectDossierProvider } from '@/lib/core/capabilities';
+import { seoProjectDossier } from '@/lib/seo/dossier-provider';
 
 export function registerSeoCapabilities(): void {
   registerSaludAudit();
   registerDossierJobs(); // expediente provisional (ficha, web, Wayback, Search Console)
   registerPlanJobs(); // plan de mejora por reglas, al terminar cada auditoría
-  registerSeoWatch(); // I+D fase A: fuentes oficiales de Google (cada 3 h) y resumen semanal
+  registerMapaJobs(); // Hito 2: mapa de palabras sobre Search Console
+  registerCompetenciaJobs(); // Hito 2: competencia en Google (DataForSEO por el núcleo)
+  registerSeoWatch();
+  // Hito 2: lo que SEO sabe de cada proyecto, para el expediente del estratega (por el núcleo).
+  registerProjectDossierProvider('seo', seoProjectDossier); // I+D fase A: fuentes oficiales de Google (cada 3 h) y resumen semanal
 }

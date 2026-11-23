@@ -1,4 +1,5 @@
-// Mapa Visual de SEO · proyecto: Salud técnica, expediente, plan de mejora e I+D (Hito 1, 23 nov 2026; nivel 3). Se registra en lib/architecture-map/registry.ts
+// Mapa Visual de SEO · proyecto: Salud técnica, expediente, plan de mejora e I+D (Hito 1, 23 nov 2026) y mapa de palabras,
+// competencia y expediente del estratega (Hito 2, 24 nov 2026; nivel 3). Se registra en lib/architecture-map/registry.ts
 // (detailMapId «seo_salud»). Diseño: docs/DISENO-MODULO-SEO.md §5 (fase 1, diagnóstico) y docs/DISENO-TECNICO-HITO1.md.
 import type { ProcessStep } from '@/lib/ai/clustering/pipeline';
 
@@ -113,6 +114,45 @@ export const SEO_SALUD_PROCESS_MAP: ProcessStep[] = [
     ai: 'Nada: comparación normalizada (teléfono internacional, código postal y población, nombre sin forma jurídica) y palabras del servicio en la URL, el título o el H1.',
     code: 'Lo que una persona confirma en el expediente manda sobre la ficha; lo descartado no cuenta. Fuente propia «seo.local:nap» (la auditoría del rastreo no la resuelve).',
     tables: ['findings', 'seo_dossier_facts', 'crawl_pages', 'clients']
+  },
+  {
+    id: 'seo-palabras',
+    lane: 'Mapa de palabras',
+    name: 'Mapa de palabras sobre Search Console',
+    description:
+      'Las búsquedas de 90 días agrupadas en temas: cada búsqueda va a la página que Google más le muestra (≥ 60 % de sus impresiones y posición ≤ 30); las que no tienen página clara se agrupan por significado (embeddings guardados y reutilizados entre proyectos) o, sin embeddings, por palabras, y piden «página nueva». Cifras, tendencia a 28 días, búsquedas de marca y parte de clics anónimos. Pantalla: Proyectos → Palabras.',
+    status: 'built',
+    file: 'lib/seo/mapa/mapa.ts',
+    when: 'Al terminar cada auditoría y a mano (trabajo «seo.mapa.build»).',
+    ai: 'Solo embeddings (si hay proveedor con saldo) para agrupar por significado; el nombre de cada tema es su búsqueda principal (sin IA de texto).',
+    code: 'Reglas puras en lib/seo/mapa/rules.ts. Un tema que una persona descarta o renombra lo sigue estando al rehacer el mapa. Canibalización: búsquedas con ≥ 2 páginas que se turnan el primer puesto semana a semana (≥ 2 cambios, top 20) → hallazgo «seo.cannibalization» (fuente «seo.mapa:gsc») y propuesta del plan.',
+    tables: ['seo_topics', 'seo_topic_queries', 'seo_text_embeddings', 'gsc_daily', 'gsc_queries', 'gsc_pages', 'gsc_daily_totals', 'findings']
+  },
+  {
+    id: 'seo-competencia',
+    lane: 'Competencia',
+    name: 'Competencia en Google',
+    description:
+      'Busca en Google (DataForSEO, por la fuente de búsquedas del núcleo que registra Agentes) hasta 15 búsquedas semilla: los temas que más se ven (sin los de marca) y «servicio + población» de la ficha. Propone los dominios que salen en al menos 3 búsquedas (2 si hay pocas) o 2 veces en el mapa; los directorios conocidos salen marcados. Se guardan en la lista de competidores del cliente (núcleo) como «propuesto»: una persona confirma.',
+    status: 'built',
+    file: 'lib/seo/competencia/competencia.ts',
+    when: 'A mano, desde Proyectos → Palabras (trabajo «seo.competencia.find», un intento: no repite gasto).',
+    ai: 'Nada: recuento y posición media por dominio (lib/seo/competencia/rules.ts).',
+    code: 'Lo confirmado o descartado nunca lo cambia la búsqueda; solo se ponen al día sus datos (búsquedas, posición, valoración en el mapa). Coste por búsqueda de DataForSEO, unos 0,002 $ [NV].',
+    tables: ['client_competitors', 'seo_topics', 'client_locations']
+  },
+  {
+    id: 'seo-estratega',
+    lane: 'Estratega',
+    name: 'Lo que sabe SEO, en el expediente del estratega',
+    description:
+      'El estratega (Estrategia) recibe por el núcleo (registerProjectDossierProvider) un resumen de cada proyecto SEO del cliente: hallazgos agrupados, propuestas del plan pendientes o en curso (para no repetirlas y contar sus horas), los temas principales del mapa de palabras y la competencia confirmada. Sus URLs y búsquedas se pueden citar como evidencia.',
+    status: 'built',
+    file: 'lib/seo/dossier-provider.ts',
+    when: 'Cada vez que el estratega analiza un cliente con proyectos SEO.',
+    ai: 'La del estratega (su prompt no cambia).',
+    code: 'Sin leer tablas de otro módulo: SEO registra el proveedor y Estrategia lo pide al núcleo. Va marcado como dato no fiable (lleva búsquedas de fuera).',
+    tables: ['findings', 'seo_plan_items', 'seo_topics', 'client_competitors']
   },
   {
     id: 'seo-resenas',

@@ -1,7 +1,7 @@
 # Diseño técnico del Hito 2 SEO: competencia, mapa de palabras, estratega por proyecto y 3 preguntas (para aprobar)
 
 **Fecha:** 2026-11-24 · **Depende de:** `docs/DISENO-MODULO-SEO.md` v2 (§5 fases 2-4, §10 Hito 2) y el Hito 1 en producción (migraciones 0060 y 0061).
-**Estado:** propuesta. No se ha tocado el esquema.
+**Estado:** aprobado por Enric el 24 nov. Primera parte construida (migración 0062): mapa de palabras, competencia y estratega (§1-§3). Pendiente: §4 (3 preguntas) y §5 (conectores).
 
 El Hito 2 tiene cuatro piezas:
 1. competencia;

@@ -551,3 +551,46 @@ export function registerClientReplyListener(key: string, fn: (r: ClientReply & {
 export function clientReplyListeners(): ((r: ClientReply & { messageId: string; projectId: string | null; kind: string }) => Promise<void>)[] {
   return [...(GM2.__kijuReplyListeners?.values() ?? [])];
 }
+
+// --- Lo que sabe un departamento de los proyectos de un cliente (Hito 2 SEO, 24 nov 2026) ----------------------------
+// El estratega (Estrategia) monta su expediente con lo que cada departamento sabe de los proyectos del cliente, sin leer
+// sus tablas: SEO registra aquí un proveedor que resume hallazgos, plan de mejora, temas y competencia de cada proyecto.
+// Las URLs y búsquedas que devuelve son citables como evidencia en las propuestas del estratega.
+export type ProjectDossierSection = { projectId: string; projectName: string; title: string; lines: string[]; urls?: string[]; queries?: string[] };
+export type ProjectDossierProvider = (tenantId: string, clientId: string) => Promise<ProjectDossierSection[]>;
+const GPD = globalThis as unknown as { __kijuProjectDossiers?: Map<string, ProjectDossierProvider> };
+export function registerProjectDossierProvider(key: string, fn: ProjectDossierProvider): void {
+  (GPD.__kijuProjectDossiers ??= new Map()).set(key, fn);
+}
+/** Todas las secciones de todos los proveedores (un fallo de uno no rompe a quien pregunta). */
+export async function projectDossierSections(tenantId: string, clientId: string): Promise<ProjectDossierSection[]> {
+  const out: ProjectDossierSection[] = [];
+  for (const [key, fn] of GPD.__kijuProjectDossiers ?? new Map<string, ProjectDossierProvider>()) {
+    try {
+      out.push(...(await fn(tenantId, clientId)));
+    } catch (e) {
+      console.error(`[núcleo] expediente de proyecto ${key}:`, e instanceof Error ? e.message : e);
+    }
+  }
+  return out;
+}
+
+// --- Resultados de Google por una búsqueda (Hito 2 SEO, 24 nov 2026) --------------------------------------------------
+// Para la competencia: quién sale en orgánico y en el paquete local por una búsqueda. Lo registra quien tenga un
+// proveedor (Agentes, con DataForSEO); SEO lo usa sin saber de DataForSEO.
+export type SerpResult = {
+  organic: { rank: number; domain: string; url: string; title: string }[];
+  localPack: { rank: number; title: string; domain: string | null; rating: number | null; reviews: number | null }[];
+  costUsd: number | null;
+};
+export type SerpSource = {
+  isConnected: (tenantId: string) => Promise<boolean>;
+  search: (tenantId: string, q: { keyword: string; location: string; language: string; depth?: number }) => Promise<SerpResult>;
+};
+const GSERP = globalThis as unknown as { __kijuSerpSource?: SerpSource | null };
+export function registerSerpSource(s: SerpSource): void {
+  GSERP.__kijuSerpSource = s;
+}
+export function serpSource(): SerpSource | null {
+  return GSERP.__kijuSerpSource ?? null;
+}
