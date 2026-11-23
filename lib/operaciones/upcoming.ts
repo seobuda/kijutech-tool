@@ -9,6 +9,7 @@ import { getOwnerTimezone, getScheduleMap, scheduleOrDefault, WEEKDAY_ISO, type 
 import { localParts, toMinutes } from '@/lib/operaciones/notifications';
 import { isWorkMoment, workingMinutesBetween } from '@/lib/operaciones/reminders';
 import { isQuietAt, nearestAllowedMinute, releaseAt } from '@/lib/operaciones/quiet';
+import { addDays, zonedToMs } from '@/lib/operaciones/deferred-notice';
 
 export type UpcomingItem = { at: number; who: string; kind: string; note: string | null; now: boolean };
 
@@ -23,24 +24,6 @@ const KIND_LABEL: Record<string, string> = {
   digest: 'Resumen de mi bandeja',
   reminder: 'Recordatorio',
   test: 'Prueba'
-};
-
-// Instante UTC de «fecha local + minutos» en una zona horaria.
-function zonedToMs(timezone: string, date: string, minutes: number): number {
-  const [y, m, d] = date.split('-').map(Number);
-  const guess = Date.UTC(y, m - 1, d, 0, minutes);
-  const offset = (ms: number) => {
-    const p = new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(ms));
-    const g = (t: string) => Number(p.find((x) => x.type === t)!.value);
-    return Date.UTC(g('year'), g('month') - 1, g('day'), g('hour'), g('minute')) - Math.floor(ms / 60000) * 60000;
-  };
-  const first = guess - offset(guess);
-  return guess - offset(first);
-}
-
-const addDays = (date: string, n: number) => {
-  const [y, m, d] = date.split('-').map(Number);
-  return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
 };
 
 export async function getUpcoming(tenantId: string, nowMs = Date.now()): Promise<UpcomingItem[]> {
@@ -226,7 +209,14 @@ export async function getUpcoming(tenantId: string, nowMs = Date.now()): Promise
       at,
       who: q.forName ?? '—',
       kind: KIND_LABEL[q.kind] ?? q.kind,
-      note: q.status === 'fallido' ? `reintento (${q.lastError ?? 'falló el envío'})` : q.nextAttemptAt.getTime() > nowMs + 2 * 60_000 ? 'retrasado por comida o silencio' : 'en cola',
+      note:
+        q.status === 'fallido'
+          ? `reintento (${q.lastError ?? 'falló el envío'})`
+          : (q.payload as { deferredTo?: string } | null)?.deferredTo
+            ? 'encargo para ese día: se avisa a su hora de entrada'
+            : q.nextAttemptAt.getTime() > nowMs + 2 * 60_000
+              ? 'retrasado por comida o silencio'
+              : 'en cola',
       now: q.nextAttemptAt.getTime() <= nowMs
     });
   }
