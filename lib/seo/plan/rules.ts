@@ -5,7 +5,7 @@
 // mucho BATCH páginas (las que más se ven primero): un encargo manejable; el resto sale en la siguiente.
 
 export type PlanSeverity = 'critico' | 'importante' | 'aviso' | 'info';
-export type PlanFinding = { id: string; kind: string; severity: PlanSeverity; url: string | null };
+export type PlanFinding = { id: string; kind: string; severity: PlanSeverity; url: string | null; query?: string | null };
 export type PlanHypothesis = { metric?: string; direction?: 'sube' | 'baja'; magnitudePct?: number; windowDays?: number };
 export type PlanDraft = {
   technique: string;
@@ -22,7 +22,7 @@ export type PlanDraft = {
 
 export const BATCH = 40;
 
-type Recipe = { technique: string; title: (n: number) => string; how: string; minutesPerUrl: number; baseHours: number; metric: string; windowDays: number };
+type Recipe = { technique: string; title: (n: number) => string; how: string; minutesPerUrl: number; baseHours: number; metric: string; windowDays: number; /** Para hallazgos sin URL que cuentan uno a uno (p. ej. un servicio sin página). */ minutesPerFinding?: number };
 
 /** Plantilla por técnica (lo que verá el equipo en el encargo). */
 const RECIPES: Record<string, Recipe> = {
@@ -42,6 +42,8 @@ const RECIPES: Record<string, Recipe> = {
   enlazado_interno: { technique: 'enlazado_interno', title: (n) => `Enlazar ${n} página(s) que están aisladas o muy profundas`, how: 'Enlaza estas páginas desde el menú, el pie o páginas relacionadas, para que estén a 3 clics o menos de la portada.', minutesPerUrl: 5, baseHours: 1, metric: 'posicion', windowDays: 42 },
   schema_negocio: { technique: 'schema_negocio', title: () => 'Poner los datos estructurados del negocio', how: 'Pega el código JSON-LD de la pantalla Salud técnica (generado con la ficha del cliente) en todas las páginas y compruébalo con la prueba de resultados enriquecidos.', minutesPerUrl: 0, baseHours: 1, metric: 'impresiones', windowDays: 56 },
   schema_limpieza: { technique: 'schema_limpieza', title: (n) => `Quitar datos estructurados que no aportan en ${n} página(s)`, how: 'Quita el marcado de preguntas frecuentes (Google ya no lo muestra para casi ninguna web) y las valoraciones del propio negocio (no las admite).', minutesPerUrl: 3, baseHours: 0.5, metric: 'impresiones', windowDays: 56 },
+  nap_coherente: { technique: 'nap_coherente', title: () => 'Unificar nombre, dirección y teléfono', how: 'El nombre, la dirección y el teléfono deben ser idénticos en la web (pie, contacto y datos estructurados), la ficha de Google y los directorios. Confirma con el cliente cuáles son los buenos, corrige la web y actualiza la ficha del cliente.', minutesPerUrl: 0, baseHours: 1, metric: 'impresiones', windowDays: 56 },
+  nueva_landing_servicio: { technique: 'nueva_landing_servicio', title: (n) => `Crear la página de ${n} servicio(s)`, how: 'Cada servicio necesita su propia página: qué incluye, para quién, cómo se trabaja, zona, preguntas frecuentes y llamada a la acción. Enlázala desde el menú y desde la portada.', minutesPerUrl: 0, baseHours: 0, minutesPerFinding: 240, metric: 'impresiones', windowDays: 90 },
   indexacion_corregida: { technique: 'indexacion_corregida', title: (n) => `Revisar ${n} página(s) que salen en Google y no encontramos en la web`, how: 'Salen en Search Console pero el rastreo no llega a ellas: enlázalas si deben existir o redirígelas si sobran.', minutesPerUrl: 5, baseHours: 0.5, metric: 'impresiones', windowDays: 42 }
 };
 
@@ -77,7 +79,12 @@ export const KIND_TECHNIQUE: Record<string, string> = {
   'seo.schema_fields_missing': 'schema_negocio',
   'seo.schema_faq': 'schema_limpieza',
   'seo.schema_self_reviews': 'schema_limpieza',
-  'seo.gsc_page_not_crawled': 'indexacion_corregida'
+  'seo.gsc_page_not_crawled': 'indexacion_corregida',
+  'seo.nap_name_mismatch': 'nap_coherente',
+  'seo.nap_phone_mismatch': 'nap_coherente',
+  'seo.nap_phone_missing': 'nap_coherente',
+  'seo.nap_address_mismatch': 'nap_coherente',
+  'seo.service_page_missing': 'nueva_landing_servicio'
 };
 
 const SEV_WEIGHT: Record<PlanSeverity, number> = { critico: 8, importante: 4, aviso: 2, info: 1 };
@@ -112,7 +119,9 @@ export function buildPlan(findings: PlanFinding[], impressions: Map<string, numb
     const score = round1(SEV_WEIGHT[severity] * (1 + Math.log10(1 + Math.max(pages, 1))) * (1 + Math.log10(1 + impr) / 2));
     // Lo importante nunca baja de media: un 404 en dos páginas no es «baja» aunque se vea poco.
     const priority: 1 | 2 | 3 = severity === 'critico' || score >= 14 ? 1 : severity === 'importante' || score >= 5 ? 2 : 3;
-    const estHours = Math.min(40, Math.max(0.5, round1(r.baseHours + (r.minutesPerUrl * pages) / 60)));
+    const perFinding = r.minutesPerFinding ? (r.minutesPerFinding * chosen.filter((f) => !f.url).length) / 60 : 0;
+    const estHours = Math.min(40, Math.max(0.5, round1(r.baseHours + (r.minutesPerUrl * pages) / 60 + perFinding)));
+    const queries = chosen.map((f) => f.query).filter((q): q is string => Boolean(q));
     const kinds: Record<string, number> = {};
     for (const f of chosen) kinds[f.kind] = (kinds[f.kind] ?? 0) + 1;
     const rest = ranked.length - batch.length;
@@ -121,13 +130,14 @@ export function buildPlan(findings: PlanFinding[], impressions: Map<string, numb
       '',
       '**Qué ha encontrado la auditoría:**',
       ...Object.entries(kinds).map(([k, n]) => `- ${labels[k] ?? k}: ${n}`),
+      ...(queries.length ? ['', '**Cuáles:**', ...queries.map((q) => `- ${q}`)] : []),
       ...(batch.length ? ['', `**Páginas (${batch.length}${rest > 0 ? ` de ${ranked.length}; el resto irá en la siguiente tanda` : ''}):**`, ...batch.map((u) => `- ${u}${urlImpr.get(u) ? ` (${urlImpr.get(u)} impresiones en 90 días)` : ''}`)] : []),
       '',
       'Cuando esté hecho, vuelve a pasar la auditoría (Proyectos → Salud): lo arreglado se cierra solo.'
     ];
     drafts.push({
       technique,
-      title: r.title(pages),
+      title: r.title(r.minutesPerFinding ? chosen.length : pages),
       description: lines.join('\n'),
       findingIds: chosen.map((f) => f.id),
       urls: batch,

@@ -8,12 +8,16 @@ import 'server-only';
 // Cada dato queda con su origen y su confianza (rules.ts). Si un dato cambia, vuelve a «provisional» para revisarlo.
 import { and, asc, eq, inArray, notInArray, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { clientAssets, clientLocations, clients, projects, seoDossierFacts } from '@/lib/db/schema';
+import { clientAssets, clientLocations, clients, crawlPages, projects, seoDossierFacts } from '@/lib/db/schema';
 import { enqueueJob, registerJobKind } from '@/lib/core/jobs';
+import { syncFindings } from '@/lib/core/findings';
 import { fetchPublic } from '@/lib/core/net';
 import { gscPropertiesForProject } from '@/lib/core/gsc';
 import { BUSINESS_TYPE_SET } from '@/lib/core/business-types';
-import { projectWebUrl } from '@/lib/seo/salud/audit';
+import { latestProjectCrawl, projectWebUrl } from '@/lib/seo/salud/audit';
+import { isIndexable, type AuditPage } from '@/lib/seo/salud/audit-rules';
+import { LOCAL_KINDS } from '@/lib/seo/salud/kinds';
+import { auditLocal, LOCAL_SOURCE, parseServices } from '@/lib/seo/local/rules';
 import { brandTokens, extractFromHome, host, isBrandQuery, normPhone, scoreFacts, type FactDraft } from '@/lib/seo/expediente/rules';
 
 const SOCIAL_KINDS = ['instagram', 'meta', 'linkedin', 'youtube', 'tiktok'];
@@ -108,7 +112,7 @@ async function gscFacts(tenantId: string, projectId: string, names: string[]): P
 }
 
 /** Recoge todo y pone al día el expediente del proyecto. */
-export async function collectDossier(tenantId: string, projectId: string): Promise<{ facts: number; sources: string[] }> {
+export async function collectDossier(tenantId: string, projectId: string): Promise<{ facts: number; sources: string[]; local?: { created: number; resolved: number } }> {
   const [p] = await db.select({ clientId: projects.clientId }).from(projects).where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId))).limit(1);
   if (!p?.clientId) return { facts: 0, sources: [] };
   const { facts: ficha, names } = await fichaFacts(tenantId, projectId, p.clientId);
@@ -149,7 +153,31 @@ export async function collectDossier(tenantId: string, projectId: string): Promi
       produced.length ? sql`(${seoDossierFacts.field} || ':' || ${seoDossierFacts.source}) NOT IN (${sql.join(produced.map((x) => sql`${x}`), sql`, `)})` : sql`true`
     )
   );
-  return { facts: scored.length, sources: [...new Set(scored.map((f) => f.source))] };
+  const local = await checkLocal(tenantId, projectId, p.clientId);
+  return { facts: scored.length, sources: [...new Set(scored.map((f) => f.source))], local };
+}
+
+/**
+ * Local sin Places: coherencia del nombre, dirección y teléfono entre la ficha y la web, y una página por servicio de la
+ * ficha (con el último rastreo terminado). Hallazgos con su propia fuente; al cambiar algo, el plan se rehace.
+ */
+async function checkLocal(tenantId: string, projectId: string, clientId: string): Promise<{ created: number; resolved: number }> {
+  const [[c], facts, crawl] = await Promise.all([
+    db.select({ offerings: clients.offerings, businessType: clients.businessType }).from(clients).where(and(eq(clients.id, clientId), eq(clients.tenantId, tenantId))).limit(1),
+    db.select({ field: seoDossierFacts.field, value: seoDossierFacts.value, source: seoDossierFacts.source, status: seoDossierFacts.status, sourceRef: seoDossierFacts.sourceRef }).from(seoDossierFacts).where(eq(seoDossierFacts.projectId, projectId)),
+    latestProjectCrawl(projectId)
+  ]);
+  let pages = null;
+  if (crawl?.status === 'hecho') {
+    const rows = (await db.select().from(crawlPages).where(eq(crawlPages.runId, crawl.id))) as unknown as AuditPage[];
+    pages = rows.map((r) => ({ url: r.url, title: r.title, h1: r.h1, indexable: isIndexable(r) }));
+  }
+  const found = auditLocal({ facts, services: parseServices(c?.offerings), pages, isOrganization: c?.businessType === 'Organization' });
+  const r = await syncFindings(tenantId, projectId, LOCAL_SOURCE, found, LOCAL_KINDS.map((k) => k.kind));
+  if (r.created || r.resolved) {
+    await enqueueJob({ tenantId, kind: 'seo.plan.regenerate', payload: { projectId }, scopeType: 'proyecto', scopeId: projectId, priority: 5, dedupeKey: `seo.plan:${projectId}` });
+  }
+  return { created: r.created, resolved: r.resolved };
 }
 
 export async function enqueueDossier(tenantId: string, projectId: string, delayMinutes = 0): Promise<void> {

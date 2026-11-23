@@ -2,14 +2,15 @@ import 'server-only';
 
 // SEO · Salud técnica: datos de la pantalla del proyecto (Hito 1, 23 nov 2026). Solo lectura, sin llamadas externas:
 // lo que pinta sale de la base (rastreo, hallazgos, propiedades de Search Console y ficha del cliente).
-import { and, asc, eq, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { clientAssets, clientLocations, clients, projectAssets, projects } from '@/lib/db/schema';
+import { clientAssets, clientLocations, clients, jobs, projectAssets, projects } from '@/lib/db/schema';
 import { listFindings, openFindingCounts, type Severity } from '@/lib/core/findings';
 import { gscPropertiesForProject } from '@/lib/core/gsc';
 import { latestProjectCrawl, projectWebUrl, SALUD_SOURCE } from '@/lib/seo/salud/audit';
 import { buildJsonLd, type JsonLdOutput } from '@/lib/seo/salud/jsonld';
 import { isBusinessType } from '@/lib/core/business-types';
+import { LOCAL_SOURCE } from '@/lib/seo/local/rules';
 
 const SOCIAL_KINDS = ['instagram', 'meta', 'linkedin', 'youtube', 'tiktok'];
 
@@ -33,6 +34,10 @@ export type SaludView = {
   savedBusinessType: string | null;
   web: string | null;
   crawl: { id: string; status: string; pagesDone: number; maxPages: number; createdAt: string; finishedAt: string | null; error: string | null } | null;
+  /** La auditoría (o el plan que va detrás) está en la cola o en marcha. */
+  auditPending: boolean;
+  /** Si el último trabajo de auditoría de este rastreo falló, su error (para decirlo en la pantalla). */
+  auditError: string | null;
   counts: Record<Severity, number>;
   open: SaludFinding[];
   decided: SaludFinding[];
@@ -70,7 +75,17 @@ export async function getSaludView(tenantId: string, projectId: string, override
     listFindings(tenantId, projectId, { status: ['abierto', 'descartado', 'aceptado'], limit: 3000 }),
     gscPropertiesForProject(tenantId, projectId)
   ]);
-  const mine = findingsAll.filter((f) => f.source === SALUD_SOURCE);
+  const mine = findingsAll.filter((f) => f.source === SALUD_SOURCE || f.source === LOCAL_SOURCE);
+  // Estado real de la auditoría en la cola (antes se suponían 4 minutos tras el rastreo).
+  const queue = await db
+    .select({ kind: jobs.kind, status: jobs.status, error: jobs.lastError, payload: jobs.payload })
+    .from(jobs)
+    .where(and(eq(jobs.tenantId, tenantId), eq(jobs.scopeId, projectId), inArray(jobs.kind, ['seo.salud.audit', 'seo.plan.regenerate'])))
+    .orderBy(desc(jobs.createdAt))
+    .limit(10);
+  const auditPending = queue.some((j) => j.status === 'pendiente' || j.status === 'en_curso');
+  const lastAudit = queue.find((j) => j.kind === 'seo.salud.audit' && (j.payload as { runId?: string } | null)?.runId === crawl?.id);
+  const auditError = !auditPending && lastAudit?.status === 'fallido' ? (lastAudit.error ?? 'La auditoría falló') : null;
 
   // Datos de la ficha para el JSON-LD: el cliente, sus locales y los perfiles sociales del alcance (o de la ficha).
   let jsonld: JsonLdOutput = { blocks: [], missing: ['El proyecto no tiene cliente: edítalo y elige el cliente.'] };
@@ -107,6 +122,8 @@ export async function getSaludView(tenantId: string, projectId: string, override
     crawl: crawl
       ? { id: crawl.id, status: crawl.status, pagesDone: crawl.pagesDone, maxPages: crawl.maxPages, createdAt: crawl.createdAt.toISOString(), finishedAt: crawl.finishedAt?.toISOString() ?? null, error: crawl.error }
       : null,
+    auditPending,
+    auditError,
     counts,
     open: mine.filter((f) => f.status === 'abierto').map(toFinding),
     decided: mine.filter((f) => f.status !== 'abierto').map(toFinding),

@@ -12,7 +12,8 @@ import { registerWorkSource, workSource, type WorkSource } from '@/lib/core/capa
 import { saveFeedItems, weekStart } from '@/lib/core/knowledge-feed';
 import { brandTokens, extractFromHome, identity, isBrandQuery, normPhone, sameName, scoreFacts, type FactDraft } from '@/lib/seo/expediente/rules';
 import { BATCH, buildPlan, KIND_TECHNIQUE, type PlanFinding } from '@/lib/seo/plan/rules';
-import { SALUD_KINDS } from '@/lib/seo/salud/kinds';
+import { SEO_KINDS } from '@/lib/seo/salud/kinds';
+import { auditLocal, parseServices, servicePage, type LocalFact, type LocalPage } from '@/lib/seo/local/rules';
 import { parseRss, parseStatusIncidents } from '@/lib/seo/id/sources';
 import { approvePlanItem, discardPlanItem, regeneratePlan, reopenPlanItem, PLAN_SOURCE } from '@/lib/seo/plan/plan';
 import { SALUD_SOURCE } from '@/lib/seo/salud/audit';
@@ -28,8 +29,8 @@ describe('Técnicas y tipos de negocio (núcleo)', () => {
     expect(techniqueFromCategory(null)).toBe('otra');
   });
 
-  it('cada tipo de hallazgo de Salud tiene técnica, y esa técnica existe', () => {
-    for (const k of SALUD_KINDS) {
+  it('cada tipo de hallazgo de SEO (Salud y local) tiene técnica, y esa técnica existe', () => {
+    for (const k of SEO_KINDS) {
       expect(KIND_TECHNIQUE[k.kind], k.kind).toBeTruthy();
       expect(TECHNIQUE_BY_KEY.has(KIND_TECHNIQUE[k.kind]), k.kind).toBe(true);
     }
@@ -149,6 +150,69 @@ describe('Plan de mejora: reglas', () => {
     expect(plan[0].priority).toBe(1);
     expect(thin.evidence.overHours).toBe(true);
     expect(plan[0].evidence.overHours).toBeUndefined();
+  });
+});
+
+describe('Local sin Places: NAP y páginas por servicio', () => {
+  const fact = (field: string, value: unknown, source: string, status = 'provisional'): LocalFact => ({ field, value, source, status });
+  const page = (url: string, title: string, indexable = true): LocalPage => ({ url, title, h1: [title], indexable });
+
+  it('saca los servicios del texto libre de la ficha', () => {
+    expect(parseServices('Reformas integrales, Reforma de baños; cocinas\n- Pintura\nTrabajamos en toda Valencia.')).toEqual(['Reformas integrales', 'Reforma de baños', 'cocinas', 'Pintura']);
+    expect(parseServices(null)).toEqual([]);
+  });
+
+  it('una página trata un servicio si tiene todas sus palabras (singular o plural) en la URL, el título o el H1', () => {
+    const pages = [page('https://w.es/reformas-de-banos/', 'Reformas de baños en Valencia'), page('https://w.es/cocina', 'Cocinas', false)];
+    expect(servicePage('Reforma de baños', pages)?.url).toBe('https://w.es/reformas-de-banos/');
+    expect(servicePage('Cocinas', pages)).toBeNull(); // la única que lo trata no es indexable
+    expect(servicePage('Pintura', pages)).toBeNull();
+  });
+
+  it('nombre, teléfono y dirección: solo avisa si dos fuentes dicen cosas distintas', () => {
+    const facts = [
+      fact('nombre', 'CM Ibérica', 'ficha'),
+      fact('nombre', 'New CM-Iberica', 'web'),
+      fact('telefono', '+34911111111', 'ficha'),
+      fact('telefono', '+34932296402', 'web'),
+      fact('direccion', { city: 'Madrid', postalCode: '28001' }, 'ficha'),
+      fact('direccion', { city: 'Barcelona', postalCode: '08001' }, 'web')
+    ];
+    const out = auditLocal({ facts, services: [], pages: [], isOrganization: false });
+    expect(out.map((f) => f.kind).sort()).toEqual(['seo.nap_address_mismatch', 'seo.nap_phone_mismatch']);
+    expect(out.find((f) => f.kind === 'seo.nap_phone_mismatch')?.evidence).toMatchObject({ ficha: '+34911111111', web: '+34932296402' });
+  });
+
+  it('lo que confirma una persona manda sobre la ficha, y lo descartado no cuenta', () => {
+    const facts = [fact('telefono', '+34911111111', 'ficha'), fact('telefono', '+34932296402', 'persona', 'confirmado'), fact('telefono', '+34932296402', 'web')];
+    expect(auditLocal({ facts, services: [], pages: [], isOrganization: false })).toEqual([]);
+    const descartado = [fact('telefono', '+34911111111', 'ficha'), fact('telefono', '+34932296402', 'web', 'descartado')];
+    expect(auditLocal({ facts: descartado, services: [], pages: [], isOrganization: false }).map((f) => f.kind)).toEqual(['seo.nap_phone_missing']);
+  });
+
+  it('servicios sin página, uno por servicio; sin rastreo no se comprueba', () => {
+    const pages = [page('https://w.es/pintura', 'Pintura de interiores')];
+    const out = auditLocal({ facts: [fact('telefono', '+34932296402', 'web')], services: ['Pintura', 'Reforma de baños', 'Cocinas'], pages, isOrganization: false });
+    expect(out.map((f) => f.query)).toEqual(['Reforma de baños', 'Cocinas']);
+    expect(new Set(out.map((f) => f.dedupeKey)).size).toBe(2);
+    expect(auditLocal({ facts: [], services: ['Cocinas'], pages: null, isOrganization: false })).toEqual([]);
+  });
+
+  it('el plan agrupa los servicios sin página en una propuesta con 4 h por servicio', () => {
+    const plan = buildPlan(
+      [
+        { id: 'a', kind: 'seo.service_page_missing', severity: 'aviso', url: null, query: 'Cocinas' },
+        { id: 'b', kind: 'seo.service_page_missing', severity: 'aviso', url: null, query: 'Baños' },
+        { id: 'c', kind: 'seo.nap_phone_mismatch', severity: 'importante', url: null }
+      ],
+      new Map(),
+      null
+    );
+    const svc = plan.find((p) => p.technique === 'nueva_landing_servicio')!;
+    expect(svc.title).toBe('Crear la página de 2 servicio(s)');
+    expect(svc.estHours).toBe(8);
+    expect(svc.description).toContain('- Cocinas');
+    expect(plan.find((p) => p.technique === 'nap_coherente')!.priority).toBe(2);
   });
 });
 

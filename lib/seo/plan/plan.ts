@@ -15,11 +15,12 @@ import { linkFindingToRequest } from '@/lib/core/findings';
 import { gscPropertiesForProject } from '@/lib/core/gsc';
 import { cancelIntervention, interventionsBySource, recordIntervention } from '@/lib/core/interventions';
 import { SALUD_SOURCE } from '@/lib/seo/salud/audit';
-import { SALUD_KINDS } from '@/lib/seo/salud/kinds';
+import { SEO_KINDS } from '@/lib/seo/salud/kinds';
+import { LOCAL_SOURCE } from '@/lib/seo/local/rules';
 import { buildPlan, type PlanFinding, type PlanSeverity } from '@/lib/seo/plan/rules';
 
 export const PLAN_SOURCE = 'seo.plan';
-const LABELS = Object.fromEntries(SALUD_KINDS.map((k) => [k.kind, k.title]));
+const LABELS = Object.fromEntries(SEO_KINDS.map((k) => [k.kind, k.title]));
 
 export class PlanError extends Error {
   constructor(public userMessage: string) {
@@ -56,9 +57,9 @@ export async function regeneratePlan(tenantId: string, projectId: string): Promi
   await markDone(tenantId, projectId);
   const [open, items, impressions] = await Promise.all([
     db
-      .select({ id: findings.id, kind: findings.kind, severity: findings.severity, url: findings.url })
+      .select({ id: findings.id, kind: findings.kind, severity: findings.severity, url: findings.url, query: findings.query })
       .from(findings)
-      .where(and(eq(findings.projectId, projectId), eq(findings.tenantId, tenantId), eq(findings.source, SALUD_SOURCE), eq(findings.status, 'abierto'))),
+      .where(and(eq(findings.projectId, projectId), eq(findings.tenantId, tenantId), inArray(findings.source, [SALUD_SOURCE, LOCAL_SOURCE]), eq(findings.status, 'abierto'))),
     db.select().from(seoPlanItems).where(and(eq(seoPlanItems.projectId, projectId), eq(seoPlanItems.tenantId, tenantId))),
     impressionsByUrl(tenantId, projectId)
   ]);
