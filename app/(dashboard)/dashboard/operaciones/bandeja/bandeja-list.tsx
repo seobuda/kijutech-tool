@@ -6,6 +6,7 @@ import { Bot, Check, Clock, CornerDownLeft, ExternalLink, Eye, Inbox, MessageSqu
 import { Button } from '@/components/ui/button';
 import { Badge, EmptyState } from '@/components/ui/page';
 import { cn } from '@/lib/utils';
+import { useFlash } from '@/components/ui/flash';
 import {
   inboxAccept,
   inboxAnswer,
@@ -103,8 +104,9 @@ function ItemCard({ item }: { item: BandejaItem }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const areaId = useId();
+  const flash = useFlash();
 
-  const run = (fn: () => Promise<{ ok: boolean; error?: string }>) =>
+  const run = (fn: () => Promise<{ ok: boolean; error?: string }>, okText: string) =>
     startTransition(async () => {
       setError(null);
       const res = await fn();
@@ -112,6 +114,7 @@ function ItemCard({ item }: { item: BandejaItem }) {
       else {
         setMode('idle');
         setText('');
+        flash(okText);
       }
       router.refresh();
     });
@@ -227,7 +230,7 @@ function ItemCard({ item }: { item: BandejaItem }) {
                   size="sm"
                   className="bg-brand text-white hover:bg-brand/90"
                   disabled={pending}
-                  onClick={() => run(() => inboxAccept(item.id))}
+                  onClick={() => run(() => inboxAccept(item.id), `Aceptado: «${item.title}»`)}
                 >
                   <Check aria-hidden />
                   Aceptar
@@ -243,7 +246,7 @@ function ItemCard({ item }: { item: BandejaItem }) {
                   size="sm"
                   className="bg-brand text-white hover:bg-brand/90"
                   disabled={pending}
-                  onClick={() => run(() => inboxApproveProposal(item.proposal!.actionId))}
+                  onClick={() => run(() => inboxApproveProposal(item.proposal!.actionId), `Respuesta enviada a ${item.person}`)}
                 >
                   <Check aria-hidden />
                   Enviar la propuesta
@@ -257,7 +260,7 @@ function ItemCard({ item }: { item: BandejaItem }) {
                   variant="ghost"
                   className="text-muted-foreground"
                   disabled={pending}
-                  onClick={() => run(() => inboxRejectProposal(item.proposal!.actionId))}
+                  onClick={() => run(() => inboxRejectProposal(item.proposal!.actionId), 'Propuesta descartada')}
                 >
                   Descartar propuesta
                 </Button>
@@ -293,7 +296,10 @@ function ItemCard({ item }: { item: BandejaItem }) {
                 className="bg-brand text-white hover:bg-brand/90"
                 disabled={pending || !text.trim()}
                 onClick={() =>
-                  run(() => (mode === 'return' ? inboxReturn(item.id, text) : inboxAnswer(item.id, text)))
+                  run(
+                    () => (mode === 'return' ? inboxReturn(item.id, text) : inboxAnswer(item.id, text)),
+                    mode === 'return' ? `Devuelto a ${item.person}` : `Respuesta enviada a ${item.person}`
+                  )
                 }
               >
                 {mode === 'return' ? 'Devolver con este motivo' : 'Enviar respuesta'}

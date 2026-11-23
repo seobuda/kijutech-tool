@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { AlertTriangle, Check, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { useFlash } from '@/components/ui/flash';
 
 export const focusRing = 'focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-brand/40 focus-visible:border-brand';
 export const areaClass = cn('w-full rounded-md border border-input bg-card px-3 py-2 text-sm shadow-xs placeholder:text-muted-foreground', focusRing);
@@ -83,6 +84,7 @@ export function useRun() {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<Msg>(null);
+  const flash = useFlash();
   const run = (fn: () => Promise<Result>, okText: string, after?: () => void) =>
     start(async () => {
       setMsg(null);
@@ -92,6 +94,7 @@ export function useRun() {
         return;
       }
       setMsg({ type: 'ok', text: okText });
+      flash(okText);
       after?.();
       router.refresh();
     });

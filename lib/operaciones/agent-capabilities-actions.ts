@@ -8,6 +8,7 @@ import { requirePermission } from '@/lib/auth/permissions';
 import { publicError } from '@/lib/errors';
 import { decideAgentTool, setToolAutonomy } from '@/lib/operaciones/agent-capabilities';
 import { requireInboxOwner } from '@/lib/operaciones/inbox-owner';
+import { closeDecidedNotice } from '@/lib/operaciones/notifications';
 import { logEvent } from '@/lib/operaciones/events';
 
 export async function setToolAutonomyAction(tool: string, level: string): Promise<{ ok: true } | { ok: false; error: string }> {
@@ -37,6 +38,9 @@ export async function decideAgentToolAction(actionId: string, approve: boolean):
     revalidatePath('/dashboard/operaciones/agente');
     // Sin «line» la propuesta ya no existía o ya estaba decidida: se dice tal cual.
     if (!r.line) return { ok: false, error: r.answer };
+    // Si la propuesta llegó como aviso aparte, ese mensaje pierde sus botones. (La que va dentro de una conversación
+    // con el agente no guarda su mensaje: ahí el botón responde «ya estaba decidida».)
+    await closeDecidedNotice(user.tenantId, `at:prop:${id.data}`, approve ? '✅ Hecho desde la web' : '✖️ Descartada en la web');
     const text = r.line.replace(/^\S+\s/, '');
     // Aprobada pero la acción falló al hacerse (⚠️): se enseña como error, con lo que dijo la herramienta.
     if (r.line.startsWith('⚠️')) return { ok: false, error: `Aprobada, pero no se pudo hacer: ${text}` };

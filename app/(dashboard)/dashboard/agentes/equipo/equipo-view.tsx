@@ -153,17 +153,17 @@ export function QuestionCard({ q, as: Tag = 'li' }: { q: QuestionRow; as?: 'li' 
         <div className="space-y-2 border-t pt-3">
           <textarea className={cn(areaClass, 'min-h-20')} value={answer} onChange={(e) => setAnswer(e.target.value)} placeholder={`Tu respuesta para ${q.askedBy} (le llega tal cual por Telegram)`} maxLength={6000} />
           <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" className={brandBtn} disabled={pending || !answer.trim()} onClick={() => run(() => answerQuestionAction(q.id, answer), 'Enviada.', () => setAnswer(''))}>
+            <Button size="sm" className={brandBtn} disabled={pending || !answer.trim()} onClick={() => run(() => answerQuestionAction(q.id, answer), `Respuesta enviada a ${q.askedBy}`, () => setAnswer(''))}>
               <MessageSquareReply aria-hidden />
               Enviar mi respuesta
             </Button>
             {q.aiAnswer && (
-              <Button size="sm" variant="outline" disabled={pending} onClick={() => run(() => approveQuestionAction(q.id), 'Enviada la propuesta.')}>
+              <Button size="sm" variant="outline" disabled={pending} onClick={() => run(() => approveQuestionAction(q.id), `Propuesta enviada a ${q.askedBy}`)}>
                 <Send aria-hidden />
                 Enviar la propuesta
               </Button>
             )}
-            <Button size="sm" variant="ghost" disabled={pending} onClick={() => run(() => discardQuestionAction(q.id), 'Descartada.')}>
+            <Button size="sm" variant="ghost" disabled={pending} onClick={() => run(() => discardQuestionAction(q.id), `Duda de ${q.askedBy} marcada para hablarla en persona`)}>
               <Trash2 aria-hidden />
               Lo hablo yo con la persona
             </Button>

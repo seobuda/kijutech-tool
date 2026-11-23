@@ -64,9 +64,9 @@ export function EmailDecisionCard({ c }: { c: EmailCard }) {
         proposal={c.proposal}
         disabled={pending}
         onApprove={(text, create) =>
-          run(() => approveEmailReplyAction(c.actionId, text, create), create && doesWork ? 'Hecho: aprobado y aplicado.' : 'Respuesta enviada.')
+          run(() => approveEmailReplyAction(c.actionId, text, create), create && doesWork ? `Hecho: «${c.subject}» aprobado y aplicado` : `Respuesta enviada a ${c.who}`)
         }
-        onReject={() => run(() => rejectEmailReplyAction(c.actionId), 'Respuesta descartada.')}
+        onReject={() => run(() => rejectEmailReplyAction(c.actionId), `Respuesta a «${c.subject}» descartada`)}
       />
       <MsgLine msg={msg} className="mt-2" />
     </article>
@@ -78,7 +78,8 @@ export type ToolCard = { id: string; summary: string; agent: string | null; requ
 export function ToolDecisionCard({ c }: { c: ToolCard }) {
   const { run, pending, msg } = useRun();
   // Al decidir, la página se refresca y la propuesta desaparece; si falla, se queda con el motivo.
-  const decide = (approve: boolean) => run(() => decideAgentToolAction(c.id, approve), approve ? 'Hecho.' : 'Descartada.');
+  const short = c.summary.length > 80 ? `${c.summary.slice(0, 79)}…` : c.summary;
+  const decide = (approve: boolean) => run(() => decideAgentToolAction(c.id, approve), approve ? `Hecho: ${short}` : `Descartada: ${short}`);
   return (
     <li className="space-y-3 rounded-xl border bg-card p-4 shadow-xs">
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
