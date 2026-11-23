@@ -4,16 +4,16 @@
 // módulo. Lo urgente va primero y, dentro, lo que más espera. Cada elemento lleva su departamento para filtrar.
 // KINDS es la única definición de los tipos: la usan Para ti, el Inicio («Lo que espera de ti») y el contador de la barra.
 import 'server-only';
-import { and, asc, eq, inArray } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { agtDepartments, agtTeamQuestions, clientMemory, clients, estSuggestions, kbArticles, opsAgentActions, opsInboundEmails, type AgtTeamQuestion } from '@/lib/db/schema';
+import { agtDepartments, agtTeamQuestions, clientMemory, clients, estSuggestions, kbArticles, opsAgentActions, opsInboundEmails, projects, seoPlanItems, type AgtTeamQuestion } from '@/lib/db/schema';
 import { listErrorGroups } from '@/lib/core/errors';
 import { getInbox, type InboxItem } from '@/lib/operaciones/inbox';
 import { getPendingEmailProposals, type PendingEmail } from '@/lib/operaciones/owner-queue';
 import { pendingEmailProposal } from '@/lib/operaciones/email-agent';
 import { pendingClientMessages, type PendingMessage } from '@/lib/core/comms';
 
-export type KindKey = 'bloqueos' | 'revisiones' | 'correos' | 'mensajes' | 'dudas' | 'agente' | 'estratega' | 'fichas' | 'base' | 'errores';
+export type KindKey = 'bloqueos' | 'revisiones' | 'correos' | 'mensajes' | 'dudas' | 'agente' | 'estratega' | 'seo' | 'fichas' | 'base' | 'errores';
 export type DeptKey = 'operaciones' | 'cuentas' | 'sistema';
 
 export const KINDS: Record<KindKey, { label: string; dept: DeptKey; urgent: boolean; ownerOnly: boolean }> = {
@@ -26,6 +26,8 @@ export const KINDS: Record<KindKey, { label: string; dept: DeptKey; urgent: bool
   mensajes: { label: 'Correos a clientes por aprobar', dept: 'operaciones', urgent: false, ownerOnly: false },
   agente: { label: 'Propuestas del agente', dept: 'operaciones', urgent: false, ownerOnly: true },
   estratega: { label: 'Propuestas del estratega', dept: 'cuentas', urgent: false, ownerOnly: false },
+  // Hito 1 SEO (23 nov 2026): propuestas del plan de mejora de un proyecto (una entrada por proyecto).
+  seo: { label: 'Plan de mejora SEO por aprobar', dept: 'cuentas', urgent: false, ownerOnly: false },
   fichas: { label: 'Cambios propuestos en fichas', dept: 'cuentas', urgent: false, ownerOnly: false },
   base: { label: 'Entradas de la base por revisar', dept: 'operaciones', urgent: false, ownerOnly: false }
 };
@@ -59,7 +61,7 @@ const clip = (s: string | null | undefined, n = 160) => (s ? (s.length > n ? `${
 
 /** Todo lo que espera una decisión, ya ordenado (urgente primero; dentro, lo que más espera). */
 export async function getParaTi(tenantId: string): Promise<ParaTi> {
-  const [inbox, emails, agentRows, questions, kb, suggestions, memory, errors, deptRows, outgoing] = await Promise.all([
+  const [inbox, emails, agentRows, questions, kb, suggestions, memory, errors, deptRows, outgoing, seoPlans] = await Promise.all([
     getInbox(tenantId),
     getPendingEmailProposals(tenantId),
     db
@@ -97,7 +99,15 @@ export async function getParaTi(tenantId: string): Promise<ParaTi> {
       .limit(LIMIT),
     listErrorGroups(tenantId, { status: 'abiertos', severity: 'critico' }, LIMIT),
     db.select({ key: agtDepartments.key, name: agtDepartments.name }).from(agtDepartments).where(eq(agtDepartments.tenantId, tenantId)),
-    pendingClientMessages(tenantId, LIMIT)
+    pendingClientMessages(tenantId, LIMIT),
+    db
+      .select({ projectId: seoPlanItems.projectId, project: projects.name, client: clients.name, n: sql<number>`count(*)::int`, since: sql<Date>`min(${seoPlanItems.createdAt})`, hours: sql<number>`sum(${seoPlanItems.estHours})::float` })
+      .from(seoPlanItems)
+      .innerJoin(projects, eq(projects.id, seoPlanItems.projectId))
+      .leftJoin(clients, eq(clients.id, projects.clientId))
+      .where(and(eq(seoPlanItems.tenantId, tenantId), eq(seoPlanItems.status, 'pendiente')))
+      .groupBy(seoPlanItems.projectId, projects.name, clients.name)
+      .limit(LIMIT)
   ]);
 
   const entries: ParaTiEntry[] = [];
@@ -118,6 +128,7 @@ export async function getParaTi(tenantId: string): Promise<ParaTi> {
   }
   for (const k of kb) push({ key: `k-${k.id}`, kind: 'base', title: k.title, detail: null, clientName: null, since: k.createdAt, href: `/dashboard/conocimiento/${k.id}` });
   for (const s of suggestions) push({ key: `s-${s.id}`, kind: 'estratega', title: s.title, detail: null, clientName: s.client, since: s.createdAt, href: `/dashboard/clientes/${s.clientId}?tab=estrategia` });
+  for (const p of seoPlans) push({ key: `p-${p.projectId}`, kind: 'seo', title: `${Number(p.n)} propuesta(s) para ${p.project}`, detail: `${Number(p.hours).toLocaleString('es-ES', { maximumFractionDigits: 1 })} h estimadas`, clientName: p.client, since: new Date(p.since), href: `/dashboard/projects/${p.projectId}/plan` });
   for (const m of memory) push({ key: `m-${m.id}`, kind: 'fichas', title: clip(m.text, 140) ?? '', detail: m.kind, clientName: m.client, since: m.createdAt, href: `/dashboard/clientes/${m.clientId}?tab=memoria` });
   for (const g of errors) push({ key: `e-${g.id}`, kind: 'errores', title: g.title, detail: `${g.source}${g.area ? ` · ${g.area}` : ''} · ${g.occurrences} vez/veces`, clientName: null, since: g.firstSeen, href: `/dashboard/errores?id=${g.id}` });
 

@@ -121,19 +121,29 @@ if (!/registerScheduled\('base de conocimiento'/.test(kbCode)) fail('La tarea de
 // (alcance del proyecto, cola de trabajos, Search Console en detalle, rastreador y hallazgos) y sus tipos de trabajo.
 const pltSrc = read('lib/core/platform-process-map.ts');
 for (const f of uniq(all(/file: '([^']+)'/g, pltSrc))) if (!fs.existsSync(path.join(root, f))) fail(`El mapa de Plataforma cita un archivo que no existe: ${f}`);
-const pltTables = uniq(all(/pgTable\(\s*'((?:project_assets|jobs|job_schedules|gsc_\w+|crawl_\w+|findings|client_messages))'/g, schemaSrc));
+const pltTables = uniq(all(/pgTable\(\s*'((?:project_assets|jobs|job_schedules|gsc_\w+|crawl_\w+|findings|client_messages|interventions))'/g, schemaSrc));
 for (const t of pltTables) if (!pltSrc.includes(`'${t}'`)) fail(`La tabla «${t}» (plataforma) no aparece en el mapa de Plataforma.`);
 for (const k of uniq(all(/registerJobKind\(\{\s*kind: '([a-z.]+)'/g, ['lib/core/comms.ts', 'lib/core/gsc.ts', 'lib/core/crawler.ts'].map(read).join(' ')))) {
   const prefix = k.split('.')[0];
   const lanes = { comms: 'plt-comms', gsc: 'plt-gsc', crawl: 'plt-rastreo' };
   if (!lanes[prefix] || !pltSrc.includes(`id: '${lanes[prefix]}'`)) fail(`El trabajo «${k}» de la cola no tiene su paso en el mapa de Plataforma.`);
 }
+// Registro de intervenciones (Hito 1, migración 0061): su trabajo horario tiene su paso en el mapa de Plataforma.
+if (/registerJobKind\(\{ kind: INTERVENTIONS_SYNC/.test(read('lib/core/interventions.ts')) && !pltSrc.includes("id: 'plt-intervenciones'")) fail('El trabajo «core.interventions.sync» no tiene su paso en el mapa de Plataforma.');
 
 // 5j. SEO · Salud técnica (Hito 1, lib/seo/salud/process-map.ts, 23 nov 2026): archivos y tipos de trabajo del módulo SEO.
 const saludSrc = read('lib/seo/salud/process-map.ts');
 for (const f of uniq(all(/file: '([^']+)'/g, saludSrc))) if (!fs.existsSync(path.join(root, f))) fail(`El mapa de Salud técnica cita un archivo que no existe: ${f}`);
-for (const k of uniq(all(/kind: '(seo\.[a-z.]+)',\s*timeoutS/g, read('lib/seo/salud/audit.ts')))) {
-  if (!saludSrc.includes(`«${k}»`)) fail(`El trabajo «${k}» de la cola no aparece en el mapa de Salud técnica.`);
+// Hito 1 completo (migración 0061): también los trabajos del expediente, el plan y la vigilancia de I+D, y las tablas
+// seo_* nuevas (las del SEO antiguo, seo_stage_progress y compañía, tienen su propio mapa).
+const seoJobSrc = ['lib/seo/salud/audit.ts', 'lib/seo/expediente/collect.ts', 'lib/seo/plan/plan.ts', 'lib/seo/id/watch.ts'].map(read).join(' ');
+const seoJobKinds = [...all(/kind: '(seo\.[a-z.]+)',\s*timeoutS/g, seoJobSrc), ...all(/export const ID_\w+ = '(seo\.[a-z.]+)'/g, seoJobSrc)];
+for (const k of uniq(seoJobKinds)) {
+  if (!saludSrc.includes(`«${k}»`)) fail(`El trabajo «${k}» de la cola no aparece en el mapa de SEO (Salud técnica).`);
+}
+for (const t of ['seo_dossier_facts', 'seo_plan_items', 'seo_reviews']) {
+  if (!schemaSrc.includes(`'${t}'`)) fail(`Falta la tabla «${t}» en el esquema.`);
+  else if (!saludSrc.includes(`'${t}'`)) fail(`La tabla «${t}» (SEO v2) no aparece en el mapa de SEO (Salud técnica).`);
 }
 
 function schemaSrcForAgt() {

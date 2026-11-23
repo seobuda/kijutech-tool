@@ -33,6 +33,7 @@ export type ClientView = {
   sector: string;
   summary: string;
   logoUrl: string;
+  businessType: string;
   legalName: string;
   taxId: string;
   fiscalAddress: string;

@@ -6,7 +6,8 @@ import { ArrowLeft, Stethoscope } from 'lucide-react';
 import { checkPermission, requirePagePermission } from '@/lib/auth/permissions';
 import { PageContainer, PageHeader } from '@/components/ui/page';
 import { getSaludView } from '@/lib/seo/salud/view';
-import { BUSINESS_TYPES } from '@/lib/seo/salud/jsonld';
+import { BUSINESS_TYPES } from '@/lib/core/business-types';
+import { ProjectSeoNav } from '../seo-nav';
 import { SaludPanel } from './salud-panel';
 
 export default async function SaludPage({ params, searchParams }: { params: Promise<{ projectId: string }>; searchParams: Promise<{ tipo?: string }> }) {
@@ -14,8 +15,7 @@ export default async function SaludPage({ params, searchParams }: { params: Prom
   const { projectId } = await params;
   const { tipo } = await searchParams;
   if (!/^[0-9a-f-]{36}$/i.test(projectId)) notFound();
-  const businessType = BUSINESS_TYPES.some((t) => t.value === tipo) ? tipo! : 'LocalBusiness';
-  const [view, canEdit] = await Promise.all([getSaludView(user.tenantId, projectId, businessType), checkPermission('edit').then((r) => r.ok)]);
+  const [view, canEdit] = await Promise.all([getSaludView(user.tenantId, projectId, tipo ?? null), checkPermission('edit').then((r) => r.ok)]);
   if (!view) notFound();
 
   return (
@@ -34,7 +34,8 @@ export default async function SaludPage({ params, searchParams }: { params: Prom
           </>
         }
       />
-      <SaludPanel view={view} canEdit={canEdit} businessType={businessType} businessTypes={BUSINESS_TYPES} />
+      <ProjectSeoNav projectId={projectId} active="salud" />
+      <SaludPanel view={view} canEdit={canEdit} businessType={view.businessType} businessTypes={BUSINESS_TYPES} />
     </PageContainer>
   );
 }

@@ -74,5 +74,18 @@ export const PLATAFORMA_PROCESS_MAP: ProcessStep[] = [
     ai: 'Nada aquí.',
     code: 'Lo nuevo se crea; lo que sigue se actualiza; lo resuelto que vuelve se reabre; lo que deja de aparecer se resuelve solo; lo descartado o aceptado no se reabre. Cada tipo enlaza su explicación de formación en la base de conocimiento.',
     tables: ['findings']
+  },
+  {
+    id: 'plt-intervenciones',
+    lane: 'Datos',
+    name: 'Registro de intervenciones (técnica + hipótesis)',
+    description:
+      'Cada encargo aprobado desde un módulo queda registrado con su técnica (taxonomía del núcleo, versionada), las URLs, el tipo de negocio del cliente y la hipótesis: qué métrica debería moverse, hacia dónde y en cuántos días. Es el dato que no se puede recuperar después y la base para medir qué funciona por técnica y tipo de negocio (I+D fase B).',
+    status: 'built',
+    file: 'lib/core/interventions.ts',
+    when: 'Al aprobar una propuesta del plan de mejora de SEO o del estratega (Estrategia). La fecha de «hecho» la pone el trabajo «core.interventions.sync» cada hora.',
+    ai: 'Nada: la técnica y la hipótesis vienen de la propuesta (reglas o estratega); si falta algo, se completa con lo típico de la técnica (lib/core/techniques.ts).',
+    code: 'Una por origen (módulo + id de la propuesta): reaprobar actualiza, no duplica. El trabajo horario pregunta a la fuente de trabajo el estado de los encargos (workSource().requestStatus): sirve igual con ClickUp o con la herramienta que lo sustituya, sin que Operaciones tenga que avisar.',
+    tables: ['interventions', 'clients']
   }
 ];

@@ -12,6 +12,8 @@ import { createClientMessage, registerCommsJobs } from '@/lib/core/comms';
 import { COMMS_KINDS, type CommsKind } from '@/lib/core/comms-rules';
 import { registerGscJobs } from '@/lib/core/gsc';
 import { registerCrawlJobs } from '@/lib/core/crawler';
+import { registerInterventionJobs } from '@/lib/core/interventions';
+import { registerFeedEvents } from '@/lib/core/knowledge-feed';
 import { findCoreClient } from '@/lib/core/clients';
 
 const escribirAlCliente: AgentTool = {
@@ -65,6 +67,8 @@ export function registerPlatformCapabilities(): void {
   registerCommsJobs();
   registerGscJobs();
   registerCrawlJobs();
+  registerInterventionJobs(); // Hito 1 SEO: fecha de «hecho» de las intervenciones (cada hora)
+  registerFeedEvents(); // Hito 1 SEO: actualizaciones e incidencias de Google como eventos externos
   registerTools([escribirAlCliente]);
   // Trabajos terminados de la cola: se borran con la limpieza semanal (los fallidos se guardan el doble de tiempo).
   registerRetention('núcleo: trabajos de la cola', (tenantId, cutoff) => purgeOldJobs(tenantId, cutoff));

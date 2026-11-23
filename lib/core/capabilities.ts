@@ -420,6 +420,12 @@ export type WorkSource = {
   workTypes?: (tenantId: string) => Promise<{ key: string; label: string }[]>;
   /** Crea un encargo para un cliente (lista, responsable y fecha los elige Operaciones con sus fichas). */
   createTask?: (tenantId: string, input: NewTaskInput) => Promise<{ ok: boolean; ref: string | null; url: string | null; message: string }>;
+  /**
+   * Estado de varios encargos por su referencia (Hito 1 SEO, 23 nov 2026): el registro de intervenciones del núcleo lo
+   * pregunta cada hora para poner la fecha de «hecho» sin que la fuente de trabajo tenga que avisar (sirve igual con
+   * ClickUp o con la herramienta propia que lo sustituya). Las referencias que no conoce no aparecen en la respuesta.
+   */
+  requestStatus?: (tenantId: string, refs: string[]) => Promise<{ ref: string; doneAt: string | null; cancelled: boolean }[]>;
 };
 export type OpenWorkItem = { ref: string; title: string; workType: string | null; status: string; dueDate: string | null };
 export type NewTaskInput = { clientId: string; title: string; description: string; workType: string | null; requestedBy: string; /** Proyecto del que nace (cimientos, 23 nov 2026). */ projectId?: string | null };

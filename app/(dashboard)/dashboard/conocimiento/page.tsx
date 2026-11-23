@@ -1,4 +1,5 @@
-import { Library } from 'lucide-react';
+import Link from 'next/link';
+import { Library, Newspaper } from 'lucide-react';
 import { checkPermission, requirePagePermission } from '@/lib/auth/permissions';
 import { PageContainer, PageHeader } from '@/components/ui/page';
 import { countByStatus, listArticles, listCategories } from '@/lib/core/knowledge';
@@ -50,6 +51,12 @@ export default async function ConocimientoPage({ searchParams }: { searchParams:
         icon={Library}
         title="Conocimiento"
         description="Lo que la agencia sabe hacer y resolver: procedimientos, soluciones y tutoriales con vídeo. Lo usan el equipo y los agentes para responder dudas sin esperar a Enric."
+        actions={
+          <Link href="/dashboard/conocimiento/novedades" className="inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-sm hover:bg-muted">
+            <Newspaper className="size-4" />
+            Novedades de Google
+          </Link>
+        }
       />
       <ConocimientoView
         isAdmin={isAdmin}

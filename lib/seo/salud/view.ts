@@ -9,6 +9,7 @@ import { listFindings, openFindingCounts, type Severity } from '@/lib/core/findi
 import { gscPropertiesForProject } from '@/lib/core/gsc';
 import { latestProjectCrawl, projectWebUrl, SALUD_SOURCE } from '@/lib/seo/salud/audit';
 import { buildJsonLd, type JsonLdOutput } from '@/lib/seo/salud/jsonld';
+import { isBusinessType } from '@/lib/core/business-types';
 
 const SOCIAL_KINDS = ['instagram', 'meta', 'linkedin', 'youtube', 'tiktok'];
 
@@ -27,6 +28,9 @@ export type SaludFinding = {
 
 export type SaludView = {
   project: { id: string; name: string; clientId: string | null; clientName: string | null };
+  /** Tipo de negocio usado en el JSON-LD y el guardado en la ficha del cliente (null = sin elegir). */
+  businessType: string;
+  savedBusinessType: string | null;
   web: string | null;
   crawl: { id: string; status: string; pagesDone: number; maxPages: number; createdAt: string; finishedAt: string | null; error: string | null } | null;
   counts: Record<Severity, number>;
@@ -49,7 +53,8 @@ const toFinding = (f: Awaited<ReturnType<typeof listFindings>>[number]): SaludFi
   dismissReason: f.dismissReason
 });
 
-export async function getSaludView(tenantId: string, projectId: string, businessType: string): Promise<SaludView | null> {
+/** «override» = tipo elegido solo para ver (lector o vista previa); si no, el de la ficha del cliente. */
+export async function getSaludView(tenantId: string, projectId: string, override: string | null): Promise<SaludView | null> {
   const [p] = await db
     .select({ id: projects.id, name: projects.name, clientId: projects.clientId, clientName: clients.name })
     .from(projects)
@@ -69,8 +74,12 @@ export async function getSaludView(tenantId: string, projectId: string, business
 
   // Datos de la ficha para el JSON-LD: el cliente, sus locales y los perfiles sociales del alcance (o de la ficha).
   let jsonld: JsonLdOutput = { blocks: [], missing: ['El proyecto no tiene cliente: edítalo y elige el cliente.'] };
+  let savedBusinessType: string | null = null;
+  let businessType = isBusinessType(override) ? override : 'LocalBusiness';
   if (p.clientId) {
     const [client] = await db.select().from(clients).where(and(eq(clients.id, p.clientId), eq(clients.tenantId, tenantId))).limit(1);
+    savedBusinessType = client?.businessType ?? null;
+    if (!isBusinessType(override) && isBusinessType(savedBusinessType)) businessType = savedBusinessType;
     const [locs, socials] = await Promise.all([
       db.select().from(clientLocations).where(and(eq(clientLocations.clientId, p.clientId), eq(clientLocations.tenantId, tenantId))).orderBy(asc(clientLocations.createdAt)),
       db
@@ -92,6 +101,8 @@ export async function getSaludView(tenantId: string, projectId: string, business
 
   return {
     project: { id: p.id, name: p.name, clientId: p.clientId, clientName: p.clientName },
+    businessType,
+    savedBusinessType,
     web,
     crawl: crawl
       ? { id: crawl.id, status: crawl.status, pagesDone: crawl.pagesDone, maxPages: crawl.maxPages, createdAt: crawl.createdAt.toISOString(), finishedAt: crawl.finishedAt?.toISOString() ?? null, error: crawl.error }

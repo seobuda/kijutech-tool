@@ -4,39 +4,9 @@
 // Nunca genera FAQPage (Google dejó de mostrarlo para casi todas las webs) ni reseñas o valoraciones del propio negocio
 // (Google no las admite). Lo que falta en la ficha no se inventa: se avisa en `missing` para completarlo.
 
-/** Subtipos de schema.org más habituales en nuestros clientes. El de la ficha lo elige una persona (o, más adelante, la IA lo propone). */
-export const BUSINESS_TYPES: { value: string; label: string }[] = [
-  { value: 'LocalBusiness', label: 'Negocio local (genérico)' },
-  { value: 'Organization', label: 'Empresa sin atención al público' },
-  { value: 'ProfessionalService', label: 'Servicio profesional' },
-  { value: 'HomeAndConstructionBusiness', label: 'Reformas y construcción' },
-  { value: 'GeneralContractor', label: 'Contratista general' },
-  { value: 'Electrician', label: 'Electricista' },
-  { value: 'Plumber', label: 'Fontanero' },
-  { value: 'HVACBusiness', label: 'Climatización' },
-  { value: 'RoofingContractor', label: 'Tejados y cubiertas' },
-  { value: 'AutomotiveBusiness', label: 'Automoción' },
-  { value: 'AutoRepair', label: 'Taller mecánico' },
-  { value: 'HealthAndBeautyBusiness', label: 'Salud y belleza' },
-  { value: 'BeautySalon', label: 'Salón de belleza' },
-  { value: 'HairSalon', label: 'Peluquería' },
-  { value: 'Dentist', label: 'Dentista' },
-  { value: 'MedicalClinic', label: 'Clínica médica' },
-  { value: 'Physiotherapy', label: 'Fisioterapia' },
-  { value: 'SportsActivityLocation', label: 'Actividad deportiva' },
-  { value: 'ExerciseGym', label: 'Gimnasio' },
-  { value: 'LegalService', label: 'Servicios legales' },
-  { value: 'Attorney', label: 'Abogado' },
-  { value: 'AccountingService', label: 'Asesoría contable' },
-  { value: 'RealEstateAgent', label: 'Inmobiliaria' },
-  { value: 'Restaurant', label: 'Restaurante' },
-  { value: 'CafeOrCoffeeShop', label: 'Cafetería' },
-  { value: 'Store', label: 'Tienda' },
-  { value: 'LodgingBusiness', label: 'Alojamiento' },
-  { value: 'EducationalOrganization', label: 'Centro de formación' },
-  { value: 'TravelAgency', label: 'Agencia de viajes' }
-];
-const TYPE_SET = new Set(BUSINESS_TYPES.map((t) => t.value));
+// La lista de tipos vive en el núcleo (es un dato del cliente: clients.business_type).
+import { BUSINESS_TYPES, BUSINESS_TYPE_SET as TYPE_SET } from '@/lib/core/business-types';
+export { BUSINESS_TYPES };
 
 export type JsonLdClient = {
   name: string;

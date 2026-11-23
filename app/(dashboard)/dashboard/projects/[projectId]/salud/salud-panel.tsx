@@ -11,7 +11,7 @@ import { Badge, EmptyState, Section } from '@/components/ui/page';
 import { cn } from '@/lib/utils';
 import { SALUD_GROUP_LABEL, SALUD_KIND_BY_KEY, type SaludGroup, type Severity } from '@/lib/seo/salud/kinds';
 import type { SaludFinding, SaludView } from '@/lib/seo/salud/view';
-import { decideSaludFindingAction, startSaludAuditAction } from '@/lib/seo/salud-actions';
+import { decideSaludFindingAction, saveSeoBusinessTypeAction, startSaludAuditAction } from '@/lib/seo/salud-actions';
 
 const SEV: Record<Severity, { label: string; tone: 'danger' | 'warning' | 'info' | 'neutral'; order: number }> = {
   critico: { label: 'Crítico', tone: 'danger', order: 0 },
@@ -158,7 +158,7 @@ export function SaludPanel({ view, canEdit, businessType, businessTypes }: { vie
 
       {view.decided.length > 0 && <Decided items={view.decided} projectId={view.project.id} canEdit={canEdit} />}
 
-      <JsonLdSection view={view} businessType={businessType} businessTypes={businessTypes} />
+      <JsonLdSection view={view} canEdit={canEdit} businessType={businessType} businessTypes={businessTypes} />
     </div>
   );
 }
@@ -342,8 +342,21 @@ function Decided({ items, projectId, canEdit }: { items: SaludFinding[]; project
   );
 }
 
-function JsonLdSection({ view, businessType, businessTypes }: { view: SaludView; businessType: string; businessTypes: { value: string; label: string }[] }) {
+function JsonLdSection({ view, canEdit, businessType, businessTypes }: { view: SaludView; canEdit: boolean; businessType: string; businessTypes: { value: string; label: string }[] }) {
   const router = useRouter();
+  const [saving, startSave] = useTransition();
+  const [saveMsg, setSaveMsg] = useState<string | null>(null);
+  // Editor: el tipo se guarda en la ficha del cliente (lo usan también la medición y, después, Ads). Lector: solo se mira.
+  const choose = (value: string) => {
+    if (!canEdit || !view.project.clientId) return router.replace(`/dashboard/projects/${view.project.id}/salud?tipo=${encodeURIComponent(value)}`, { scroll: false });
+    startSave(async () => {
+      setSaveMsg(null);
+      const r = await saveSeoBusinessTypeAction(view.project.id, value);
+      setSaveMsg(r.ok ? 'Guardado en la ficha del cliente.' : r.error);
+      router.replace(`/dashboard/projects/${view.project.id}/salud`, { scroll: false });
+      router.refresh();
+    });
+  };
   return (
     <Section
       title="Datos estructurados (JSON-LD)"
@@ -354,7 +367,8 @@ function JsonLdSection({ view, businessType, businessTypes }: { view: SaludView;
           <select
             className="h-8 rounded-md border bg-background px-2 text-sm"
             value={businessType}
-            onChange={(e) => router.replace(`/dashboard/projects/${view.project.id}/salud?tipo=${encodeURIComponent(e.target.value)}`, { scroll: false })}
+            disabled={saving}
+            onChange={(e) => choose(e.target.value)}
           >
             {businessTypes.map((t) => (
               <option key={t.value} value={t.value}>
@@ -390,7 +404,8 @@ function JsonLdSection({ view, businessType, businessTypes }: { view: SaludView;
         <a href="https://search.google.com/test/rich-results" target="_blank" rel="noreferrer" className="underline underline-offset-2">
           prueba de resultados enriquecidos de Google
         </a>
-        . El tipo de negocio no se guarda todavía: elígelo cada vez (se guardará en el expediente del proyecto).
+        .{' '}
+        {saveMsg ? saveMsg : view.savedBusinessType ? 'El tipo de negocio está guardado en la ficha del cliente.' : 'El tipo de negocio aún no está en la ficha: al elegirlo se guarda allí.'}
       </p>
     </Section>
   );

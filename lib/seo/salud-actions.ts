@@ -5,7 +5,9 @@
 import { revalidatePath } from 'next/cache';
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { findings } from '@/lib/db/schema';
+import { findings, projects } from '@/lib/db/schema';
+import { isBusinessType } from '@/lib/core/business-types';
+import { updateCoreClient } from '@/lib/core/clients';
 import { requirePermission } from '@/lib/auth/permissions';
 import { publicError } from '@/lib/errors';
 import { decideFinding } from '@/lib/core/findings';
@@ -24,6 +26,22 @@ export async function startSaludAuditAction(projectId: string): Promise<Ok<{ alr
     return { ok: true, already: r.already };
   } catch (e) {
     return { ok: false, error: e instanceof SaludError ? e.userMessage : publicError(e, 'No se pudo lanzar la auditoría') };
+  }
+}
+
+/** Guarda el tipo de negocio en la ficha del cliente del proyecto (núcleo: clients.business_type). */
+export async function saveSeoBusinessTypeAction(projectId: string, businessType: string): Promise<Ok> {
+  try {
+    const user = await requirePermission('edit');
+    if (!UUID.test(projectId)) return { ok: false, error: 'Proyecto no encontrado' };
+    if (!isBusinessType(businessType)) return { ok: false, error: 'Tipo de negocio no válido' };
+    const [p] = await db.select({ clientId: projects.clientId }).from(projects).where(and(eq(projects.id, projectId), eq(projects.tenantId, user.tenantId))).limit(1);
+    if (!p?.clientId) return { ok: false, error: 'El proyecto no tiene cliente' };
+    await updateCoreClient(user.tenantId, p.clientId, { businessType });
+    revalidatePath(`/dashboard/projects/${projectId}/salud`);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: publicError(e, 'No se pudo guardar el tipo de negocio') };
   }
 }
 
