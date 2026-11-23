@@ -9,6 +9,9 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/page';
 import { approveEmailReplyAction, rejectEmailReplyAction } from '@/lib/operaciones/email-agent-actions';
 import { decideAgentToolAction } from '@/lib/operaciones/agent-capabilities-actions';
+import { approveClientMessageAction, rejectClientMessageAction } from '@/lib/core/comms-actions';
+import { useState } from 'react';
+import { PencilLine, Send } from 'lucide-react';
 import type { InboundEmailDetail } from '@/lib/operaciones/inbound-email-actions';
 import { brandBtn, MsgLine, useRun } from '../clientes/ui';
 import { ReplyProposal } from '../operaciones/correos/reply-proposal';
@@ -97,6 +100,74 @@ export function ToolDecisionCard({ c }: { c: ToolCard }) {
           Hacerlo
         </Button>
         <Button size="sm" variant="ghost" className="text-muted-foreground" disabled={pending} onClick={() => decide(false)}>
+          <X aria-hidden />
+          Descartar
+        </Button>
+        <MsgLine msg={msg} />
+      </div>
+    </li>
+  );
+}
+
+// Correo a un cliente que ha preparado el equipo o un agente (cimientos, 23 nov 2026): enviar, corregir o descartar.
+export type MessageCard = { id: string; clientName: string; kind: string; subject: string; body: string; author: string; to: string[]; wait: string };
+
+export function MessageDecisionCard({ c }: { c: MessageCard }) {
+  const { run, pending, msg } = useRun();
+  const [editing, setEditing] = useState(false);
+  const [subject, setSubject] = useState(c.subject);
+  const [body, setBody] = useState(c.body);
+  const changed = editing && (subject.trim() !== c.subject.trim() || body.trim() !== c.body.trim());
+  return (
+    <li className="space-y-3 rounded-xl border bg-card p-4 shadow-xs">
+      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <Badge tone="info">
+          <Mail className="size-3" aria-hidden />
+          {c.kind}
+        </Badge>
+        <span className="text-sm font-medium text-foreground">{c.clientName}</span>
+        <span>· lo ha preparado {c.author}</span>
+        <span>· espera {c.wait}</span>
+      </div>
+      <p className="text-xs text-muted-foreground">Para: {c.to.join(', ')}</p>
+      {editing ? (
+        <div className="space-y-2">
+          <label className="sr-only" htmlFor={`sub-${c.id}`}>
+            Asunto
+          </label>
+          <input id={`sub-${c.id}`} className="w-full rounded-md border border-input bg-card px-3 py-2 text-sm" value={subject} onChange={(e) => setSubject(e.target.value)} maxLength={300} />
+          <label className="sr-only" htmlFor={`body-${c.id}`}>
+            Texto
+          </label>
+          <textarea id={`body-${c.id}`} rows={8} className="w-full rounded-md border border-input bg-card px-3 py-2 text-sm" value={body} onChange={(e) => setBody(e.target.value)} />
+        </div>
+      ) : (
+        <div className="rounded-lg bg-muted/60 p-3 text-sm">
+          <p className="font-medium">{c.subject}</p>
+          <p className="mt-1 whitespace-pre-wrap">{c.body}</p>
+        </div>
+      )}
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          size="sm"
+          className={brandBtn}
+          disabled={pending || (editing && (!subject.trim() || !body.trim()))}
+          onClick={() => run(() => approveClientMessageAction(c.id, changed ? { subject, body } : undefined), `Correo a ${c.clientName} aprobado: sale en un momento`)}
+        >
+          <Send aria-hidden />
+          {changed ? 'Enviar mi versión' : 'Enviar'}
+        </Button>
+        {!editing ? (
+          <Button size="sm" variant="outline" disabled={pending} onClick={() => setEditing(true)}>
+            <PencilLine aria-hidden />
+            Corregir
+          </Button>
+        ) : (
+          <Button size="sm" variant="ghost" disabled={pending} onClick={() => { setEditing(false); setSubject(c.subject); setBody(c.body); }}>
+            Cancelar corrección
+          </Button>
+        )}
+        <Button size="sm" variant="ghost" className="text-muted-foreground" disabled={pending} onClick={() => run(() => rejectClientMessageAction(c.id), `Correo a ${c.clientName} descartado`)}>
           <X aria-hidden />
           Descartar
         </Button>

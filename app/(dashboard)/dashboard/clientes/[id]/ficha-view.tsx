@@ -51,7 +51,7 @@ export type ClientView = {
   updatedAt: string;
 };
 export type ContractView = { contractServices: string; monthlyFee: number | null; contractStart: string; contractRenewal: string };
-export type ContactView = { id: string; name: string; jobTitle: string; role: string; email: string; phone: string; whatsapp: string; preferredChannel: string; isPrimary: boolean; notes: string; active: boolean };
+export type ContactView = { id: string; name: string; jobTitle: string; role: string; email: string; phone: string; whatsapp: string; preferredChannel: string; isPrimary: boolean; notes: string; active: boolean; /** Qué comunicaciones recibe (para todos los proyectos; cimientos 23 nov 2026). */ receives?: string[] };
 export type LocationView = { id: string; name: string; address: string; city: string; postalCode: string; region: string; country: string; phone: string; hours: string; isPrimary: boolean; notes: string };
 export type AssetView = { id: string; kind: string; label: string; value: string; access: string; accessNotes: string; isPrimary: boolean; recognizeEmails: boolean; emailDomain: string; notes: string };
 export type CompetitorView = { id: string; name: string; domain: string; notes: string; source: string };
@@ -73,6 +73,8 @@ export type FichaData = {
   spaces: Space[];
   options: Option[];
   isAdmin: boolean;
+  /** Comunicaciones (cimientos, 23 nov 2026): si pasan por aprobación (heredar | siempre | nunca) y lo de la cuenta. */
+  comms: { approval: string; tenantDefault: string };
   /** Lo que el cliente tiene en los módulos (solo para un administrador): con algo, borrar exige baja + su nombre (D6). */
   history: string[];
   /** El trabajo del cliente (fase 4 UX): sus encargos y sus proyectos SEO. */
@@ -320,7 +322,7 @@ export function FichaView({ data }: { data: FichaData }) {
       <div role="tabpanel" aria-label={TABS.find((t) => t.key === tab)?.label}>
         {tab === 'resumen' && <Resumen data={data} go={go} />}
         {tab === 'empresa' && <EmpresaTab client={c} contract={data.contract} />}
-        {tab === 'contactos' && <ContactosTab clientId={c.id} contacts={data.contacts} locations={data.locations} isAdmin={data.isAdmin} />}
+        {tab === 'contactos' && <ContactosTab clientId={c.id} contacts={data.contacts} locations={data.locations} isAdmin={data.isAdmin} comms={data.comms} />}
         {tab === 'webs' && <WebsTab clientId={c.id} assets={data.assets} integrations={data.integrations} />}
         {tab === 'competencia' && <CompetenciaTab clientId={c.id} competitors={data.competitors} />}
         {tab === 'encargos' && <EncargosTab clientId={c.id} requests={data.work.requests} linked={Boolean(data.ops.clickupOptionId)} />}

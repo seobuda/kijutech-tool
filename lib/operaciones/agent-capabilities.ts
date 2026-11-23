@@ -29,6 +29,7 @@ import { ALL_SPACES, NOTE_PROMPT_KEY, proposeRequests } from '@/lib/operaciones/
 import { getStructure, selectedSpaces, validClient, type CachedStructure } from '@/lib/operaciones/structure';
 import { syncToClickUp } from '@/lib/operaciones/sync';
 import { decodeBotToken, getOwnerMember, getTelegramConfig } from '@/lib/operaciones/telegram-config';
+import { registerCommsBridge } from '@/lib/operaciones/comms-bridge';
 import { clampMessage, escapeHtml, htmlToPlain, tg, tgSendVoice } from '@/lib/operaciones/telegram';
 import { readyDeptBotToken } from '@/lib/operaciones/dept-bots';
 import { estadoSistemaTool } from '@/lib/operaciones/system-report';
@@ -750,6 +751,7 @@ let registered = false;
 export function registerOperacionesCapabilities(): void {
   if (registered) return;
   registered = true;
+  registerCommsBridge(); // cimientos (23 nov 2026): envío de mensajes a clientes y su aprobación por Telegram
   registerTools(OPS_AGENT_TOOLS);
   registerTools([estadoSistemaTool]); // organigrama: herramienta del jefe de Sistema
   // El motor de propuestas queda disponible para las herramientas de cambio de otros módulos (núcleo: proposeChange).

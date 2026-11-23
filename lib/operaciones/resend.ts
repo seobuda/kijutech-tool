@@ -256,3 +256,28 @@ export async function sendInternalEmail(
     body: JSON.stringify({ from: `${cfg.fromName} <${cfg.address}>`, to: [input.to], subject: input.subject, text: input.text })
   });
 }
+
+// --- Mensaje a un cliente (cimientos, 23 nov 2026) ------------------------------------------------------------
+// Lo usa el núcleo de comunicaciones (lib/core/comms.ts) a través del MailSender que registra Operaciones. Lleva un
+// Message-ID propio («cm-<id>@dominio») para unir las respuestas del cliente a su hilo; con copia oculta al dueño si
+// está configurada. [Sin verificar: que Resend respete el Message-ID propio; si no, las respuestas no se unirían solas.]
+export async function sendClientEmail(
+  cfg: EmailConfig,
+  input: { to: { email: string; name: string }[]; cc: { email: string; name: string }[]; subject: string; text: string; messageId: string; idempotencyKey: string }
+): Promise<{ id: string }> {
+  if (!cfg.apiKey) throw new Error('El buzón del agente no está conectado');
+  const fmt = (p: { email: string; name: string }) => (p.name ? `${p.name.replace(/[<>"]/g, '')} <${p.email}>` : p.email);
+  return call<{ id: string }>(cfg.apiKey, '/emails', {
+    method: 'POST',
+    headers: { 'Idempotency-Key': input.idempotencyKey.slice(0, 256) },
+    body: JSON.stringify({
+      from: `${cfg.fromName} <${cfg.address}>`,
+      to: input.to.map(fmt),
+      ...(input.cc.length ? { cc: input.cc.map(fmt) } : {}),
+      ...(cfg.bcc ? { bcc: [cfg.bcc] } : {}),
+      subject: input.subject,
+      text: input.text,
+      headers: { 'Message-ID': `<${input.messageId}>` }
+    })
+  });
+}

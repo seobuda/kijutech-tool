@@ -35,5 +35,23 @@ services:
       postgres:
         condition: service_healthy
 
+  # Trabajador aparte (cimientos, 23 nov 2026). En local no hace falta: sin APP_ROLE, la app corre también la cola.
+  # Para probarlo como en producción: docker compose --profile worker up -d (y APP_ROLE=web en la app).
+  worker:
+    image: kijutech-tool-app
+    pull_policy: never
+    container_name: kijutech_worker
+    profiles: ["worker"]
+    restart: unless-stopped
+    environment:
+      APP_ROLE: worker
+      POSTGRES_URL: postgresql://kijutech:${POSTGRES_PASSWORD}@postgres:5432/kijutech_db
+      AUTH_SECRET: ${AUTH_SECRET:?Define AUTH_SECRET en .env}
+      BASE_URL: http://localhost:3000
+      AI_ENCRYPTION_KEY: ${AI_ENCRYPTION_KEY:?Define AI_ENCRYPTION_KEY en .env}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
   kijutech_pgdata:

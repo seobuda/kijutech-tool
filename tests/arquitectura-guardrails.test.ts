@@ -190,6 +190,10 @@ const TABLE_PREFIXES = ['ops_', 'seo_', 'ai_', 'agt_', 'kb_', 'perf_', 'est_', '
 const CORE_TABLES = new Set([
   'tenants', 'users', 'roles', 'user_roles', 'projects', 'modules', 'project_modules', 'auth_login_attempts',
   'clients', 'client_contacts', 'client_locations', 'client_assets', 'client_competitors', 'client_memory',
+  // Cimientos de la plataforma (23 nov 2026, migración 0060, aprobados por Enric): los usan SEO y después Ads.
+  'project_assets', 'client_contact_subscriptions', 'client_messages', 'jobs', 'job_schedules',
+  'gsc_properties', 'gsc_queries', 'gsc_pages', 'gsc_daily', 'gsc_daily_totals', 'gsc_daily_country', 'gsc_monthly',
+  'crawl_runs', 'crawl_pages', 'crawl_links', 'findings',
   // Restos de la plantilla, pendientes de borrar con una migración (ESTADO §16).
   'teams', 'team_members', 'invitations', 'activity_logs'
 ]);

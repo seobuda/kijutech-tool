@@ -34,6 +34,9 @@ export const tenants = pgTable('tenants', {
   aiKeyModeAllowed: varchar('ai_key_mode_allowed', { length: 20 })
     .notNull()
     .default('platform_only'),
+  // Comunicaciones con clientes (cimientos, 23 nov 2026): por defecto, todo lo que sale hacia un cliente pasa por la
+  // aprobación del dueño. siempre | nunca. Cada cliente puede heredarlo o fijar el suyo (clients.comms_approval).
+  commsApprovalDefault: varchar('comms_approval_default', { length: 10 }).notNull().default('siempre'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
@@ -67,9 +70,18 @@ export const projects = pgTable('projects', {
   domain: varchar('domain', { length: 255 }),
   location: varchar('location', { length: 255 }),
   status: varchar('status', { length: 20 }).notNull().default('active'),
-  // Cliente del núcleo al que pertenece el proyecto (14 nov 2026).
+  // Cliente del núcleo al que pertenece el proyecto (14 nov 2026). Obligatorio desde los cimientos (23 nov 2026, CHECK
+  // de la migración 0060): solo los proyectos que ya existían sin cliente (legacy) pueden seguir sin él.
   clientId: uuid('client_id').references(() => clients.id, { onDelete: 'set null' }),
+  legacy: boolean('legacy').notNull().default(false),
+  // Servicio del proyecto: seo | ads | web | otro. Un cliente puede tener varios proyectos.
+  service: varchar('service', { length: 20 }).notNull().default('seo'),
+  // Horas al mes del proyecto (las reparte el estratega). Sin valor, se usan las del cliente.
+  monthlyHours: decimal('monthly_hours', { precision: 6, scale: 1 }),
+  // Resumen del expediente (el detalle vive en el módulo del servicio).
+  brief: jsonb('brief'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
   createdBy: integer('created_by')
     .notNull()
     .references(() => users.id),
@@ -111,12 +123,15 @@ export const clients = pgTable(
     startedAt: date('started_at'),
     endedAt: date('ended_at'),
     endReason: text('end_reason'),
+    // Comunicaciones (23 nov 2026): heredar (lo de la cuenta) | siempre (pasan por aprobación) | nunca.
+    commsApproval: varchar('comms_approval', { length: 10 }).notNull().default('heredar'),
     createdAt: timestamp('created_at').notNull().defaultNow(),
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
   },
   (table) => [
     index('clients_tenant_idx').on(table.tenantId, table.status),
     check('clients_status_check', sql`${table.status} IN ('prospecto', 'onboarding', 'activo', 'pausado', 'baja')`),
+    check('clients_comms_approval_check', sql`${table.commsApproval} IN ('heredar', 'siempre', 'nunca')`),
   ]
 );
 export type Client = typeof clients.$inferSelect;
@@ -1379,6 +1394,8 @@ export const opsRequests = pgTable(
     // Opción elegida del campo personalizado "Cliente" de ClickUp (null = sin cliente).
     clientOptionId: varchar('client_option_id', { length: 50 }),
     clientName: varchar('client_name', { length: 255 }),
+    // Proyecto del que nace el encargo (cimientos, 23 nov 2026): estratega o plan de mejora de un proyecto.
+    projectId: uuid('project_id').references(() => projects.id, { onDelete: 'set null' }),
     // Flujo de trabajo (paso 5): asignado → en_curso → (bloqueado) → en_revision → completado.
     workStatus: varchar('work_status', { length: 20 }).notNull().default('asignado'),
     workStatusAt: timestamp('work_status_at').notNull().defaultNow(),
@@ -3282,3 +3299,423 @@ export const opsSimMessages = pgTable(
   ]
 );
 export type OpsSimMessage = typeof opsSimMessages.$inferSelect;
+
+// =====================================================================================================================
+// CIMIENTOS DE LA PLATAFORMA (núcleo, 23 nov 2026; docs/DISENO-TECNICO-CIMIENTOS.md). Los usan SEO y, después, Ads.
+// =====================================================================================================================
+
+// Alcance de un proyecto: qué webs, propiedades de Google, fichas y redes del cliente son suyas.
+export const projectAssets = pgTable(
+  'project_assets',
+  {
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    clientAssetId: uuid('client_asset_id')
+      .notNull()
+      .references(() => clientAssets.id, { onDelete: 'cascade' }),
+    role: varchar('role', { length: 12 }).notNull().default('principal'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.projectId, table.clientAssetId] }),
+    index('project_assets_asset_idx').on(table.clientAssetId),
+    check('project_assets_role_check', sql`${table.role} IN ('principal', 'secundario')`),
+  ]
+);
+export type ProjectAsset = typeof projectAssets.$inferSelect;
+
+// Qué comunicaciones recibe cada contacto del cliente (por tipo; opcionalmente solo de un proyecto).
+export const clientContactSubscriptions = pgTable(
+  'client_contact_subscriptions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    contactId: uuid('contact_id')
+      .notNull()
+      .references(() => clientContacts.id, { onDelete: 'cascade' }),
+    // informes | preguntas | avisos | aprobaciones | facturacion | todo
+    kind: varchar('kind', { length: 16 }).notNull(),
+    projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('client_contact_subs_unique').on(table.contactId, table.kind, sql`coalesce(${table.projectId}, '00000000-0000-0000-0000-000000000000'::uuid)`),
+    index('client_contact_subs_tenant_idx').on(table.tenantId),
+    check('client_contact_subs_kind_check', sql`${table.kind} IN ('informes', 'preguntas', 'avisos', 'aprobaciones', 'facturacion', 'todo')`),
+  ]
+);
+export type ClientContactSubscription = typeof clientContactSubscriptions.$inferSelect;
+
+// Todo lo que sale hacia un cliente, lo escriba quien lo escriba (persona, agente o sistema).
+export const clientMessages = pgTable(
+  'client_messages',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id').references(() => projects.id, { onDelete: 'set null' }),
+    kind: varchar('kind', { length: 16 }).notNull(),
+    subject: varchar('subject', { length: 300 }).notNull(),
+    bodyText: text('body_text').notNull(),
+    toContactIds: uuid('to_contact_ids').array().notNull(),
+    ccContactIds: uuid('cc_contact_ids').array().notNull().default(sql`'{}'::uuid[]`),
+    // persona | agente | sistema
+    authorKind: varchar('author_kind', { length: 10 }).notNull(),
+    authorName: varchar('author_name', { length: 255 }).notNull(),
+    authorUserId: integer('author_user_id').references(() => users.id, { onDelete: 'set null' }),
+    authorAgentKey: varchar('author_agent_key', { length: 60 }),
+    // borrador | pendiente_aprobacion | aprobado | enviado | rechazado | fallido
+    status: varchar('status', { length: 22 }).notNull(),
+    approvalRequired: boolean('approval_required').notNull(),
+    decidedBy: varchar('decided_by', { length: 255 }),
+    decidedAt: timestamp('decided_at'),
+    rejectReason: text('reject_reason'),
+    sentAt: timestamp('sent_at'),
+    providerMessageId: varchar('provider_message_id', { length: 300 }),
+    lastError: text('last_error'),
+    // Hilo: las respuestas que entran por el buzón se unen por aquí (Message-ID / In-Reply-To).
+    threadKey: varchar('thread_key', { length: 300 }).notNull(),
+    replyToInboundId: uuid('reply_to_inbound_id'),
+    dedupeKey: varchar('dedupe_key', { length: 200 }).notNull(),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    unique('client_messages_dedupe_unique').on(table.tenantId, table.dedupeKey),
+    index('client_messages_status_idx').on(table.tenantId, table.status),
+    index('client_messages_client_idx').on(table.clientId, table.createdAt),
+    index('client_messages_thread_idx').on(table.threadKey),
+    check('client_messages_kind_check', sql`${table.kind} IN ('informes', 'preguntas', 'avisos', 'aprobaciones', 'facturacion')`),
+    check('client_messages_author_check', sql`${table.authorKind} IN ('persona', 'agente', 'sistema')`),
+    check('client_messages_status_check', sql`${table.status} IN ('borrador', 'pendiente_aprobacion', 'aprobado', 'enviado', 'rechazado', 'fallido')`),
+  ]
+);
+export type ClientMessage = typeof clientMessages.$inferSelect;
+
+// Cola de trabajos: la reclama un trabajador (FOR UPDATE SKIP LOCKED), con latido, reintentos y concurrencia por tipo.
+export const jobs = pgTable(
+  'jobs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    kind: varchar('kind', { length: 60 }).notNull(),
+    // proyecto | cliente | cuenta
+    scopeType: varchar('scope_type', { length: 10 }).notNull().default('cuenta'),
+    scopeId: varchar('scope_id', { length: 64 }),
+    payload: jsonb('payload').notNull().default({}),
+    priority: smallint('priority').notNull().default(5),
+    runAt: timestamp('run_at').notNull().defaultNow(),
+    // pendiente | en_curso | hecho | fallido | cancelado
+    status: varchar('status', { length: 10 }).notNull().default('pendiente'),
+    attempts: integer('attempts').notNull().default(0),
+    maxAttempts: integer('max_attempts').notNull().default(3),
+    lockedBy: varchar('locked_by', { length: 60 }),
+    lockedAt: timestamp('locked_at'),
+    heartbeatAt: timestamp('heartbeat_at'),
+    timeoutS: integer('timeout_s').notNull().default(300),
+    lastError: text('last_error'),
+    result: jsonb('result'),
+    dedupeKey: varchar('dedupe_key', { length: 200 }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    finishedAt: timestamp('finished_at'),
+  },
+  (table) => [
+    index('jobs_ready_idx').on(table.runAt, table.priority).where(sql`${table.status} = 'pendiente'`),
+    index('jobs_running_idx').on(table.kind).where(sql`${table.status} = 'en_curso'`),
+    index('jobs_tenant_kind_idx').on(table.tenantId, table.kind, table.createdAt),
+    uniqueIndex('jobs_dedupe_open_unique').on(table.tenantId, table.dedupeKey).where(sql`${table.dedupeKey} IS NOT NULL AND ${table.status} IN ('pendiente', 'en_curso')`),
+    check('jobs_status_check', sql`${table.status} IN ('pendiente', 'en_curso', 'hecho', 'fallido', 'cancelado')`),
+    check('jobs_scope_check', sql`${table.scopeType} IN ('proyecto', 'cliente', 'cuenta')`),
+  ]
+);
+export type Job = typeof jobs.$inferSelect;
+
+// Procesos periódicos: cada fila genera un trabajo cuando vence (generaliza est_process_runs).
+export const jobSchedules = pgTable(
+  'job_schedules',
+  {
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    processKey: varchar('process_key', { length: 60 }).notNull(),
+    scopeType: varchar('scope_type', { length: 10 }).notNull().default('cuenta'),
+    // '' = toda la cuenta.
+    scopeId: varchar('scope_id', { length: 64 }).notNull().default(''),
+    everyMinutes: integer('every_minutes').notNull(),
+    nextRunAt: timestamp('next_run_at').notNull().defaultNow(),
+    lastRunAt: timestamp('last_run_at'),
+    lastStatus: varchar('last_status', { length: 10 }),
+    lastError: text('last_error'),
+    consecutiveFailures: integer('consecutive_failures').notNull().default(0),
+    enabled: boolean('enabled').notNull().default(true),
+    pausedUntil: timestamp('paused_until'),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.tenantId, table.processKey, table.scopeId] }),
+    index('job_schedules_due_idx').on(table.nextRunAt).where(sql`${table.enabled}`),
+  ]
+);
+export type JobSchedule = typeof jobSchedules.$inferSelect;
+
+// --- Search Console en detalle ----------------------------------------------------------------------------------------
+export const gscProperties = pgTable(
+  'gsc_properties',
+  {
+    id: serial('id').primaryKey(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    clientAssetId: uuid('client_asset_id').references(() => clientAssets.id, { onDelete: 'set null' }),
+    siteUrl: varchar('site_url', { length: 300 }).notNull(),
+    // dominio | prefijo | plataforma
+    kind: varchar('kind', { length: 12 }).notNull(),
+    firstDate: date('first_date', { mode: 'string' }),
+    lastDate: date('last_date', { mode: 'string' }),
+    // Cursor de la descarga: { backfillTo, truncatedDays: [...] }.
+    syncState: jsonb('sync_state').notNull().default({}),
+    // activa | error | inactiva
+    status: varchar('status', { length: 10 }).notNull().default('activa'),
+    lastError: text('last_error'),
+    lastSyncAt: timestamp('last_sync_at'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [unique('gsc_properties_site_unique').on(table.tenantId, table.siteUrl), check('gsc_properties_kind_check', sql`${table.kind} IN ('dominio', 'prefijo', 'plataforma')`)]
+);
+export type GscProperty = typeof gscProperties.$inferSelect;
+
+export const gscQueries = pgTable(
+  'gsc_queries',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    propertyId: integer('property_id')
+      .notNull()
+      .references(() => gscProperties.id, { onDelete: 'cascade' }),
+    query: text('query').notNull(),
+    queryHash: varchar('query_hash', { length: 40 }).notNull(),
+    branded: boolean('branded'),
+    firstSeen: date('first_seen', { mode: 'string' }).notNull(),
+  },
+  (table) => [unique('gsc_queries_hash_unique').on(table.propertyId, table.queryHash)]
+);
+
+export const gscPages = pgTable(
+  'gsc_pages',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    propertyId: integer('property_id')
+      .notNull()
+      .references(() => gscProperties.id, { onDelete: 'cascade' }),
+    url: text('url').notNull(),
+    urlHash: varchar('url_hash', { length: 40 }).notNull(),
+    firstSeen: date('first_seen', { mode: 'string' }).notNull(),
+  },
+  (table) => [unique('gsc_pages_hash_unique').on(table.propertyId, table.urlHash)]
+);
+
+// Detalle diario (tabla PARTICIONADA por mes en la migración 0060; aquí solo para tipos y consultas).
+// device: 1 móvil, 2 ordenador, 3 tableta. searchType: 1 web, 2 imágenes, 3 vídeo, 4 news, 5 discover, 6 googleNews.
+// pos_sum = posición × impresiones (para agregar bien: posición = pos_sum / impresiones).
+export const gscDaily = pgTable(
+  'gsc_daily',
+  {
+    propertyId: integer('property_id').notNull(),
+    date: date('date', { mode: 'string' }).notNull(),
+    searchType: smallint('search_type').notNull(),
+    device: smallint('device').notNull(),
+    queryId: bigint('query_id', { mode: 'number' }).notNull(),
+    pageId: bigint('page_id', { mode: 'number' }).notNull(),
+    clicks: integer('clicks').notNull(),
+    impressions: integer('impressions').notNull(),
+    posSum: doublePrecision('pos_sum').notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.propertyId, table.date, table.searchType, table.device, table.queryId, table.pageId] })]
+);
+
+// Totales del día sin dimensiones (para saber cuántos clics son de consultas anónimas).
+export const gscDailyTotals = pgTable(
+  'gsc_daily_totals',
+  {
+    propertyId: integer('property_id')
+      .notNull()
+      .references(() => gscProperties.id, { onDelete: 'cascade' }),
+    date: date('date', { mode: 'string' }).notNull(),
+    searchType: smallint('search_type').notNull(),
+    clicks: integer('clicks').notNull(),
+    impressions: integer('impressions').notNull(),
+    posSum: doublePrecision('pos_sum').notNull(),
+    // Suma de las filas con consulta: la diferencia con el total son las anónimas.
+    queryClicks: integer('query_clicks').notNull().default(0),
+    truncated: boolean('truncated').notNull().default(false),
+  },
+  (table) => [primaryKey({ columns: [table.propertyId, table.date, table.searchType] })]
+);
+
+export const gscDailyCountry = pgTable(
+  'gsc_daily_country',
+  {
+    propertyId: integer('property_id')
+      .notNull()
+      .references(() => gscProperties.id, { onDelete: 'cascade' }),
+    date: date('date', { mode: 'string' }).notNull(),
+    country: varchar('country', { length: 3 }).notNull(),
+    clicks: integer('clicks').notNull(),
+    impressions: integer('impressions').notNull(),
+    posSum: doublePrecision('pos_sum').notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.propertyId, table.date, table.country] })]
+);
+
+// Resumen mensual consulta × página (para siempre; el detalle diario se guarda 24 meses).
+export const gscMonthly = pgTable(
+  'gsc_monthly',
+  {
+    propertyId: integer('property_id')
+      .notNull()
+      .references(() => gscProperties.id, { onDelete: 'cascade' }),
+    month: date('month', { mode: 'string' }).notNull(),
+    queryId: bigint('query_id', { mode: 'number' }).notNull(),
+    pageId: bigint('page_id', { mode: 'number' }).notNull(),
+    clicks: integer('clicks').notNull(),
+    impressions: integer('impressions').notNull(),
+    posSum: doublePrecision('pos_sum').notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.propertyId, table.month, table.queryId, table.pageId] }), index('gsc_monthly_page_idx').on(table.propertyId, table.pageId)]
+);
+
+// --- Rastreador -------------------------------------------------------------------------------------------------------
+export const crawlRuns = pgTable(
+  'crawl_runs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+    // propio | competidor
+    target: varchar('target', { length: 12 }).notNull().default('propio'),
+    rootUrl: text('root_url').notNull(),
+    // pendiente | en_curso | hecho | error
+    status: varchar('status', { length: 10 }).notNull().default('pendiente'),
+    maxPages: integer('max_pages').notNull().default(500),
+    pagesDone: integer('pages_done').notNull().default(0),
+    robotsTxt: text('robots_txt'),
+    sitemaps: text('sitemaps').array(),
+    // Frontera pendiente mientras dura (la vacía el trabajador).
+    state: jsonb('state').notNull().default({}),
+    startedAt: timestamp('started_at'),
+    finishedAt: timestamp('finished_at'),
+    error: text('error'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    index('crawl_runs_project_idx').on(table.projectId, table.target, table.createdAt),
+    check('crawl_runs_target_check', sql`${table.target} IN ('propio', 'competidor')`),
+    check('crawl_runs_status_check', sql`${table.status} IN ('pendiente', 'en_curso', 'hecho', 'error')`),
+  ]
+);
+export type CrawlRun = typeof crawlRuns.$inferSelect;
+
+export const crawlPages = pgTable(
+  'crawl_pages',
+  {
+    runId: uuid('run_id')
+      .notNull()
+      .references(() => crawlRuns.id, { onDelete: 'cascade' }),
+    url: text('url').notNull(),
+    urlHash: varchar('url_hash', { length: 40 }).notNull(),
+    statusCode: integer('status_code'),
+    redirectTo: text('redirect_to'),
+    contentType: varchar('content_type', { length: 120 }),
+    title: text('title'),
+    metaDescription: text('meta_description'),
+    h1: text('h1').array(),
+    headings: jsonb('headings'),
+    canonical: text('canonical'),
+    robotsMeta: varchar('robots_meta', { length: 200 }),
+    xRobots: varchar('x_robots', { length: 200 }),
+    lang: varchar('lang', { length: 20 }),
+    hreflang: jsonb('hreflang'),
+    wordCount: integer('word_count'),
+    contentHash: varchar('content_hash', { length: 40 }),
+    simhash: varchar('simhash', { length: 16 }),
+    linksInternal: integer('links_internal'),
+    linksExternal: integer('links_external'),
+    depth: integer('depth'),
+    inSitemap: boolean('in_sitemap').notNull().default(false),
+    jsonld: jsonb('jsonld'),
+    schemaTypes: text('schema_types').array(),
+    imagesWithoutAlt: integer('images_without_alt'),
+    bytes: integer('bytes'),
+    fetchMs: integer('fetch_ms'),
+    error: text('error'),
+    fetchedAt: timestamp('fetched_at').notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.runId, table.urlHash] })]
+);
+export type CrawlPage = typeof crawlPages.$inferSelect;
+
+export const crawlLinks = pgTable(
+  'crawl_links',
+  {
+    runId: uuid('run_id')
+      .notNull()
+      .references(() => crawlRuns.id, { onDelete: 'cascade' }),
+    fromHash: varchar('from_hash', { length: 40 }).notNull(),
+    toHash: varchar('to_hash', { length: 40 }).notNull(),
+    anchor: varchar('anchor', { length: 200 }),
+    nofollow: boolean('nofollow').notNull().default(false),
+  },
+  (table) => [index('crawl_links_to_idx').on(table.runId, table.toHash), index('crawl_links_from_idx').on(table.runId, table.fromHash)]
+);
+
+// --- Hallazgos tipados ------------------------------------------------------------------------------------------------
+export const findings = pgTable(
+  'findings',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    kind: varchar('kind', { length: 60 }).notNull(),
+    ruleVersion: integer('rule_version').notNull().default(1),
+    // info | aviso | importante | critico
+    severity: varchar('severity', { length: 10 }).notNull(),
+    // abierto | resuelto | descartado | aceptado
+    status: varchar('status', { length: 10 }).notNull().default('abierto'),
+    dedupeKey: varchar('dedupe_key', { length: 300 }).notNull(),
+    url: text('url'),
+    query: text('query'),
+    metric: varchar('metric', { length: 40 }),
+    value: doublePrecision('value'),
+    evidence: jsonb('evidence').notNull().default({}),
+    source: varchar('source', { length: 80 }).notNull(),
+    requestId: uuid('request_id'),
+    firstSeen: timestamp('first_seen').notNull().defaultNow(),
+    lastSeen: timestamp('last_seen').notNull().defaultNow(),
+    resolvedAt: timestamp('resolved_at'),
+    dismissedBy: varchar('dismissed_by', { length: 255 }),
+    dismissReason: text('dismiss_reason'),
+  },
+  (table) => [
+    unique('findings_dedupe_unique').on(table.projectId, table.dedupeKey),
+    index('findings_project_status_idx').on(table.projectId, table.status, table.severity),
+    index('findings_project_kind_idx').on(table.projectId, table.kind),
+    index('findings_project_url_idx').on(table.projectId, table.url),
+    check('findings_severity_check', sql`${table.severity} IN ('info', 'aviso', 'importante', 'critico')`),
+    check('findings_status_check', sql`${table.status} IN ('abierto', 'resuelto', 'descartado', 'aceptado')`),
+  ]
+);
+export type Finding = typeof findings.$inferSelect;

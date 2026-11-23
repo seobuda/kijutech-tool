@@ -1,6 +1,6 @@
 import { and, eq, inArray, like } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { authLoginAttempts, projects, roles, tenants, userRoles, users } from '@/lib/db/schema';
+import { authLoginAttempts, projects, roles, tenants, userRoles, users, clients } from '@/lib/db/schema';
 import { hashPassword, passwordFingerprint, signToken } from '@/lib/auth/session';
 
 /**
@@ -23,6 +23,8 @@ const holder = (globalThis as unknown as { __segSession: { token: string | null 
 
 export const emailFor = (key: string) => `${PREFIX}${key.replace('_', '-')}@kijutech.test`;
 
+const FIXTURE_CLIENT = 'Cliente de las pruebas de seguridad (fixture)';
+
 export async function cleanupFixtures() {
   const testUsers = await db.select({ id: users.id }).from(users).where(like(users.email, `${PREFIX}%`));
   const ids = testUsers.map((u) => u.id);
@@ -31,6 +33,9 @@ export async function cleanupFixtures() {
     await db.delete(users).where(inArray(users.id, ids));
   }
   await db.delete(projects).where(like(projects.name, `${PREFIX}%`));
+  // Cliente del proyecto de pruebas (desde los cimientos, 23 nov 2026, un proyecto siempre tiene cliente). Su nombre
+  // no empieza por el prefijo: otras pruebas borran sus clientes «${PREFIX}…» y dejarían el proyecto sin cliente.
+  await db.delete(clients).where(eq(clients.name, FIXTURE_CLIENT));
   await db.delete(authLoginAttempts).where(like(authLoginAttempts.email, `${PREFIX}%`));
   await db.delete(tenants).where(eq(tenants.slug, `${PREFIX}otra-cuenta`));
 }
@@ -48,9 +53,10 @@ export async function createFixtures(): Promise<Fixtures> {
 
   // Proyecto de Kijutech para las pruebas de aislamiento: se crea uno propio y se borra al final.
   const [creador] = await db.select({ id: users.id }).from(users).where(eq(users.tenantId, kijutech.id)).limit(1);
+  const [fxClient] = await db.insert(clients).values({ tenantId: kijutech.id, name: FIXTURE_CLIENT }).returning();
   const [project] = await db
     .insert(projects)
-    .values({ tenantId: kijutech.id, name: `${PREFIX}proyecto`, createdBy: creador.id })
+    .values({ tenantId: kijutech.id, name: `${PREFIX}proyecto`, clientId: fxClient.id, createdBy: creador.id })
     .returning();
 
   const passwordHash = await hashPassword(FIXTURE_PASSWORD);

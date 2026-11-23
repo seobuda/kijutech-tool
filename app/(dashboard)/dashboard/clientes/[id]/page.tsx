@@ -5,6 +5,8 @@ import { db } from '@/lib/db/drizzle';
 import { opsClientActivity, opsRequests, projects } from '@/lib/db/schema';
 import { completeness } from '@/lib/core/client-rules';
 import { clientHistory, getClientSheet } from '@/lib/core/clients';
+import { contactsForRouting } from '@/lib/core/comms';
+import { tenants } from '@/lib/db/schema';
 import { getStructure, selectedSpaces } from '@/lib/operaciones/structure';
 import { evaluateClient, getLevels, getServices, listClients } from '@/lib/operaciones/clients';
 import { isConnected } from '@/lib/agentes/integrations';
@@ -20,6 +22,10 @@ export default async function FichaClientePage({ params }: { params: Promise<{ i
   const user = await requirePagePermission('edit');
   const { id } = await params;
   const sheet = await getClientSheet(user.tenantId, id);
+  // Qué recibe cada contacto y la política de la cuenta (cimientos, 23 nov 2026).
+  const [routing, [tenantRow]] = sheet
+    ? await Promise.all([contactsForRouting(user.tenantId, id), db.select({ commsApprovalDefault: tenants.commsApprovalDefault }).from(tenants).where(eq(tenants.id, user.tenantId)).limit(1)])
+    : [[], [undefined]];
   if (!sheet) notFound();
 
   const [isAdmin, levels, services, structure, opsList, activity, google, dataforseo] = await Promise.all([
@@ -69,7 +75,8 @@ export default async function FichaClientePage({ params }: { params: Promise<{ i
     contract: isAdmin
       ? { contractServices: c.contractServices ?? '', monthlyFee: c.monthlyFee != null ? Number(c.monthlyFee) : null, contractStart: c.contractStart ?? '', contractRenewal: c.contractRenewal ?? '' }
       : null,
-    contacts: sheet.contacts.map((x) => ({ id: x.id, name: x.name, jobTitle: x.jobTitle ?? '', role: x.role, email: x.email ?? '', phone: x.phone ?? '', whatsapp: x.whatsapp ?? '', preferredChannel: x.preferredChannel ?? '', isPrimary: x.isPrimary, notes: x.notes ?? '', active: x.active })),
+    contacts: sheet.contacts.map((x) => ({ id: x.id, name: x.name, jobTitle: x.jobTitle ?? '', role: x.role, email: x.email ?? '', phone: x.phone ?? '', whatsapp: x.whatsapp ?? '', preferredChannel: x.preferredChannel ?? '', isPrimary: x.isPrimary, notes: x.notes ?? '', active: x.active, receives: (routing.find((r) => r.id === x.id)?.subscriptions ?? []).filter((s) => s.projectId === null).map((s) => s.kind) })),
+    comms: { approval: c.commsApproval, tenantDefault: tenantRow?.commsApprovalDefault ?? 'siempre' },
     locations: sheet.locations.map((x) => ({ id: x.id, name: x.name ?? '', address: x.address ?? '', city: x.city ?? '', postalCode: x.postalCode ?? '', region: x.region ?? '', country: x.country ?? '', phone: x.phone ?? '', hours: x.hours ?? '', isPrimary: x.isPrimary, notes: x.notes ?? '' })),
     assets: sheet.assets.map((x) => ({ id: x.id, kind: x.kind, label: x.label ?? '', value: x.value ?? '', access: x.access, accessNotes: x.accessNotes ?? '', isPrimary: x.isPrimary, recognizeEmails: Boolean(x.emailDomain), emailDomain: x.emailDomain ?? '', notes: x.notes ?? '' })),
     competitors: sheet.competitors.map((x) => ({ id: x.id, name: x.name, domain: x.domain ?? '', notes: x.notes ?? '', source: x.source })),
