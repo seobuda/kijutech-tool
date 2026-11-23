@@ -3,7 +3,9 @@
 // actualizado desde la última pasada, en los espacios seleccionados (todo por el cliente con contador).
 // Las decisiones las toma el código, sin IA:
 //  - Tarea que ya es un encargo (nuestro o espejo): si se cierra en ClickUp, el encargo se completa; si se
-//    reasigna a otra persona vinculada, se actualiza el responsable y se avisa al nuevo.
+//    reasigna a otra persona vinculada, se actualiza el responsable y se avisa al nuevo. Desde el 23 nov también se copian
+//    al encargo la fecha, la prioridad, el título, la descripción, la lista y el cliente, y los cambios parciales de
+//    responsables (alguien añadido o quitado); sus avisos se ponen al día (syncNewRequestNotices).
 //  - Tarea que lleva la marca [kiju:] y no es un encargo: es nuestra, se ignora.
 //  - Tarea nueva (creada después de activar la función) o recién asignada a alguien vinculado: encargo
 //    «espejo» con origen ClickUp y el mismo aviso con botones. Una tarea nueva que el creador se asigna a sí
@@ -21,10 +23,10 @@ import {
 } from '@/lib/db/schema';
 import { fetchWatchTasks, OPS_TIMEZONE, type WatchTask } from '@/lib/operaciones/clickup';
 import { getClickUpToken } from '@/lib/operaciones/queries';
-import { getStructure, selectedSpaces, type CachedStructure } from '@/lib/operaciones/structure';
+import { clientFieldForList, getStructure, selectedSpaces, type CachedStructure } from '@/lib/operaciones/structure';
 import { getTelegramConfig } from '@/lib/operaciones/telegram-config';
 import { logEvent } from '@/lib/operaciones/events';
-import { enqueueNewRequestNotification, refreshNotice } from '@/lib/operaciones/notifications';
+import { enqueueNewRequestNotification, refreshNotice, syncNewRequestNotices } from '@/lib/operaciones/notifications';
 import { transition } from '@/lib/operaciones/workflow';
 import { getAuto, num } from '@/lib/operaciones/automations';
 
@@ -164,7 +166,7 @@ export async function runWatch(tenantId: string, now = new Date()): Promise<void
       for (const t of [...tasks].sort((a, b) => a.updatedMs - b.updatedMs)) {
         try {
           const req = reqs.get(t.id);
-          if (req) await syncExisting(ctx, req, t);
+          if (req) await syncExisting(ctx, req, t, snaps.get(t.id)?.assigneeIds ?? null);
           else if (!isClosedType(t.statusType) && !t.description.includes('[kiju:')) {
             await maybeMirror(ctx, t, snaps.get(t.id)?.assigneeIds ?? null);
           }
@@ -198,9 +200,10 @@ export async function runWatch(tenantId: string, now = new Date()): Promise<void
   }
 }
 
-// Encargo que ya existe: sincroniza el cierre y las reasignaciones hechas en ClickUp.
-async function syncExisting(ctx: Ctx, req: OpsRequest, t: WatchTask) {
+// Encargo que ya existe: copia lo que se cambió en ClickUp (datos, cierre y responsables) y pone al día sus avisos.
+async function syncExisting(ctx: Ctx, req: OpsRequest, t: WatchTask, snapAssignees: string[] | null) {
   if (req.status !== 'creado') return;
+  const changed = await syncFields(ctx, req, t);
 
   if (isClosedType(t.statusType)) {
     const row = await transition(req, 'completado', [...OPEN_STATES, 'en_revision']);
@@ -211,43 +214,156 @@ async function syncExisting(ctx: Ctx, req: OpsRequest, t: WatchTask) {
       const { onTaskFinished } = await import('@/lib/operaciones/tiempos');
       await onTaskFinished(ctx.tenantId, { clickupTaskId: row.clickupTaskId, title: row.title }, { source: 'clickup' });
     }
+  } else if (OPEN_STATES.includes(req.workStatus)) {
+    await syncAssignees(ctx, req, t, snapAssignees);
+  }
+  if (changed) await syncNewRequestNotices(ctx.tenantId, req.id);
+}
+
+const KIJU_MARKER = /\s*\[kiju:[^\]]*\]\s*/g;
+// Lo que la herramienta añade a la descripción al crear la tarea (transcripción del audio y marca) no es del encargo.
+export const cleanTaskDescription = (md: string) => md.split(/\n#{1,3}\s*Transcripción del audio/i)[0].replace(KIJU_MARKER, '\n').trim();
+// Para comparar sin falsos cambios: ClickUp devuelve el Markdown con otro formato (viñetas, saltos, escapes).
+const letters = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+
+/** Fecha, prioridad, título, descripción, lista y cliente de la tarea → encargo. Devuelve si cambió algo. */
+async function syncFields(ctx: Ctx, req: OpsRequest, t: WatchTask): Promise<boolean> {
+  const set: Partial<typeof opsRequests.$inferInsert> = {};
+  const changes: Record<string, unknown> = {};
+  const note = (key: string, from: unknown, to: unknown) => (changes[key] = { from, to });
+
+  const due = t.dueMs ? madridDate(t.dueMs) : null;
+  if (due !== req.dueDate) {
+    set.dueDate = due;
+    note('fecha', req.dueDate, due);
+  }
+  if (t.priority !== req.priority) {
+    set.priority = t.priority;
+    note('prioridad', req.priority, t.priority);
+  }
+  const title = t.name.trim().slice(0, 500);
+  if (title && title !== req.title) {
+    set.title = title;
+    note('título', req.title, title);
+  }
+  const md = cleanTaskDescription(t.markdown);
+  const plain = cleanTaskDescription(t.description);
+  const mine = letters(req.preparedDescription);
+  if ((md || plain) && letters(md) !== mine && letters(plain) !== mine) {
+    set.preparedDescription = md || plain;
+    changes['descripción'] = true;
+  }
+  if (t.listId && t.listId !== req.clickupListId) {
+    set.clickupListId = t.listId;
+    set.clickupListName = t.listName;
+    note('lista', req.clickupListName, t.listName);
+  }
+  // Cliente: solo si la lista tiene el campo «Cliente» (si no lo tiene, el de la herramienta no está en ClickUp y se respeta).
+  const field = clientFieldForList(ctx.structure, t.listId || req.clickupListId);
+  if (field) {
+    const picked = t.dropdowns[field.fieldId];
+    const opt = picked ? field.options.find((o) => o.id === picked.optionId) : undefined;
+    const optionId = opt?.id ?? null;
+    if (optionId !== req.clientOptionId) {
+      set.clientOptionId = optionId;
+      set.clientName = opt?.label ?? null;
+      note('cliente', req.clientName, opt?.label ?? null);
+    }
+  }
+
+  if (Object.keys(changes).length === 0) return false;
+  await db
+    .update(opsRequests)
+    .set({ ...set, updatedAt: new Date() })
+    .where(and(eq(opsRequests.id, req.id), eq(opsRequests.tenantId, ctx.tenantId)));
+  Object.assign(req, set);
+  await logEvent(ctx.tenantId, { requestId: req.id, actor: null, type: 'clickup_updated', payload: changes });
+  return true;
+}
+
+/**
+ * Responsables cambiados en ClickUp (encargo abierto):
+ *  - Ya no está ninguno de los que tenía: pasa a quien esté ahora (avisando a los que tienen Telegram; si nadie lo
+ *    tiene, se anota el nuevo responsable sin aviso). Sin nadie asignado, se deja como estaba.
+ *  - Sigue alguno: los añadidos (con Telegram) entran como candidatos y se les avisa si aún nadie lo ha empezado; los
+ *    quitados salen. Si se quitó a quien lo estaba haciendo, vuelve a «asignado» para los que quedan.
+ * «Añadido» se mide contra la lectura anterior de la tarea, para no avisar a quien ya estaba (p. ej. el creador).
+ */
+async function syncAssignees(ctx: Ctx, req: OpsRequest, t: WatchTask, snapAssignees: string[] | null) {
+  const ids = t.assignees.map((a) => a.id);
+  if (ids.length === 0) return;
+  const known = [...new Set([req.assigneeClickupId, ...(req.candidateIds ?? [])].filter((x): x is string => Boolean(x)))];
+  const remaining = known.filter((k) => ids.includes(k));
+  const name = (id: string) => ctx.names.get(id) ?? null;
+  const names = (list: string[]) => list.map((g) => ctx.names.get(g) ?? g);
+  const reset = { seenAt: null, seenBy: null, remindedAt: null, unansweredListedAt: null };
+  const notify = async (people: string[], label: string) => {
+    for (const g of people) {
+      await enqueueNewRequestNotification(req.id, { forUserId: g, forName: ctx.names.get(g), label, dedupeSuffix: String(t.updatedMs) });
+    }
+  };
+
+  if (remaining.length === 0) {
+    const gained = ids.filter((id) => ctx.linked.has(id));
+    const first = gained[0] ?? ids[0];
+    const row = await transition(req, 'asignado', OPEN_STATES, {
+      assigneeClickupId: first,
+      assigneeName: name(first),
+      candidateIds: gained,
+      ...reset
+    });
+    if (!row) return;
+    await logEvent(ctx.tenantId, {
+      requestId: req.id,
+      actor: null,
+      type: 'reassigned',
+      payload: { from: req.assigneeName, to: names(ids), ...(gained.length ? {} : { sinTelegram: true }) }
+    });
+    await refreshNotice(ctx.tenantId, req.id); // los avisos anteriores pasan a «ahora lo lleva X» y pierden los botones
+    await notify(gained, 'reasignado en ClickUp');
     return;
   }
-  if (!OPEN_STATES.includes(req.workStatus)) return;
 
-  // Reasignación: ninguno de los responsables conocidos sigue en la tarea y hay alguien vinculado nuevo.
-  const ids = t.assignees.map((a) => a.id);
-  const known = [req.assigneeClickupId, ...(req.candidateIds ?? [])].filter((x): x is string => Boolean(x));
-  if (known.some((k) => ids.includes(k))) return;
-  const gained = ids.filter((id) => ctx.linked.has(id));
-  if (gained.length === 0) return;
+  const added = snapAssignees ? ids.filter((id) => !snapAssignees.includes(id) && !known.includes(id) && ctx.linked.has(id)) : [];
+  const removed = known.filter((k) => !ids.includes(k));
+  if (added.length === 0 && removed.length === 0) return;
+  const doerRemoved = Boolean(req.assigneeClickupId && removed.includes(req.assigneeClickupId));
+  const who = { responsables: { añadidos: names(added), quitados: names(removed) } };
 
-  const first = gained[0];
-  const row = await transition(req, 'asignado', OPEN_STATES, {
-    assigneeClickupId: first,
-    assigneeName: ctx.names.get(first) ?? null,
-    candidateIds: gained,
-    seenAt: null,
-    seenBy: null,
-    remindedAt: null,
-    unansweredListedAt: null
-  });
-  if (!row) return;
-  await logEvent(ctx.tenantId, {
-    requestId: req.id,
-    actor: null,
-    type: 'reassigned',
-    payload: { from: req.assigneeName, to: gained.map((g) => ctx.names.get(g) ?? g) }
-  });
-  await refreshNotice(ctx.tenantId, req.id); // los avisos anteriores pasan a «ahora lo lleva X» y pierden los botones
-  for (const g of gained) {
-    await enqueueNewRequestNotification(req.id, {
-      forUserId: g,
-      forName: ctx.names.get(g),
-      label: 'reasignado en ClickUp',
-      dedupeSuffix: String(t.updatedMs)
+  if (req.workStatus === 'asignado' || doerRemoved) {
+    // Nadie lo ha empezado (o se quitó a quien lo hacía): lo tienen los que quedan más los añadidos.
+    const people = [...new Set([...remaining, ...added])];
+    const head = doerRemoved ? people[0] : req.assigneeClickupId!;
+    const extra = { assigneeClickupId: head, assigneeName: name(head), candidateIds: people };
+    // Sin empezar y sigue quien figuraba: no es un cambio de estado (no se toca la hora del estado, que mide la espera).
+    const row = doerRemoved
+      ? await transition(req, 'asignado', OPEN_STATES, { ...extra, ...reset })
+      : (
+          await db
+            .update(opsRequests)
+            .set({ ...extra, updatedAt: new Date() })
+            .where(and(eq(opsRequests.id, req.id), eq(opsRequests.workStatus, 'asignado')))
+            .returning({ id: opsRequests.id })
+        )[0];
+    if (!row) return;
+    await logEvent(ctx.tenantId, {
+      requestId: req.id,
+      actor: null,
+      type: doerRemoved ? 'reassigned' : 'clickup_updated',
+      payload: doerRemoved ? { from: req.assigneeName, to: names(people) } : who
     });
+    await refreshNotice(ctx.tenantId, req.id);
+    // A quien ya tenía su aviso no se le repite, salvo si el encargo vuelve a estar sin empezar porque se quitó a quien lo hacía.
+    await notify(doerRemoved ? people : added, doerRemoved ? 'reasignado en ClickUp' : 'añadido en ClickUp');
+    return;
   }
+
+  // En curso con la misma persona: los que salieron dejan de ser candidatos; los añadidos colaboran (solo se anota).
+  await db
+    .update(opsRequests)
+    .set({ candidateIds: (req.candidateIds ?? []).filter((k) => ids.includes(k)), updatedAt: new Date() })
+    .where(eq(opsRequests.id, req.id));
+  await logEvent(ctx.tenantId, { requestId: req.id, actor: null, type: 'clickup_updated', payload: who });
 }
 
 const madridDate = (ms: number) => new Intl.DateTimeFormat('en-CA', { timeZone: OPS_TIMEZONE }).format(new Date(ms));

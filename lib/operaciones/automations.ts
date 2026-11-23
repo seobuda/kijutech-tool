@@ -284,7 +284,7 @@ export const AUTOMATIONS: AutomationDef[] = [
   {
     key: 'watch',
     title: 'Vigilancia de ClickUp',
-    what: 'Cada pocos minutos mira ClickUp: tareas nuevas o asignadas entran como encargos, los cierres los completan y las reasignaciones avisan al nuevo.',
+    what: 'Cada pocos minutos mira ClickUp: tareas nuevas o asignadas entran como encargos; en las que ya son encargos copia la fecha, prioridad, título, descripción, lista, cliente y responsables (y pone al día sus avisos); los cierres los completan y las reasignaciones avisan al nuevo.',
     canDisable: true,
     fields: [{ key: 'everySec', label: 'Cada cuánto consulta', type: 'number', unit: 's', min: 60, max: 900, default: 150, help: 'Una consulta agrupada cada vez (límite de ClickUp: 100 por minuto)' }],
     testNote: 'No envía mensajes por sí misma: la prueba te confirma su estado y su configuración.'

@@ -60,6 +60,7 @@ type Payload = {
   silent?: boolean; // sin sonido (disable_notification): lo informativo no interrumpe
   sentVia?: string; // bot por el que salió de verdad
   deferredTo?: string; // aviso de encargo programado para el día que toca (AAAA-MM-DD, en la zona de la persona)
+  label?: string; // etiqueta del aviso de encargo («reasignado en ClickUp»…), para poder rehacer el texto si cambia
 };
 
 export type { Payload as NotificationPayload };
@@ -137,28 +138,19 @@ export async function enqueueNewRequestNotification(
   const userName = opts.forName ?? req.assigneeName;
 
   const tz = await getMemberTimezone(req.tenantId, userId);
-  const summary = summarize(req.preparedDescription);
-
-  const text = clampMessage(
-    renderTemplate(DEF.get('new_request')!, auto.template, {
-      tarea: escapeHtml(req.title),
-      lista: escapeHtml(req.clickupListName ?? '—'),
-      fecha: req.dueDate ? escapeHtml(fmtDay(madridNoonMs(req.dueDate), tz)) : '',
-      cliente: req.clientName ? escapeHtml(req.clientName) : '',
-      resumen: summary ? escapeHtml(summary) : '',
-      url: safeUrl(req.clickupTaskUrl),
-      etiqueta: opts.label ? ` <i>(${escapeHtml(opts.label)})</i>` : ''
-    })
-  );
+  const text = newRequestText(req, auto.template, tz, opts.label);
 
   // Encargo para otro día: el aviso sale ese día a su hora de entrada (deferred-notice.ts). En modo pruebas, al momento
   // (como la comida y el silencio, que tampoco se aplican), para poder probar el aviso.
-  const later =
-    !cfg.testMode && auto.cfg.onlyToday !== false
-      ? deferredNoticeAt(scheduleOrDefault(await getScheduleMap(req.tenantId), userId), req, Date.now())
-      : null;
+  const later = await noticeLater(req, userId, cfg.testMode, auto.cfg.onlyToday !== false);
 
-  const payload: Payload = { text, testMode: cfg.testMode, actions: true, ...(later ? { deferredTo: later.day } : {}) };
+  const payload: Payload = {
+    text,
+    testMode: cfg.testMode,
+    actions: true,
+    ...(opts.label ? { label: opts.label } : {}),
+    ...(later ? { deferredTo: later.day } : {})
+  };
   const inserted = await db
     .insert(opsNotifications)
     .values({
@@ -176,6 +168,74 @@ export async function enqueueNewRequestNotification(
     .returning({ id: opsNotifications.id });
 
   if (inserted.length > 0 && !later) void processNotifications(req.tenantId);
+}
+
+function newRequestText(req: typeof opsRequests.$inferSelect, template: string, tz: string, label?: string): string {
+  const summary = summarize(req.preparedDescription);
+  return clampMessage(
+    renderTemplate(DEF.get('new_request')!, template, {
+      tarea: escapeHtml(req.title),
+      lista: escapeHtml(req.clickupListName ?? '—'),
+      fecha: req.dueDate ? escapeHtml(fmtDay(madridNoonMs(req.dueDate), tz)) : '',
+      cliente: req.clientName ? escapeHtml(req.clientName) : '',
+      resumen: summary ? escapeHtml(summary) : '',
+      url: safeUrl(req.clickupTaskUrl ?? ''),
+      etiqueta: label ? ` <i>(${escapeHtml(label)})</i>` : ''
+    })
+  );
+}
+
+async function noticeLater(req: typeof opsRequests.$inferSelect, userId: string, testMode: boolean, onlyToday: boolean) {
+  return !testMode && onlyToday ? deferredNoticeAt(scheduleOrDefault(await getScheduleMap(req.tenantId), userId), req, Date.now()) : null;
+}
+
+/**
+ * El encargo cambió en ClickUp (fecha, prioridad, título, descripción, lista o cliente; 23 nov 2026): sus avisos se ponen
+ * al día. Los que aún esperan en la cola rehacen el texto y su hora (si ahora es para hoy o urgente, salen ya; si la fecha
+ * se movió, salen el nuevo día). Los ya enviados se reescriben en Telegram con los datos nuevos (sin sonar). Nunca lanza.
+ */
+export async function syncNewRequestNotices(tenantId: string, requestId: string): Promise<void> {
+  try {
+    const [req] = await db.select().from(opsRequests).where(and(eq(opsRequests.id, requestId), eq(opsRequests.tenantId, tenantId))).limit(1);
+    const cfg = await getTelegramConfig(tenantId);
+    if (!req || !cfg) return;
+    const auto = await getAuto(tenantId, 'new_request');
+    const rows = await db
+      .select()
+      .from(opsNotifications)
+      .where(and(eq(opsNotifications.tenantId, tenantId), eq(opsNotifications.requestId, requestId), eq(opsNotifications.kind, 'new_request')));
+    let kick = false;
+    for (const n of rows) {
+      const p = n.payload as Payload;
+      const user = n.forClickupUserId ?? req.assigneeClickupId;
+      if (!user || p.skipped) continue;
+      const text = newRequestText(req, auto.template, await getMemberTimezone(tenantId, user), p.label);
+      if (n.status === 'pendiente') {
+        const later = await noticeLater(req, user, p.testMode, auto.cfg.onlyToday !== false);
+        const { deferredTo: _old, ...rest } = p;
+        if (later) {
+          await db.update(opsNotifications).set({ payload: { ...rest, text, deferredTo: later.day }, nextAttemptAt: new Date(later.at) }).where(and(eq(opsNotifications.id, n.id), eq(opsNotifications.status, n.status)));
+        } else if (p.deferredTo) {
+          // Estaba programado para otro día y ahora toca ya: sale en esta misma pasada.
+          await db.update(opsNotifications).set({ payload: { ...rest, text }, nextAttemptAt: sql`now()` }).where(and(eq(opsNotifications.id, n.id), eq(opsNotifications.status, n.status)));
+          kick = true;
+        } else if (text !== p.text) {
+          await db.update(opsNotifications).set({ payload: { ...p, text } }).where(and(eq(opsNotifications.id, n.id), eq(opsNotifications.status, n.status)));
+        }
+      } else if (n.status === 'fallido') {
+        if (text !== p.text) await db.update(opsNotifications).set({ payload: { ...p, text } }).where(and(eq(opsNotifications.id, n.id), eq(opsNotifications.status, n.status)));
+      } else if (n.sentAt && text !== p.text) {
+        // Ya enviado: se conserva la cabecera que llevaba (modo pruebas, «por si no te llegó») y se cambia el cuerpo.
+        const sent = p.sentText ?? p.text;
+        const header = sent.endsWith(p.text) ? sent.slice(0, sent.length - p.text.length) : '';
+        await db.update(opsNotifications).set({ payload: { ...p, text, sentText: clampMessage(`${header}${text}`) } }).where(and(eq(opsNotifications.id, n.id), eq(opsNotifications.status, n.status)));
+      }
+    }
+    await refreshNotice(tenantId, requestId);
+    if (kick) void processNotifications(tenantId);
+  } catch (e) {
+    console.error('[avisos] no se pudieron poner al día los avisos del encargo', requestId, e instanceof Error ? e.message : e);
+  }
 }
 
 // Encola un aviso del flujo (revisión, bloqueo, respuesta, devolución, resumen). Se inserta primero
