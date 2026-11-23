@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { ClientesTabs } from '@/components/clientes-tabs';
 import { Button } from '@/components/ui/button';
-import { Archive, ArrowUpRight, FolderKanban, Globe, Pencil, PlusCircle } from 'lucide-react';
+import { Archive, ArrowUpRight, FolderKanban, Globe, Pencil, PlusCircle, Stethoscope } from 'lucide-react';
 import { getProjectsForUser, getUser, getUserTenantRoleNames } from '@/lib/db/queries';
 import { Badge, EmptyState, PageContainer, PageHeader } from '@/components/ui/page';
 import { ArchiveProjectButton } from './archive-project-button';
@@ -92,6 +92,12 @@ export default async function ProjectsPage() {
                     <Link href={`/dashboard/projects/${project.id}/seo`}>
                       Abrir SEO
                       <ArrowUpRight className="size-3.5" />
+                    </Link>
+                  </Button>
+                  <Button asChild variant="outline" size="sm">
+                    <Link href={`/dashboard/projects/${project.id}/salud`}>
+                      <Stethoscope className="size-3.5" />
+                      Salud
                     </Link>
                   </Button>
                   <Button asChild variant="outline" size="sm" aria-label="Editar proyecto">

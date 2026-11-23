@@ -129,13 +129,20 @@ for (const k of uniq(all(/registerJobKind\(\{\s*kind: '([a-z.]+)'/g, ['lib/core/
   if (!lanes[prefix] || !pltSrc.includes(`id: '${lanes[prefix]}'`)) fail(`El trabajo «${k}» de la cola no tiene su paso en el mapa de Plataforma.`);
 }
 
+// 5j. SEO · Salud técnica (Hito 1, lib/seo/salud/process-map.ts, 23 nov 2026): archivos y tipos de trabajo del módulo SEO.
+const saludSrc = read('lib/seo/salud/process-map.ts');
+for (const f of uniq(all(/file: '([^']+)'/g, saludSrc))) if (!fs.existsSync(path.join(root, f))) fail(`El mapa de Salud técnica cita un archivo que no existe: ${f}`);
+for (const k of uniq(all(/kind: '(seo\.[a-z.]+)',\s*timeoutS/g, read('lib/seo/salud/audit.ts')))) {
+  if (!saludSrc.includes(`«${k}»`)) fail(`El trabajo «${k}» de la cola no aparece en el mapa de Salud técnica.`);
+}
+
 function schemaSrcForAgt() {
   return read('lib/db/schema.ts');
 }
 
 // 6. Enlaces entre mapas
 const mapIds = all(/^ {2}(\w+): [A-Z_]+,$/gm, mapSrc.slice(mapSrc.indexOf('export const OPS_MAPS')));
-const known = new Set([...mapIds, 'clustering', 'competitor_analysis', 'security', 'agentes', 'clientes', 'plataforma', 'rendimiento', 'estrategia', 'errores', 'conocimiento']);
+const known = new Set([...mapIds, 'clustering', 'competitor_analysis', 'security', 'agentes', 'clientes', 'plataforma', 'rendimiento', 'estrategia', 'errores', 'conocimiento', 'seo_salud']);
 for (const id of uniq([...all(/detailMapId: '(\w+)'/g, mapSrc), ...all(/detailMapId: '(\w+)'/g, registrySrc)])) {
   if (!known.has(id)) fail(`detailMapId «${id}» no corresponde a ningún mapa registrado en OPS_MAPS.`);
 }
