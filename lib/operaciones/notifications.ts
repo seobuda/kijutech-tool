@@ -384,6 +384,45 @@ export async function refreshNotice(tenantId: string, requestId: string): Promis
   }
 }
 
+/**
+ * Una propuesta con botones (correo, agente) se ha decidido fuera de Telegram, p. ej. desde Para ti (23 nov 2026): su
+ * aviso pierde los botones y dice qué se hizo, para que nadie pulse algo ya decidido. Si aún no había salido, sale ya
+ * con esa línea y sin botones. Nunca lanza: si el mensaje se borró o Telegram falla, no pasa nada.
+ */
+export async function closeDecidedNotice(tenantId: string, dedupeKey: string, line: string): Promise<void> {
+  try {
+    const [n] = await db
+      .select()
+      .from(opsNotifications)
+      .where(and(eq(opsNotifications.tenantId, tenantId), eq(opsNotifications.dedupeKey, dedupeKey)))
+      .limit(1);
+    if (!n) return;
+    const p = n.payload as Payload & { sentVia?: string };
+    const suffix = `\n\n<b>${escapeHtml(line)}</b>`;
+    if (n.status !== 'enviado') {
+      await db
+        .update(opsNotifications)
+        .set({ payload: { ...p, text: `${p.text}${suffix}`, buttons: [] } })
+        .where(and(eq(opsNotifications.id, n.id), eq(opsNotifications.status, n.status)));
+      return;
+    }
+    if (!n.chatId || !n.telegramMessageId) return;
+    const cfg = await getTelegramConfig(tenantId);
+    if (!cfg) return;
+    const token = (p.sentVia ? await readyDeptBotToken(tenantId, p.sentVia) : null) ?? decodeBotToken(cfg);
+    await tg(token, 'editMessageText', {
+      chat_id: n.chatId,
+      message_id: n.telegramMessageId,
+      text: clampMessage(`${p.sentText ?? p.text}${suffix}`),
+      parse_mode: 'HTML',
+      disable_web_page_preview: true,
+      reply_markup: { inline_keyboard: [] }
+    }).catch(() => undefined);
+  } catch {
+    // no es crítico
+  }
+}
+
 export async function enqueueTestNotification(tenantId: string): Promise<void> {
   await db.insert(opsNotifications).values({
     tenantId,

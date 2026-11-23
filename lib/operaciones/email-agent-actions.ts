@@ -9,6 +9,7 @@ import { publicError } from '@/lib/errors';
 import { requireInboxOwner } from '@/lib/operaciones/inbox-owner';
 import { getClickUpConnection } from '@/lib/operaciones/queries';
 import { approveEmailReply, rejectEmailReply } from '@/lib/operaciones/email-agent';
+import { closeDecidedNotice } from '@/lib/operaciones/notifications';
 import { connectResend, getEmailConfig, saveWebhookSecret } from '@/lib/operaciones/resend';
 import type { Actor } from '@/lib/operaciones/events';
 
@@ -69,6 +70,8 @@ export async function approveEmailReplyAction(
     const res = await approveEmailReply(user.tenantId, actionId, await ownerActor(user.tenantId), 'panel', text, {
       createRequests: Boolean(createRequests)
     });
+    // Decidida en la web: el aviso de Telegram pierde sus botones y dice qué se hizo.
+    if (res.ok) await closeDecidedNotice(user.tenantId, `email_proposal:${actionId}`, text ? '✏️ Corregida y aprobada en la web' : '✅ Aprobada en la web');
     refresh();
     revalidatePath('/dashboard/operaciones/encargos');
     return res.ok ? { ok: true, created: res.created ?? 0 } : { ok: false, error: res.reason };
@@ -81,6 +84,7 @@ export async function rejectEmailReplyAction(actionId: string): Promise<Ok> {
   try {
     const user = await requireInboxOwner();
     const res = await rejectEmailReply(user.tenantId, actionId, await ownerActor(user.tenantId), 'panel');
+    if (res.ok) await closeDecidedNotice(user.tenantId, `email_proposal:${actionId}`, '✖️ Descartada en la web');
     refresh();
     return res.ok ? { ok: true } : { ok: false, error: res.reason };
   } catch (e) {

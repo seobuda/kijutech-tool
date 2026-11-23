@@ -22,6 +22,8 @@ import {
 } from '@/lib/operaciones/blockers';
 import type { Actor } from '@/lib/operaciones/events';
 import { publicError } from '@/lib/errors';
+import { closeDecidedNotice } from '@/lib/operaciones/notifications';
+import { getAction } from '@/lib/operaciones/agent-actions';
 
 type Ok<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 
@@ -157,6 +159,8 @@ export async function inboxAnswer(blockerId: string, answer: string): Promise<Ok
     const blocker = await getBlocker(user.tenantId, blockerId);
     if (!blocker) return { ok: false, error: 'Bloqueo no encontrado' };
     const res = await ownerAnswerBlocker(blocker, await ownerActor(user.tenantId), answer, { via: 'panel' });
+    // El aviso urgente del bloqueo (si lo hubo) pierde sus botones: ya está respondido.
+    if (res.ok) await closeDecidedNotice(user.tenantId, `block:${blocker.id}`, '💬 Respondido en la web');
     refreshAll();
     return res.ok ? { ok: true } : { ok: false, error: res.reason };
   } catch (e) {
@@ -169,6 +173,11 @@ export async function inboxApproveProposal(actionId: string): Promise<Ok> {
   try {
     const user = await requireInboxOwner();
     const res = await approveBlockerProposal(user.tenantId, actionId, await ownerActor(user.tenantId), 'panel');
+    // Respondido con la propuesta: el aviso urgente pierde sus botones. (Al descartarla no: el bloqueo sigue abierto.)
+    if (res.ok) {
+      const blockerId = (await getAction(user.tenantId, actionId))?.blockerId;
+      if (blockerId) await closeDecidedNotice(user.tenantId, `block:${blockerId}`, '✅ Propuesta enviada desde la web');
+    }
     refreshAll();
     revalidatePath('/dashboard/operaciones/agente');
     return res.ok ? { ok: true } : { ok: false, error: res.reason };

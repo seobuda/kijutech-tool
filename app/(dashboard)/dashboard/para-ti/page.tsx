@@ -12,6 +12,7 @@ import { toBandejaItems } from '../operaciones/bandeja/items';
 import { QuestionCard } from '../agentes/equipo/equipo-view';
 import { toQuestionRow } from '../agentes/equipo/rows';
 import { EmailDecisionCard, ToolDecisionCard } from './decision-cards';
+import { FlashScope } from '@/components/ui/flash';
 
 export const dynamic = 'force-dynamic';
 
@@ -60,6 +61,7 @@ export default async function ParaTiPage({ searchParams }: { searchParams: Promi
   const kindCounts = KIND_ORDER.map((k) => ({ k, n: inDept.filter((e) => e.kind === k).length })).filter((x) => x.n > 0);
 
   return (
+    <FlashScope>
     <PageContainer className="space-y-5">
       <PageHeader
         icon={Inbox}
@@ -172,6 +174,7 @@ export default async function ParaTiPage({ searchParams }: { searchParams: Promi
         </>
       )}
     </PageContainer>
+    </FlashScope>
   );
 }
 
