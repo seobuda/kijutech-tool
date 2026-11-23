@@ -5,6 +5,7 @@ import { OPS_MAPS } from '@/lib/operaciones/process-map';
 import { SECURITY_PROCESS_MAP } from '@/lib/auth/security-process-map';
 import { AGENTES_PROCESS_MAP } from '@/lib/agentes/process-map';
 import { CLIENTES_PROCESS_MAP } from '@/lib/core/clients-process-map';
+import { PLATAFORMA_PROCESS_MAP } from '@/lib/core/platform-process-map';
 import { RENDIMIENTO_PROCESS_MAP } from '@/lib/rendimiento/process-map';
 import { ESTRATEGIA_PROCESS_MAP } from '@/lib/estrategia/process-map';
 import { ERRORES_PROCESS_MAP } from '@/lib/core/errors-process-map';
@@ -69,6 +70,22 @@ const CORE_NODES: SystemNode[] = [
         'Tablas del núcleo clients, client_contacts, client_locations, client_assets, client_competitors y client_memory (14 nov 2026, migración 0048). Operaciones guarda sus ajustes en ops_clients con el mismo id. Sección propia /dashboard/clientes con pestañas.',
       stack: ['lib/core/clients.ts (datos)', 'lib/core/client-rules.ts (reglas puras y completitud)', 'lib/core/client-actions.ts (acciones con permisos)'],
       keyDecisions: ['Cliente ≠ activo ≠ integración (patrón Semrush/AgencyAnalytics)', 'Mismo id que ops_clients: ninguna referencia se reescribió', 'Nunca contraseñas; contrato solo para administradores']
+    },
+  },
+  {
+    id: 'core-plataforma',
+    name: 'Plataforma',
+    description:
+      'Los cimientos que usan los departamentos (SEO ahora, Ads después): proyecto con cliente y alcance, cola de trabajos con trabajador aparte, correos a clientes con aprobación, Search Console en detalle, rastreador de webs y hallazgos.',
+    status: 'built',
+    icon: 'Hammer',
+    detailMapId: 'plataforma',
+    group: 'infrastructure',
+    technicalDetail: {
+      summary:
+        'Cimientos del 23 nov 2026 (migración 0060, aprobados por Enric; docs/DISENO-TECNICO-CIMIENTOS.md). Todo en el núcleo porque lo usarán varios módulos. El trabajador corre en su propio contenedor (APP_ROLE=worker).',
+      stack: ['lib/core/jobs.ts', 'lib/core/comms.ts', 'lib/core/gsc.ts', 'lib/core/crawler.ts (parse5)', 'lib/core/findings.ts', 'lib/projects/scope.ts'],
+      keyDecisions: ['Lo pesado fuera de la web y del bot', 'Search Console guardado en detalle (tabla particionada) en vez de consultas en directo', 'Hallazgos consultables con ciclo de vida, no JSON opaco', 'Ningún correo a un cliente sale sin aprobación por defecto']
     },
   },
   {
@@ -376,7 +393,7 @@ export function getSystemMap(): SystemNode[] {
 }
 
 // Todos los mapas de detalle conocidos (el Server Component los resuelve y los pasa al cliente).
-export const PROCESS_MAP_IDS = ['clustering', 'competitor_analysis', 'security', 'agentes', 'clientes', 'rendimiento', 'estrategia', 'errores', 'conocimiento', ...Object.keys(OPS_MAPS)];
+export const PROCESS_MAP_IDS = ['clustering', 'competitor_analysis', 'security', 'agentes', 'clientes', 'plataforma', 'rendimiento', 'estrategia', 'errores', 'conocimiento', ...Object.keys(OPS_MAPS)];
 
 export function getProcessMap(detailMapId: string): ProcessStep[] {
   switch (detailMapId) {
@@ -390,6 +407,8 @@ export function getProcessMap(detailMapId: string): ProcessStep[] {
       return AGENTES_PROCESS_MAP;
     case 'clientes':
       return CLIENTES_PROCESS_MAP;
+    case 'plataforma':
+      return PLATAFORMA_PROCESS_MAP;
     case 'rendimiento':
       return RENDIMIENTO_PROCESS_MAP;
     case 'estrategia':

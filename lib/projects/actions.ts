@@ -1,10 +1,11 @@
 'use server';
 
 import { z } from 'zod';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { redirect } from 'next/navigation';
 import { db } from '@/lib/db/drizzle';
 import {
+  clients,
   projectModules,
   projects,
   userRoles,
@@ -12,33 +13,51 @@ import {
 } from '@/lib/db/schema';
 import { validatedActionWithUser } from '@/lib/auth/middleware';
 import { getUser, getUserTenantRoleNames } from '@/lib/db/queries';
+import { primaryDomainOf, setProjectScope } from '@/lib/projects/scope';
 
 const MANAGE_PROJECT_ROLES = ['admin', 'super_admin'];
 
 const emptyToUndefined = (v: unknown) => (v === '' ? undefined : v);
 
+// Cimientos (23 nov 2026): un proyecto pertenece SIEMPRE a un cliente y elige su alcance (webs, Search Console,
+// fichas…) de entre las cuentas de ese cliente. Un cliente puede tener varios proyectos.
 const createProjectSchema = z.object({
   name: z.string().min(1, 'El nombre es obligatorio').max(200),
-  clientName: z.preprocess(emptyToUndefined, z.string().max(200).optional()),
-  domain: z.preprocess(emptyToUndefined, z.string().max(255).optional()),
-  location: z.preprocess(emptyToUndefined, z.string().max(255).optional())
+  clientId: z.string().uuid('Elige el cliente del proyecto'),
+  service: z.enum(['seo', 'ads', 'web', 'otro']).default('seo'),
+  monthlyHours: z.preprocess(emptyToUndefined, z.coerce.number().min(0).max(1000).optional()),
+  location: z.preprocess(emptyToUndefined, z.string().max(255).optional()),
+  // Cuentas del alcance, separadas por comas (el formulario las junta en un campo oculto).
+  assets: z.preprocess(emptyToUndefined, z.string().max(4000).optional())
 });
+
+const assetList = (v?: string) => (v ?? '').split(',').map((x) => x.trim()).filter((x) => /^[0-9a-f-]{36}$/i.test(x));
+
+async function clientOf(tenantId: string, clientId: string) {
+  const [c] = await db.select({ id: clients.id, name: clients.name }).from(clients).where(and(eq(clients.id, clientId), eq(clients.tenantId, tenantId))).limit(1);
+  return c ?? null;
+}
 
 export const createProject = validatedActionWithUser(
   createProjectSchema,
   async (data, _, user) => {
-    const { name, clientName, domain, location } = data;
-
+    const client = await clientOf(user.tenantId, data.clientId);
+    if (!client) return { error: 'Cliente no encontrado' };
     const newProject: NewProject = {
       tenantId: user.tenantId,
-      name,
-      clientName: clientName ?? null,
-      domain: domain ?? null,
-      location: location ?? null,
+      name: data.name,
+      clientId: client.id,
+      // Nombre del cliente también en texto: lo leen pantallas antiguas del SEO de agosto.
+      clientName: client.name,
+      service: data.service,
+      monthlyHours: data.monthlyHours === undefined ? null : String(data.monthlyHours),
+      location: data.location ?? null,
       createdBy: user.id
     };
-
-    await db.insert(projects).values(newProject);
+    const [row] = await db.insert(projects).values(newProject).returning({ id: projects.id });
+    await setProjectScope(user.tenantId, row.id, assetList(data.assets));
+    const domain = await primaryDomainOf(user.tenantId, row.id);
+    if (domain) await db.update(projects).set({ domain }).where(eq(projects.id, row.id));
 
     redirect('/dashboard/projects');
   },
@@ -52,27 +71,33 @@ const updateProjectSchema = createProjectSchema.extend({
 export const updateProject = validatedActionWithUser(
   updateProjectSchema,
   async (data, _, user) => {
-    const { id, name, clientName, domain, location } = data;
-
     const [project] = await db
       .select()
       .from(projects)
-      .where(eq(projects.id, id))
+      .where(eq(projects.id, data.id))
       .limit(1);
 
     if (!project || project.tenantId !== user.tenantId) {
       return { error: 'Proyecto no encontrado' };
     }
+    const client = await clientOf(user.tenantId, data.clientId);
+    if (!client) return { error: 'Cliente no encontrado' };
 
     await db
       .update(projects)
       .set({
-        name,
-        clientName: clientName ?? null,
-        domain: domain ?? null,
-        location: location ?? null
+        name: data.name,
+        clientId: client.id,
+        clientName: client.name,
+        service: data.service,
+        monthlyHours: data.monthlyHours === undefined ? null : String(data.monthlyHours),
+        location: data.location ?? null,
+        updatedAt: new Date()
       })
-      .where(eq(projects.id, id));
+      .where(eq(projects.id, data.id));
+    await setProjectScope(user.tenantId, data.id, assetList(data.assets));
+    const domain = await primaryDomainOf(user.tenantId, data.id);
+    await db.update(projects).set({ domain }).where(eq(projects.id, data.id));
 
     redirect('/dashboard/projects');
   },

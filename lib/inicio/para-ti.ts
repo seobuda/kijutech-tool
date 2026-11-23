@@ -11,8 +11,9 @@ import { listErrorGroups } from '@/lib/core/errors';
 import { getInbox, type InboxItem } from '@/lib/operaciones/inbox';
 import { getPendingEmailProposals, type PendingEmail } from '@/lib/operaciones/owner-queue';
 import { pendingEmailProposal } from '@/lib/operaciones/email-agent';
+import { pendingClientMessages, type PendingMessage } from '@/lib/core/comms';
 
-export type KindKey = 'bloqueos' | 'revisiones' | 'correos' | 'dudas' | 'agente' | 'estratega' | 'fichas' | 'base' | 'errores';
+export type KindKey = 'bloqueos' | 'revisiones' | 'correos' | 'mensajes' | 'dudas' | 'agente' | 'estratega' | 'fichas' | 'base' | 'errores';
 export type DeptKey = 'operaciones' | 'cuentas' | 'sistema';
 
 export const KINDS: Record<KindKey, { label: string; dept: DeptKey; urgent: boolean; ownerOnly: boolean }> = {
@@ -21,6 +22,8 @@ export const KINDS: Record<KindKey, { label: string; dept: DeptKey; urgent: bool
   errores: { label: 'Errores críticos abiertos', dept: 'sistema', urgent: true, ownerOnly: false },
   revisiones: { label: 'Encargos por revisar', dept: 'operaciones', urgent: false, ownerOnly: true },
   correos: { label: 'Correos por responder', dept: 'operaciones', urgent: false, ownerOnly: true },
+  // Cimientos (23 nov 2026): lo que el equipo o un agente quiere enviar a un cliente y espera aprobación.
+  mensajes: { label: 'Correos a clientes por aprobar', dept: 'operaciones', urgent: false, ownerOnly: false },
   agente: { label: 'Propuestas del agente', dept: 'operaciones', urgent: false, ownerOnly: true },
   estratega: { label: 'Propuestas del estratega', dept: 'cuentas', urgent: false, ownerOnly: false },
   fichas: { label: 'Cambios propuestos en fichas', dept: 'cuentas', urgent: false, ownerOnly: false },
@@ -56,7 +59,7 @@ const clip = (s: string | null | undefined, n = 160) => (s ? (s.length > n ? `${
 
 /** Todo lo que espera una decisión, ya ordenado (urgente primero; dentro, lo que más espera). */
 export async function getParaTi(tenantId: string): Promise<ParaTi> {
-  const [inbox, emails, agentRows, questions, kb, suggestions, memory, errors, deptRows] = await Promise.all([
+  const [inbox, emails, agentRows, questions, kb, suggestions, memory, errors, deptRows, outgoing] = await Promise.all([
     getInbox(tenantId),
     getPendingEmailProposals(tenantId),
     db
@@ -93,7 +96,8 @@ export async function getParaTi(tenantId: string): Promise<ParaTi> {
       .orderBy(asc(clientMemory.createdAt))
       .limit(LIMIT),
     listErrorGroups(tenantId, { status: 'abiertos', severity: 'critico' }, LIMIT),
-    db.select({ key: agtDepartments.key, name: agtDepartments.name }).from(agtDepartments).where(eq(agtDepartments.tenantId, tenantId))
+    db.select({ key: agtDepartments.key, name: agtDepartments.name }).from(agtDepartments).where(eq(agtDepartments.tenantId, tenantId)),
+    pendingClientMessages(tenantId, LIMIT)
   ]);
 
   const entries: ParaTiEntry[] = [];
@@ -107,6 +111,7 @@ export async function getParaTi(tenantId: string): Promise<ParaTi> {
     }
   }
   for (const e of emails) push({ key: `c-${e.actionId}`, kind: 'correos', title: e.subject || '(sin asunto)', detail: e.top ? 'Cliente Top' : null, clientName: e.clientName ?? e.from, since: e.since, href: e.emailId ? `/dashboard/operaciones/correos?id=${e.emailId}` : '/dashboard/operaciones/correos' });
+  for (const m of outgoing) push({ key: `o-${m.id}`, kind: 'mensajes', title: m.subject, detail: `De ${m.author} · para ${m.to.join(', ')}`, clientName: m.clientName, since: m.since, href: null });
   for (const a of agentRows) push({ key: `a-${a.id}`, kind: 'agente', title: clip(a.summary, 140) ?? 'Propuesta del agente', detail: null, clientName: null, since: a.createdAt, href: '/dashboard/operaciones/agente' });
   for (const q of questions) {
     push({ key: `q-${q.id}`, kind: 'dudas', title: clip(q.question, 140) ?? '', detail: `${q.by} · ${q.status === 'escalada' ? 'escalada a ti' : 'respuesta pendiente de tu aprobación'}`, clientName: null, since: q.escalatedAt ?? q.createdAt, href: '/dashboard/agentes/equipo' });
@@ -154,16 +159,16 @@ export type EmailDecision = {
 
 export type ToolDecision = { key: string; id: string; summary: string; agent: string | null; requestedBy: string | null; since: Date };
 
-export type ParaTiDecisions = { emails: EmailDecision[]; tools: ToolDecision[]; questions: AgtTeamQuestion[] };
+export type ParaTiDecisions = { emails: EmailDecision[]; tools: ToolDecision[]; questions: AgtTeamQuestion[]; messages: PendingMessage[] };
 
 /** Clave de la entrada de Para ti que corresponde a cada decisión (para cruzarla con los filtros). */
-export const decisionKey = { email: (actionId: string) => `c-${actionId}`, tool: (id: string) => `a-${id}`, question: (id: string) => `q-${id}` };
+export const decisionKey = { email: (actionId: string) => `c-${actionId}`, tool: (id: string) => `a-${id}`, question: (id: string) => `q-${id}`, message: (id: string) => `o-${id}` };
 
 const EXCERPT = 600;
 
 export async function getParaTiDecisions(tenantId: string, emails: PendingEmail[]): Promise<ParaTiDecisions> {
   const withEmail = emails.filter((e): e is PendingEmail & { emailId: string } => Boolean(e.emailId)).slice(0, DECIDE_LIMIT);
-  const [bodies, proposals, toolRows, questions] = await Promise.all([
+  const [bodies, proposals, toolRows, questions, messages] = await Promise.all([
     withEmail.length
       ? db
           .select({ id: opsInboundEmails.id, bodyText: opsInboundEmails.bodyText, proposal: opsInboundEmails.proposal })
@@ -182,7 +187,8 @@ export async function getParaTiDecisions(tenantId: string, emails: PendingEmail[
       .from(agtTeamQuestions)
       .where(and(eq(agtTeamQuestions.tenantId, tenantId), inArray(agtTeamQuestions.status, ['pendiente_aprobacion', 'escalada'])))
       .orderBy(asc(agtTeamQuestions.createdAt))
-      .limit(DECIDE_LIMIT)
+      .limit(DECIDE_LIMIT),
+    pendingClientMessages(tenantId, DECIDE_LIMIT)
   ]);
   const byId = new Map(bodies.map((b) => [b.id, b]));
   const emailDecisions: EmailDecision[] = [];
@@ -211,5 +217,5 @@ export async function getParaTiDecisions(tenantId: string, emails: PendingEmail[
       since: t.createdAt
     };
   });
-  return { emails: emailDecisions, tools, questions };
+  return { emails: emailDecisions, tools, questions, messages };
 }

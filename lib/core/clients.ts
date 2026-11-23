@@ -14,6 +14,7 @@ import {
   clientLocations,
   clientMemory,
   clients,
+  projects,
   type Client,
   type ClientAsset,
   type ClientCompetitor,
@@ -280,6 +281,9 @@ export async function deleteCoreClient(tenantId: string, id: string, confirmName
     if (c.status !== 'baja') throw new ClientError(`${history.join(' ')} Dale de baja primero (queda archivado); después podrás borrarlo escribiendo su nombre.`);
     if (normName(confirmName ?? '') !== normName(c.name)) throw new ClientError(`Para borrarlo con su histórico, escribe el nombre del cliente («${c.name}»).`);
   }
+  // Cimientos (23 nov 2026): un proyecto no puede quedarse sin cliente; primero hay que archivar o borrar sus proyectos.
+  const [proj] = await db.select({ name: projects.name }).from(projects).where(and(eq(projects.clientId, id), eq(projects.tenantId, tenantId), eq(projects.legacy, false))).limit(1);
+  if (proj) throw new ClientError(`Tiene proyectos (p. ej. «${proj.name}»): bórralos o pásalos a otro cliente antes de borrar la ficha.`);
   await db.delete(clients).where(and(eq(clients.id, id), eq(clients.tenantId, tenantId)));
 }
 

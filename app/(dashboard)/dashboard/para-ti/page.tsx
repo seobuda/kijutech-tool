@@ -11,7 +11,7 @@ import { BandejaList } from '../operaciones/bandeja/bandeja-list';
 import { toBandejaItems } from '../operaciones/bandeja/items';
 import { QuestionCard } from '../agentes/equipo/equipo-view';
 import { toQuestionRow } from '../agentes/equipo/rows';
-import { EmailDecisionCard, ToolDecisionCard } from './decision-cards';
+import { EmailDecisionCard, MessageDecisionCard, ToolDecisionCard } from './decision-cards';
 import { FlashScope } from '@/components/ui/flash';
 
 export const dynamic = 'force-dynamic';
@@ -41,11 +41,14 @@ export default async function ParaTiPage({ searchParams }: { searchParams: Promi
   const emailCards = owner ? decisions.emails.filter((d) => shownKeys.has(d.key)) : [];
   const toolCards = owner ? decisions.tools.filter((d) => shownKeys.has(d.key)) : [];
   const questionCards = decisions.questions.filter((q) => shownKeys.has(decisionKey.question(q.id)));
+  // Correos a clientes por aprobar (cimientos, 23 nov 2026): cualquier administrador.
+  const messageCards = decisions.messages.filter((m) => shownKeys.has(decisionKey.message(m.id)));
   const decideKeys = new Set([
     ...inboxKeys,
     ...emailCards.map((d) => d.key),
     ...toolCards.map((d) => d.key),
-    ...questionCards.map((q) => decisionKey.question(q.id))
+    ...questionCards.map((q) => decisionKey.question(q.id)),
+    ...messageCards.map((m) => decisionKey.message(m.id))
   ]);
   const rest = shown.filter((e) => !decideKeys.has(e.key));
   const ownerOnlyCount = owner ? 0 : shown.filter((e) => KINDS[e.kind].ownerOnly).length;
@@ -125,6 +128,15 @@ export default async function ParaTiPage({ searchParams }: { searchParams: Promi
                   <ul className="space-y-3 p-4" data-testid="para-ti-dudas">
                     {questionCards.map((q) => (
                       <QuestionCard key={q.id} q={toQuestionRow(q)} />
+                    ))}
+                  </ul>
+                </Section>
+              )}
+              {messageCards.length > 0 && (
+                <Section title={`Correos a clientes por aprobar · ${messageCards.length}`} description="Lo ha preparado el equipo o un agente: no sale sin tu aprobación.">
+                  <ul className="space-y-3 p-4" data-testid="para-ti-mensajes">
+                    {messageCards.map((m) => (
+                      <MessageDecisionCard key={m.id} c={{ id: m.id, clientName: m.clientName, kind: m.kind, subject: m.subject, body: m.body, author: m.author, to: m.to, wait: waitLabel(m.since) }} />
                     ))}
                   </ul>
                 </Section>

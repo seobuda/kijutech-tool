@@ -421,6 +421,13 @@
       "when": 1795500000000,
       "tag": "0059_examen_prompts",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1795600000000,
+      "tag": "0060_cimientos_plataforma",
+      "breakpoints": true
     }
   ]
 }

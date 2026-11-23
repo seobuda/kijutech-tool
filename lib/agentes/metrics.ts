@@ -135,7 +135,16 @@ async function fetchTop(tenantId: string, source: string, property: string, from
 /** Consulta libre a Search Console (módulo Estrategia: palabras clave, URLs trabajadas, detectores). */
 async function search(tenantId: string, source: string, property: string, q: SearchQuery): Promise<SearchRow[]> {
   if (source !== 'gsc') return [];
-  const body: Record<string, unknown> = { startDate: q.from, endDate: q.to, dimensions: q.dimensions, rowLimit: Math.min(Math.max(q.limit ?? 1000, 1), 25000), dataState: 'final' };
+  const body: Record<string, unknown> = {
+    startDate: q.from,
+    endDate: q.to,
+    dimensions: q.dimensions,
+    rowLimit: Math.min(Math.max(q.limit ?? 1000, 1), 25000),
+    dataState: q.dataState ?? 'final',
+    // Paginación y tipo de búsqueda (cimientos, 23 nov 2026: descarga completa del detalle en el núcleo).
+    ...(q.startRow ? { startRow: q.startRow } : {}),
+    ...(q.searchType && q.searchType !== 'web' ? { type: q.searchType } : {})
+  };
   if (q.filters?.length) body.dimensionFilterGroups = [{ groupType: 'and', filters: q.filters.map((f) => ({ dimension: f.dimension, operator: f.operator, expression: f.expression })) }];
   const rows = await gscQuery(tenantId, property, body);
   return rows.map((r) => ({ keys: r.keys ?? [], clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position }));

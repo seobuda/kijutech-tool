@@ -284,13 +284,19 @@ export type MetricSource = {
   /** Estado de una URL en el buscador (último rastreo, indexación). null si la fuente no lo ofrece. */
   inspectUrl?: (tenantId: string, source: string, property: string, url: string) => Promise<UrlInspection | null>;
 };
-export type SearchDimension = 'date' | 'query' | 'page' | 'device';
+export type SearchDimension = 'date' | 'query' | 'page' | 'device' | 'country';
 export type SearchQuery = {
   from: string;
   to: string;
   dimensions: SearchDimension[];
   filters?: { dimension: 'query' | 'page'; operator: 'equals' | 'contains' | 'includingRegex'; expression: string }[];
   limit?: number;
+  /** Desde qué fila (paginación de la descarga completa, cimientos 23 nov 2026). */
+  startRow?: number;
+  /** web (por defecto) | image | video | news | discover | googleNews. */
+  searchType?: 'web' | 'image' | 'video' | 'news' | 'discover' | 'googleNews';
+  /** final (por defecto) | all (incluye los días aún sin cerrar). */
+  dataState?: 'final' | 'all';
 };
 export type SearchRow = { keys: string[]; clicks: number; impressions: number; ctr: number; position: number };
 export type UrlInspection = { lastCrawl: string | null; verdict: string | null; coverage: string | null; indexing: string | null; robots: string | null; canonical: string | null };
@@ -416,7 +422,7 @@ export type WorkSource = {
   createTask?: (tenantId: string, input: NewTaskInput) => Promise<{ ok: boolean; ref: string | null; url: string | null; message: string }>;
 };
 export type OpenWorkItem = { ref: string; title: string; workType: string | null; status: string; dueDate: string | null };
-export type NewTaskInput = { clientId: string; title: string; description: string; workType: string | null; requestedBy: string };
+export type NewTaskInput = { clientId: string; title: string; description: string; workType: string | null; requestedBy: string; /** Proyecto del que nace (cimientos, 23 nov 2026). */ projectId?: string | null };
 export function registerWorkSource(w: WorkSource): void {
   GK.__kijuWorkSource = w;
 }
@@ -493,4 +499,49 @@ export function setAgentJobCreator(fn: AgentJobCreator): void {
 }
 export function agentJobCreator(): AgentJobCreator | null {
   return GJ.__kijuAgentJobCreator ?? null;
+}
+
+// --- Comunicaciones con clientes (cimientos, 23 nov 2026) -------------------------------------------------------------
+// El núcleo decide QUÉ sale, A QUIÉN y si pasa por aprobación (lib/core/comms.ts); un módulo con buzón lo ENVÍA
+// (Operaciones registra Resend) y avisa al dueño de lo que espera su aprobación (Telegram). Las respuestas del cliente
+// entran por el buzón de Operaciones, que llama a receiveClientReply (lib/core/comms.ts) para unirlas a su hilo.
+export type MailSender = {
+  send: (
+    tenantId: string,
+    m: { to: { email: string; name: string }[]; cc: { email: string; name: string }[]; subject: string; text: string; messageId: string; idempotencyKey: string }
+  ) => Promise<{ providerId: string }>;
+  /** Dominio del buzón, para el Message-ID de los mensajes (hilos). */
+  domain: (tenantId: string) => Promise<string>;
+};
+export type CommsApprovalNotice = { tenantId: string; messageId: string; clientName: string; kind: string; subject: string; body: string; author: string };
+export type ClientReply = { tenantId: string; inboundId: string; clientId: string | null; threadKeys: string[]; subject: string; text: string; from: string };
+const GM2 = globalThis as unknown as {
+  __kijuMailSender?: MailSender;
+  __kijuCommsNotifier?: CommsApprovalNotifier;
+  __kijuReplyListeners?: Map<string, (r: ClientReply & { messageId: string; projectId: string | null; kind: string }) => Promise<void>>;
+};
+export function registerMailSender(s: MailSender): void {
+  GM2.__kijuMailSender = s;
+}
+export function mailSender(): MailSender | null {
+  return GM2.__kijuMailSender ?? null;
+}
+/** Quién avisa al dueño de un mensaje pendiente de aprobar (Operaciones, por Telegram) y cierra el aviso al decidirlo. */
+export type CommsApprovalNotifier = {
+  notify: (n: CommsApprovalNotice) => Promise<void>;
+  /** Decidido fuera del aviso (p. ej. en Para ti): el aviso pierde sus botones y dice qué se hizo. */
+  decided: (tenantId: string, messageId: string, line: string) => Promise<void>;
+};
+export function registerCommsApprovalNotifier(n: CommsApprovalNotifier): void {
+  GM2.__kijuCommsNotifier = n;
+}
+export function commsApprovalNotifier(): CommsApprovalNotifier | null {
+  return GM2.__kijuCommsNotifier ?? null;
+}
+/** Un módulo quiere enterarse de las respuestas a sus mensajes (p. ej. SEO, para completar el expediente). */
+export function registerClientReplyListener(key: string, fn: (r: ClientReply & { messageId: string; projectId: string | null; kind: string }) => Promise<void>): void {
+  (GM2.__kijuReplyListeners ??= new Map()).set(key, fn);
+}
+export function clientReplyListeners(): ((r: ClientReply & { messageId: string; projectId: string | null; kind: string }) => Promise<void>)[] {
+  return [...(GM2.__kijuReplyListeners?.values() ?? [])];
 }

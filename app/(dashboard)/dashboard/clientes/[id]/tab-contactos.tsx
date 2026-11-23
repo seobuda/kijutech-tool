@@ -3,27 +3,77 @@
 // Pestaña «Contactos»: personas del cliente (rol, correo, teléfono, WhatsApp, canal preferido, principal) y sus locales
 // o sedes. Cada cambio se guarda al momento. Los correos de los contactos activos sirven para reconocer sus emails.
 import { useState } from 'react';
-import { MapPin, Pencil, Plus, Star, UserRound } from 'lucide-react';
+import { AlertTriangle, Mail, MapPin, Pencil, Plus, Star, UserRound } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/page';
 import { cn } from '@/lib/utils';
 import { CHANNEL_LABEL, CHANNELS, CONTACT_ROLE_LABEL, CONTACT_ROLES } from '@/lib/core/client-rules';
-import { deleteContactAction, deleteLocationAction, saveContactAction, saveLocationAction } from '@/lib/core/client-actions';
+import { deleteContactAction, deleteLocationAction, saveContactAction, saveLocationAction, setClientCommsApprovalAction, setContactSubscriptionsAction } from '@/lib/core/client-actions';
+import { COMMS_KIND_LABELS, COMMS_KINDS, SUBSCRIPTION_KINDS, type SubscriptionKind } from '@/lib/core/comms-rules';
 import { areaClass, brandBtn, checkClass, ConfirmDelete, MsgLine, selectClass, useRun } from '../ui';
 import type { ContactView, LocationView } from './ficha-view';
 
 const emptyContact: ContactView = { id: '', name: '', jobTitle: '', role: 'otro', email: '', phone: '', whatsapp: '', preferredChannel: '', isPrimary: false, notes: '', active: true };
 const emptyLocation: LocationView = { id: '', name: '', address: '', city: '', postalCode: '', region: '', country: 'España', phone: '', hours: '', isPrimary: false, notes: '' };
 
-export function ContactosTab({ clientId, contacts, locations, isAdmin }: { clientId: string; contacts: ContactView[]; locations: LocationView[]; isAdmin: boolean }) {
+export function ContactosTab({
+  clientId,
+  contacts,
+  locations,
+  isAdmin,
+  comms
+}: {
+  clientId: string;
+  contacts: ContactView[];
+  locations: LocationView[];
+  isAdmin: boolean;
+  comms?: { approval: string; tenantDefault: string };
+}) {
   const [editC, setEditC] = useState<string | null>(null); // id, 'new' o null
+  const [editR, setEditR] = useState<string | null>(null); // contacto cuyo «qué recibe» se edita
+  // Tipos de mensaje sin nadie que los reciba: el sistema no podrá escribir al cliente de eso.
+  const reachable = (k: string) => contacts.some((p) => p.active && p.email && (p.receives ?? []).some((r) => r === k || r === 'todo'));
+  const unreachable = COMMS_KINDS.filter((k) => !reachable(k));
   const [editL, setEditL] = useState<string | null>(null);
   const { run, pending, msg } = useRun();
 
   return (
     <div className="space-y-6">
       <MsgLine msg={msg} />
+      {comms && (
+        <section className="space-y-2 rounded-lg border bg-card p-3 text-sm shadow-xs" aria-labelledby="h-comms">
+          <h2 id="h-comms" className="flex items-center gap-1.5 text-sm font-semibold">
+            <Mail className="size-4 text-muted-foreground" aria-hidden />
+            Correos a este cliente
+          </h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <label htmlFor="comms-approval" className="text-xs text-muted-foreground">
+              Antes de salir:
+            </label>
+            <select
+              id="comms-approval"
+              className={cn(selectClass, 'h-8 text-xs')}
+              defaultValue={comms.approval}
+              disabled={!isAdmin || pending}
+              onChange={(e) => run(() => setClientCommsApprovalAction(clientId, e.target.value), 'Guardado.')}
+            >
+              <option value="heredar">Lo de la cuenta ({comms.tenantDefault === 'nunca' ? 'salen solos' : 'pasan por tu aprobación'})</option>
+              <option value="siempre">Siempre pasan por tu aprobación</option>
+              <option value="nunca">Salen sin aprobación</option>
+            </select>
+            {!isAdmin && <span className="text-xs text-muted-foreground">Solo lo cambia administración.</span>}
+          </div>
+          {unreachable.length > 0 ? (
+            <p className="flex items-start gap-1.5 text-xs text-warning-strong">
+              <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+              Nadie recibe {unreachable.map((k) => COMMS_KIND_LABELS[k].toLowerCase()).join(', ')}: el equipo y los agentes no podrán escribir a este cliente de eso. Márcalo en «Qué recibe» de un contacto con correo.
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground">Cada tipo de correo tiene al menos un contacto que lo recibe.</p>
+          )}
+        </section>
+      )}
       <section className="space-y-3" aria-labelledby="h-contactos">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
@@ -71,6 +121,29 @@ export function ContactosTab({ clientId, contacts, locations, isAdmin }: { clien
                         {p.preferredChannel && <span>Prefiere {CHANNEL_LABEL[p.preferredChannel as keyof typeof CHANNEL_LABEL] ?? p.preferredChannel}</span>}
                       </p>
                       {p.notes && <p className="text-xs text-muted-foreground whitespace-pre-line">{p.notes}</p>}
+                      {comms && editR !== p.id && (
+                        <p className="flex flex-wrap items-center gap-1 pt-1 text-xs">
+                          <span className="text-muted-foreground">Recibe:</span>
+                          {(p.receives ?? []).length ? (
+                            (p.receives ?? []).map((k) => (
+                              <Badge key={k} tone="info">
+                                {COMMS_KIND_LABELS[k as SubscriptionKind] ?? k}
+                              </Badge>
+                            ))
+                          ) : (
+                            <span className="text-muted-foreground">nada</span>
+                          )}
+                          {!p.email && <span className="text-warning-strong">· sin correo, no puede recibir</span>}
+                        </p>
+                      )}
+                      {comms && editR === p.id && (
+                        <ReceivesEditor
+                          initial={p.receives ?? []}
+                          pending={pending}
+                          onCancel={() => setEditR(null)}
+                          onSave={(kinds) => run(() => setContactSubscriptionsAction(clientId, p.id, kinds), 'Guardado qué recibe.', () => setEditR(null))}
+                        />
+                      )}
                     </div>
                   </div>
                   <div className="flex shrink-0 flex-wrap gap-1">
@@ -78,6 +151,12 @@ export function ContactosTab({ clientId, contacts, locations, isAdmin }: { clien
                       <Button size="sm" variant="ghost" disabled={pending} onClick={() => run(() => saveContactAction(clientId, { id: p.id, isPrimary: true }), 'Contacto principal cambiado.')}>
                         <Star aria-hidden />
                         Hacer principal
+                      </Button>
+                    )}
+                    {comms && (
+                      <Button size="sm" variant="ghost" disabled={pending || editR !== null} onClick={() => setEditR(p.id)}>
+                        <Mail aria-hidden />
+                        Qué recibe
                       </Button>
                     )}
                     <Button size="sm" variant="ghost" disabled={pending || editC !== null} onClick={() => setEditC(p.id)}>
@@ -146,6 +225,40 @@ export function ContactosTab({ clientId, contacts, locations, isAdmin }: { clien
         )}
       </section>
     </div>
+  );
+}
+
+function ReceivesEditor({ initial, pending, onSave, onCancel }: { initial: string[]; pending: boolean; onSave: (kinds: string[]) => void; onCancel: () => void }) {
+  const [sel, setSel] = useState<Set<string>>(() => new Set(initial));
+  const all = sel.has('todo');
+  const toggle = (k: string) =>
+    setSel((prev) => {
+      const n = new Set(prev);
+      if (n.has(k)) n.delete(k);
+      else n.add(k);
+      if (k === 'todo' && n.has('todo')) return new Set(['todo']);
+      return n;
+    });
+  return (
+    <fieldset className="mt-2 space-y-2 rounded-md border p-2">
+      <legend className="px-1 text-xs font-medium">Qué correos recibe</legend>
+      <div className="flex flex-wrap gap-x-3 gap-y-1">
+        {SUBSCRIPTION_KINDS.map((k) => (
+          <label key={k} className="flex items-center gap-1.5 text-xs">
+            <input type="checkbox" className={checkClass} checked={sel.has(k)} disabled={all && k !== 'todo'} onChange={() => toggle(k)} />
+            {COMMS_KIND_LABELS[k]}
+          </label>
+        ))}
+      </div>
+      <div className="flex gap-1">
+        <Button size="sm" className={brandBtn} disabled={pending} onClick={() => onSave([...sel])}>
+          Guardar
+        </Button>
+        <Button size="sm" variant="ghost" disabled={pending} onClick={onCancel}>
+          Cancelar
+        </Button>
+      </div>
+    </fieldset>
   );
 }
 

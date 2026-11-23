@@ -22,11 +22,16 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.dev
+    image: kijutech-app:latest
     container_name: kijutech_app
     restart: unless-stopped
     expose:
       - "3000"
-    environment:
+    environment: &app_env
+      # Cimientos (23 nov 2026): la web no corre la cola de trabajos; la corre el contenedor «worker».
+      APP_ROLE: web
+      # Trabajos a la vez en el trabajador (por defecto 3).
+      WORKER_SLOTS: ${WORKER_SLOTS:-3}
       POSTGRES_URL: postgresql://kijutech:${POSTGRES_PASSWORD}@postgres:5432/kijutech_db
       AUTH_SECRET: ${AUTH_SECRET:?Define AUTH_SECRET en .env}
       BASE_URL: https://brain.kijutech.com
@@ -43,6 +48,23 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+
+  # Trabajador (cimientos, 23 nov 2026, aprobado por Enric): misma imagen que la app, sin tráfico web. Corre la cola
+  # de trabajos (rastreos, descarga de Search Console, envío de correos a clientes) para que lo pesado no comparta
+  # proceso con la web ni con el bot. Necesita el servidor de 4 GB.
+  worker:
+    image: kijutech-app:latest
+    pull_policy: never
+    container_name: kijutech_worker
+    restart: unless-stopped
+    environment:
+      <<: *app_env
+      APP_ROLE: worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      app:
+        condition: service_started
 
   caddy:
     image: caddy:2

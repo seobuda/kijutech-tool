@@ -11,11 +11,13 @@ import { registerEstrategiaCapabilities } from '@/lib/estrategia/register';
 import { registerErrorCapabilities } from '@/lib/core/errors';
 import { registerKnowledgeCapabilities } from '@/lib/core/knowledge';
 import { registerOperacionesPromptEvals } from '@/lib/operaciones/prompt-evals';
+import { registerPlatformCapabilities } from '@/lib/core/platform';
 
 let wired = false;
 export function wireApp(): void {
   if (wired) return;
   wired = true;
+  registerPlatformCapabilities(); // cimientos (23 nov 2026): cola de trabajos, mensajes a clientes, Search Console, rastreador
   registerOperacionesCapabilities();
   registerAgentesCapabilities();
   registerRendimientoCapabilities();

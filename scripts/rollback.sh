@@ -23,7 +23,7 @@ echo "→ Volviendo a la imagen anterior ($(cat DEPLOYED.previous 2>/dev/null ||
 # La que falló queda como kijutech-app:failed, por si hay que mirarla.
 docker image tag kijutech-app:latest kijutech-app:failed 2>/dev/null || true
 docker image tag kijutech-app:previous kijutech-app:latest
-docker compose -f docker-compose.prod.yml up -d --no-build --force-recreate app > /tmp/kiju-rollback.log 2>&1 || {
+docker compose -f docker-compose.prod.yml up -d --no-build --force-recreate app worker > /tmp/kiju-rollback.log 2>&1 || {
   echo "✗ No se pudo arrancar la imagen anterior. Log: /tmp/kiju-rollback.log" >&2
   exit 1
 }

@@ -117,13 +117,25 @@ for (const t of kbTables) if (!kbSrc.includes(`'${t}'`)) fail(`La tabla «${t}»
 const kbCode = read('lib/core/knowledge.ts');
 for (const k of uniq(all(/'(kb_[a-z_]+)'/g, kbCode))) if (!kbTables.includes(k) && !kbSrc.includes(`prompts: ['${k}'`)) fail(`Prompt de IA «${k}» (base de conocimiento) sin entrada en el mapa de Conocimiento.`);
 if (!/registerScheduled\('base de conocimiento'/.test(kbCode)) fail('La tarea del planificador de la base de conocimiento no está registrada (lib/core/knowledge.ts).');
+// 5i. Plataforma (cimientos, núcleo, lib/core/platform-process-map.ts, 23 nov 2026): archivos, todas sus tablas
+// (alcance del proyecto, cola de trabajos, Search Console en detalle, rastreador y hallazgos) y sus tipos de trabajo.
+const pltSrc = read('lib/core/platform-process-map.ts');
+for (const f of uniq(all(/file: '([^']+)'/g, pltSrc))) if (!fs.existsSync(path.join(root, f))) fail(`El mapa de Plataforma cita un archivo que no existe: ${f}`);
+const pltTables = uniq(all(/pgTable\(\s*'((?:project_assets|jobs|job_schedules|gsc_\w+|crawl_\w+|findings|client_messages))'/g, schemaSrc));
+for (const t of pltTables) if (!pltSrc.includes(`'${t}'`)) fail(`La tabla «${t}» (plataforma) no aparece en el mapa de Plataforma.`);
+for (const k of uniq(all(/registerJobKind\(\{\s*kind: '([a-z.]+)'/g, ['lib/core/comms.ts', 'lib/core/gsc.ts', 'lib/core/crawler.ts'].map(read).join(' ')))) {
+  const prefix = k.split('.')[0];
+  const lanes = { comms: 'plt-comms', gsc: 'plt-gsc', crawl: 'plt-rastreo' };
+  if (!lanes[prefix] || !pltSrc.includes(`id: '${lanes[prefix]}'`)) fail(`El trabajo «${k}» de la cola no tiene su paso en el mapa de Plataforma.`);
+}
+
 function schemaSrcForAgt() {
   return read('lib/db/schema.ts');
 }
 
 // 6. Enlaces entre mapas
 const mapIds = all(/^ {2}(\w+): [A-Z_]+,$/gm, mapSrc.slice(mapSrc.indexOf('export const OPS_MAPS')));
-const known = new Set([...mapIds, 'clustering', 'competitor_analysis', 'security', 'agentes', 'clientes', 'rendimiento', 'estrategia', 'errores', 'conocimiento']);
+const known = new Set([...mapIds, 'clustering', 'competitor_analysis', 'security', 'agentes', 'clientes', 'plataforma', 'rendimiento', 'estrategia', 'errores', 'conocimiento']);
 for (const id of uniq([...all(/detailMapId: '(\w+)'/g, mapSrc), ...all(/detailMapId: '(\w+)'/g, registrySrc)])) {
   if (!known.has(id)) fail(`detailMapId «${id}» no corresponde a ningún mapa registrado en OPS_MAPS.`);
 }

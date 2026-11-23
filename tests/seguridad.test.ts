@@ -32,8 +32,11 @@ import {
   saveCompetitorAction,
   saveContactAction,
   saveLocationAction,
-  setClientStatusAction
+  setClientCommsApprovalAction,
+  setClientStatusAction,
+  setContactSubscriptionsAction
 } from '@/lib/core/client-actions';
+import { approveClientMessageAction, rejectClientMessageAction } from '@/lib/core/comms-actions';
 import { addClientMemory, decideClientMemory, deleteClientMemory, listClientMemory, updateClientMemory } from '@/lib/core/client-memory-actions';
 import {
   assignInboundEmailClient,
@@ -209,7 +212,11 @@ const ACCIONES_ADMIN: [string, () => unknown][] = [
   ['deleteIntegrationAction (agentes)', () => deleteIntegrationAction('clarity')],
   ['setToolAutonomyAction (agentes)', () => setToolAutonomyAction('crear_encargo', 'autonomo')],
   ['saveVoiceSettingsAction (voz)', () => saveVoiceSettingsAction({ ttsModel: 'gpt-4o-mini-tts', defaultVoice: 'marin', speed: 1, tone: 'x', sttModels: ['gpt-transcribe'] })],
-  ['previewVoiceAction (voz)', () => previewVoiceAction({ text: 'hola', settings: { ttsModel: 'gpt-4o-mini-tts', defaultVoice: 'marin', speed: 1, tone: 'x', sttModels: ['gpt-transcribe'] } })]
+  ['previewVoiceAction (voz)', () => previewVoiceAction({ text: 'hola', settings: { ttsModel: 'gpt-4o-mini-tts', defaultVoice: 'marin', speed: 1, tone: 'x', sttModels: ['gpt-transcribe'] } })],
+  // Cimientos (23 nov 2026): aprobar o descartar correos a clientes y la política de aprobación son de administración.
+  ['approveClientMessageAction (correos a clientes)', () => approveClientMessageAction(ZERO)],
+  ['rejectClientMessageAction (correos a clientes)', () => rejectClientMessageAction(ZERO)],
+  ['setClientCommsApprovalAction (correos a clientes)', () => setClientCommsApprovalAction(ZERO, 'nunca')]
 ];
 const ACCIONES_EDITOR: [string, () => unknown][] = [
   ['deleteNote (Bloc)', () => deleteNote(ZERO)],
@@ -222,6 +229,7 @@ const ACCIONES_EDITOR: [string, () => unknown][] = [
   ['aiProposeClient (fichas)', () => aiProposeClient('', null)],
   ['applyClientProposal (fichas)', () => applyClientProposal({}, ZERO)],
   ['saveContactAction (contactos)', () => saveContactAction(ZERO, { name: 'x' })],
+  ['setContactSubscriptionsAction (qué recibe un contacto)', () => setContactSubscriptionsAction(ZERO, ZERO, ['informes'])],
   ['saveLocationAction (locales)', () => saveLocationAction(ZERO, { name: 'x' })],
   ['deleteLocationAction (locales)', () => deleteLocationAction(ZERO, ZERO)],
   ['saveAssetAction (webs y cuentas)', () => saveAssetAction(ZERO, { kind: 'web', value: 'ejemplo.com' })],

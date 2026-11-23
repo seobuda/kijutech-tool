@@ -226,6 +226,8 @@ async function createTask(tenantId: string, input: NewTaskInput): Promise<{ ok: 
         priority: item.priority,
         workTypeKey: await validWorkTypeKey(tenantId, input.workType ?? item.workTypeKey ?? null),
         ...clientFields,
+        // Proyecto del que nace (cimientos, 23 nov 2026): el estratega o el plan de mejora de un proyecto.
+        projectId: input.projectId ?? null,
         status: 'pendiente_clickup'
       })
       .returning({ id: opsRequests.id });

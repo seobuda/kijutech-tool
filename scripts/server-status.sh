@@ -37,6 +37,8 @@ echo "  web: $(curl -s -o /dev/null -w '%{http_code}' https://brain.kijutech.com
 echo "  migraciones: $(q 'select count(*) from drizzle.__drizzle_migrations')"
 # La cuenta de pruebas (Sistema → Pruebas) va aparte: aquí solo lo real.
 REAL="tenant_id NOT IN (SELECT sim_tenant_id FROM ops_sim_environments)"
+# Cola de trabajos (cimientos, 23 nov 2026): la corre el contenedor kijutech_worker; si hay pendientes viejos, está parado.
+echo "  cola de trabajos: $(q "select count(*) filter (where status = 'pendiente') || ' pendientes (' || count(*) filter (where status = 'pendiente' and run_at < now() - interval '30 minutes') || ' con más de 30 min), ' || count(*) filter (where status = 'fallido' and finished_at > now() - interval '24 hours') || ' fallidos en 24 h' from jobs where $REAL" 2>/dev/null || echo '—')"
 echo "  telegram: $(q "select receive_mode || ' / ' || coalesce(last_error,'sin error') from ops_telegram_config where receive_mode <> 'simulado'")"
 HB=$(q "select value from ops_settings where key='worker_heartbeat' limit 1")
 if [ -n "$HB" ]; then echo "  latido del planificador: hace $(( ($(date +%s%3N) - HB) / 1000 )) s"; else echo "  latido del planificador: sin registro"; fi

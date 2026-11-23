@@ -12,8 +12,17 @@ export async function register() {
     // Conecta los módulos con el núcleo (herramientas de los agentes, canales) antes de arrancar los procesos de fondo.
     const { wireApp } = await import('./lib/app-wiring');
     wireApp();
-    const { startTelegramWorkers } = await import('./lib/operaciones/telegram-worker');
-    startTelegramWorkers();
+    // Cimientos (23 nov 2026): APP_ROLE=web solo atiende la web y el bot; APP_ROLE=worker solo corre la cola de
+    // trabajos (contenedor aparte en producción); sin APP_ROLE (local, un solo contenedor) hace las dos cosas.
+    const role = process.env.APP_ROLE ?? '';
+    if (role !== 'worker') {
+      const { startTelegramWorkers } = await import('./lib/operaciones/telegram-worker');
+      startTelegramWorkers();
+    }
+    if (role !== 'web') {
+      const { startWorker } = await import('./lib/core/jobs');
+      startWorker();
+    }
   }
 }
 

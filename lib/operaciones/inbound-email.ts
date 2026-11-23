@@ -7,6 +7,7 @@ import { and, count, eq, gte } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { opsInboundEmails, users } from '@/lib/db/schema';
 import { emailMatchRules } from '@/lib/core/clients';
+import { receiveClientReply } from '@/lib/core/comms';
 
 // Nota que marca un correo del equipo (no de un cliente): el agente también le propone respuesta.
 export const TEAM_NOTE = 'Del equipo';
@@ -128,5 +129,17 @@ export async function ingestInboundEmail(
     if (!again) return { ok: false, code: 'error', error: 'No se pudo guardar el correo' };
     return { ok: true, id: again.id, duplicate: true, status: again.status };
   }
+  // Cimientos (23 nov 2026): si es la respuesta a un mensaje que enviamos al cliente, se une a su hilo y se avisa a
+  // los módulos interesados. Nunca rompe la entrada del correo.
+  await receiveClientReply({
+    tenantId,
+    inboundId: row.id,
+    clientId,
+    inReplyTo: email.inReplyTo,
+    references: extra.referencesHeader ?? null,
+    subject: email.subject,
+    text: email.bodyText,
+    from: email.fromAddress
+  }).catch((e) => console.error('[correo] respuesta a un mensaje nuestro:', e instanceof Error ? e.message : e));
   return { ok: true, id: row.id, duplicate: false, status: row.status };
 }

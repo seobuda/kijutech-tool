@@ -5,6 +5,11 @@
 //   - el contrato (cuota, fechas) y borrar un cliente o un contacto: «admin».
 // Los errores al usuario son genéricos salvo los de validación (ClientError), que explican qué corregir.
 import { revalidatePath } from 'next/cache';
+import { and, eq } from 'drizzle-orm';
+import { db } from '@/lib/db/drizzle';
+import { clientContacts, clients } from '@/lib/db/schema';
+import { setContactSubscriptions } from '@/lib/core/comms';
+import { SUBSCRIPTION_KINDS, type SubscriptionKind } from '@/lib/core/comms-rules';
 import { requirePermission } from '@/lib/auth/permissions';
 import { publicError } from '@/lib/errors';
 import {
@@ -243,5 +248,36 @@ export async function deleteCompetitorAction(clientId: string, competitorId: str
     return { ok: true };
   } catch (e) {
     return fail(e, 'No se pudo eliminar el competidor');
+  }
+}
+
+// --- Comunicaciones con el cliente (cimientos, 23 nov 2026) -----------------------------------------------------------
+
+/** Qué recibe un contacto (informes, preguntas, avisos, aprobaciones, facturación o todo). */
+export async function setContactSubscriptionsAction(clientId: string, contactId: string, kinds: string[]): Promise<Ok> {
+  try {
+    const user = await requirePermission('edit');
+    const valid = (Array.isArray(kinds) ? kinds : []).filter((k): k is SubscriptionKind => (SUBSCRIPTION_KINDS as readonly string[]).includes(k));
+    const [c] = await db.select({ id: clientContacts.id }).from(clientContacts).where(and(eq(clientContacts.id, String(contactId)), eq(clientContacts.clientId, String(clientId)), eq(clientContacts.tenantId, user.tenantId))).limit(1);
+    if (!c) return { ok: false, error: 'Contacto no encontrado' };
+    await setContactSubscriptions(user.tenantId, c.id, valid.includes('todo') ? ['todo'] : valid);
+    refresh(clientId);
+    return { ok: true };
+  } catch (e) {
+    return fail(e, 'No se pudo guardar qué recibe el contacto');
+  }
+}
+
+/** Si los correos a este cliente pasan por aprobación (solo administración). */
+export async function setClientCommsApprovalAction(clientId: string, value: string): Promise<Ok> {
+  try {
+    const user = await requirePermission('admin');
+    if (!['heredar', 'siempre', 'nunca'].includes(value)) return { ok: false, error: 'Valor no válido' };
+    const rows = await db.update(clients).set({ commsApproval: value, updatedAt: new Date() }).where(and(eq(clients.id, String(clientId)), eq(clients.tenantId, user.tenantId))).returning({ id: clients.id });
+    if (!rows.length) return { ok: false, error: 'Cliente no encontrado' };
+    refresh(clientId);
+    return { ok: true };
+  } catch (e) {
+    return fail(e, 'No se pudo cambiar la aprobación de los correos');
   }
 }
