@@ -127,6 +127,8 @@ export function registerSaludAudit(): void {
       const base = { tenantId: ctx.tenantId, payload: { projectId }, scopeType: 'proyecto' as const, scopeId: projectId };
       await enqueueJob({ ...base, kind: 'seo.plan.regenerate', priority: 5, dedupeKey: `seo.plan:${projectId}` });
       await enqueueJob({ ...base, kind: 'seo.expediente.collect', priority: 6, dedupeKey: `seo.expediente:${projectId}` });
+      // Hito 2: el mapa de palabras se rehace con cada auditoría (usa Search Console, no el rastreo).
+      await enqueueJob({ ...base, kind: 'seo.mapa.build', priority: 6, dedupeKey: `seo.mapa:${projectId}` });
       return r;
     }
   });

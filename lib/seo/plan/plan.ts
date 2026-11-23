@@ -59,7 +59,7 @@ export async function regeneratePlan(tenantId: string, projectId: string): Promi
     db
       .select({ id: findings.id, kind: findings.kind, severity: findings.severity, url: findings.url, query: findings.query })
       .from(findings)
-      .where(and(eq(findings.projectId, projectId), eq(findings.tenantId, tenantId), inArray(findings.source, [SALUD_SOURCE, LOCAL_SOURCE]), eq(findings.status, 'abierto'))),
+      .where(and(eq(findings.projectId, projectId), eq(findings.tenantId, tenantId), inArray(findings.source, [SALUD_SOURCE, LOCAL_SOURCE, 'seo.mapa:gsc']), eq(findings.status, 'abierto'))),
     db.select().from(seoPlanItems).where(and(eq(seoPlanItems.projectId, projectId), eq(seoPlanItems.tenantId, tenantId))),
     impressionsByUrl(tenantId, projectId)
   ]);

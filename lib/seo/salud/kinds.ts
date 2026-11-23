@@ -61,5 +61,10 @@ export const LOCAL_KINDS: SaludKind[] = [
   { kind: 'seo.service_page_missing', group: 'local', title: 'Servicio sin página propia', explain: 'Un servicio de la ficha del cliente no tiene una página de la web dedicada (ni en la URL, ni en el título, ni en el H1). Una página por servicio es lo que más ayuda a aparecer cuando alguien busca ese servicio.', severityDefault: 'aviso', ruleVersion: 1 }
 ];
 
-export const SEO_KINDS: SaludKind[] = [...SALUD_KINDS, ...LOCAL_KINDS];
+/** Mapa de palabras (fuente «seo.mapa:gsc», Hito 2): se calculan con el detalle de Search Console, no con el rastreo. */
+export const MAPA_KINDS: SaludKind[] = [
+  { kind: 'seo.cannibalization', group: 'search_console', title: 'Canibalización: dos páginas se turnan una búsqueda', explain: 'Para la misma búsqueda, Google alterna semana a semana entre dos o más páginas de la web: ninguna se consolida y las dos posicionan peor. Hay que elegir una (unir contenidos y redirigir, o diferenciar claramente cada página y enlazar a la buena).', severityDefault: 'aviso', ruleVersion: 1 }
+];
+
+export const SEO_KINDS: SaludKind[] = [...SALUD_KINDS, ...LOCAL_KINDS, ...MAPA_KINDS];
 export const SALUD_KIND_BY_KEY = new Map(SEO_KINDS.map((k) => [k.kind, k]));

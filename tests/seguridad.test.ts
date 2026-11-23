@@ -9,6 +9,7 @@ import { aiProposeClient, applyClientProposal, saveClientOps } from '@/lib/opera
 import { decideSaludFindingAction, startSaludAuditAction, saveSeoBusinessTypeAction } from '@/lib/seo/salud-actions';
 import { applyFactToFichaAction, collectDossierAction, decideDossierFactAction, savePersonaFactAction } from '@/lib/seo/expediente-actions';
 import { approvePlanItemAction, discardPlanItemAction, regeneratePlanAction, reopenPlanItemAction } from '@/lib/seo/plan-actions';
+import { buildKeywordMapAction, decideCompetitorAction, findCompetitorsAction, updateTopicAction } from '@/lib/seo/mapa-actions';
 import { addTestRequestAction, createSimRequestAction, getPruebasAction, pressSimButtonAction, runScenariosAction, sendSimTextAction, withdrawTestRequestAction } from '@/lib/operaciones/sim/actions';
 import { POST as pruebasRunPost } from '@/app/api/pruebas/run/route';
 import { checkDeptBotAction, removeDeptBotAction, saveDeptBotAction } from '@/lib/operaciones/dept-bot-actions';
@@ -233,6 +234,10 @@ const ACCIONES_EDITOR: [string, () => unknown][] = [
   ['approvePlanItemAction (SEO: aprobar propuesta)', () => approvePlanItemAction(ZERO, ZERO)],
   ['discardPlanItemAction (SEO: descartar propuesta)', () => discardPlanItemAction(ZERO, ZERO, 'x')],
   ['reopenPlanItemAction (SEO: recuperar propuesta)', () => reopenPlanItemAction(ZERO, ZERO)],
+  ['buildKeywordMapAction (SEO: calcular mapa de palabras)', () => buildKeywordMapAction(ZERO)],
+  ['updateTopicAction (SEO: descartar o renombrar tema)', () => updateTopicAction(ZERO, ZERO, { status: 'descartado' })],
+  ['findCompetitorsAction (SEO: buscar competencia)', () => findCompetitorsAction(ZERO)],
+  ['decideCompetitorAction (SEO: confirmar competidor)', () => decideCompetitorAction(ZERO, ZERO, 'confirmado')],
   ['deleteNote (Bloc)', () => deleteNote(ZERO)],
   ['getClientProposalsAction (fichas)', () => getClientProposalsAction()],
   ['applyClientProposalAction (fichas)', () => applyClientProposalAction({ clientId: ZERO, services: [], listIds: [] })],

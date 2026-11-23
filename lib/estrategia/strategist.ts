@@ -13,7 +13,7 @@ import 'server-only';
 import { and, asc, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { aiJobs, estAnalyses, estSuggestions, type EstAnalysis, type EstSuggestion } from '@/lib/db/schema';
-import { externalEvents, kpiProvider, telegramOutbound, workSource } from '@/lib/core/capabilities';
+import { externalEvents, kpiProvider, projectDossierSections, telegramOutbound, workSource } from '@/lib/core/capabilities';
 import { getClientSheet, sheetText } from '@/lib/core/clients';
 import { recordIntervention } from '@/lib/core/interventions';
 import { techniqueFromCategory } from '@/lib/core/techniques';
@@ -328,6 +328,16 @@ export async function buildDossier(tenantId: string, clientId: string, now = new
       return `${t.url} · cambio ${t.changedOn}${t.crawledOn ? ` · Google la rastreó el ${t.crawledOn}` : ' · Google aún no la ha vuelto a rastrear'} · antes: ${perDay(t.before)} · después: ${perDay(t.after)}${t.enoughData ? '' : ' · pocos datos todavía'}${t.reason ? ` · ${untrusted(t.reason.slice(0, 120))}` : ''}`;
     })
   );
+
+  // Lo que saben los departamentos de los proyectos del cliente (Hito 2 SEO, 24 nov 2026): hallazgos, plan de mejora,
+  // temas del mapa de palabras y competencia. Llega por el núcleo (sin leer tablas de otro módulo); sus URLs y
+  // búsquedas se pueden citar como evidencia.
+  for (const sec of await projectDossierSections(tenantId, clientId)) {
+    sec.urls?.forEach(addUrl);
+    sec.queries?.forEach((q) => refs.queries.add(normQuery(q)));
+    // Lleva búsquedas y nombres de páginas de fuera: dato no fiable (nunca instrucciones).
+    section(sec.title, [untrusted(sec.lines.slice(0, 60).join('\n'))]);
+  }
 
   // Encargos abiertos.
   const open = (await ws?.clientOpen?.(tenantId, clientId).catch(() => [])) ?? [];

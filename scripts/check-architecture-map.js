@@ -136,12 +136,12 @@ const saludSrc = read('lib/seo/salud/process-map.ts');
 for (const f of uniq(all(/file: '([^']+)'/g, saludSrc))) if (!fs.existsSync(path.join(root, f))) fail(`El mapa de Salud técnica cita un archivo que no existe: ${f}`);
 // Hito 1 completo (migración 0061): también los trabajos del expediente, el plan y la vigilancia de I+D, y las tablas
 // seo_* nuevas (las del SEO antiguo, seo_stage_progress y compañía, tienen su propio mapa).
-const seoJobSrc = ['lib/seo/salud/audit.ts', 'lib/seo/expediente/collect.ts', 'lib/seo/plan/plan.ts', 'lib/seo/id/watch.ts'].map(read).join(' ');
+const seoJobSrc = ['lib/seo/salud/audit.ts', 'lib/seo/expediente/collect.ts', 'lib/seo/plan/plan.ts', 'lib/seo/id/watch.ts', 'lib/seo/mapa/mapa.ts', 'lib/seo/competencia/competencia.ts'].map(read).join(' ');
 const seoJobKinds = [...all(/kind: '(seo\.[a-z.]+)',\s*timeoutS/g, seoJobSrc), ...all(/export const ID_\w+ = '(seo\.[a-z.]+)'/g, seoJobSrc)];
 for (const k of uniq(seoJobKinds)) {
   if (!saludSrc.includes(`«${k}»`)) fail(`El trabajo «${k}» de la cola no aparece en el mapa de SEO (Salud técnica).`);
 }
-for (const t of ['seo_dossier_facts', 'seo_plan_items', 'seo_reviews']) {
+for (const t of ['seo_dossier_facts', 'seo_plan_items', 'seo_reviews', 'seo_topics', 'seo_topic_queries', 'seo_text_embeddings']) {
   if (!schemaSrc.includes(`'${t}'`)) fail(`Falta la tabla «${t}» en el esquema.`);
   else if (!saludSrc.includes(`'${t}'`)) fail(`La tabla «${t}» (SEO v2) no aparece en el mapa de SEO (Salud técnica).`);
 }
