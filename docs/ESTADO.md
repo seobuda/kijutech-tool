@@ -3,7 +3,7 @@
 > **Documento vivo y de referencia.** Recoge todo lo que existe, cómo funciona, qué está decidido, qué se ha probado y qué falta. Se actualiza al cerrar cada paso de trabajo (junto al documento de sesión y al Mapa Visual).
 > **No contiene claves, contraseñas ni valores de `.env`** (solo sus nombres).
 
-**Fecha de esta versión:** 2026-11-23. **Último cambio (en `main`, sin desplegar todavía):** al decidir en Para ti queda un aviso de «hecho» unos segundos, y el aviso de Telegram de lo decidido en la web pierde sus botones (§6.32, §18); antes, Para ti deja decidir ahí mismo correos, propuestas de los agentes y dudas del equipo (§6.32), y detalles de interfaz: «Nuevo encargo» desde la ficha con el cliente elegido, filtro «Sin cliente» en Encargos, el nombre en la última miga, la jornada y las acciones web en la actividad del día y un solo `aria-current="page"` en la barra (§6.33, §6.34, §18), y guard de página en proyectos y «Nuevo encargo» (§16); antes, lo que se cambia en ClickUp (fecha, prioridad, título, descripción, lista, cliente y responsables) se copia al encargo y pone al día sus avisos (§6.6, §18), y la librería `postgres` pasa a 3.4.9 (quita el aviso «TimeoutNegativeWarning»); antes, los avisos de encargos para otro día salen el día que toca (§7, §6, §18; lo detectó Jesús), y examen de prompts desde el panel, con historial (§22, §8; migración **0059**, aprobada por Enric; primer examen en producción hecho y regla «antes del X = X» en el prompt), y pruebas que abren todas las pantallas con cada rol tras desplegar y registro de errores por cuenta de la sesión (§22, §6.27), y barreras de arquitectura, reglas del arnés y batería de prompts. El historial de cada cambio está en la cronología (§18) y en `docs/sessions/`.
+**Fecha de esta versión:** 2026-11-23. **Último cambio (rama `feature/cimientos-plataforma`, sin desplegar, con migración 0060):** los **cimientos de la plataforma** para el departamento SEO (§6.36): proyecto con cliente y alcance, correos a clientes con aprobación, cola de trabajos con trabajador aparte, Search Console en detalle, rastreador y hallazgos. Necesitan el servidor de 4 GB antes de desplegar. Antes, en `main` sin desplegar: al decidir en Para ti queda un aviso de «hecho» unos segundos, y el aviso de Telegram de lo decidido en la web pierde sus botones (§6.32, §18); antes, Para ti deja decidir ahí mismo correos, propuestas de los agentes y dudas del equipo (§6.32), y detalles de interfaz: «Nuevo encargo» desde la ficha con el cliente elegido, filtro «Sin cliente» en Encargos, el nombre en la última miga, la jornada y las acciones web en la actividad del día y un solo `aria-current="page"` en la barra (§6.33, §6.34, §18), y guard de página en proyectos y «Nuevo encargo» (§16); antes, lo que se cambia en ClickUp (fecha, prioridad, título, descripción, lista, cliente y responsables) se copia al encargo y pone al día sus avisos (§6.6, §18), y la librería `postgres` pasa a 3.4.9 (quita el aviso «TimeoutNegativeWarning»); antes, los avisos de encargos para otro día salen el día que toca (§7, §6, §18; lo detectó Jesús), y examen de prompts desde el panel, con historial (§22, §8; migración **0059**, aprobada por Enric; primer examen en producción hecho y regla «antes del X = X» en el prompt), y pruebas que abren todas las pantallas con cada rol tras desplegar y registro de errores por cuenta de la sesión (§22, §6.27), y barreras de arquitectura, reglas del arnés y batería de prompts. El historial de cada cambio está en la cronología (§18) y en `docs/sessions/`.
 **Producción:** `https://brain.kijutech.com` (droplet `kijutech-brain`, Frankfurt). Procedimiento en `docs/DESPLIEGUE.md`. Rama de trabajo del despliegue: `feature/despliegue`.
 **Ramas:** cada mejora en su rama (`feature/…`, `fix/…`, `docs/…`); `main` solo recibe lo terminado y aprobado y es lo que está en producción. Las ramas antiguas (`operaciones`, `feature/seguridad`, `feature/despliegue`…) ya están fusionadas y se mantienen.
 **Rama `main`:** último despliegue registrado `86546d53` (22 nov, pantallas por rol y examen de prompts) con las **60 migraciones** (`0000`…`0059`); el 23 nov, dos despliegues sin migración: avisos solo el día que toca (`5a14d39c`) y cambios de ClickUp al encargo con `postgres` 3.4.9. Revisión de autonomía en `docs/REVISION-AUTONOMIA.md`.
@@ -62,7 +62,7 @@ Todo corre **dentro de Docker**. **Nunca** se ejecuta `pnpm`/`npm` en el host Wi
 | Backup antes de migrar un módulo | `docker exec kijutech_db pg_dump -U kijutech -d kijutech_db > backups/backup_pre_<modulo>_<fecha>.sql` |
 | Restaurar (sobre BD limpia) | `docker exec -i kijutech_db psql -U kijutech -d kijutech_db < backups/backup_pre_<modulo>_<fecha>.sql` |
 | Comprobar el Mapa Visual | `node scripts/check-architecture-map.js` (o `pnpm check:map` en el contenedor) |
-| **Pruebas automáticas** (543 el 23 nov; reconstruir antes para que lleven el código actual) | `docker exec kijutech_app pnpm test` |
+| **Pruebas automáticas** (571 el 23 nov; reconstruir antes para que lleven el código actual) | `docker exec kijutech_app pnpm test` |
 | Batería de referencia de prompts (IA real, ~0,20 $; solo a mano, ver §22; lo normal es pasarla desde el panel: IA → Prompts → el prompt) | `docker exec -e RUN_REAL_EVALS=true kijutech_app ./node_modules/.bin/vitest run tests/ia-prompts-evals.test.ts` |
 | Logs | `docker logs kijutech_app` |
 
@@ -74,7 +74,7 @@ Todo corre **dentro de Docker**. **Nunca** se ejecuta `pnpm`/`npm` en el host Wi
 - **`.dockerignore`** (arreglado en el paso 8: tenía comillas invertidas y no excluía nada): deja fuera `.env`, `.git`, `backups/`, `node_modules` y `.next` de la imagen.
 - **Para cambiar dependencias sin tocar Windows** (patrón usado en el paso 8): `docker run --rm -v "C:\dev\kijutech-tool:/work" -v /work/node_modules -w /work node:24-alpine sh -c "corepack enable && pnpm …"` (el volumen anónimo evita que `node_modules` aterrice en el host).
 - **Nunca** `docker compose down -v` ni nada que borre el volumen de la base de datos.
-- **Migraciones:** `lib/db/migrations/0000`…`0059` (**60**). La 0059 (`ai_prompt_evals`, examen de prompts, 22 nov) está aplicada en local y **pendiente en producción** (`deploy.sh --migrate`, con el OK de Enric); las demás, en los dos sitios (la 0058 de las fotos del equipo, el 21 nov). En producción se aplican con `deploy.sh --migrate`, que hace backup antes y siempre necesita el OK de Enric. Desde la 0029 se escriben a mano con su entrada en `meta/_journal.json`: **no usar `pnpm db:generate`** (sin snapshots genera SQL para tablas que ya existen). Hay scripts SQL sueltos de prompts en `scripts/` (ver §8).
+- **Migraciones:** `lib/db/migrations/0000`…`0060` (**61**; la **0060**, cimientos de la plataforma, aplicada en local y **pendiente en producción**, en la rama `feature/cimientos-plataforma`). La 0059 (`ai_prompt_evals`, examen de prompts, 22 nov) está aplicada en local y **pendiente en producción** (`deploy.sh --migrate`, con el OK de Enric); las demás, en los dos sitios (la 0058 de las fotos del equipo, el 21 nov). En producción se aplican con `deploy.sh --migrate`, que hace backup antes y siempre necesita el OK de Enric. Desde la 0029 se escriben a mano con su entrada en `meta/_journal.json`: **no usar `pnpm db:generate`** (sin snapshots genera SQL para tablas que ya existen). Hay scripts SQL sueltos de prompts en `scripts/` (ver §8).
 
 ## 3. Stack y versiones
 
@@ -91,7 +91,7 @@ Todo corre **dentro de Docker**. **Nunca** se ejecuta `pnpm`/`npm` en el host Wi
 | Clustering | embeddings + `hdbscan-ts` |
 | Otras | `zod`, `swr`. **Stripe eliminado** en el paso 8 (rutas, `lib/payments`, dependencia, `db:setup`); las columnas `stripe_*` de `teams` siguen en la BD (deuda) |
 | Gestor | `pnpm` (dentro de Docker) |
-| Pruebas automáticas | **Vitest 5.1.0** (`pnpm test` dentro del contenedor: 543 pruebas de seguridad, arquitectura, flujos y circuitos), `tsc` en el build, la comprobación del Mapa Visual y la batería de referencia de prompts (a mano). No hay ESLint ni CI aparte: la puerta es `deploy.sh` |
+| Pruebas automáticas | **Vitest 5.1.0** (`pnpm test` dentro del contenedor: 571 pruebas de seguridad, arquitectura, flujos y circuitos), `tsc` en el build, la comprobación del Mapa Visual y la batería de referencia de prompts (a mano). No hay ESLint ni CI aparte: la puerta es `deploy.sh` |
 
 ## 4. Reglas de trabajo y restricciones vigentes
 
@@ -711,6 +711,78 @@ En `tests/seguridad.test.ts`, las 4 acciones nuevas son solo de admin.
 - «ya la vio» se guarda por usuario;
 - las migas de pan son legibles.
 
+
+### 6.36 Cimientos de la plataforma (23 nov 2026, migración 0060)
+
+Diseño en `docs/DISENO-MODULO-SEO.md` (v2) y `docs/DISENO-TECNICO-CIMIENTOS.md`, aprobados por Enric («OK a todo»):
+- esquema y núcleo;
+- trabajador aparte en `docker-compose`;
+- dependencia `parse5`.
+
+Rama `feature/cimientos-plataforma`. **Sin desplegar:** necesita el servidor de 4 GB (lo amplía Enric) y `deploy.sh --migrate`.
+
+Son la base del departamento SEO por proyecto y, después, de Google Ads. Todo vive en el núcleo, porque lo usarán varios módulos.
+
+- **Proyecto con cliente y alcance** (`lib/projects/scope.ts`, `lib/projects/actions.ts`, formulario de proyecto):
+  - El cliente es obligatorio. Lo garantiza un CHECK en la base; los proyectos que ya existían sin cliente quedan como `legacy`.
+  - Cada proyecto tiene servicio (SEO, Ads, web, otro), horas al mes y **alcance**: qué webs, propiedades de Google, fichas y redes del cliente son suyas (`project_assets`). Solo se admiten cuentas del mismo cliente.
+  - Un cliente puede tener varios proyectos.
+  - Las propiedades de Search Console del alcance se dan de alta solas.
+  - No se borra la ficha de un cliente con proyectos.
+  - Los encargos que nacen de un proyecto lo guardan (`ops_requests.project_id`, mediante `WorkSource.createTask({ projectId })`).
+- **Correos a clientes** (`lib/core/comms.ts`, `comms-rules.ts`, `comms-actions.ts`; puente en `lib/operaciones/comms-bridge.ts`):
+  - **Qué recibe cada contacto:** informes, preguntas, avisos, aprobaciones, facturación o todo; también por proyecto. Se marca en la ficha → Contactos → «Qué recibe», y la ficha avisa si un tipo no tiene a nadie.
+  - **Política de aprobación:** de cuenta (`tenants.comms_approval_default`, por defecto `siempre`) y por cliente (`clients.comms_approval`: heredar, siempre o nunca; solo administración).
+  - **Todo lo que sale hacia un cliente** (de una persona, un agente o el sistema) es un `client_messages`:
+    - si no hay a quién enviarlo, no se crea y se dice qué falta (bloqueo);
+    - con aprobación, llega a **Para ti** («Correos a clientes por aprobar»: enviar, corregir o descartar; administración) y a **Telegram** con ✅ / ✖️ (solo el dueño);
+    - aprobado, se envía por la cola (`comms.send`) con el buzón de Operaciones (Resend), una sola vez y con un Message-ID propio;
+    - las respuestas que entran por el buzón se unen a su hilo (`receiveClientReply`), y los módulos pueden escucharlas (`registerClientReplyListener`).
+  - **Herramienta de los agentes `escribir_al_cliente`:** los destinatarios los elige la regla, nunca el agente. Si el turno leyó webs, siempre pasa por aprobación.
+  - **Sin verificar:** que Resend respete el Message-ID propio (si no, las respuestas no se unirían solas).
+- **Cola de trabajos** (`lib/core/jobs.ts`; tablas `jobs` y `job_schedules`):
+  - **Reclamación atómica** (`FOR UPDATE SKIP LOCKED`).
+  - **Latido** cada 15 s; un trabajo sin latido durante 90 s vuelve a la cola.
+  - **Reintentos** con espera de 1, 4, 9… minutos.
+  - **Concurrencia** máxima por tipo, y una clave que evita duplicados abiertos.
+  - **Procesos periódicos** que crean su trabajo al vencer y que, tras fallos, esperan más (×2, tope de 24 h).
+  - Los módulos registran sus tipos (`registerJobKind`) y procesos (`registerProcess`).
+  - **El trabajador corre aparte:**
+    - en producción, contenedor `kijutech_worker` (misma imagen, `APP_ROLE=worker`; la web va con `APP_ROLE=web`);
+    - en local, sin `APP_ROLE`, la app hace las dos cosas.
+  - Salud avisa si hay trabajos esperando más de 30 min (trabajador parado) o fallidos. `server-status.sh` lo muestra, y `rollback.sh` reinicia también el trabajador.
+  - El planificador antiguo (`runScheduled`, dentro del bucle de Telegram) sigue igual para Operaciones, Estrategia y Rendimiento hasta trasladarlos.
+- **Search Console en detalle** (`lib/core/gsc.ts`, `gsc-rules.ts`):
+  - **Qué se guarda:**
+    - **cada día:** consulta × página × dispositivo, paginado hasta el final con tope de 100.000 filas al día (si se alcanza, «truncado»);
+    - **totales del día:** para el porcentaje de clics de consultas anónimas;
+    - **por país:** el reparto del día;
+    - **resumen mensual:** para siempre.
+  - **Cómo se guarda:**
+    - diccionarios de consultas y URLs;
+    - detalle en `gsc_daily`, **particionada por mes** (la crea el código) y guardada **24 meses**;
+    - la posición, como `pos_sum` (posición × impresiones), para poder agregar.
+  - **Proceso `gsc.sync`:** cada 6 horas por propiedad, los 4 últimos días más un tramo de 14 días del histórico, hasta completar 16 meses.
+  - Reintento ante límites de Google. El núcleo usa la fuente de Agentes (`search`, ahora con `startRow`, `searchType` y `dataState`).
+- **Rastreador** (`lib/core/crawler.ts`, `crawl-extract.ts` con **parse5**, `robots.ts`):
+  - respeta robots.txt (RFC 9309) y lee los sitemaps;
+  - 1 petición por segundo por dominio (o su Crawl-delay, hasta 5 s), solo direcciones públicas y 2 MB por página;
+  - no sigue redirecciones: las registra;
+  - no ejecuta JavaScript: avisa si la página parece pintada con JS;
+  - por página guarda estado, título, descripción, canonical, robots, hreflang, encabezados, palabras, huellas de duplicado (hash y simhash), enlaces internos y externos, JSON-LD y sus tipos, e imágenes sin alt;
+  - va por tramos en la cola (`crawl.run`) y guarda las 3 últimas ejecuciones por proyecto.
+- **Hallazgos tipados** (`lib/core/findings.ts`, `findings-rules.ts`):
+  - cada tipo se registra (`registerFindingKind`, con su explicación de formación);
+  - cada hallazgo lleva gravedad, URL o consulta, cifra y evidencia, y se puede consultar;
+  - **ciclo de vida:** lo que deja de aparecer se resuelve solo y lo descartado no se reabre.
+  - Las reglas del SEO llegarán en el Hito 1.
+- **Mapa Visual:**
+  - nodo «Plataforma» con su mapa (`lib/core/platform-process-map.ts`) y paso «Qué recibe cada contacto» en el mapa de Clientes;
+  - `check-architecture-map.js` comprueba las tablas y los trabajos de la plataforma.
+- **Pruebas:**
+  - `tests/cimientos.test.ts` (28): reglas, y contra la base de datos en una cuenta propia, con Google, el buzón y la red simulados;
+  - las acciones nuevas, en `tests/seguridad.test.ts`.
+
 ## 7. Panel de Automatizaciones: todos los valores
 
 Los valores por defecto viven en el código (`lib/operaciones/automations.ts`); la tabla `ops_automations` solo guarda lo que se cambia (restaurar = borrar la fila). Caché de 10 s. Textos en formato de Telegram (`<b>`, `<i>`, `<u>`, `<code>`, `<a href>`) con huecos validados; una línea con un hueco opcional vacío desaparece.
@@ -776,7 +848,7 @@ Construido en agosto de 2026 (Fases A–D). Detalle y auditoría completa en `do
 
 ## 10. Base de datos
 
-**Total: 116 tablas** (`ops_team_avatars` y `agt_agent_avatars` desde la 0058, fotos del equipo, y la columna `ops_team_profiles.department_key`, ver §6.33; `agt_team_questions` desde la 0057, dudas del equipo al jefe de operaciones, ver §6.30; `kb_categories` y `kb_articles` desde la 0056, base de conocimiento del núcleo, ver §6.29; `ops_telegram_bots` y `agt_departments` desde la 0055, organigrama, ver §6.28; 18 núcleo —con `clients`, `client_contacts`, `client_locations`, `client_assets`, `client_competitors` y `client_memory` desde la 0048—, 15 SEO, 8 IA (`ai_prompt_evals` desde la 0059, examen de prompts, ver §8), **42 `ops_*`** (las 3 `ops_sim_*` de las pruebas simuladas desde la 0054, ver §6.27) y 6 `agt_*` del módulo Agentes 5 `perf_*` del módulo Rendimiento (0049, ver §6.23) y 15 `est_*` del módulo Estrategia (13 en la 0050 y `est_analyses` y `est_suggestions` en la 0051, ver §6.24 y §6.25) y 3 `sys_error_*` del registro de errores del núcleo (0052, ver §6.26); `ops_client_senders` se eliminó y `ops_client_memory` pasó a ser `client_memory`). Las últimas: `ops_agent_actions` (0040), `ops_health_incidents` (0043), `ops_work_events` (0044, jornada real; ver §6.18) y `ops_task_times` (0045, tiempos de tarea; ver §6.19). La revisión de autonomía no añade tablas: el calendario y la última copia diaria van en `ops_settings` (claves `calendar` y `backup_last_at`). Los conteos de filas de abajo son de la base local del 30 oct (orientativos).
+**Total: 132 tablas** (16 del núcleo desde la **0060**, cimientos de la plataforma, ver §6.36: `project_assets`, `client_contact_subscriptions`, `client_messages`, `jobs`, `job_schedules`, `gsc_properties`, `gsc_queries`, `gsc_pages`, `gsc_daily` —particionada por mes—, `gsc_daily_totals`, `gsc_daily_country`, `gsc_monthly`, `crawl_runs`, `crawl_pages`, `crawl_links` y `findings`; además, columnas nuevas en `projects`, `clients`, `tenants` y `ops_requests`; `ops_team_avatars` y `agt_agent_avatars` desde la 0058, fotos del equipo, y la columna `ops_team_profiles.department_key`, ver §6.33; `agt_team_questions` desde la 0057, dudas del equipo al jefe de operaciones, ver §6.30; `kb_categories` y `kb_articles` desde la 0056, base de conocimiento del núcleo, ver §6.29; `ops_telegram_bots` y `agt_departments` desde la 0055, organigrama, ver §6.28; 18 núcleo —con `clients`, `client_contacts`, `client_locations`, `client_assets`, `client_competitors` y `client_memory` desde la 0048—, 15 SEO, 8 IA (`ai_prompt_evals` desde la 0059, examen de prompts, ver §8), **42 `ops_*`** (las 3 `ops_sim_*` de las pruebas simuladas desde la 0054, ver §6.27) y 6 `agt_*` del módulo Agentes 5 `perf_*` del módulo Rendimiento (0049, ver §6.23) y 15 `est_*` del módulo Estrategia (13 en la 0050 y `est_analyses` y `est_suggestions` en la 0051, ver §6.24 y §6.25) y 3 `sys_error_*` del registro de errores del núcleo (0052, ver §6.26); `ops_client_senders` se eliminó y `ops_client_memory` pasó a ser `client_memory`). Las últimas: `ops_agent_actions` (0040), `ops_health_incidents` (0043), `ops_work_events` (0044, jornada real; ver §6.18) y `ops_task_times` (0045, tiempos de tarea; ver §6.19). La revisión de autonomía no añade tablas: el calendario y la última copia diaria van en `ops_settings` (claves `calendar` y `backup_last_at`). Los conteos de filas de abajo son de la base local del 30 oct (orientativos).
 
 **Núcleo / plantilla:** `tenants` 1 · `users` 2 · `roles` 4 · `user_roles` 1 · `projects` 1 · `modules` 1 · `project_modules` 0 · `teams` 2 · `team_members` 2 · `invitations` 0 · `activity_logs` 10 (`teams`, `team_members` e `invitations` son restos de la plantilla pendientes de limpieza).
 
@@ -911,6 +983,21 @@ Construido en agosto de 2026 (Fases A–D). Detalle y auditoría completa en `do
 
 ## 16. Pendientes y deuda técnica
 
+- **Cimientos de la plataforma (23 nov, §6.36):**
+  - **Despliegue:** sin desplegar, a la espera del servidor de 4 GB. Con `deploy.sh --migrate`, que hace backup, y el OK de Enric.
+  - **Por comprobar en producción:**
+    - si Resend respeta el Message-ID propio (hilos de respuesta);
+    - el volumen real de `gsc_daily` por propiedad.
+  - **Trasladar a la cola:** Estrategia y Rendimiento todavía usan el planificador antiguo.
+  - **Siguiente, el Hito 1 del SEO** (`docs/DISENO-MODULO-SEO.md` §10):
+    - expediente provisional;
+    - reglas de auditoría sobre el rastreo, con hallazgos;
+    - JSON-LD con su código;
+    - local;
+    - plan de mejora;
+    - I+D en fase A;
+    - técnica e hipótesis en cada encargo.
+
 - **Verificación y barreras (22 nov, §22):**
   - **Examen de prompts (22 nov):** migración 0059 pendiente de aplicar en producción (`deploy.sh --migrate`, OK de Enric). Ideas siguientes: añadir casos desde el panel, examen para otros prompts (`ops_email_reply`, `ops_prepare_request`) y repetir cada caso 2-3 veces para separar ruido de empeoramiento (hoy cada pasada cuesta ~0,20 $; repetir la multiplica).
   - ~~Comprobar las pantallas tras desplegar~~ **Hecho el 22 nov** con el OK de Enric (usuarios admin/editor/lector en la cuenta de pruebas y arreglo de raíz en `lib/core/errors.ts`). Quedan fuera: las pantallas con `[id]` (la cuenta de pruebas no tiene clientes ni proyectos) y las 5 de solo `super_admin` (Usuarios, ajustes de IA, Cerebro, Arquitectura y ajustes SEO), que no se recorrerán hasta separar el rol de plataforma (S2/S3).
@@ -987,6 +1074,15 @@ Cada uno con su nodo en el nivel 1 del Mapa Visual:
 
 ## 18. Cronología de la construcción
 - **22 nov, barreras y verificación** (rama `feature/guardrails-verificacion`, sin migraciones): a partir del análisis de la entrevista sobre agentes autónomos (`docs/Arquitectura ingeniera SpaceX.md`). Barreras de arquitectura en las pruebas, reglas de permiso del arnés, batería de referencia del prompt de convertir notas y corrección de ESTADO y CLAUDE.md. Ver §22 y `docs/sessions/2026-11-22-00-barreras-verificacion.md`.
+- **23 nov, cimientos de la plataforma** (rama `feature/cimientos-plataforma`, **migración 0060**, sin desplegar; aprobado por Enric):
+  - proyecto con cliente y alcance;
+  - correos a clientes con aprobación;
+  - cola de trabajos con trabajador aparte;
+  - Search Console en detalle;
+  - rastreador con parse5;
+  - hallazgos tipados.
+
+  Ver §6.36 y `docs/sessions/2026-11-23-21-cimientos-plataforma.md`.
 - **23 nov, confirmación en Para ti y avisos de Telegram ya decididos** (rama `fix/para-ti-confirmacion-y-telegram`, sin migración, **sin desplegar**: Enric lo desplegará con lo siguiente): aviso de «hecho» que sobrevive al refresco de Para ti y cierre de los botones de Telegram de lo decidido en la web (§6.32). Pruebas en `tests/avisos-decididos.test.ts`.
 - **23 nov, Para ti completo y detalles de interfaz** (rama `feature/para-ti-y-detalles`, sin migración; pedido por Enric): en Para ti se deciden ahí mismo los correos, las propuestas de los agentes y las dudas del equipo (§6.32). «Nuevo encargo» desde la ficha del cliente abre el formulario con el cliente y su lista habitual (`?cliente=`; la IA no quita el cliente elegido). Encargos tiene columna Cliente y filtro «Sin cliente». La última miga muestra el nombre de la persona, el cliente o la entrada (`components/app-shell/crumb-label.tsx`) en vez de «Detalle». La actividad del día suma la jornada (`ops_work_events`) y lo hecho desde la web (bloqueos respondidos, fichas, calendario y decisiones sobre propuestas). La barra lateral ya no marca dos enlaces con `aria-current="page"`: la entrada principal pasa a «true» cuando hay una subentrada marcada. Pruebas en `tests/para-ti.test.ts`, `tests/equipo-humano-ia.test.ts` y `tests/seguridad.test.ts`. En el mismo despliegue (rama `fix/guards-paginas`), guard de página en `projects`, `projects/archived` (lector), `projects/new`, `projects/[id]/edit` y `operaciones/nuevo` (editor), con su prueba.
 - **23 nov, cambios de ClickUp al encargo** (rama `fix/clickup-cambios`, sin migración; pedido por Enric): la vigilancia ya copiaba cierres y reasignaciones completas; ahora también fecha, prioridad, título, descripción, lista, cliente y responsables añadidos o quitados, y pone al día los avisos (programados y enviados). La lectura de ClickUp es la misma petición, con la descripción también en Markdown. Pruebas en `tests/clickup-cambios.test.ts`. En el mismo despliegue, con el OK de Enric, la librería `postgres` pasa de 3.4.5 a 3.4.9: su `reconnect()` calculaba una espera negativa y Node avisaba «TimeoutNegativeWarning» (inofensivo, ensuciaba el registro).
@@ -1071,6 +1167,16 @@ Cada uno con su nodo en el nivel 1 del Mapa Visual:
 - **Cliente en un solo sitio (21 nov):** `app/(dashboard)/dashboard/clientes/[id]/tab-trabajo.tsx` (pestañas Encargos y SEO), `ficha-view.tsx` (pestañas y «Ficha y ajustes»), `[id]/page.tsx` (`clientWork`), `clientes/layout.tsx` (márgenes), `components/clientes-tabs.tsx`, `projects/new/page.tsx` y `project-form.tsx` (`?cliente=`).
 - **Equipo humano + IA (21 nov):** `lib/equipo/team.ts` (organigrama, estado y actividad), `lib/equipo/actions.ts` (foto y departamento), `lib/equipo/avatar-rules.ts` (puro), `app/(dashboard)/dashboard/equipo/` (portada, `[tipo]/[id]/` ficha, `member-card.tsx`, `activity-feed.tsx`), `components/equipo/` (`member-avatar.tsx`, `avatar-editor.tsx`, `department-select.tsx`), `app/api/equipo/avatar/route.ts`, `lib/db/migrations/0058_equipo_avatares.sql`, `tests/equipo-humano-ia.test.ts`.
 - **Examen de prompts (22 nov):** `lib/ai/prompt-evals.ts` (núcleo: registro, ejecución en segundo plano, historial y estado), `lib/ai/eval-tag.ts` (marca de las llamadas de un examen para sumar su coste), `lib/operaciones/prompt-evals.ts` (casos de `ops_note_to_requests`) y `prompt-evals-rules.ts` (corrector puro), `app/(dashboard)/dashboard/ai/settings/prompts/[key]/` (`prompt-eval-panel.tsx`, `eval-actions.ts`), `lib/db/migrations/0059_examen_prompts.sql`, `tests/examen-prompts.test.ts`.
+- **Cimientos de la plataforma (23 nov):**
+  - `lib/core/jobs.ts` (cola);
+  - `lib/core/comms.ts`, `comms-rules.ts`, `comms-actions.ts` (correos a clientes) y `lib/operaciones/comms-bridge.ts` (envío y botones);
+  - `lib/core/gsc.ts` y `gsc-rules.ts` (Search Console en detalle);
+  - `lib/core/crawler.ts`, `crawl-extract.ts` y `robots.ts` (rastreador);
+  - `lib/core/findings.ts` y `findings-rules.ts` (hallazgos);
+  - `lib/core/platform.ts` (alta al arrancar, herramienta `escribir_al_cliente`, Salud) y `lib/core/platform-process-map.ts`;
+  - `lib/projects/scope.ts` (alcance del proyecto);
+  - `lib/db/migrations/0060_cimientos_plataforma.sql`;
+  - `tests/cimientos.test.ts`.
 - **Para ti (21 nov):** `lib/inicio/para-ti.ts` (tipos, recogida, filtros, recuentos y, desde el 23 nov, `getParaTiDecisions`), `app/(dashboard)/dashboard/para-ti/page.tsx`, `para-ti/decision-cards.tsx` (correos y propuestas de los agentes), `app/api/para-ti/route.ts` (contador), `app/(dashboard)/dashboard/operaciones/bandeja/items.ts` (`toBandejaItems`, compartido con Mi bandeja), `tests/para-ti.test.ts`.
 - **Inicio y navegación (20 nov):** `app/(dashboard)/dashboard/page.tsx` y `_inicio/` (`admin-home.tsx`, `team-home.tsx`, `parts.tsx`), `lib/inicio/panel.ts` (datos, solo lectura), `lib/operaciones/my-tasks.ts` (fuente de tareas con tipo propio), `app/(dashboard)/dashboard/mis-tareas/` (página y `task-list.tsx`), `tests/mis-tareas.test.ts`, `components/app-shell/nav.ts` (espacios, subentradas, «＋ Nuevo», `ACCOUNT_LINKS`), `app-shell.tsx`, `command-palette.tsx`, `use-roles.ts` (`canEdit`), `tests/nav-roles.test.ts`.
 - **Servidor y costes:** `lib/operaciones/infra-watch.ts` / `infra-actions.ts`, `app/(dashboard)/dashboard/operaciones/servidor/`.

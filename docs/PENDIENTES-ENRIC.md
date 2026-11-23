@@ -3,7 +3,17 @@
 Lista viva de lo que solo puede hacer Enric (accesos, decisiones, el equipo). Claude la actualiza al terminar cada bloque.
 Detalle paso a paso de la activación en `docs/PRUEBAS-EN-VIVO.md`.
 
-**Última actualización:** 21 nov 2026. En producción: `main` `654e90a9` (reorganización UX completa, fases 1 a 5), 59 migraciones.
+**Última actualización:** 23 nov 2026. En producción: `main` `654e90a9` (reorganización UX completa, fases 1 a 5), 59 migraciones.
+
+## Departamento SEO: cimientos de la plataforma (23 nov, migración 0060, rama `feature/cimientos-plataforma`)
+Aprobado: diseño v2 (`docs/DISENO-MODULO-SEO.md`), esquema y núcleo (`docs/DISENO-TECNICO-CIMIENTOS.md`), trabajador aparte y `parse5`. Construido y probado; **sin desplegar**.
+- [ ] **Subir el servidor a 4 GB de RAM o más** (DigitalOcean → droplet → Resize). Sin esto no se despliega: el trabajador, el rastreo y Search Console no caben en 2 GB.
+- [ ] Cuando esté, decir «despliega»: Claude fusiona la rama y lanza `deploy.sh --migrate` (hace backup antes; el permiso te lo pide).
+- [ ] **El cliente de la prueba real** del Hito 1 (mejor con web, Search Console y ficha de Google). En su ficha → Contactos, marcar en «Qué recibe» a quién van las preguntas y los informes.
+- [ ] Cuentas para el Hito 1: DataForSEO (recarga de 50 $), claves de Google Cloud de PageSpeed/CrUX y Places, y embeddings con saldo.
+- [ ] Antes de que caduque SE Ranking: exportar las palabras clave y el histórico de los clientes.
+- [ ] Con el cliente de la prueba: reclamar sus fichas en Bing Places y Apple Business, probar «Businesses in ChatGPT» (¿admite España?) y añadir sus redes en Search Console.
+- [ ] Google Ads: no pedir el token de desarrollador (se retiró el 9 sep 2026).
 
 ## Reorganización UX: Inicio, Para ti, Equipo, cliente en un solo sitio y guía (20-21 nov, migración 0058)
 Todo desplegado. Detalle en `docs/ESTADO.md` §6.31 a §6.35 y en `docs/DISENO-UX-REORGANIZACION.md`.

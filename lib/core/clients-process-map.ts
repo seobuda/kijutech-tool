@@ -29,6 +29,18 @@ export const CLIENTES_PROCESS_MAP: ProcessStep[] = [
     tables: ['client_contacts', 'client_locations']
   },
   {
+    id: 'cli-comunicaciones',
+    lane: 'La ficha',
+    name: 'Qué recibe cada contacto',
+    description: 'Cada contacto marca qué correos recibe (informes, preguntas, avisos, aprobaciones, facturación o todo; también por proyecto) y la ficha dice si los correos a este cliente pasan por aprobación. Si nadie recibe un tipo, lo avisa: el sistema no podrá escribirle de eso.',
+    status: 'built',
+    file: 'lib/core/comms.ts',
+    when: 'Desde la pestaña «Contactos» («Qué recibe»); la aprobación, solo administración. Lo usan los correos a clientes (mapa Plataforma).',
+    ai: 'Nada.',
+    code: 'Destinatarios: contactos activos con correo que tengan ese tipo o «todo», para ese proyecto o para todos. Política: heredar (lo de la cuenta, por defecto siempre por aprobación), siempre o nunca.',
+    tables: ['client_contact_subscriptions', 'client_messages', 'client_contacts']
+  },
+  {
     id: 'cli-webs',
     lane: 'La ficha',
     name: 'Webs y cuentas',
