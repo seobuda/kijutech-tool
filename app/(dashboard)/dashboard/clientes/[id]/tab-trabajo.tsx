@@ -33,10 +33,11 @@ const fmtDate = (iso: string) => new Intl.DateTimeFormat('es-ES', { day: 'numeri
 
 export const openRequests = (rs: RequestView[]) => rs.filter((r) => OPEN.includes(r.workStatus)).length;
 
-export function EncargosTab({ requests, linked }: { requests: RequestView[]; linked: boolean }) {
+export function EncargosTab({ clientId, requests, linked }: { clientId: string; requests: RequestView[]; linked: boolean }) {
   const newBtn = (
     <Button asChild size="sm" className="bg-brand text-white hover:bg-brand/90">
-      <Link href="/dashboard/operaciones/nuevo">
+      {/* Con el cliente ya elegido (y su lista habitual) en el formulario. */}
+      <Link href={`/dashboard/operaciones/nuevo?cliente=${clientId}`}>
         <Plus aria-hidden /> Nuevo encargo
       </Link>
     </Button>

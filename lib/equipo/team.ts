@@ -3,9 +3,9 @@
 // ahora y la actividad del día en un solo registro. Es una vista de la aplicación, como el Inicio: solo LEE de los dos
 // módulos; cada módulo sigue siendo dueño de sus datos.
 import 'server-only';
-import { and, desc, eq, gte, inArray, isNotNull, notInArray } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNotNull, isNull, notInArray } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { agtAgentAvatars, agtJobs, agtTeamQuestions, opsAgentActions, opsRequestEvents, opsRequests, opsTeamAvatars, opsTeamProfiles } from '@/lib/db/schema';
+import { agtAgentAvatars, agtJobs, agtTeamQuestions, opsAgentActions, opsRequestEvents, opsRequests, opsTeamAvatars, opsTeamProfiles, opsWorkEvents } from '@/lib/db/schema';
 import { listAgents, listDepartments } from '@/lib/agentes/store';
 import { getCurrentDays } from '@/lib/operaciones/jornada';
 import { STATUS_LABEL, type DayStatus } from '@/lib/operaciones/jornada-core';
@@ -167,6 +167,48 @@ const EVENT_TEXT: Partial<Record<string, (title: string) => string>> = {
 };
 export const PERSON_EVENTS = Object.keys(EVENT_TEXT);
 
+// Jornada (23 nov 2026): cada fichaje del día, sea por Telegram, desde la web o automático.
+const WORK_TEXT: Record<string, (task: string | null, minutes: number | null) => string> = {
+  entrada: (t) => (t ? `empezó la jornada con «${t}»` : 'empezó la jornada'),
+  descanso: (_t, m) => (m ? `se tomó un descanso de ${m} min` : 'se tomó un descanso'),
+  comida: () => 'salió a comer',
+  salida_urgente: () => 'salió por una urgencia',
+  vuelta: () => 'volvió al trabajo',
+  salida: () => 'terminó la jornada',
+  ausencia: () => 'marcó una ausencia',
+  tarea: (t) => (t ? `cambió a «${t}»` : 'cambió de tarea')
+};
+
+/** Texto de un fichaje de la jornada. Puro (se prueba sin base de datos). */
+export function workEventText(e: { kind: string; task: string | null; plannedMinutes: number | null; source: string; createdByName: string | null }): string | null {
+  const fn = WORK_TEXT[e.kind];
+  if (!fn) return null;
+  const base = fn(e.task, e.plannedMinutes);
+  if (e.source === 'auto') return e.kind === 'salida' ? 'se le cerró la jornada automáticamente' : `${base} (automático)`;
+  if (e.source === 'web' || e.source === 'correccion') return `${base} (anotado en la web${e.createdByName ? ` por ${e.createdByName}` : ''})`;
+  return base;
+}
+
+/** Acciones hechas desde la web que también son actividad del día. Puro. */
+export function webEventText(type: string, payload: Record<string, unknown> | null, title: string | null): string | null {
+  const p = payload ?? {};
+  if (type === 'owner_replied') return `respondió al bloqueo de «${title ?? 'una tarea'}»`;
+  if (type === 'ficha_cliente') return p.client ? `actualizó la ficha de ${String(p.client)}` : 'actualizó la ficha de un cliente';
+  if (type === 'calendario') {
+    const name = typeof p.name === 'string' && p.name ? ` «${p.name}»` : '';
+    return p.action === 'remove' ? `quitó${name} del calendario` : `añadió${name} al calendario`;
+  }
+  return null;
+}
+const WEB_EVENTS = ['owner_replied', 'ficha_cliente', 'calendario'];
+
+/** Decisión de una persona sobre una propuesta del agente (Para ti, Correos, Mi bandeja o Telegram). Puro. */
+export function decisionText(status: string, via: string | null, summary: string): string | null {
+  const verb = status === 'aprobado' ? 'aprobó' : status === 'corregido' ? 'corrigió y aprobó' : status === 'rechazado' ? 'descartó' : null;
+  if (!verb) return null;
+  return `${verb}${via === 'panel' ? ' desde la web' : via === 'telegram' ? ' por Telegram' : ''}: ${summary || 'una propuesta del agente'}`;
+}
+
 function startOfDayMadrid(now: Date): Date {
   const ymd = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Madrid', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
   // Medianoche de Madrid aproximada (±1 h según horario): suficiente para «lo de hoy».
@@ -179,7 +221,7 @@ function startOfDayMadrid(now: Date): Date {
 export async function getActivityToday(tenantId: string, opts: { limit?: number; now?: Date } = {}): Promise<ActivityItem[]> {
   const since = startOfDayMadrid(opts.now ?? new Date());
   const limit = opts.limit ?? 60;
-  const [events, jobs, answers, actions, agents] = await Promise.all([
+  const [events, jobs, answers, actions, agents, work, web, decisions] = await Promise.all([
     db
       .select({ id: opsRequestEvents.id, at: opsRequestEvents.createdAt, type: opsRequestEvents.eventType, who: opsRequestEvents.personName, cu: opsRequestEvents.personClickupUserId, title: opsRequests.title })
       .from(opsRequestEvents)
@@ -205,7 +247,26 @@ export async function getActivityToday(tenantId: string, opts: { limit?: number;
       .where(and(eq(opsAgentActions.tenantId, tenantId), gte(opsAgentActions.createdAt, since)))
       .orderBy(desc(opsAgentActions.createdAt))
       .limit(limit),
-    listAgents(tenantId)
+    listAgents(tenantId),
+    db
+      .select({ id: opsWorkEvents.id, at: opsWorkEvents.at, kind: opsWorkEvents.kind, who: opsWorkEvents.personName, cu: opsWorkEvents.clickupUserId, task: opsWorkEvents.task, plannedMinutes: opsWorkEvents.plannedMinutes, source: opsWorkEvents.source, createdByName: opsWorkEvents.createdByName })
+      .from(opsWorkEvents)
+      .where(and(eq(opsWorkEvents.tenantId, tenantId), gte(opsWorkEvents.at, since), isNull(opsWorkEvents.voidedAt)))
+      .orderBy(desc(opsWorkEvents.at))
+      .limit(limit),
+    db
+      .select({ id: opsRequestEvents.id, at: opsRequestEvents.createdAt, type: opsRequestEvents.eventType, who: opsRequestEvents.personName, cu: opsRequestEvents.personClickupUserId, payload: opsRequestEvents.payload, title: opsRequests.title })
+      .from(opsRequestEvents)
+      .leftJoin(opsRequests, eq(opsRequests.id, opsRequestEvents.requestId))
+      .where(and(eq(opsRequestEvents.tenantId, tenantId), gte(opsRequestEvents.createdAt, since), inArray(opsRequestEvents.eventType, WEB_EVENTS), isNotNull(opsRequestEvents.personName)))
+      .orderBy(desc(opsRequestEvents.createdAt))
+      .limit(limit),
+    db
+      .select({ id: opsAgentActions.id, summary: opsAgentActions.summary, status: opsAgentActions.status, by: opsAgentActions.decidedByName, via: opsAgentActions.decidedVia, at: opsAgentActions.decidedAt })
+      .from(opsAgentActions)
+      .where(and(eq(opsAgentActions.tenantId, tenantId), gte(opsAgentActions.decidedAt, since), isNotNull(opsAgentActions.decidedByName), inArray(opsAgentActions.decidedVia, ['panel', 'telegram'])))
+      .orderBy(desc(opsAgentActions.decidedAt))
+      .limit(limit)
   ]);
   const agentById = new Map(agents.map((a) => [a.id, a]));
   const manager = agents.find((a) => a.kind === 'principal');
@@ -239,6 +300,19 @@ export async function getActivityToday(tenantId: string, opts: { limit?: number;
   for (const x of actions) {
     const verb = x.status === 'propuesto' ? 'propuso' : x.status === 'auto' ? 'hizo solo' : x.status === 'rechazado' ? 'propuso (rechazado)' : 'propuso (aprobado)';
     items.push({ key: `a-${x.id}`, at: x.at, who: manager?.name ?? 'El agente', whoKind: 'agente', text: `${verb}: ${x.summary || 'una acción'}`, clickupUserId: null, agentKey: manager?.key ?? null });
+  }
+  for (const w of work) {
+    const task = (w.task as { name?: unknown } | null)?.name;
+    const text = workEventText({ kind: w.kind, task: typeof task === 'string' ? task : null, plannedMinutes: w.plannedMinutes, source: w.source, createdByName: w.createdByName });
+    if (text) items.push({ key: `w-${w.id}`, at: w.at, who: w.who, whoKind: 'persona', text, clickupUserId: w.cu, agentKey: null });
+  }
+  for (const e of web) {
+    const text = webEventText(e.type, e.payload as Record<string, unknown> | null, e.title);
+    if (text) items.push({ key: `e-${e.id}`, at: e.at, who: e.who ?? 'Alguien', whoKind: 'persona', text, clickupUserId: e.cu, agentKey: null });
+  }
+  for (const d of decisions) {
+    const text = d.at && d.by ? decisionText(d.status, d.via, d.summary) : null;
+    if (text && d.at && d.by) items.push({ key: `d-${d.id}`, at: d.at, who: d.by, whoKind: 'persona', text, clickupUserId: null, agentKey: null });
   }
   return items.sort((a, b) => b.at.getTime() - a.at.getTime()).slice(0, limit);
 }

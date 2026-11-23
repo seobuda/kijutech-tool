@@ -55,15 +55,29 @@ export function NuevoEncargoForm({
   clientFields,
   workTypes,
   members,
-  meId
+  meId,
+  preset = null
 }: {
   spaces: ClickUpSpaceWithLists[];
   clientFields: Record<string, { name: string; options: { id: string; label: string }[] }>;
   workTypes: { key: string; label: string }[];
   members: { id: string; username: string }[];
   meId: string;
+  /** Cliente elegido desde su ficha: su opción de ClickUp y sus listas habituales. */
+  preset?: { id: string; name: string; optionId: string; listIds: string[] } | null;
 }) {
-  const [listId, setListId] = useState('');
+  const allLists = spaces.flatMap((s) =>
+    s.lists.map((l) => ({ ...l, spaceName: s.name }))
+  );
+  const fieldHas = (listId: string, optionId: string) => {
+    const fid = allLists.find((l) => l.id === listId)?.clientFieldId;
+    return Boolean(optionId && fid && clientFields[fid]?.options.some((o) => o.id === optionId));
+  };
+  // Lista inicial: la primera lista habitual del cliente que exista; mejor si tiene su opción de «Cliente».
+  const presetList = preset
+    ? (preset.listIds.find((id) => fieldHas(id, preset.optionId)) ?? preset.listIds.find((id) => allLists.some((l) => l.id === id)) ?? '')
+    : '';
+  const [listId, setListId] = useState(presetList);
   // Los miembros salen de la caché (no se llama a ClickUp al elegir lista).
   const [assigneeId, setAssigneeId] = useState(members.some((m) => m.id === meId) ? meId : '');
 
@@ -73,7 +87,7 @@ export function NuevoEncargoForm({
   const [missing, setMissing] = useState<string[]>([]);
   const [dueDate, setDueDate] = useState('');
   const [priority, setPriority] = useState('3');
-  const [clientOptionId, setClientOptionId] = useState('');
+  const [clientOptionId, setClientOptionId] = useState(preset && fieldHas(presetList, preset.optionId) ? preset.optionId : '');
   const [workTypeKey, setWorkTypeKey] = useState('');
   const [requiresReview, setRequiresReview] = useState(false);
   const [clientHint, setClientHint] = useState(false); // la IA lo intentó y no encontró uno claro
@@ -84,9 +98,6 @@ export function NuevoEncargoForm({
   const [aiPending, startAi] = useTransition();
   const [sendPending, startSend] = useTransition();
 
-  const allLists = spaces.flatMap((s) =>
-    s.lists.map((l) => ({ ...l, spaceName: s.name }))
-  );
   const listName = allLists.find((l) => l.id === listId)?.name ?? '';
   const clientField = (() => {
     const fid = allLists.find((l) => l.id === listId)?.clientFieldId;
@@ -106,8 +117,12 @@ export function NuevoEncargoForm({
       setPrepared(res.prepared.description);
       setMissing(res.prepared.missingData);
       if (clientField) {
-        setClientOptionId(res.prepared.clientOptionId);
-        setClientHint(!res.prepared.clientOptionId);
+        // Si se vino desde la ficha, la IA no quita el cliente elegido (solo lo cambia si reconoce otro).
+        const keep = !res.prepared.clientOptionId && preset && clientOptionId === preset.optionId;
+        if (!keep) {
+          setClientOptionId(res.prepared.clientOptionId);
+          setClientHint(!res.prepared.clientOptionId);
+        }
       }
     });
 
@@ -181,6 +196,11 @@ export function NuevoEncargoForm({
               <Button asChild variant="outline">
                 <Link href="/dashboard/operaciones/encargos">Ver encargos</Link>
               </Button>
+              {preset && (
+                <Button asChild variant="outline">
+                  <Link href={`/dashboard/clientes/${preset.id}?tab=encargos`}>Volver a {preset.name}</Link>
+                </Button>
+              )}
               <Button variant="ghost" onClick={reset}>
                 Crear otro encargo
               </Button>
@@ -226,6 +246,19 @@ export function NuevoEncargoForm({
           <p className="mt-0.5 text-sm text-muted-foreground">
             Los campos con <span className="text-destructive">*</span> son obligatorios.
           </p>
+          {preset && (
+            <p className="mt-2 text-sm" data-testid="nuevo-cliente-preset">
+              Para <span className="font-medium">{preset.name}</span>
+              {!preset.optionId
+                ? ' · este cliente no está vinculado a su opción «Cliente» de ClickUp: elígelo en la lista o vincúlalo en su ficha.'
+                : !clientOptionId && listId
+                  ? ' · la lista elegida no tiene a este cliente en su campo «Cliente».'
+                  : ''}{' '}
+              <Link href={`/dashboard/clientes/${preset.id}?tab=encargos`} className="text-brand underline-offset-2 hover:underline">
+                Volver a la ficha
+              </Link>
+            </p>
+          )}
         </div>
 
         <FormGroup step={1} title="Destino" hint="Dónde se creará la tarea en ClickUp.">

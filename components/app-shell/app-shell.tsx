@@ -26,6 +26,7 @@ import { signOut } from '@/app/(login)/actions';
 import type { SafeUser } from '@/lib/db/queries';
 import { ACCOUNT_LINKS, activeChild, breadcrumbs, isActive, visibleActions, visibleNav, type NavGroup, type NavItem } from './nav';
 import { CommandPalette } from './command-palette';
+import { useCrumbLabel } from './crumb-label';
 import { useRoles } from './use-roles';
 import { GuideProvider, useGuide } from '@/components/guia/guide';
 
@@ -108,7 +109,9 @@ function NavList({
             const current = kids.length ? activeChild(item, pathname) : null;
             return (
               <div key={item.href}>
-                <NavLink item={item} active={active} collapsed={collapsed} onNavigate={onNavigate} count={count} />
+                {/* Con una subentrada marcada, la página actual es esa: la entrada principal solo indica la sección
+                    (aria-current «true»), para que no haya dos «page» en la barra. */}
+                <NavLink item={item} active={active} isPage={active && !current} collapsed={collapsed} onNavigate={onNavigate} count={count} />
                 {kids.length > 0 && (
                   <ul className="mb-1 mt-0.5 ml-[21px] flex flex-col gap-0.5 border-l border-sidebar-border pl-2" aria-label={`Dentro de ${item.label}`}>
                     {kids.map((c) => {
@@ -150,12 +153,14 @@ function useParaTiCount(enabled: boolean) {
 function NavLink({
   item,
   active,
+  isPage = active,
   collapsed,
   onNavigate,
   count
 }: {
   item: NavItem;
   active: boolean;
+  isPage?: boolean;
   collapsed?: boolean;
   onNavigate?: () => void;
   count?: { count: number; urgent: number };
@@ -167,7 +172,7 @@ function NavLink({
       onClick={onNavigate}
       data-tour={`nav:${item.href}`}
       title={collapsed ? item.label : undefined}
-      aria-current={active ? 'page' : undefined}
+      aria-current={isPage ? 'page' : active ? 'true' : undefined}
       className={cn(
         'group relative flex h-9 items-center gap-2.5 rounded-lg px-2.5 text-sm font-medium transition-colors',
         'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
@@ -332,7 +337,8 @@ function UserMenu({ collapsed }: { collapsed?: boolean }) {
 // --- Migas ---------------------------------------------------------------------
 
 function Breadcrumbs({ pathname }: { pathname: string }) {
-  const crumbs = breadcrumbs(pathname);
+  const named = useCrumbLabel(pathname);
+  const crumbs = breadcrumbs(pathname).map((c, i, all) => (named && i === all.length - 1 ? { ...c, label: named } : c));
   return (
     <ol className="flex min-w-0 items-center gap-1 text-sm" aria-label="Estás aquí">
       {crumbs.map((c, i) => {

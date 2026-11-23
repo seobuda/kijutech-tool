@@ -106,7 +106,7 @@ export async function getParaTi(tenantId: string): Promise<ParaTi> {
       push({ key: `r-${i.req.id}`, kind: 'revisiones', title: i.req.title, detail: i.req.assigneeName ? `Lo entrega ${i.req.assigneeName}` : null, clientName: i.req.clientName, since: i.since, href: null, urgent: i.req.priority === 1 });
     }
   }
-  for (const e of emails) push({ key: `c-${e.actionId}`, kind: 'correos', title: e.subject || '(sin asunto)', detail: e.top ? 'Cliente Top' : null, clientName: e.clientName ?? e.from, since: e.since, href: '/dashboard/operaciones/correos' });
+  for (const e of emails) push({ key: `c-${e.actionId}`, kind: 'correos', title: e.subject || '(sin asunto)', detail: e.top ? 'Cliente Top' : null, clientName: e.clientName ?? e.from, since: e.since, href: e.emailId ? `/dashboard/operaciones/correos?id=${e.emailId}` : '/dashboard/operaciones/correos' });
   for (const a of agentRows) push({ key: `a-${a.id}`, kind: 'agente', title: clip(a.summary, 140) ?? 'Propuesta del agente', detail: null, clientName: null, since: a.createdAt, href: '/dashboard/operaciones/agente' });
   for (const q of questions) {
     push({ key: `q-${q.id}`, kind: 'dudas', title: clip(q.question, 140) ?? '', detail: `${q.by} · ${q.status === 'escalada' ? 'escalada a ti' : 'respuesta pendiente de tu aprobación'}`, clientName: null, since: q.escalatedAt ?? q.createdAt, href: '/dashboard/agentes/equipo' });

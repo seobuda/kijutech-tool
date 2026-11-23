@@ -10,6 +10,7 @@ import { activityOf, getActivityToday, getTeamOrg } from '@/lib/equipo/team';
 import { getAgentsSummary, getMyProfile, getMyStats, safeBlock } from '@/lib/inicio/panel';
 import { agentMonthSpend, listAgents, listDepartments } from '@/lib/agentes/store';
 import { ActivityFeed } from '../../activity-feed';
+import { CrumbLabel } from '@/components/app-shell/crumb-label';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,6 +40,7 @@ export default async function MiembroPage({ params }: { params: Promise<{ tipo: 
 
   return (
     <PageContainer className="space-y-6">
+      <CrumbLabel label={m.name} />
       <Link href="/dashboard/equipo" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="size-4" aria-hidden /> Equipo
       </Link>

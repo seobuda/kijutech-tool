@@ -8,6 +8,7 @@ import { clientHistory, getClientSheet } from '@/lib/core/clients';
 import { getStructure, selectedSpaces } from '@/lib/operaciones/structure';
 import { evaluateClient, getLevels, getServices, listClients } from '@/lib/operaciones/clients';
 import { isConnected } from '@/lib/agentes/integrations';
+import { CrumbLabel } from '@/components/app-shell/crumb-label';
 import { FichaView, type FichaData } from './ficha-view';
 import type { ProjectView, RequestView } from './tab-trabajo';
 
@@ -108,7 +109,12 @@ export default async function FichaClientePage({ params }: { params: Promise<{ i
     history: isAdmin ? await clientHistory(user.tenantId, id).catch(() => []) : [],
     work: await clientWork(user.tenantId, id, ops.clickupOptionId, [c.name, ...c.aliases])
   };
-  return <FichaView data={data} />;
+  return (
+    <>
+      <CrumbLabel label={data.client.name} />
+      <FichaView data={data} />
+    </>
+  );
 }
 
 /**

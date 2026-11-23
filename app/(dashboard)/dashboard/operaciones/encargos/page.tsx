@@ -1,13 +1,14 @@
 import { AutoRefresh } from '@/components/ui/auto-refresh';
 import Link from 'next/link';
-import { desc, eq, inArray, and } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, isNotNull, isNull, notInArray, or, type SQL } from 'drizzle-orm';
 import { redirect } from 'next/navigation';
 import { db } from '@/lib/db/drizzle';
-import { opsRequestEvents, opsRequests } from '@/lib/db/schema';
+import { opsClients, opsRequestEvents, opsRequests } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
 import { ClipboardList, ExternalLink, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge, EmptyState } from '@/components/ui/page';
+import { cn } from '@/lib/utils';
 import { RetryButton } from './retry-button';
 
 export const dynamic = 'force-dynamic';
@@ -54,16 +55,32 @@ const fmt = new Intl.DateTimeFormat('es-ES', {
   minute: '2-digit'
 });
 
-export default async function EncargosPage() {
+// ?cliente=sin: los encargos que no son de ningún cliente con ficha (sin cliente en ClickUp, o con una opción de
+// «Cliente» que no está vinculada a ninguna ficha). Así no se pierden en la ficha de nadie.
+export default async function EncargosPage({ searchParams }: { searchParams: Promise<{ cliente?: string }> }) {
   const user = await getUser();
   if (!user) redirect('/sign-in');
+  const onlyNoClient = (await searchParams).cliente === 'sin';
 
-  const rows = await db
-    .select()
-    .from(opsRequests)
-    .where(eq(opsRequests.tenantId, user.tenantId))
-    .orderBy(desc(opsRequests.createdAt))
-    .limit(200);
+  const linked = (
+    await db
+      .select({ id: opsClients.clickupOptionId })
+      .from(opsClients)
+      .where(and(eq(opsClients.tenantId, user.tenantId), isNotNull(opsClients.clickupOptionId)))
+  ).map((c) => c.id as string);
+  const linkedSet = new Set(linked);
+  const noClient: SQL = (linked.length ? or(isNull(opsRequests.clientOptionId), notInArray(opsRequests.clientOptionId, linked)) : isNull(opsRequests.clientOptionId)) as SQL;
+  const base = eq(opsRequests.tenantId, user.tenantId);
+
+  const [rows, [{ n: noClientCount }]] = await Promise.all([
+    db
+      .select()
+      .from(opsRequests)
+      .where(onlyNoClient ? and(base, noClient) : base)
+      .orderBy(desc(opsRequests.createdAt))
+      .limit(200),
+    db.select({ n: count() }).from(opsRequests).where(and(base, noClient))
+  ]);
 
   // Última acción por encargo: el evento más reciente de un botón pulsado.
   const lastAction = new Map<string, { label: string; at: Date; by: string | null }>();
@@ -96,6 +113,21 @@ export default async function EncargosPage() {
     </Button>
   );
 
+  if (rows.length === 0 && onlyNoClient) {
+    return (
+      <EmptyState
+        icon={ClipboardList}
+        title="Todos los encargos tienen cliente"
+        description="Ningún encargo está sin cliente ni con un cliente de ClickUp sin ficha."
+        action={
+          <Link href="/dashboard/operaciones/encargos" className="text-sm text-brand underline-offset-2 hover:underline">
+            Ver todos los encargos
+          </Link>
+        }
+      />
+    );
+  }
+
   if (rows.length === 0) {
     return (
       <EmptyState
@@ -116,12 +148,40 @@ export default async function EncargosPage() {
             <AutoRefresh className="font-normal" />
           </h2>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            {rows.length === 200 ? 'Los 200 más recientes' : `${rows.length} encargo${rows.length === 1 ? '' : 's'}`}, del más
-            nuevo al más antiguo.
+            {rows.length === 200 ? 'Los 200 más recientes' : `${rows.length} encargo${rows.length === 1 ? '' : 's'}`}
+            {onlyNoClient ? ' sin cliente' : ''}, del más nuevo al más antiguo.
           </p>
         </div>
         {newButton}
       </div>
+
+      <nav aria-label="Filtrar encargos" className="flex flex-wrap gap-1.5">
+        {[
+          { href: '/dashboard/operaciones/encargos', label: 'Todos', active: !onlyNoClient, n: null },
+          { href: '/dashboard/operaciones/encargos?cliente=sin', label: 'Sin cliente', active: onlyNoClient, n: Number(noClientCount) }
+        ].map((f) => (
+          <Link
+            key={f.label}
+            href={f.href}
+            aria-current={f.active ? 'true' : undefined}
+            className={cn(
+              'inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-ring',
+              f.active ? 'border-brand/50 bg-brand-soft text-foreground' : 'bg-card text-muted-foreground hover:bg-accent hover:text-foreground'
+            )}
+          >
+            {f.label}
+            {f.n !== null && <span className="tabular-nums text-muted-foreground">{f.n}</span>}
+          </Link>
+        ))}
+      </nav>
+
+      {onlyNoClient && (
+        <p className="rounded-lg border bg-muted/40 px-3 py-2 text-sm text-muted-foreground text-pretty">
+          Para que un encargo pase a su cliente, pon el cliente en el campo «Cliente» de la tarea en ClickUp: aquí se actualiza en
+          2 o 3 minutos. Si el cliente sale pero «sin ficha», vincula esa opción de ClickUp a su ficha (ficha del cliente → Más →
+          Operaciones).
+        </p>
+      )}
 
       <div className="overflow-hidden rounded-xl border bg-card shadow-xs">
         <div className="overflow-x-auto">
@@ -131,6 +191,7 @@ export default async function EncargosPage() {
                 <th scope="col">Creado</th>
                 <th scope="col">Encargo</th>
                 <th scope="col">Lista</th>
+                <th scope="col">Cliente</th>
                 <th scope="col">Responsable</th>
                 <th scope="col">Entrega</th>
                 <th scope="col">Estado</th>
@@ -165,6 +226,16 @@ export default async function EncargosPage() {
                       )}
                     </td>
                     <td className="text-muted-foreground">{r.clickupListName ?? r.clickupListId}</td>
+                    <td className="whitespace-nowrap">
+                      {!r.clientOptionId ? (
+                        <span className="text-muted-foreground/70">Sin cliente</span>
+                      ) : (
+                        <>
+                          {r.clientName ?? '—'}
+                          {!linkedSet.has(r.clientOptionId) && <span className="block text-xs text-warning-strong">sin ficha</span>}
+                        </>
+                      )}
+                    </td>
                     <td className="whitespace-nowrap">
                       {r.assigneeName ?? <span className="text-muted-foreground/70">Sin asignar</span>}
                     </td>
