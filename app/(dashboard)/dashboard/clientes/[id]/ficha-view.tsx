@@ -323,7 +323,7 @@ export function FichaView({ data }: { data: FichaData }) {
         {tab === 'contactos' && <ContactosTab clientId={c.id} contacts={data.contacts} locations={data.locations} isAdmin={data.isAdmin} />}
         {tab === 'webs' && <WebsTab clientId={c.id} assets={data.assets} integrations={data.integrations} />}
         {tab === 'competencia' && <CompetenciaTab clientId={c.id} competitors={data.competitors} />}
-        {tab === 'encargos' && <EncargosTab requests={data.work.requests} linked={Boolean(data.ops.clickupOptionId)} />}
+        {tab === 'encargos' && <EncargosTab clientId={c.id} requests={data.work.requests} linked={Boolean(data.ops.clickupOptionId)} />}
         {tab === 'seo' && <SeoTab projects={data.work.projects} clientName={c.name} />}
         {tab === 'rendimiento' && <ClienteRendimiento clientId={c.id} clientName={c.name} />}
         {tab === 'estrategia' && <ClienteEstrategia clientId={c.id} isAdmin={data.isAdmin} />}

@@ -4,7 +4,7 @@ import { db } from '@/lib/db/drizzle';
 import { opsTeamAvatars, opsTeamProfiles } from '@/lib/db/schema';
 import { cleanupFixtures, createFixtures, loginAs, PREFIX, type Fixtures } from './fixtures';
 import { parseAvatar, sniffMime, AVATAR_MAX_BYTES } from '@/lib/equipo/avatar-rules';
-import { activityOf, hueOf, initialsOf, type ActivityItem } from '@/lib/equipo/team';
+import { activityOf, decisionText, getActivityToday, hueOf, initialsOf, webEventText, workEventText, type ActivityItem } from '@/lib/equipo/team';
 import { removeAvatar, setAvatar, setPersonDepartment } from '@/lib/equipo/actions';
 import { GET as getAvatar } from '@/app/api/equipo/avatar/route';
 
@@ -99,5 +99,41 @@ describe('Equipo: permisos de fotos y departamentos', () => {
     expect(p.d).toBe('operaciones');
     expect((await removeAvatar('persona', profileId)).ok).toBe(true);
     expect(await db.select().from(opsTeamAvatars).where(eq(opsTeamAvatars.profileId, profileId))).toHaveLength(0);
+  });
+});
+
+// 23 nov 2026: la actividad del día también enseña la jornada y lo que se hace desde la web.
+describe('Actividad del día: jornada y acciones web', () => {
+  const w = (kind: string, source = 'telegram', extra: Partial<Parameters<typeof workEventText>[0]> = {}) =>
+    workEventText({ kind, task: null, plannedMinutes: null, source, createdByName: null, ...extra });
+
+  it('cada fichaje tiene su frase, y se distingue lo automático y lo anotado en la web', () => {
+    expect(w('entrada', 'telegram', { task: 'Informe' })).toBe('empezó la jornada con «Informe»');
+    expect(w('descanso', 'telegram', { plannedMinutes: 10 })).toBe('se tomó un descanso de 10 min');
+    expect(w('vuelta')).toBe('volvió al trabajo');
+    expect(w('salida', 'auto')).toBe('se le cerró la jornada automáticamente');
+    expect(w('salida', 'web', { createdByName: 'Enric' })).toBe('terminó la jornada (anotado en la web por Enric)');
+    expect(w('desconocido')).toBeNull();
+  });
+
+  it('acciones web: bloqueos respondidos, fichas y calendario; lo demás no sale', () => {
+    expect(webEventText('owner_replied', null, 'Subir el blog')).toBe('respondió al bloqueo de «Subir el blog»');
+    expect(webEventText('ficha_cliente', { client: 'Indautxu' }, null)).toBe('actualizó la ficha de Indautxu');
+    expect(webEventText('calendario', { action: 'remove', name: 'Festivo' }, null)).toBe('quitó «Festivo» del calendario');
+    expect(webEventText('autonomia', {}, null)).toBeNull();
+  });
+
+  it('decisiones sobre propuestas: quién y por dónde; lo no decidido no sale', () => {
+    expect(decisionText('rechazado', 'panel', 'Apuntar algo')).toBe('descartó desde la web: Apuntar algo');
+    expect(decisionText('aprobado', 'telegram', 'Responder al cliente')).toBe('aprobó por Telegram: Responder al cliente');
+    expect(decisionText('propuesto', 'panel', 'x')).toBeNull();
+  });
+
+  it('la consulta del día funciona contra la base de datos', async () => {
+    const [kiju] = await db.select({ id: opsTeamProfiles.tenantId }).from(opsTeamProfiles).limit(1);
+    if (!kiju) return;
+    const items = await getActivityToday(kiju.id, { limit: 20 });
+    expect(Array.isArray(items)).toBe(true);
+    for (let i = 1; i < items.length; i++) expect(items[i - 1].at.getTime()).toBeGreaterThanOrEqual(items[i].at.getTime());
   });
 });

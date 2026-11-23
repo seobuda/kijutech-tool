@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { checkPermission, requirePagePermission } from '@/lib/auth/permissions';
 import { PageContainer } from '@/components/ui/page';
+import { CrumbLabel } from '@/components/app-shell/crumb-label';
 import { getArticle, listCategories } from '@/lib/core/knowledge';
 import { needsReview, type KbLink } from '@/lib/core/knowledge-rules';
 import { ArticleEditor, type ArticleData } from '../article-editor';
@@ -40,6 +41,7 @@ export default async function EntradaPage({ params }: { params: Promise<{ id: st
   };
   return (
     <PageContainer>
+      <CrumbLabel label={a.title} />
       <ArticleEditor data={data} isAdmin={isAdmin} categories={cats.map((c) => ({ id: c.id, name: c.name, archived: Boolean(c.archivedAt) }))} />
     </PageContainer>
   );

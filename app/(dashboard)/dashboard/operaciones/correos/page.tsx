@@ -6,13 +6,16 @@ import { CorreosView } from './correos-view';
 
 export const dynamic = 'force-dynamic';
 
-export default async function CorreosPage() {
+// ?id= abre ese correo al entrar (lo usa Para ti para «Ver el correo completo»).
+export default async function CorreosPage({ searchParams }: { searchParams: Promise<{ id?: string }> }) {
   const user = await requirePagePermission('edit');
+  const { id } = await searchParams;
+  const initialId = id && /^[0-9a-f-]{36}$/i.test(id) ? id : null;
   // Clientes a los que se puede asignar un correo: todos menos los dados de baja.
   const list = await db
     .select({ id: clients.id, name: clients.name })
     .from(clients)
     .where(and(eq(clients.tenantId, user.tenantId), inArray(clients.status, ['prospecto', 'onboarding', 'activo', 'pausado'])))
     .orderBy(asc(clients.name));
-  return <CorreosView clients={list} />;
+  return <CorreosView clients={list} initialId={initialId} />;
 }

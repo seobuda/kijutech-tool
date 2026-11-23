@@ -11,26 +11,7 @@ import { cn } from '@/lib/utils';
 import type { TeamSettings } from '@/lib/agentes/team';
 import { answerQuestionAction, approveQuestionAction, discardQuestionAction, saveTeamSettingsAction } from '@/lib/agentes/team-actions';
 import { areaClass, brandBtn, MsgLine, selectClass, useRun } from '../../clientes/ui';
-
-export type QuestionRow = {
-  id: string;
-  askedBy: string;
-  question: string;
-  followups: string[];
-  status: string;
-  tier: string | null;
-  topic: string | null;
-  aiAnswer: string | null;
-  finalAnswer: string | null;
-  answeredBy: string | null;
-  feedback: string | null;
-  feedbackNote: string | null;
-  reason: string | null;
-  revisions: string[];
-  tools: string[];
-  costUsd: number;
-  createdAt: string;
-};
+import type { QuestionRow } from './rows';
 
 const STATUS: Record<string, { label: string; tone: 'neutral' | 'brand' | 'success' | 'warning' | 'danger' | 'info' }> = {
   respondida: { label: 'Respondida (esperando si le sirve)', tone: 'info' },
@@ -136,13 +117,14 @@ function SettingsPanel({ active, model, settings }: { active: boolean; model: st
   );
 }
 
-function QuestionCard({ q }: { q: QuestionRow }) {
+/** Una duda con su respuesta y, si está abierta, los botones para decidirla. La usan Dudas del equipo y Para ti. */
+export function QuestionCard({ q, as: Tag = 'li' }: { q: QuestionRow; as?: 'li' | 'div' }) {
   const [answer, setAnswer] = useState('');
   const { run, pending, msg } = useRun();
   const open = q.status === 'pendiente_aprobacion' || q.status === 'escalada';
   const st = STATUS[q.status] ?? { label: q.status, tone: 'neutral' as const };
   return (
-    <li className="space-y-3 rounded-xl border bg-card p-4 shadow-xs">
+    <Tag className="space-y-3 rounded-xl border bg-card p-4 shadow-xs">
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
         <span className="text-sm font-medium text-foreground">{q.askedBy}</span>
         <span>{fmt(q.createdAt)}</span>
@@ -196,6 +178,6 @@ function QuestionCard({ q }: { q: QuestionRow }) {
           Resuelta{q.feedback === 'sirve' ? ' y le sirvió' : ''}
         </p>
       )}
-    </li>
+    </Tag>
   );
 }

@@ -4,33 +4,49 @@ import { requirePagePermission } from '@/lib/auth/permissions';
 import { AutoRefresh } from '@/components/ui/auto-refresh';
 import { Badge, EmptyState, PageContainer, PageHeader, Section } from '@/components/ui/page';
 import { cn } from '@/lib/utils';
-import { filterEntries, getParaTi, KIND_ORDER, KINDS, type DeptKey, type KindKey, type ParaTiEntry } from '@/lib/inicio/para-ti';
+import { decisionKey, filterEntries, getParaTi, getParaTiDecisions, KIND_ORDER, KINDS, type DeptKey, type KindKey, type ParaTiEntry } from '@/lib/inicio/para-ti';
 import { waitLabel } from '@/lib/operaciones/inbox';
 import { isInboxOwner } from '@/lib/operaciones/inbox-owner';
 import { BandejaList } from '../operaciones/bandeja/bandeja-list';
 import { toBandejaItems } from '../operaciones/bandeja/items';
+import { QuestionCard } from '../agentes/equipo/equipo-view';
+import { toQuestionRow } from '../agentes/equipo/rows';
+import { EmailDecisionCard, ToolDecisionCard } from './decision-cards';
 
 export const dynamic = 'force-dynamic';
 
 // Para ti (fase 2 de la reorganización UX, 21 nov 2026): la bandeja única de administración. Todo lo que espera una
 // decisión, de los 7 sitios donde estaba repartido, en una lista: lo urgente primero y, dentro, lo que más espera.
-// Filtros por departamento y por tipo (?area= y ?tipo=). Las revisiones y los bloqueos se deciden aquí mismo con los
-// botones de Mi bandeja, pero solo los decide quien lleva las operaciones: el resto de administradores los ve para estar
-// al tanto. Lo demás enlaza a su elemento concreto.
+// Filtros por departamento y por tipo (?area= y ?tipo=). Se decide aquí mismo (23 nov 2026): revisiones y bloqueos (con
+// los botones de Mi bandeja), correos (la respuesta que propone el agente) y propuestas de los agentes, que solo decide
+// quien lleva las operaciones (el resto de administradores los ve para estar al tanto), y las dudas del equipo, que
+// decide cualquier administrador. Lo demás enlaza a su elemento concreto.
 export default async function ParaTiPage({ searchParams }: { searchParams: Promise<{ area?: string; tipo?: string }> }) {
   const user = await requirePagePermission('admin');
   const sp = await searchParams;
   const [data, owner] = await Promise.all([getParaTi(user.tenantId), isInboxOwner(user)]);
+  const decisions = await getParaTiDecisions(user.tenantId, data.emails);
   const dept = data.depts.some((d) => d.key === sp.area) ? (sp.area as DeptKey) : null;
   const kind = sp.tipo && sp.tipo in KINDS ? (sp.tipo as KindKey) : null;
 
   const inDept = filterEntries(data.entries, { dept });
   const shown = filterEntries(inDept, { kind });
-  // El dueño decide revisiones y bloqueos aquí mismo (con sus botones); el resto los ve en la lista, sin botones.
+  // Lo que se decide aquí mismo, respetando los filtros. Revisiones, bloqueos, correos y propuestas de los agentes, solo el
+  // dueño; el resto de administradores los ve en la lista, sin botones. Las dudas del equipo, cualquier administrador.
+  const shownKeys = new Set(shown.map((e) => e.key));
   const decideHere = owner ? shown.filter((e) => e.kind === 'revisiones' || e.kind === 'bloqueos') : [];
-  const decideKeys = new Set(decideHere.map((e) => e.key));
+  const inboxKeys = new Set(decideHere.map((e) => e.key));
+  const bandeja = toBandejaItems(data.inbox.filter((i) => inboxKeys.has(i.kind === 'blocker' ? `b-${i.blocker.id}` : `r-${i.req.id}`)));
+  const emailCards = owner ? decisions.emails.filter((d) => shownKeys.has(d.key)) : [];
+  const toolCards = owner ? decisions.tools.filter((d) => shownKeys.has(d.key)) : [];
+  const questionCards = decisions.questions.filter((q) => shownKeys.has(decisionKey.question(q.id)));
+  const decideKeys = new Set([
+    ...inboxKeys,
+    ...emailCards.map((d) => d.key),
+    ...toolCards.map((d) => d.key),
+    ...questionCards.map((q) => decisionKey.question(q.id))
+  ]);
   const rest = shown.filter((e) => !decideKeys.has(e.key));
-  const bandeja = toBandejaItems(data.inbox.filter((i) => decideKeys.has(i.kind === 'blocker' ? `b-${i.blocker.id}` : `r-${i.req.id}`)));
   const ownerOnlyCount = owner ? 0 : shown.filter((e) => KINDS[e.kind].ownerOnly).length;
 
   const qs = (p: { area?: string | null; tipo?: string | null }) => {
@@ -81,8 +97,8 @@ export default async function ParaTiPage({ searchParams }: { searchParams: Promi
           {ownerOnlyCount > 0 && (
             <p className="flex items-start gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
               <Lock className="mt-0.5 size-4 shrink-0" aria-hidden />
-              {ownerOnlyCount} de estas cosas (revisiones, bloqueos, correos y propuestas del agente) las decide quien lleva las operaciones. Las ves para
-              estar al tanto.
+              {ownerOnlyCount} de estas cosas (revisiones, bloqueos, correos y propuestas de los agentes) las decide quien lleva las operaciones. Las ves
+              para estar al tanto.
             </p>
           )}
 
@@ -102,8 +118,48 @@ export default async function ParaTiPage({ searchParams }: { searchParams: Promi
                   </div>
                 </Section>
               )}
+              {questionCards.length > 0 && (
+                <Section title={`Dudas del equipo · ${questionCards.length}`} description="Responde tú, envía la propuesta del jefe o díselo en persona. Le llega por Telegram.">
+                  <ul className="space-y-3 p-4" data-testid="para-ti-dudas">
+                    {questionCards.map((q) => (
+                      <QuestionCard key={q.id} q={toQuestionRow(q)} />
+                    ))}
+                  </ul>
+                </Section>
+              )}
+              {emailCards.length > 0 && (
+                <Section title={`Correos por responder · ${emailCards.length}`} description="La respuesta que propone el agente: envíala, corrígela o descártala.">
+                  <div className="space-y-3 p-4" data-testid="para-ti-correos">
+                    {emailCards.map((d) => (
+                      <EmailDecisionCard
+                        key={d.key}
+                        c={{
+                          actionId: d.email.actionId,
+                          emailId: d.email.emailId ?? '',
+                          subject: d.email.subject,
+                          who: d.email.clientName ? `${d.email.clientName} · ${d.email.from}` : d.email.from,
+                          top: d.email.top,
+                          wait: waitLabel(d.email.since),
+                          aiSummary: d.aiSummary,
+                          excerpt: d.excerpt,
+                          proposal: d.proposal
+                        }}
+                      />
+                    ))}
+                  </div>
+                </Section>
+              )}
+              {toolCards.length > 0 && (
+                <Section title={`Propuestas de los agentes · ${toolCards.length}`} description="Lo mismo que ✅ Hacerlo / ✖️ Descartar en Telegram.">
+                  <ul className="space-y-3 p-4" data-testid="para-ti-agentes">
+                    {toolCards.map((d) => (
+                      <ToolDecisionCard key={d.key} c={{ id: d.id, summary: d.summary, agent: d.agent, requestedBy: d.requestedBy, wait: waitLabel(d.since) }} />
+                    ))}
+                  </ul>
+                </Section>
+              )}
               {rest.length > 0 && (
-                <Section title={bandeja.length ? `Lo demás · ${rest.length}` : undefined}>
+                <Section title={decideKeys.size ? `Lo demás · ${rest.length}` : undefined}>
                   <ul className="divide-y" data-testid="para-ti-lista">
                     {rest.map((e) => (
                       <EntryRow key={e.key} e={e} owner={owner} />

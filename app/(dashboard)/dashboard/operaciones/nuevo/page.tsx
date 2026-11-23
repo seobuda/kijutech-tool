@@ -3,6 +3,9 @@ import { redirect } from 'next/navigation';
 import { PlugZap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/page';
+import { and, eq } from 'drizzle-orm';
+import { db } from '@/lib/db/drizzle';
+import { clients, opsClients } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
 import { getClickUpConnection } from '@/lib/operaciones/queries';
 import { ensureFresh, getStructure, selectedSpaces } from '@/lib/operaciones/structure';
@@ -12,7 +15,19 @@ import { NuevoEncargoForm } from './nuevo-encargo-form';
 
 export const dynamic = 'force-dynamic';
 
-export default async function NuevoEncargoPage() {
+// ?cliente=<id> (desde la ficha del cliente): el formulario sale con ese cliente y su lista habitual ya elegidos.
+async function clientPreset(tenantId: string, id: string | undefined) {
+  if (!id || !/^[0-9a-f-]{36}$/i.test(id)) return null;
+  const [row] = await db
+    .select({ id: clients.id, name: clients.name, optionId: opsClients.clickupOptionId, listIds: opsClients.usualListIds })
+    .from(clients)
+    .leftJoin(opsClients, eq(opsClients.id, clients.id))
+    .where(and(eq(clients.tenantId, tenantId), eq(clients.id, id)))
+    .limit(1);
+  return row ? { id: row.id, name: row.name, optionId: row.optionId ?? '', listIds: row.listIds ?? [] } : null;
+}
+
+export default async function NuevoEncargoPage({ searchParams }: { searchParams: Promise<{ cliente?: string }> }) {
   const user = await getUser();
   if (!user) redirect('/sign-in');
 
@@ -39,5 +54,16 @@ export default async function NuevoEncargoPage() {
   const spaces = selectedSpaces(structure);
   if (spaces.length === 0) return <SyncPending reason="no-spaces" />;
 
-  return <NuevoEncargoForm spaces={spaces} clientFields={structure.clientFields} workTypes={await getWorkTypeOptions(user.tenantId)} members={structure.members} meId={structure.meId ?? ''} />;
+  const preset = await clientPreset(user.tenantId, (await searchParams).cliente);
+
+  return (
+    <NuevoEncargoForm
+      spaces={spaces}
+      clientFields={structure.clientFields}
+      workTypes={await getWorkTypeOptions(user.tenantId)}
+      members={structure.members}
+      meId={structure.meId ?? ''}
+      preset={preset}
+    />
+  );
 }
