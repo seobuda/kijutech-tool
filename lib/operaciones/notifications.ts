@@ -32,6 +32,7 @@ import {
 import { madridNoonMs } from '@/lib/operaciones/clickup';
 import { DEF, getAuto, num, renderTemplate } from '@/lib/operaciones/automations';
 import { isQuietAt, nearestAllowedMinute, releaseAt } from '@/lib/operaciones/quiet';
+import { deferredNoticeAt } from '@/lib/operaciones/deferred-notice';
 import { getTeamToday, type TeamMemberToday } from '@/lib/operaciones/team-today';
 import type { OpsTask } from '@/lib/operaciones/clickup';
 
@@ -58,6 +59,7 @@ type Payload = {
   bot?: string; // bot de departamento por el que sale (organigrama); si no está listo, el principal
   silent?: boolean; // sin sonido (disable_notification): lo informativo no interrumpe
   sentVia?: string; // bot por el que salió de verdad
+  deferredTo?: string; // aviso de encargo programado para el día que toca (AAAA-MM-DD, en la zona de la persona)
 };
 
 export type { Payload as NotificationPayload };
@@ -149,7 +151,14 @@ export async function enqueueNewRequestNotification(
     })
   );
 
-  const payload: Payload = { text, testMode: cfg.testMode, actions: true };
+  // Encargo para otro día: el aviso sale ese día a su hora de entrada (deferred-notice.ts). En modo pruebas, al momento
+  // (como la comida y el silencio, que tampoco se aplican), para poder probar el aviso.
+  const later =
+    !cfg.testMode && auto.cfg.onlyToday !== false
+      ? deferredNoticeAt(scheduleOrDefault(await getScheduleMap(req.tenantId), userId), req, Date.now())
+      : null;
+
+  const payload: Payload = { text, testMode: cfg.testMode, actions: true, ...(later ? { deferredTo: later.day } : {}) };
   const inserted = await db
     .insert(opsNotifications)
     .values({
@@ -160,12 +169,13 @@ export async function enqueueNewRequestNotification(
       forClickupUserId: userId,
       forName: userName,
       requestId: req.id,
-      payload
+      payload,
+      ...(later ? { nextAttemptAt: new Date(later.at) } : {})
     })
     .onConflictDoNothing()
     .returning({ id: opsNotifications.id });
 
-  if (inserted.length > 0) void processNotifications(req.tenantId);
+  if (inserted.length > 0 && !later) void processNotifications(req.tenantId);
 }
 
 // Encola un aviso del flujo (revisión, bloqueo, respuesta, devolución, resumen). Se inserta primero
@@ -375,6 +385,22 @@ async function sendOne(c: Claimed): Promise<void> {
       })
       .where(eq(opsNotifications.id, c.id));
   };
+
+  // Aviso programado para el día que toca: si entretanto el encargo ya se empezó, se terminó, se canceló o pasó a otra
+  // persona, ya no se manda (queda anotado como omitido, sin hora de envío: no cuenta para recordatorios ni tiempos).
+  if (c.kind === 'new_request' && c.payload.deferredTo) {
+    const [req] = c.request_id ? await db.select().from(opsRequests).where(eq(opsRequests.id, c.request_id)).limit(1) : [];
+    const user = c.for_clickup_user_id;
+    const stillDue =
+      req && user && req.status === 'creado' && req.workStatus === 'asignado' && (req.assigneeClickupId === user || (req.candidateIds ?? []).includes(user));
+    if (!stillDue) {
+      await db
+        .update(opsNotifications)
+        .set({ status: 'enviado', lastError: null, payload: { ...c.payload, skipped: 'ya no hacía falta: el encargo cambió antes de su día' } })
+        .where(eq(opsNotifications.id, c.id));
+      return;
+    }
+  }
 
   const cfg = await getTelegramConfig(c.tenant_id);
   if (!cfg) return fail('Telegram no está configurado');

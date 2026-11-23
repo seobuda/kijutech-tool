@@ -43,7 +43,15 @@ export const AUTOMATIONS: AutomationDef[] = [
     title: 'Aviso de encargo nuevo',
     what: 'Cuando se crea un encargo (o llega uno desde ClickUp), avisa por Telegram a su responsable con los botones del flujo.',
     canDisable: true,
-    fields: [],
+    fields: [
+      {
+        key: 'onlyToday',
+        label: 'Encargos de otro día: avisar el día que toca',
+        type: 'bool',
+        default: true,
+        help: 'El aviso sale ese día a su hora de entrada (o el último día que trabaja antes). Los de hoy, sin fecha o urgentes avisan al momento'
+      }
+    ],
     template: {
       default:
         '📌 <b>Nuevo encargo</b>{etiqueta}\n<b>{tarea}</b>\n📂 Lista: {lista}\n📅 Entrega: <b>{fecha}</b>\n👤 Cliente: {cliente}\n\n{resumen}\n\n🔗 <a href="{url}">Abrir la tarea en ClickUp</a>',
