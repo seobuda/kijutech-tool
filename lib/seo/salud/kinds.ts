@@ -2,7 +2,7 @@
 
 export type Severity = 'info' | 'aviso' | 'importante' | 'critico';
 export type SaludKind = { kind: string; title: string; explain: string; severityDefault: Severity; ruleVersion: number; group: SaludGroup };
-export type SaludGroup = 'rastreo' | 'indexacion' | 'contenido' | 'enlazado' | 'datos_estructurados' | 'search_console';
+export type SaludGroup = 'rastreo' | 'indexacion' | 'contenido' | 'enlazado' | 'datos_estructurados' | 'search_console' | 'local';
 
 export const SALUD_GROUP_LABEL: Record<SaludGroup, string> = {
   rastreo: 'Rastreo y respuestas',
@@ -10,7 +10,8 @@ export const SALUD_GROUP_LABEL: Record<SaludGroup, string> = {
   contenido: 'Títulos, encabezados y contenido',
   enlazado: 'Enlazado interno',
   datos_estructurados: 'Datos estructurados',
-  search_console: 'Cruce con Search Console'
+  search_console: 'Cruce con Search Console',
+  local: 'Local: nombre, dirección, teléfono y servicios'
 };
 
 /** Los tipos de hallazgo de Salud. Se registran en el núcleo al arrancar (lib/seo/register.ts). */
@@ -48,4 +49,17 @@ export const SALUD_KINDS: SaludKind[] = [
   { kind: 'seo.gsc_page_not_crawled', group: 'search_console', title: 'Página con impresiones que el rastreo no encontró', explain: 'Google la muestra en resultados pero no se llega a ella navegando por la web: puede estar huérfana, fuera del sitemap o ser antigua.', severityDefault: 'aviso', ruleVersion: 1 }
 ];
 
-export const SALUD_KIND_BY_KEY = new Map(SALUD_KINDS.map((k) => [k.kind, k]));
+/**
+ * Local sin Places (fuente «seo.local:nap»): se comprueban con el expediente, no con el rastreo, así que tienen su
+ * propia fuente (la auditoría no los resuelve al no producirlos).
+ */
+export const LOCAL_KINDS: SaludKind[] = [
+  { kind: 'seo.nap_name_mismatch', group: 'local', title: 'El nombre de la web no coincide con la ficha', explain: 'La web se presenta con otro nombre (en sus datos estructurados o en el nombre del sitio). Google une la marca, la ficha de Google y la web por el nombre: debe ser el mismo en todas partes.', severityDefault: 'aviso', ruleVersion: 1 },
+  { kind: 'seo.nap_phone_mismatch', group: 'local', title: 'El teléfono de la web no coincide con la ficha', explain: 'La web muestra otro teléfono principal que la ficha del cliente. Un teléfono distinto en la web, la ficha de Google y los directorios resta confianza en las búsquedas locales.', severityDefault: 'importante', ruleVersion: 1 },
+  { kind: 'seo.nap_phone_missing', group: 'local', title: 'La web no muestra un teléfono enlazable', explain: 'La portada no tiene ningún enlace tel: ni teléfono en los datos estructurados: en el móvil no se puede llamar con un toque y Google no puede contrastarlo con la ficha.', severityDefault: 'aviso', ruleVersion: 1 },
+  { kind: 'seo.nap_address_mismatch', group: 'local', title: 'La dirección de la web no coincide con la ficha', explain: 'El código postal o la población de la web no son los de la ficha del cliente. Para Google Maps, la dirección debe ser idéntica en la web, la ficha de Google y los directorios.', severityDefault: 'importante', ruleVersion: 1 },
+  { kind: 'seo.service_page_missing', group: 'local', title: 'Servicio sin página propia', explain: 'Un servicio de la ficha del cliente no tiene una página de la web dedicada (ni en la URL, ni en el título, ni en el H1). Una página por servicio es lo que más ayuda a aparecer cuando alguien busca ese servicio.', severityDefault: 'aviso', ruleVersion: 1 }
+];
+
+export const SEO_KINDS: SaludKind[] = [...SALUD_KINDS, ...LOCAL_KINDS];
+export const SALUD_KIND_BY_KEY = new Map(SEO_KINDS.map((k) => [k.kind, k]));

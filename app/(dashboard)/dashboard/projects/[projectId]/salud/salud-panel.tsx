@@ -36,8 +36,8 @@ export function SaludPanel({ view, canEdit, businessType, businessTypes }: { vie
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
   const running = view.crawl && (view.crawl.status === 'pendiente' || view.crawl.status === 'en_curso');
-  // Tras terminar el rastreo, la auditoría se aplica en la cola (hasta ~3 min): se sigue refrescando un rato.
-  const auditing = view.crawl?.status === 'hecho' && view.crawl.finishedAt && Date.now() - new Date(view.crawl.finishedAt).getTime() < 4 * 60_000;
+  // Tras terminar el rastreo, la auditoría se aplica en la cola: se refresca mientras el trabajo siga pendiente.
+  const auditing = view.crawl?.status === 'hecho' && view.auditPending;
 
   useEffect(() => {
     if (!running && !auditing) return;
@@ -99,6 +99,7 @@ export function SaludPanel({ view, canEdit, businessType, businessTypes }: { vie
               <dd className="font-medium">
                 {CRAWL_STATUS[view.crawl.status] ?? view.crawl.status}
                 {auditing && ' · aplicando la auditoría…'}
+                {view.auditError && <span className="text-destructive"> · la auditoría falló: {view.auditError.slice(0, 200)}. Vuelve a lanzarla.</span>}
               </dd>
             </div>
             <div>

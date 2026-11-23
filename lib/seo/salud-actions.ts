@@ -3,7 +3,7 @@
 // SEO · Salud técnica: acciones de la pantalla del proyecto (Hito 1, 23 nov 2026). Permiso «edit» en el servidor
 // (editor o más), y el proyecto y el hallazgo siempre de la cuenta del usuario.
 import { revalidatePath } from 'next/cache';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { findings, projects } from '@/lib/db/schema';
 import { isBusinessType } from '@/lib/core/business-types';
@@ -12,6 +12,7 @@ import { requirePermission } from '@/lib/auth/permissions';
 import { publicError } from '@/lib/errors';
 import { decideFinding } from '@/lib/core/findings';
 import { SaludError, SALUD_SOURCE, startProjectAudit } from '@/lib/seo/salud/audit';
+import { LOCAL_SOURCE } from '@/lib/seo/local/rules';
 
 type Ok<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 
@@ -54,7 +55,7 @@ export async function decideSaludFindingAction(projectId: string, findingId: str
     const [f] = await db
       .select({ id: findings.id })
       .from(findings)
-      .where(and(eq(findings.id, findingId), eq(findings.projectId, projectId), eq(findings.tenantId, user.tenantId), eq(findings.source, SALUD_SOURCE)))
+      .where(and(eq(findings.id, findingId), eq(findings.projectId, projectId), eq(findings.tenantId, user.tenantId), inArray(findings.source, [SALUD_SOURCE, LOCAL_SOURCE])))
       .limit(1);
     if (!f) return { ok: false, error: 'Hallazgo no encontrado' };
     await decideFinding(user.tenantId, findingId, status, user.name || user.email, reason);

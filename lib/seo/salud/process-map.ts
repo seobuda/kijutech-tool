@@ -103,14 +103,26 @@ export const SEO_SALUD_PROCESS_MAP: ProcessStep[] = [
   },
   {
     id: 'seo-local',
-    lane: 'Próximamente',
-    name: 'Local: reseñas y coherencia de nombre, dirección y teléfono',
+    lane: 'Local',
+    name: 'Nombre, dirección y teléfono, y una página por servicio',
     description:
-      'Reseñas de la ficha de Google con borrador de respuesta que se aprueba antes de publicarse (tabla ya creada), y hallazgos de coherencia del NAP entre ficha, web y JSON-LD y de «una página por servicio».',
+      'Con el expediente: avisa si el nombre, el teléfono o la dirección de la web (datos estructurados, enlaces tel:, nombre del sitio) no coinciden con la ficha del cliente, o si la web no muestra un teléfono enlazable; y, con el último rastreo, si un servicio de la ficha («Qué vende u ofrece») no tiene su propia página. Salen en Salud técnica (grupo Local) y en el plan de mejora (unificar NAP; crear la página de cada servicio, 4 h por servicio).',
+    status: 'built',
+    file: 'lib/seo/local/rules.ts',
+    when: 'Al final de cada recogida del expediente («seo.expediente.collect»); si cambia algo, se rehace el plan.',
+    ai: 'Nada: comparación normalizada (teléfono internacional, código postal y población, nombre sin forma jurídica) y palabras del servicio en la URL, el título o el H1.',
+    code: 'Lo que una persona confirma en el expediente manda sobre la ficha; lo descartado no cuenta. Fuente propia «seo.local:nap» (la auditoría del rastreo no la resuelve).',
+    tables: ['findings', 'seo_dossier_facts', 'crawl_pages', 'clients']
+  },
+  {
+    id: 'seo-resenas',
+    lane: 'Próximamente',
+    name: 'Reseñas de la ficha de Google',
+    description: 'Reseñas con borrador de respuesta que se aprueba antes de publicarse (tabla ya creada), y categoría y valoración de la ficha en el expediente.',
     status: 'planned',
     file: 'docs/DISENO-TECNICO-HITO1.md',
     when: 'Pendiente: necesita Places API activada en Google Cloud (o el acceso a la API de reseñas de Business Profile).',
-    ai: 'Borrador de respuesta a reseñas con Haiku; el resto, reglas.',
+    ai: 'Borrador de respuesta a reseñas con Haiku.',
     code: 'Publicar una respuesta siempre con aprobación, como los correos a clientes.',
     tables: ['seo_reviews']
   }

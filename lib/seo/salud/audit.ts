@@ -14,7 +14,7 @@ import { inlinkCounts, startCrawl } from '@/lib/core/crawler';
 import { registerFindingKind, syncFindings } from '@/lib/core/findings';
 import { gscPropertiesForProject } from '@/lib/core/gsc';
 import { auditCrawl, type AuditPage } from '@/lib/seo/salud/audit-rules';
-import { SALUD_KINDS } from '@/lib/seo/salud/kinds';
+import { SALUD_KINDS, SEO_KINDS } from '@/lib/seo/salud/kinds';
 
 export const SALUD_SOURCE = 'seo.salud:rastreo';
 const WAIT_MINUTES = 2;
@@ -104,7 +104,7 @@ let registered = false;
 export function registerSaludAudit(): void {
   if (registered) return;
   registered = true;
-  for (const k of SALUD_KINDS) registerFindingKind({ kind: k.kind, title: k.title, explain: k.explain, severityDefault: k.severityDefault, ruleVersion: k.ruleVersion });
+  for (const k of SEO_KINDS) registerFindingKind({ kind: k.kind, title: k.title, explain: k.explain, severityDefault: k.severityDefault, ruleVersion: k.ruleVersion });
   registerJobKind({
     kind: 'seo.salud.audit',
     timeoutS: 300,
