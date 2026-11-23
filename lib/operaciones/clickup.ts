@@ -618,6 +618,7 @@ export type WatchTask = {
   name: string;
   url: string;
   description: string;
+  markdown: string; // descripción en Markdown (para comparar con la del encargo y guardarla igual que se creó)
   statusName: string;
   statusType: string;
   listId: string;
@@ -639,6 +640,7 @@ type RawWatchTask = {
   url: string;
   description?: string;
   text_content?: string;
+  markdown_description?: string;
   status?: { status: string; type?: string };
   list?: { id: string; name: string };
   assignees?: { id: number; username?: string }[];
@@ -673,6 +675,7 @@ function toWatchTask(t: RawWatchTask): WatchTask {
     name: t.name,
     url: t.url,
     description: (t.text_content || t.description || '').trim(),
+    markdown: (t.markdown_description || t.text_content || t.description || '').trim(),
     statusName: t.status?.status ?? '',
     statusType: t.status?.type ?? '',
     listId: t.list?.id ?? '',
@@ -703,6 +706,8 @@ export async function fetchWatchTasks(
     q.set('page', String(page));
     q.set('subtasks', 'true');
     q.set('include_closed', opts.updatedAfterMs !== null ? 'true' : 'false');
+    // Misma petición, con la descripción también en Markdown: la vigilancia la compara con la del encargo (23 nov).
+    q.set('include_markdown_description', 'true');
     for (const s of opts.spaceIds) q.append('space_ids[]', s);
     if (opts.updatedAfterMs !== null) {
       q.set('date_updated_gt', String(opts.updatedAfterMs));

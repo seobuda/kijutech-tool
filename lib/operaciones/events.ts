@@ -11,6 +11,7 @@ export type EventType =
   | 'later'
   | 'clickup_closed'
   | 'reassigned'
+  | 'clickup_updated'
   | 'mirror_created'
   | 'reminder_sent'
   | 'start'
