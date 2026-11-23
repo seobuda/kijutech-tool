@@ -3,7 +3,28 @@
 Lista viva de lo que solo puede hacer Enric (accesos, decisiones, el equipo). Claude la actualiza al terminar cada bloque.
 Detalle paso a paso de la activación en `docs/PRUEBAS-EN-VIVO.md`.
 
-**Última actualización:** 23 nov 2026. En producción: `main` `654e90a9` (reorganización UX completa, fases 1 a 5), 59 migraciones.
+**Última actualización:** 24 nov 2026. En producción: `main` (Hito 1 del SEO completo y local sin Places), 62 migraciones.
+
+## Departamento SEO: Hito 1 en producción y Hito 2 para aprobar (23-24 nov)
+Desplegado: Salud técnica, expediente, plan de mejora → encargos, intervenciones, novedades de Google y local sin Places (`docs/ESTADO.md` §6.37 y §6.38).
+- [ ] **CM Ibérica en producción:** Proyectos → Salud → «Rastrear y auditar» (unos 50 min). Después, mira Expediente y Plan de mejora y **aprueba una propuesta** para ver el encargo en ClickUp.
+- [ ] **Completar la ficha de CM Ibérica:**
+  - logo, dirección y teléfono buenos, y redes;
+  - «Qué vende u ofrece», con los servicios separados por comas (para avisar de los servicios sin página);
+  - tipo de negocio (Empresa y negocio).
+  - La web dice Barcelona y se llama «New CM-Iberica»: confírmalo con el cliente.
+- [ ] **Una clave de API de Google Cloud** en el mismo proyecto, con **Places API** y **Chrome UX Report (CrUX)** activadas. Con ella se desbloquean las Core Web Vitals y la ficha de Google y las reseñas de la competencia. La API sin clave no tiene cuota.
+- [ ] **Comprobar si la API de Business Profile responde:** pregunta al agente por Telegram «¿qué fichas de Google tenemos?». Si lista las fichas, las reseñas del cliente se podrán leer **y responder** sin Places (`docs/DISENO-TECNICO-HITO2.md` §6).
+- [ ] **Aprobar `docs/DISENO-TECNICO-HITO2.md`** (migración 0062). Tienes que decidir:
+  - ampliar `client_competitors` del núcleo;
+  - el contrato del núcleo para que el estratega trabaje por proyecto;
+  - las 3 tablas del mapa de palabras;
+  - el origen «cliente» en el expediente;
+  - `project_id` en Estrategia;
+  - Bing, opcional.
+- [ ] **DataForSEO conectado en producción** (Agentes → Integraciones), con saldo. Lo usan la competencia y los volúmenes del Hito 2.
+- [ ] **Opcional:** la clave de la API de Bing Webmaster.
+- [ ] **Decidir:** la opción `--cliente` de `scripts/server-status.sh` (está en git stash) y si borro los datos de prueba locales de CM Ibérica.
 
 ## Departamento SEO: cimientos de la plataforma (23 nov, migración 0060, rama `feature/cimientos-plataforma`)
 Aprobado: diseño v2 (`docs/DISENO-MODULO-SEO.md`), esquema y núcleo (`docs/DISENO-TECNICO-CIMIENTOS.md`), trabajador aparte y `parse5`. Construido y probado; **sin desplegar**.
