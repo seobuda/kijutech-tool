@@ -18,8 +18,8 @@ export const SEO_SALUD_PROCESS_MAP: ProcessStep[] = [
   {
     id: 'salud-reglas',
     lane: 'Auditoría',
-    name: 'Comprobaciones técnicas (30 reglas, sin IA)',
-    description: 'Sobre las páginas rastreadas: respuestas 4xx/5xx, cadenas de redirección y enlaces a redirecciones, sitemap, noindex en el sitemap, canonical a otra URL o roto, títulos (falta, largo, repetido), meta descripción, H1, contenido escaso, duplicado y casi duplicado (simhash), imágenes sin alt, huérfanas, profundidad, HTTPS, web pintada con JavaScript y datos estructurados (negocio sin marcar o incompleto, FAQ, reseñas propias).',
+    name: 'Comprobaciones técnicas (31 reglas, sin IA)',
+    description: 'Sobre las páginas rastreadas: respuestas 4xx/5xx, cadenas de redirección y enlaces a redirecciones, sitemap, noindex en el sitemap, canonical a otra URL o roto, títulos (falta, largo, repetido), meta descripción, H1, contenido escaso, duplicado y casi duplicado (simhash), imágenes sin alt, huérfanas, profundidad, HTTPS, servidor lento (mediana ≥ 2,5 s), web pintada con JavaScript y datos estructurados (negocio sin marcar o incompleto, FAQ, reseñas propias).',
     status: 'built',
     file: 'lib/seo/salud/audit-rules.ts',
     when: 'Cuando termina el rastreo (trabajo «seo.salud.audit» en la cola).',

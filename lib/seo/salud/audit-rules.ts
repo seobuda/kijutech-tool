@@ -28,6 +28,8 @@ export type AuditPage = {
   schemaTypes: string[] | null;
   imagesWithoutAlt: number | null;
   error: string | null;
+  /** Lo que tardó la respuesta (ms), medido desde nuestro servidor. */
+  fetchMs?: number | null;
 };
 
 export type AuditInput = {
@@ -188,6 +190,12 @@ export function auditCrawl(input: AuditInput): FindingInput[] {
   // Nivel web.
   const htmlOk = input.pages.filter((p) => isHtml(p) && ok(p));
   if (htmlOk.length && !input.pages.some((p) => p.inSitemap)) add('seo.sitemap_missing', 'web');
+  // Servidor lento: mediana del tiempo de respuesta de las páginas HTML (≥ 5 páginas). ≥ 2,5 s aviso; ≥ 5 s importante.
+  const times = htmlOk.map((p) => p.fetchMs ?? 0).filter((ms) => ms > 0).sort((a, b) => a - b);
+  if (times.length >= 5) {
+    const median = times[Math.floor(times.length / 2)];
+    if (median >= 2500) add('seo.slow_server', 'web', { url: input.rootUrl, metric: 'ms_mediana', value: median, severity: median >= 5000 ? 'importante' : undefined, evidence: { pages: times.length, p90: times[Math.floor(times.length * 0.9)] } });
+  }
   const allNodes = htmlOk.flatMap((p) => jsonldNodes(p.jsonld).map((n) => ({ n, url: p.url })));
   const orgs = allNodes.filter((x) => isOrgNode(x.n));
   if (htmlOk.length && !orgs.length) add('seo.schema_org_missing', 'web', { url: input.rootUrl });

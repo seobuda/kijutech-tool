@@ -154,6 +154,16 @@ describe('Salud: reglas de auditoría', () => {
     expect(auditCrawl({ rootUrl: ROOT, pages, inlinks: new Map(), truncated: true, gscPages })[0].severity).toBe('info');
   });
 
+  it('servidor lento por la mediana del tiempo de respuesta', () => {
+    const org = [{ '@type': 'Organization', name: 'X', url: ROOT }];
+    const mk = (ms: number) => [page(ROOT, { depth: 0, jsonld: org, fetchMs: ms }), ...[1, 2, 3, 4].map((i) => page(`https://web.es/${i}`, { fetchMs: ms }))];
+    const inl = new Map([1, 2, 3, 4].map((i) => [`https://web.es/${i}`, 1]));
+    expect(auditCrawl({ rootUrl: ROOT, pages: mk(800), inlinks: inl, truncated: false })).toEqual([]);
+    const slow = auditCrawl({ rootUrl: ROOT, pages: mk(3000), inlinks: inl, truncated: false });
+    expect(slow.map((f) => [f.kind, f.severity])).toEqual([['seo.slow_server', undefined]]);
+    expect(auditCrawl({ rootUrl: ROOT, pages: mk(6000), inlinks: inl, truncated: false })[0].severity).toBe('importante');
+  });
+
   it('las claves son estables entre ejecuciones', () => {
     const pages = [page(ROOT, { depth: 0 }), page('https://web.es/a', { title: null })];
     const a = auditCrawl({ rootUrl: ROOT, pages, inlinks: new Map([['https://web.es/a', 1]]), truncated: false });

@@ -329,7 +329,7 @@ const SUPPORT_NODES: SystemNode[] = [
     id: 'seo-salud',
     name: 'Salud técnica (SEO v2)',
     description:
-      'Hito 1 del nuevo departamento SEO: rastrea la web del proyecto, aplica 30 comprobaciones técnicas sin IA (respuestas, indexación, canonical, títulos, contenido, duplicados, enlazado, datos estructurados) y el cruce con Search Console, y deja hallazgos que se cierran solos al arreglarse. Genera el JSON-LD del negocio listo para pegar desde la ficha del cliente.',
+      'Hito 1 del nuevo departamento SEO: rastrea la web del proyecto, aplica 31 comprobaciones técnicas sin IA (respuestas, indexación, canonical, títulos, contenido, duplicados, enlazado, datos estructurados) y el cruce con Search Console, y deja hallazgos que se cierran solos al arreglarse. Genera el JSON-LD del negocio listo para pegar desde la ficha del cliente.',
     status: 'in_progress',
     icon: 'Stethoscope',
     detailMapId: 'seo_salud',
