@@ -6,6 +6,7 @@ import { SECURITY_PROCESS_MAP } from '@/lib/auth/security-process-map';
 import { AGENTES_PROCESS_MAP } from '@/lib/agentes/process-map';
 import { CLIENTES_PROCESS_MAP } from '@/lib/core/clients-process-map';
 import { PLATAFORMA_PROCESS_MAP } from '@/lib/core/platform-process-map';
+import { SEO_SALUD_PROCESS_MAP } from '@/lib/seo/salud/process-map';
 import { RENDIMIENTO_PROCESS_MAP } from '@/lib/rendimiento/process-map';
 import { ESTRATEGIA_PROCESS_MAP } from '@/lib/estrategia/process-map';
 import { ERRORES_PROCESS_MAP } from '@/lib/core/errors-process-map';
@@ -325,6 +326,22 @@ const FUTURE_NODES: SystemNode[] = [
 // fila para no confundirla con los pilares de infraestructura.
 const SUPPORT_NODES: SystemNode[] = [
   {
+    id: 'seo-salud',
+    name: 'Salud técnica (SEO v2)',
+    description:
+      'Hito 1 del nuevo departamento SEO: rastrea la web del proyecto, aplica 31 comprobaciones técnicas sin IA (respuestas, indexación, canonical, títulos, contenido, duplicados, enlazado, datos estructurados) y el cruce con Search Console, y deja hallazgos que se cierran solos al arreglarse. Genera el JSON-LD del negocio listo para pegar desde la ficha del cliente.',
+    status: 'in_progress',
+    icon: 'Stethoscope',
+    detailMapId: 'seo_salud',
+    group: 'support',
+    technicalDetail: {
+      summary:
+        'Hito 1 (23 nov 2026, docs/DISENO-MODULO-SEO.md §5 y §10) sobre la plataforma: rastreador, cola de trabajos y hallazgos del núcleo. Hecho: reglas, cruce con Search Console, pantalla Proyectos → Salud y JSON-LD. Falta (necesita esquema, docs/DISENO-TECNICO-HITO1.md): expediente provisional, local, plan de mejora → encargos, I+D fase A y técnica e hipótesis de cada encargo.',
+      stack: ['lib/seo/salud/audit-rules.ts (reglas puras)', 'lib/seo/salud/audit.ts (cola)', 'lib/seo/salud/jsonld.ts (plantillas)', 'app/(dashboard)/dashboard/projects/[projectId]/salud'],
+      keyDecisions: ['Sin IA para lo que es una regla: gratis, repetible y con versión', 'Espera al rastreo desde el módulo (re-encolado) en vez de un aviso del núcleo', 'El JSON-LD nunca inventa datos que no estén en la ficha']
+    },
+  },
+  {
     id: 'competitor-analysis',
     name: 'Análisis de Competidores',
     description:
@@ -393,7 +410,7 @@ export function getSystemMap(): SystemNode[] {
 }
 
 // Todos los mapas de detalle conocidos (el Server Component los resuelve y los pasa al cliente).
-export const PROCESS_MAP_IDS = ['clustering', 'competitor_analysis', 'security', 'agentes', 'clientes', 'plataforma', 'rendimiento', 'estrategia', 'errores', 'conocimiento', ...Object.keys(OPS_MAPS)];
+export const PROCESS_MAP_IDS = ['clustering', 'competitor_analysis', 'security', 'agentes', 'clientes', 'plataforma', 'rendimiento', 'estrategia', 'errores', 'conocimiento', 'seo_salud', ...Object.keys(OPS_MAPS)];
 
 export function getProcessMap(detailMapId: string): ProcessStep[] {
   switch (detailMapId) {
@@ -409,6 +426,8 @@ export function getProcessMap(detailMapId: string): ProcessStep[] {
       return CLIENTES_PROCESS_MAP;
     case 'plataforma':
       return PLATAFORMA_PROCESS_MAP;
+    case 'seo_salud':
+      return SEO_SALUD_PROCESS_MAP;
     case 'rendimiento':
       return RENDIMIENTO_PROCESS_MAP;
     case 'estrategia':

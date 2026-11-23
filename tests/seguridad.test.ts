@@ -6,6 +6,7 @@ import { clientContacts, clientMemory, clients, opsInboundEmails, projects, user
 import { cleanupFixtures, createFixtures, emailFor, FIXTURE_PASSWORD, loginAs, PREFIX, type Fixtures } from './fixtures';
 
 import { aiProposeClient, applyClientProposal, saveClientOps } from '@/lib/operaciones/client-actions';
+import { decideSaludFindingAction, startSaludAuditAction } from '@/lib/seo/salud-actions';
 import { addTestRequestAction, createSimRequestAction, getPruebasAction, pressSimButtonAction, runScenariosAction, sendSimTextAction, withdrawTestRequestAction } from '@/lib/operaciones/sim/actions';
 import { POST as pruebasRunPost } from '@/app/api/pruebas/run/route';
 import { checkDeptBotAction, removeDeptBotAction, saveDeptBotAction } from '@/lib/operaciones/dept-bot-actions';
@@ -219,6 +220,8 @@ const ACCIONES_ADMIN: [string, () => unknown][] = [
   ['setClientCommsApprovalAction (correos a clientes)', () => setClientCommsApprovalAction(ZERO, 'nunca')]
 ];
 const ACCIONES_EDITOR: [string, () => unknown][] = [
+  ['startSaludAuditAction (SEO: rastrear y auditar)', () => startSaludAuditAction(ZERO)],
+  ['decideSaludFindingAction (SEO: descartar hallazgo)', () => decideSaludFindingAction(ZERO, ZERO, 'descartado', 'x')],
   ['deleteNote (Bloc)', () => deleteNote(ZERO)],
   ['getClientProposalsAction (fichas)', () => getClientProposalsAction()],
   ['applyClientProposalAction (fichas)', () => applyClientProposalAction({ clientId: ZERO, services: [], listIds: [] })],

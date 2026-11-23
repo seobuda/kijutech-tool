@@ -70,7 +70,7 @@ export const PLATAFORMA_PROCESS_MAP: ProcessStep[] = [
     description: 'Lo que cada departamento detecta en un proyecto («a esta URL le falta el título»), con tipo registrado, gravedad, URL o consulta, cifra y evidencia; consultable y con ciclo de vida.',
     status: 'built',
     file: 'lib/core/findings.ts',
-    when: 'Cada vez que una comprobación termina (las reglas del SEO llegarán en el Hito 1).',
+    when: 'Cada vez que una comprobación termina (desde el Hito 1: la auditoría de Salud técnica del SEO, mapa «Salud técnica»).',
     ai: 'Nada aquí.',
     code: 'Lo nuevo se crea; lo que sigue se actualiza; lo resuelto que vuelve se reabre; lo que deja de aparecer se resuelve solo; lo descartado o aceptado no se reabre. Cada tipo enlaza su explicación de formación en la base de conocimiento.',
     tables: ['findings']
