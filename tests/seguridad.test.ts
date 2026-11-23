@@ -54,6 +54,11 @@ import { connectAnthropicAdminAction, disconnectAnthropicAdminAction, refreshOrg
 import { connectDoTokenAction, disconnectDoTokenAction, refreshInfraAction } from '@/lib/operaciones/infra-actions';
 import { chatWithAgentAction, deleteAgentAction, deleteIntegrationAction, previewVoiceAction, retryJobAction, saveAgentAction, saveIntegrationAction, saveVoiceSettingsAction } from '@/lib/agentes/actions';
 import { decideAgentToolAction, setToolAutonomyAction } from '@/lib/operaciones/agent-capabilities-actions';
+import ProjectsPage from '@/app/(dashboard)/dashboard/projects/page';
+import ArchivedProjectsPage from '@/app/(dashboard)/dashboard/projects/archived/page';
+import NewProjectPage from '@/app/(dashboard)/dashboard/projects/new/page';
+import EditProjectPage from '@/app/(dashboard)/dashboard/projects/[projectId]/edit/page';
+import NuevoEncargoPage from '@/app/(dashboard)/dashboard/operaciones/nuevo/page';
 import { deleteNote } from '@/lib/operaciones/note-actions';
 import { saveClickUpToken } from '@/lib/operaciones/actions';
 import { saveTelegramToken } from '@/lib/operaciones/telegram-actions';
@@ -363,6 +368,17 @@ describe('un lector no puede modificar nada', () => {
     await loginAs(fx.users.sinRol);
     const ctx = { params: Promise.resolve({ projectId: fx.kijutechProjectId }) };
     expect((await getProgressRoute(new Request('http://x'), ctx)).status).toBe(401);
+    // Páginas de proyectos (23 nov): sin rol no se ve ni la lista.
+    await expect(ProjectsPage()).rejects.toThrow('NEXT_REDIRECT:/dashboard');
+    await expect(ArchivedProjectsPage()).rejects.toThrow('NEXT_REDIRECT:/dashboard');
+  });
+
+  it('las páginas de crear o editar (proyecto, encargo) no se abren con rol de lector', async () => {
+    await loginAs(fx.users.lector);
+    const sp = { searchParams: Promise.resolve({}) };
+    await expect(NewProjectPage(sp)).rejects.toThrow('NEXT_REDIRECT:/dashboard');
+    await expect(EditProjectPage({ params: Promise.resolve({ projectId: fx.kijutechProjectId }) })).rejects.toThrow('NEXT_REDIRECT:/dashboard');
+    await expect(NuevoEncargoPage(sp)).rejects.toThrow('NEXT_REDIRECT:/dashboard');
   });
 });
 

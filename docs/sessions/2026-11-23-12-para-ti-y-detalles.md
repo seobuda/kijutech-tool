@@ -1,7 +1,7 @@
 # Para ti completo y detalles de interfaz
 **Fecha:** 2026-11-23  
-**Rama:** feature/para-ti-y-detalles  
-**Commit:** de6f1139
+**Rama:** feature/para-ti-y-detalles y fix/guards-paginas  
+**Commit:** 9a8e2512 (antes de6f1139)
 
 ## Qué se construyó
 Enric pidió el 23 nov los puntos 1 y 2 de la lista de pendientes: decidir en Para ti también los correos, las propuestas de los agentes y las dudas del equipo, y los detalles de interfaz.
@@ -29,6 +29,11 @@ Enric pidió el 23 nov los puntos 1 y 2 de la lista de pendientes: decidir en Pa
   - En total, 539 correctas (1 saltada, el examen real).
 - `docs/ESTADO.md`: cabecera, pruebas, §6.32, §16, §18 y el mapa de archivos.
 
+**Guards de página (rama `fix/guards-paginas`, pedido por Enric antes de desplegar)**
+- `projects/page.tsx`, `projects/archived/page.tsx`: `requirePagePermission('view')`. Sin rol no se ve la lista.
+- `projects/new/page.tsx`, `projects/[projectId]/edit/page.tsx`, `operaciones/nuevo/page.tsx`: `requirePagePermission('edit')`. Antes solo lo exigían las acciones, y un lector podía abrir el formulario.
+- `tests/seguridad.test.ts`: un lector que abre esas páginas vuelve a Inicio; un usuario sin rol no ve la lista. 540 pruebas en total.
+
 ## Migraciones aplicadas
 Ninguna.
 
@@ -49,6 +54,6 @@ Ninguna.
 - Ficha de una persona en Equipo: la miga muestra su nombre; su actividad de hoy incluye la entrada de jornada.
 
 ## Pendientes detectados
-- La página `/dashboard/operaciones/nuevo` solo comprueba la sesión (`getUser`), igual que antes; la acción de crear sí lleva guard. Revisar junto al guard de `projects/new`.
 - Tras decidir en Para ti, la confirmación «Hecho» casi no se ve porque la tarjeta desaparece al refrescar (igual que en Mi bandeja).
+- Otras páginas sin guard propio que dependen de su layout o de comprobaciones internas (SEO de proyecto, IA, seguridad): no se han tocado. Una auditoría de guards de página, como la de acciones, lo cerraría.
 - El mensaje de Telegram de una propuesta decidida en la web conserva sus botones; al pulsarlos responde «ya estaba decidida».

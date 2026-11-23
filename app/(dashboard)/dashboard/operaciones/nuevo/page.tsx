@@ -12,6 +12,7 @@ import { ensureFresh, getStructure, selectedSpaces } from '@/lib/operaciones/str
 import { getWorkTypeOptions } from '@/lib/operaciones/work-types';
 import { SyncPending } from '../sync-pending';
 import { NuevoEncargoForm } from './nuevo-encargo-form';
+import { requirePagePermission } from '@/lib/auth/permissions';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,6 +29,8 @@ async function clientPreset(tenantId: string, id: string | undefined) {
 }
 
 export default async function NuevoEncargoPage({ searchParams }: { searchParams: Promise<{ cliente?: string }> }) {
+  // Crear un encargo es de editor o más (la acción ya lo exige; el layout solo pide lector).
+  await requirePagePermission('edit');
   const user = await getUser();
   if (!user) redirect('/sign-in');
 

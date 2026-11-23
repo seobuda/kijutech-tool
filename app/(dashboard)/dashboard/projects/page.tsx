@@ -5,6 +5,7 @@ import { Archive, ArrowUpRight, FolderKanban, Globe, Pencil, PlusCircle } from '
 import { getProjectsForUser, getUser, getUserTenantRoleNames } from '@/lib/db/queries';
 import { Badge, EmptyState, PageContainer, PageHeader } from '@/components/ui/page';
 import { ArchiveProjectButton } from './archive-project-button';
+import { requirePagePermission } from '@/lib/auth/permissions';
 
 const MANAGE_ROLES = ['admin', 'super_admin'];
 
@@ -15,6 +16,8 @@ const STATUS: Record<string, { label: string; tone: 'success' | 'warning' | 'neu
 };
 
 export default async function ProjectsPage() {
+  // Sin rol no se ve nada (regla de seguridad): la lista de proyectos es de lector o más.
+  await requirePagePermission('view');
   const user = await getUser();
   const [projects, roleNames] = await Promise.all([
     getProjectsForUser(),
