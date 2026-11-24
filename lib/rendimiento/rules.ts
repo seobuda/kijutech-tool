@@ -41,6 +41,8 @@ export const fmtMonthLong = (d: string): string => `${MONTHS_LONG[Number(d.slice
 // Clave de serie: «fuente|métrica|tipo de desglose|valor del desglose». Los totales llevan desglose vacío.
 // Para la posición media se guarda también «gsc|posw||» = posición × impresiones (se pondera al sumar periodos).
 
+/** Valor de desglose reservado para la suma de todas las fuentes de IA (no es una fuente real de Analytics). */
+export const AI_TOTAL = '*ia';
 export const seriesKey = (source: string, metric: string, dimType = '', dimValue = ''): string => `${source}|${metric}|${dimType}|${dimValue}`;
 export type DayMap = Map<string, Map<string, number>>; // fecha → serie → valor
 
@@ -53,6 +55,11 @@ export function buildDayMap(rows: { source: string; date: string; metric: string
     if (!day) m.set(r.date, (day = new Map()));
     const k = seriesKey(r.source, r.metric, r.dimType, r.dimValue);
     day.set(k, (day.get(k) ?? 0) + Number(r.value));
+    // Visitas desde asistentes de IA (Analytics, una fila por fuente): también su suma, para la cifra «ga4_ai».
+    if (r.source === 'ga4' && r.dimType === 'source') {
+      const t = seriesKey('ga4', r.metric, 'source', AI_TOTAL);
+      day.set(t, (day.get(t) ?? 0) + Number(r.value));
+    }
     if (r.source === 'gsc' && !r.dimType && r.metric === 'position') pos.set(r.date, Number(r.value));
     if (r.source === 'gsc' && !r.dimType && r.metric === 'impressions') imp.set(r.date, Number(r.value));
   }
@@ -90,6 +97,7 @@ export const KPIS: Kpi[] = [
   { key: 'ga4_sessions', source: 'ga4', label: 'Sesiones en la web', short: 'Sesiones', parts: one('ga4', 'sessions'), combine: first, format: 'int' },
   { key: 'ga4_keyEvents', source: 'ga4', label: 'Eventos clave (conversiones)', short: 'Conversiones', parts: one('ga4', 'keyEvents'), combine: first, format: 'int' },
   { key: 'ga4_engagement', source: 'ga4', label: 'Tasa de interacción', short: 'Interacción', parts: [...one('ga4', 'engagedSessions'), ...one('ga4', 'sessions')], combine: ratio, format: 'pct' },
+  { key: 'ga4_ai', source: 'ga4', label: 'Sesiones desde asistentes de IA', short: 'Desde IA', parts: one('ga4', 'sessions', 'source', AI_TOTAL), combine: first, format: 'int', note: 'ChatGPT, Perplexity, Gemini, Copilot, Claude y otros (lista en lib/core/ai-assistants.ts). Se descarga desde el 24 nov 2026: antes sale 0.' },
   { key: 'ga4_users', source: 'ga4', label: 'Usuarios (suma de cada día)', short: 'Usuarios', parts: one('ga4', 'totalUsers'), combine: first, format: 'int', note: 'Suma de los usuarios de cada día: un mismo usuario que vuelve otro día cuenta dos veces.' },
   { key: 'gbp_views', source: 'gbp', label: 'Vistas de la ficha de Google', short: 'Vistas ficha', parts: GBP_VIEWS, combine: (v) => v.reduce((a, b) => a + b, 0), format: 'int' },
   { key: 'gbp_calls', source: 'gbp', label: 'Llamadas desde la ficha', short: 'Llamadas', parts: one('gbp', 'calls'), combine: first, format: 'int' },

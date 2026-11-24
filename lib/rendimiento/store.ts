@@ -73,7 +73,7 @@ export async function loadDays(tenantId: string, clientId: string, props: Proper
 /** Métricas que necesitan las cifras (todas las de KPIS), para acotar las consultas de todos los clientes. */
 const TENANT_METRICS = [...new Set([...KPIS.flatMap((k) => k.parts.map((p) => p.split('|')[1])), 'position'].filter((m) => m !== 'posw'))];
 
-/** Datos diarios de todos los clientes (panel central e informes), con su cliente. Solo totales y el canal orgánico. */
+/** Datos diarios de todos los clientes (panel central e informes), con su cliente. Totales, el canal orgánico y las visitas desde IA. */
 export async function loadTenantDays(tenantId: string, props: (PropertyRef & { clientId: string })[], from: string, to: string): Promise<Map<string, DayMap>> {
   const out = new Map<string, DayMap>();
   if (!props.length) return out;
@@ -88,7 +88,7 @@ export async function loadTenantDays(tenantId: string, props: (PropertyRef & { c
         inArray(perfDaily.metric, TENANT_METRICS),
         gte(perfDaily.date, from),
         lte(perfDaily.date, to),
-        sql`(${perfDaily.dimType} = '' OR (${perfDaily.dimType} = 'channel' AND ${perfDaily.dimValue} = 'Organic Search'))`
+        sql`(${perfDaily.dimType} IN ('', 'source') OR (${perfDaily.dimType} = 'channel' AND ${perfDaily.dimValue} = 'Organic Search'))`
       )
     );
   const allowed = new Set(props.map((p) => `${p.clientId}|${p.source}|${p.property}`));

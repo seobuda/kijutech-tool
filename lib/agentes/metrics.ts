@@ -4,11 +4,13 @@ import 'server-only';
 // (registerMetricSource) desde register.ts: Rendimiento pide filas diarias ya normalizadas y no sabe de Google.
 //   gsc  Search Console: clics, impresiones y posición por día; y por dispositivo. Consultas y páginas del mes.
 //   ga4  Analytics 4: sesiones, usuarios, usuarios nuevos, eventos clave, sesiones con interacción y páginas vistas por
-//        día; sesiones y eventos clave por canal.
+//        día; sesiones y eventos clave por canal; y sesiones y eventos clave que llegan desde asistentes de IA
+//        (ChatGPT, Perplexity, Gemini…; lista en el núcleo, lib/core/ai-assistants.ts), por fuente (dim_type «source»).
 //   gbp  Business Profile: vistas en Búsqueda y Maps (móvil y ordenador), llamadas, clics a la web, cómo llegar,
 //        mensajes y reservas por día (un valor ausente es 0, según Google).
 import type { MetricRow, MetricSource, MetricTopRow, SearchQuery, SearchRow, UrlInspection } from '@/lib/core/capabilities';
 import { gapiFetch, isConnected } from '@/lib/agentes/integrations';
+import { AI_SOURCE_REGEX } from '@/lib/core/ai-assistants';
 
 /** Nombre corto con el que se guarda cada métrica de Business Profile. */
 export const GBP_METRIC_KEYS: Record<string, string> = {
@@ -72,7 +74,7 @@ export function gscRowsToMetrics(byDate: GscRow[], byDevice: GscRow[]): MetricRo
 }
 
 /** Respuesta de Analytics (dimensión date, opcionalmente un desglose) a filas. Pura. */
-export function ga4RowsToMetrics(r: Ga4Resp, metrics: string[], dimType: '' | 'channel'): MetricRow[] {
+export function ga4RowsToMetrics(r: Ga4Resp, metrics: string[], dimType: '' | 'channel' | 'source'): MetricRow[] {
   const out: MetricRow[] = [];
   for (const row of r.rows ?? []) {
     const date = ga4Date(row.dimensionValues?.[0]?.value ?? '');
@@ -105,11 +107,23 @@ async function fetchDaily(tenantId: string, source: string, property: string, fr
     const id = property.replace(/\D/g, '');
     const url = `https://analyticsdata.googleapis.com/v1beta/properties/${id}:runReport`;
     const dateRanges = [{ startDate: from, endDate: to }];
-    const [daily, channel] = await Promise.all([
+    const [daily, channel, ai] = await Promise.all([
       gapiFetch<Ga4Resp>(tenantId, url, { dateRanges, dimensions: [{ name: 'date' }], metrics: GA4_DAILY.map((name) => ({ name })), limit: 100000 }),
-      gapiFetch<Ga4Resp>(tenantId, url, { dateRanges, dimensions: [{ name: 'date' }, { name: 'sessionDefaultChannelGroup' }], metrics: GA4_CHANNEL.map((name) => ({ name })), limit: 100000 })
+      gapiFetch<Ga4Resp>(tenantId, url, { dateRanges, dimensions: [{ name: 'date' }, { name: 'sessionDefaultChannelGroup' }], metrics: GA4_CHANNEL.map((name) => ({ name })), limit: 100000 }),
+      // Visitas desde asistentes de IA: solo esas fuentes (filtro en Analytics), para no guardar todas las fuentes.
+      // Si falla, no tumba la descarga del resto (es un añadido).
+      gapiFetch<Ga4Resp>(tenantId, url, {
+        dateRanges,
+        dimensions: [{ name: 'date' }, { name: 'sessionSource' }],
+        metrics: GA4_CHANNEL.map((name) => ({ name })),
+        dimensionFilter: { filter: { fieldName: 'sessionSource', stringFilter: { matchType: 'FULL_REGEXP', value: AI_SOURCE_REGEX, caseSensitive: false } } },
+        limit: 100000
+      }).catch((e) => {
+        console.error('[agentes] GA4 visitas desde IA:', e instanceof Error ? e.message.slice(0, 200) : e);
+        return { rows: [] } as Ga4Resp;
+      })
     ]);
-    return [...ga4RowsToMetrics(daily, GA4_DAILY, ''), ...ga4RowsToMetrics(channel, GA4_CHANNEL, 'channel')];
+    return [...ga4RowsToMetrics(daily, GA4_DAILY, ''), ...ga4RowsToMetrics(channel, GA4_CHANNEL, 'channel'), ...ga4RowsToMetrics(ai, GA4_CHANNEL, 'source')];
   }
   if (source === 'gbp') {
     const q = new URLSearchParams();
