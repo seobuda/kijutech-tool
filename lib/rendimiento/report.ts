@@ -7,6 +7,7 @@ import 'server-only';
 //   - monthlyClientText   informe del mes de un cliente (texto para copiar o para el agente)
 //   - runPerformanceAlerts / runMonthlySummary  avisos de caídas y subidas, y resumen del mes por Telegram
 import { getClient, listCoreClients } from '@/lib/core/clients';
+import { groupByAssistant } from '@/lib/core/ai-assistants';
 import { externalEvents, telegramOutbound } from '@/lib/core/capabilities';
 import {
   ANNOTATION_KIND_LABEL,
@@ -95,6 +96,8 @@ export type ClientPerformance = {
   movers: MoversView | null;
   channels: { key: string; value: number; prev: number | null }[];
   devices: { key: string; value: number }[];
+  /** Sesiones que llegan desde asistentes de IA (Analytics), por asistente. */
+  aiVisits: { key: string; label: string; value: number; prev: number | null }[];
   hasData: boolean;
 };
 
@@ -238,6 +241,16 @@ export async function clientPerformance(
     const pm = new Map(prev.map((x) => [x.key, x.value]));
     channels = cur.slice(0, 8).map((x) => ({ key: x.key, value: x.value, prev: ranges.ga4!.prev ? (pm.get(x.key) ?? 0) : null }));
   }
+  let aiVisits: ClientPerformance['aiVisits'] = [];
+  if (active.ga4 && ranges.ga4) {
+    const ref = { source: 'ga4' as const, property: active.ga4.property };
+    const [cur, prev] = await Promise.all([
+      breakdown(tenantId, clientId, ref, 'sessions', 'source', ranges.ga4.cur.from, ranges.ga4.cur.to),
+      ranges.ga4.prev ? breakdown(tenantId, clientId, ref, 'sessions', 'source', ranges.ga4.prev.from, ranges.ga4.prev.to) : Promise.resolve([])
+    ]);
+    const pm = new Map(groupByAssistant(prev).map((x) => [x.key, x.value]));
+    aiVisits = groupByAssistant(cur).map((x) => ({ ...x, prev: ranges.ga4!.prev ? (pm.get(x.key) ?? 0) : null }));
+  }
   let devices: ClientPerformance['devices'] = [];
   if (gsc && ranges.gsc) devices = await breakdown(tenantId, clientId, { source: 'gsc', property: gsc.property }, 'clicks', 'device', ranges.gsc.cur.from, ranges.gsc.cur.to);
 
@@ -256,6 +269,7 @@ export async function clientPerformance(
     movers: moversView,
     channels,
     devices,
+    aiVisits,
     hasData: kpis.some((k) => k.value !== null)
   };
 }

@@ -201,6 +201,35 @@ export function ClienteRendimiento({ clientId, clientName }: { clientId: string;
             </div>
           )}
 
+          {p.sources.some((s) => s.source === 'ga4') && (
+            <Panel title="Visitas desde asistentes de IA (Analytics)">
+              {p.aiVisits.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Ninguna sesión desde ChatGPT, Perplexity, Gemini, Copilot, Claude u otros asistentes en este periodo. Se descarga desde el 24 nov 2026 (y los 10 días anteriores).
+                </p>
+              ) : (
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Asistente</th>
+                      <th className="text-right">Sesiones</th>
+                      {compare !== 'none' && <th className="text-right">Variación</th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {p.aiVisits.map((c) => (
+                      <tr key={c.key}>
+                        <td>{c.label}</td>
+                        <td className="text-right tabular-nums">{formatValue(c.value, 'int')}</td>
+                        {compare !== 'none' && <td className="text-right tabular-nums">{c.prev === null ? '—' : c.prev === 0 ? 'nuevo' : formatDelta(((c.value - c.prev) / c.prev) * 100)}</td>}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </Panel>
+          )}
+
           {p.movers && <MoversPanel m={p.movers} />}
         </>
       )}
