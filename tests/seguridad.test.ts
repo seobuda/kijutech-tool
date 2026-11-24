@@ -9,7 +9,7 @@ import { aiProposeClient, applyClientProposal, saveClientOps } from '@/lib/opera
 import { decideSaludFindingAction, startSaludAuditAction, saveSeoBusinessTypeAction } from '@/lib/seo/salud-actions';
 import { applyFactToFichaAction, collectDossierAction, decideDossierFactAction, prepareQuestionsAction, savePersonaFactAction } from '@/lib/seo/expediente-actions';
 import { approvePlanItemAction, discardPlanItemAction, regeneratePlanAction, reopenPlanItemAction } from '@/lib/seo/plan-actions';
-import { buildKeywordMapAction, decideCompetitorAction, findCompetitorsAction, updateTopicAction } from '@/lib/seo/mapa-actions';
+import { buildKeywordMapAction, crawlCompetitorsAction, decideCompetitorAction, findCompetitorsAction, updateTopicAction } from '@/lib/seo/mapa-actions';
 import { addTestRequestAction, createSimRequestAction, getPruebasAction, pressSimButtonAction, runScenariosAction, sendSimTextAction, withdrawTestRequestAction } from '@/lib/operaciones/sim/actions';
 import { POST as pruebasRunPost } from '@/app/api/pruebas/run/route';
 import { checkDeptBotAction, removeDeptBotAction, saveDeptBotAction } from '@/lib/operaciones/dept-bot-actions';
@@ -239,6 +239,7 @@ const ACCIONES_EDITOR: [string, () => unknown][] = [
   ['updateTopicAction (SEO: descartar o renombrar tema)', () => updateTopicAction(ZERO, ZERO, { status: 'descartado' })],
   ['findCompetitorsAction (SEO: buscar competencia)', () => findCompetitorsAction(ZERO)],
   ['decideCompetitorAction (SEO: confirmar competidor)', () => decideCompetitorAction(ZERO, ZERO, 'confirmado')],
+  ['crawlCompetitorsAction (SEO: rastrear webs de la competencia)', () => crawlCompetitorsAction(ZERO)],
   ['deleteNote (Bloc)', () => deleteNote(ZERO)],
   ['getClientProposalsAction (fichas)', () => getClientProposalsAction()],
   ['applyClientProposalAction (fichas)', () => applyClientProposalAction({ clientId: ZERO, services: [], listIds: [] })],

@@ -11,7 +11,7 @@ import { publicError } from '@/lib/errors';
 import { gscPropertiesForProject } from '@/lib/core/gsc';
 import { enqueueKeywordMap } from '@/lib/seo/mapa/mapa';
 import { serpSource } from '@/lib/core/capabilities';
-import { enqueueCompetitors } from '@/lib/seo/competencia/competencia';
+import { crawlCompetitors, enqueueCompetitors } from '@/lib/seo/competencia/competencia';
 
 type Ok = { ok: true } | { ok: false; error: string };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -92,9 +92,27 @@ export async function decideCompetitorAction(projectId: string, competitorId: st
       .where(and(eq(clientCompetitors.id, competitorId), eq(clientCompetitors.clientId, p.clientId), eq(clientCompetitors.tenantId, user.tenantId)))
       .returning({ id: clientCompetitors.id });
     if (!r.length) return { ok: false, error: 'Competidor no encontrado' };
+    // Al confirmarlo, rastreo ligero de su web para compararla (si no hay uno de los últimos 30 días). Si falla, la
+    // confirmación vale igual: se puede lanzar después con «Rastrear sus webs».
+    if (status === 'confirmado') await crawlCompetitors(user.tenantId, projectId, competitorId).catch((e) => console.error('[seo.competencia] rastreo al confirmar', e));
     revalidatePath(PATH(projectId));
     return { ok: true };
   } catch (e) {
     return { ok: false, error: publicError(e, 'No se pudo guardar') };
+  }
+}
+
+/** Rastreo ligero de las webs de la competencia confirmada (las que no tienen uno de los últimos 30 días). */
+export async function crawlCompetitorsAction(projectId: string): Promise<{ ok: true; started: number } | { ok: false; error: string }> {
+  try {
+    const user = await requirePermission('edit');
+    if (!UUID.test(projectId)) return { ok: false, error: 'Proyecto no encontrado' };
+    const [p] = await db.select({ id: projects.id }).from(projects).where(and(eq(projects.id, projectId), eq(projects.tenantId, user.tenantId))).limit(1);
+    if (!p) return { ok: false, error: 'Proyecto no encontrado' };
+    const r = await crawlCompetitors(user.tenantId, projectId);
+    revalidatePath(PATH(projectId));
+    return { ok: true, started: r.started };
+  } catch (e) {
+    return { ok: false, error: publicError(e, 'No se pudo empezar el rastreo') };
   }
 }

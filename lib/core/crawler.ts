@@ -100,7 +100,11 @@ async function initRun(run: CrawlRun, fetcher: Fetcher): Promise<CrawlState> {
   }
   await db.update(crawlRuns).set({ robotsTxt: robotsTxt || null, sitemaps: sitemapUrls }).where(eq(crawlRuns.id, run.id));
   const frontier: Frontier = [{ u: run.rootUrl, d: 0, ...(fromSitemap.has(run.rootUrl) ? { s: 1 as const } : {}) }];
-  for (const u of fromSitemap) if (u !== run.rootUrl) frontier.push({ u, d: 1, s: 1 });
+  // Las de ruta más corta primero (portada, servicios, secciones) antes que el blog: en un rastreo con tope (el ligero de la
+  // competencia, 50 páginas) así se ven las páginas que importan aunque el sitemap liste antes las entradas.
+  const segs = (u: string) => new URL(u).pathname.split('/').filter(Boolean).length;
+  const ordered = [...fromSitemap].map((u, i) => ({ u, i, n: segs(u) })).sort((a, b) => a.n - b.n || a.i - b.i);
+  for (const { u } of ordered) if (u !== run.rootUrl) frontier.push({ u, d: 1, s: 1 });
   return { frontier, seen: [], robots, initialized: true };
 }
 
