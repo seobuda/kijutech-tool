@@ -6,6 +6,7 @@ import { ArrowLeft, IdCard } from 'lucide-react';
 import { checkPermission, requirePagePermission } from '@/lib/auth/permissions';
 import { PageContainer, PageHeader } from '@/components/ui/page';
 import { getDossierView } from '@/lib/seo/expediente/view';
+import { questionsState } from '@/lib/seo/preguntas/preguntas';
 import { BUSINESS_TYPES } from '@/lib/core/business-types';
 import { ProjectSeoNav } from '../seo-nav';
 import { DossierPanel } from './dossier-panel';
@@ -14,7 +15,7 @@ export default async function ExpedientePage({ params }: { params: Promise<{ pro
   const user = await requirePagePermission('view');
   const { projectId } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(projectId)) notFound();
-  const [view, canEdit] = await Promise.all([getDossierView(user.tenantId, projectId), checkPermission('edit').then((r) => r.ok)]);
+  const [view, canEdit, questions] = await Promise.all([getDossierView(user.tenantId, projectId), checkPermission('edit').then((r) => r.ok), questionsState(user.tenantId, projectId)]);
   if (!view) notFound();
   return (
     <PageContainer>
@@ -33,7 +34,7 @@ export default async function ExpedientePage({ params }: { params: Promise<{ pro
         }
       />
       <ProjectSeoNav projectId={projectId} active="expediente" />
-      <DossierPanel view={view} canEdit={canEdit} businessTypes={BUSINESS_TYPES} />
+      <DossierPanel view={view} canEdit={canEdit} businessTypes={BUSINESS_TYPES} questions={questions} />
     </PageContainer>
   );
 }

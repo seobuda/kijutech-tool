@@ -5,21 +5,22 @@
 import { useEffect, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Check, Loader2, Pencil, RefreshCw, RotateCcw, ShieldCheck, ShieldQuestion, X } from 'lucide-react';
+import { Check, Loader2, Mail, Pencil, RefreshCw, RotateCcw, ShieldCheck, ShieldQuestion, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge, EmptyState, Section } from '@/components/ui/page';
 import type { DossierFactView, DossierView } from '@/lib/seo/expediente/view';
 import { display } from '@/lib/seo/expediente/rules';
-import { applyFactToFichaAction, collectDossierAction, decideDossierFactAction, savePersonaFactAction } from '@/lib/seo/expediente-actions';
+import { applyFactToFichaAction, collectDossierAction, decideDossierFactAction, prepareQuestionsAction, savePersonaFactAction } from '@/lib/seo/expediente-actions';
+import type { QuestionsState } from '@/lib/seo/preguntas/preguntas';
 
-const SOURCE: Record<string, string> = { ficha: 'Ficha', web: 'Web', places: 'Google Maps', wayback: 'Archivo de Internet', gsc: 'Search Console', busqueda: 'Búsqueda', persona: 'Persona', ia: 'IA' };
+const SOURCE: Record<string, string> = { ficha: 'Ficha', web: 'Web', places: 'Google Maps', wayback: 'Archivo de Internet', gsc: 'Search Console', busqueda: 'Búsqueda', persona: 'Persona', ia: 'IA', cliente: 'Respuesta del cliente' };
 const STATUS: Record<string, { label: string; tone: 'success' | 'neutral' | 'warning' }> = {
   confirmado: { label: 'Confirmado', tone: 'success' },
   provisional: { label: 'Provisional', tone: 'warning' },
   descartado: { label: 'Descartado', tone: 'neutral' }
 };
-const EDITABLE = new Set(['nombre', 'web', 'telefono', 'tipo_negocio', 'perfiles', 'logo']);
+const EDITABLE = new Set(['nombre', 'web', 'telefono', 'tipo_negocio', 'perfiles', 'logo', 'servicios', 'zona']);
 const fmt = (iso: string | null) => (iso ? new Date(iso).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' }) : '—');
 
 function valueText(field: string, v: unknown, types: { value: string; label: string }[]): string {
@@ -32,7 +33,7 @@ function valueText(field: string, v: unknown, types: { value: string; label: str
   return display(field, v);
 }
 
-export function DossierPanel({ view, canEdit, businessTypes }: { view: DossierView; canEdit: boolean; businessTypes: { value: string; label: string }[] }) {
+export function DossierPanel({ view, canEdit, businessTypes, questions }: { view: DossierView; canEdit: boolean; businessTypes: { value: string; label: string }[]; questions: QuestionsState | null }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
@@ -133,9 +134,74 @@ export function DossierPanel({ view, canEdit, businessTypes }: { view: DossierVi
                 ))}
             </div>
           </Section>
+
+          {questions && <QuestionsSection projectId={view.project.id} state={questions} canEdit={canEdit} pending={pending} run={run} />}
         </>
       )}
     </div>
+  );
+}
+
+const MSG_STATUS: Record<string, string> = {
+  pendiente_aprobacion: 'esperando tu aprobación (Telegram o Para ti)',
+  aprobado: 'aprobado, saliendo',
+  enviado: 'enviado',
+  rechazado: 'descartado',
+  fallido: 'no se pudo enviar'
+};
+
+function QuestionsSection({
+  projectId,
+  state,
+  canEdit,
+  pending,
+  run
+}: {
+  projectId: string;
+  state: QuestionsState;
+  canEdit: boolean;
+  pending: boolean;
+  run: (fn: () => Promise<{ ok: true } | { ok: false; error: string }>, okText?: string) => void;
+}) {
+  return (
+    <Section
+      title={
+        <span className="inline-flex items-center gap-2">
+          <Mail className="size-4" />
+          Preguntas al cliente
+        </span>
+      }
+      description="Como mucho 3, solo lo que no hemos podido averiguar solos. El correo sale del buzón del agente cuando tú lo apruebas; cuando el cliente contesta, sus respuestas aparecen aquí arriba como «Respuesta del cliente» para que las confirmes, y el agente te propone la respuesta de agradecimiento."
+      actions={
+        canEdit && state.canSend ? (
+          <Button size="sm" className="bg-brand text-white hover:bg-brand/90" disabled={pending} onClick={() => run(() => prepareQuestionsAction(projectId), 'Correo preparado: te llega para aprobarlo.')}>
+            <Mail className="size-3.5" />
+            Preparar el correo
+          </Button>
+        ) : undefined
+      }
+    >
+      {state.last && (
+        <p className="mb-3 text-sm">
+          Último correo: «{state.last.subject}», {MSG_STATUS[state.last.status] ?? state.last.status}
+          {state.last.sentAt ? ` el ${fmt(state.last.sentAt)}` : ` (preparado el ${fmt(state.last.createdAt)})`}.
+          {state.last.sentAt ? (state.answers ? ` Respuestas guardadas: ${state.answers}.` : ' Aún sin respuesta.') : ''}
+        </p>
+      )}
+      {state.questions.length > 0 ? (
+        <>
+          <p className="text-sm text-muted-foreground">{state.canSend ? 'Si lo preparas ahora, preguntaría:' : 'Ahora se preguntaría:'}</p>
+          <ol className="mt-1 list-decimal space-y-1 pl-5 text-sm">
+            {state.questions.map((q) => (
+              <li key={q.field}>{q.text}</li>
+            ))}
+          </ol>
+        </>
+      ) : (
+        <p className="text-sm text-muted-foreground">Nada que preguntar: el expediente no tiene huecos ni datos dudosos.</p>
+      )}
+      {state.blocked && state.questions.length > 0 && <p className="mt-2 text-sm text-warning-strong">{state.blocked}</p>}
+    </Section>
   );
 }
 
@@ -224,7 +290,7 @@ function FactLine({
   businessTypes: { value: string; label: string }[];
 }) {
   const st = STATUS[fact.status];
-  const toFicha = canEdit && fact.source !== 'ficha' && fact.status !== 'descartado' && (fact.field === 'tipo_negocio' || fact.field === 'logo');
+  const toFicha = canEdit && fact.source !== 'ficha' && fact.status !== 'descartado' && (fact.field === 'tipo_negocio' || fact.field === 'logo' || fact.field === 'servicios');
   return (
     <li className={fact.status === 'descartado' ? 'flex flex-wrap items-center gap-2 text-sm text-muted-foreground line-through' : 'flex flex-wrap items-center gap-2 text-sm'}>
       <span className="break-all">{valueText(fact.field, fact.value, businessTypes)}</span>
@@ -238,6 +304,7 @@ function FactLine({
           ver origen
         </a>
       )}
+      {fact.source === 'cliente' && fact.sourceRef && <span className="basis-full text-xs text-muted-foreground">{fact.sourceRef}</span>}
       {canEdit && (
         <span className="ml-auto flex items-center gap-1">
           {fact.status !== 'confirmado' && fact.status !== 'descartado' && (

@@ -142,6 +142,20 @@ export const SEO_SALUD_PROCESS_MAP: ProcessStep[] = [
     tables: ['client_competitors', 'seo_topics', 'client_locations']
   },
   {
+    id: 'seo-preguntas',
+    lane: 'Expediente',
+    name: 'Correo de 3 preguntas al cliente',
+    description:
+      'Lo que el expediente no ha podido averiguar solo (dato que falta, dos fuentes que no coinciden o confianza < 60), en orden: nombre y web > teléfono y dirección > servicios > zona; como mucho 3 preguntas con plantilla. Sale por las comunicaciones del núcleo, desde el buzón del agente, a los contactos marcados para «Preguntas», solo con aprobación de Enric; uno por proyecto cada 30 días. La respuesta entra por el mismo buzón: el núcleo la une a su hilo, aquí Haiku saca cada dato con su cita literal y queda «Respuesta del cliente», provisional, en el expediente (aviso a Enric por Telegram). El agente del correo ve nuestras preguntas en el hilo y propone el agradecimiento. Pantalla: Proyectos → Expediente → Preguntas al cliente.',
+    status: 'built',
+    file: 'lib/seo/preguntas/preguntas.ts',
+    when: 'Solo al reunir el expediente (si hay preguntas y se puede: trabajo «seo.preguntas.preparar») o a mano con «Preparar el correo». La lectura, al llegar la respuesta (trabajo «seo.preguntas.leer»).',
+    ai: 'Haiku solo para leer la respuesta (prompt seo_leer_respuestas); sin IA para elegir ni redactar las preguntas. Sin IA disponible, solo se lee un teléfono si hay uno.',
+    code: 'Cada dato debe traer una cita que esté en lo que escribió el cliente (sin nuestro correo citado) y la forma de su campo; si no, se descarta. Nada pasa a la ficha sin que una persona lo confirme («Pasar a la ficha» para los servicios).',
+    tables: ['seo_dossier_facts', 'client_messages', 'client_contact_subscriptions'],
+    prompts: ['seo_leer_respuestas']
+  },
+  {
     id: 'seo-estratega',
     lane: 'Estratega',
     name: 'Lo que sabe SEO, en el expediente del estratega',

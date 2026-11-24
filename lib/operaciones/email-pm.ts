@@ -21,6 +21,8 @@ import {
   type OpsInboundEmail
 } from '@/lib/db/schema';
 import { getPrompt } from '@/lib/ai/gateway';
+import { repliedClientMessage } from '@/lib/core/comms';
+import { COMMS_KIND_LABELS, type SubscriptionKind } from '@/lib/core/comms-rules';
 import { findClientInText, listClients } from '@/lib/operaciones/clients';
 import { getStructure, validClient } from '@/lib/operaciones/structure';
 import { NOTE_PROMPT_KEY, proposeRequests } from '@/lib/operaciones/request-proposer';
@@ -57,7 +59,30 @@ export const normalizeSubject = (s: string) =>
 // --- Hilo de la conversación ------------------------------------------------------------------
 
 /** Correos anteriores del mismo hilo (mismo asunto y mismo remitente, 30 días) y lo que respondimos. */
+/**
+ * Si el correo responde a un mensaje que ENVIAMOS nosotros (comunicaciones del núcleo: preguntas, informes, avisos…),
+ * ese mensaje, para que el agente sepa de qué va. Con las preguntas, además, que las respuestas ya se guardan solas.
+ */
+export async function ourOriginalMessage(tenantId: string, email: Pick<OpsInboundEmail, 'inReplyTo' | 'referencesHeader'>): Promise<string | null> {
+  const m = await repliedClientMessage(tenantId, email.inReplyTo, email.referencesHeader).catch(() => null);
+  if (!m) return null;
+  const fmt = new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid' });
+  const kind = COMMS_KIND_LABELS[m.kind as SubscriptionKind] ?? m.kind;
+  const note =
+    m.kind === 'preguntas'
+      ? '\n(Es la respuesta a nuestro correo de preguntas del departamento SEO: lo que conteste ya se guarda solo en el expediente del proyecto para que Enric lo confirme. No hace falta proponer un encargo por ello; basta con agradecer la respuesta y, si falta algo de lo preguntado, pedirlo con amabilidad.)'
+      : '';
+  return `[${m.sentAt ? fmt.format(m.sentAt) : '—'}] Nosotros (Equipo Kijutech) le escribimos primero (${kind}, preparado por ${m.authorName}):\nAsunto: ${m.subject}\n${clamp(m.body, 2500)}${note}`;
+}
+
 export async function threadContext(tenantId: string, email: OpsInboundEmail): Promise<string> {
+  const ours = await ourOriginalMessage(tenantId, email);
+  const rest = await threadContextFromInbound(tenantId, email);
+  if (!ours) return rest;
+  return rest === '(primer correo de la conversación)' ? ours : `${ours}\n\n${rest}`;
+}
+
+async function threadContextFromInbound(tenantId: string, email: OpsInboundEmail): Promise<string> {
   const previous = (await threadEmails(tenantId, email)).slice(0, 4).reverse();
   if (previous.length === 0) return '(primer correo de la conversación)';
 

@@ -8,6 +8,7 @@ import { registerPlanJobs } from '@/lib/seo/plan/plan';
 import { registerSeoWatch } from '@/lib/seo/id/watch';
 import { registerMapaJobs } from '@/lib/seo/mapa/mapa';
 import { registerCompetenciaJobs } from '@/lib/seo/competencia/competencia';
+import { registerPreguntasJobs } from '@/lib/seo/preguntas/preguntas';
 import { registerProjectDossierProvider } from '@/lib/core/capabilities';
 import { seoProjectDossier } from '@/lib/seo/dossier-provider';
 
@@ -17,6 +18,7 @@ export function registerSeoCapabilities(): void {
   registerPlanJobs(); // plan de mejora por reglas, al terminar cada auditoría
   registerMapaJobs(); // Hito 2: mapa de palabras sobre Search Console
   registerCompetenciaJobs(); // Hito 2: competencia en Google (DataForSEO por el núcleo)
+  registerPreguntasJobs(); // Hito 2: correo de 3 preguntas y lectura de la respuesta del cliente
   registerSeoWatch();
   // Hito 2: lo que SEO sabe de cada proyecto, para el expediente del estratega (por el núcleo).
   registerProjectDossierProvider('seo', seoProjectDossier); // I+D fase A: fuentes oficiales de Google (cada 3 h) y resumen semanal
