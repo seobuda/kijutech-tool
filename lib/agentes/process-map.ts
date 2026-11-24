@@ -57,7 +57,7 @@ export const AGENTES_PROCESS_MAP: ProcessStep[] = [
     id: 'agt-integraciones',
     lane: 'Integraciones',
     name: 'Integraciones externas',
-    description: 'DataForSEO (SERP y volúmenes), Microsoft Clarity (comportamiento) y Google (Search Console, Analytics 4, Business Profile por OAuth). Cada una da herramientas a los agentes cuando está conectada.',
+    description: 'DataForSEO (SERP y volúmenes), Microsoft Clarity (comportamiento), Google (Search Console, Analytics 4, Business Profile por OAuth) y Google Places (clave de API: reseñas de las fichas de la competencia; desde el 25 nov solo la conexión, la descarga llega después). Cada una da herramientas a los agentes cuando está conectada.',
     status: 'built',
     file: 'lib/agentes/integrations.ts',
     when: 'Cuando un agente usa una de sus herramientas.',

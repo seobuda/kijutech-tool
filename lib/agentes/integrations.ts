@@ -8,6 +8,8 @@ import 'server-only';
 //     a 10 llamadas al día por proyecto: se guarda en caché el resultado del día.
 //   - Google (OAuth con el cliente que Enric crea en Google Cloud): Search Console, Analytics 4 y Business Profile.
 //     Business Profile exige que Google apruebe el acceso a su API (formulario aparte).
+//   - Google Places (clave de API de Places API (New), 25 nov 2026): nota, número de reseñas y últimas reseñas de las fichas
+//     de Google de la competencia. Se paga por uso en la facturación de Google Cloud.
 // Los endpoints y límites salen de la documentación de cada proveedor y hay que confirmarlos con una cuenta real.
 import { createHmac, timingSafeEqual } from 'crypto';
 import { and, eq } from 'drizzle-orm';
@@ -16,7 +18,7 @@ import { agtIntegrations, type AgtIntegration } from '@/lib/db/schema';
 import { decrypt, encrypt } from '@/lib/ai/encryption';
 import type { SerpResult } from '@/lib/core/capabilities';
 
-export type ProviderKey = 'dataforseo' | 'clarity' | 'google';
+export type ProviderKey = 'dataforseo' | 'clarity' | 'google' | 'places';
 
 export const PROVIDERS: Record<ProviderKey, { title: string; what: string; fields: { key: string; label: string; secret: boolean; placeholder?: string }[]; howTo: string }> = {
   dataforseo: {
@@ -46,6 +48,13 @@ export const PROVIDERS: Record<ProviderKey, { title: string; what: string; field
     ],
     howTo:
       'En console.cloud.google.com: crea un proyecto, activa «Google Search Console API», «Google Analytics Data API», «Google Analytics Admin API» y (si Google te da acceso) «My Business Business Information API»; en Credenciales crea un «ID de cliente de OAuth» de tipo Aplicación web con la URI de redirección indicada abajo. Pega aquí el Client ID y el secret y pulsa «Conectar con Google».'
+  },
+  places: {
+    title: 'Google Places',
+    what: 'Nota, número de reseñas y últimas reseñas de las fichas de Google de la competencia. Google lo cobra por uso en la facturación del proyecto.',
+    fields: [{ key: 'apiKey', label: 'Clave de API', secret: true }],
+    howTo:
+      'En console.cloud.google.com, en el mismo proyecto que la conexión de Google: activa «Places API (New)» (no la antigua «Places API»), con la facturación activada. En Credenciales → Crear credenciales → Clave de API; edítala y en «Restricciones de API» deja solo «Places API (New)». Pégala aquí: al guardar se prueba con una consulta que no lleva datos de pago.'
   }
 };
 
@@ -169,6 +178,26 @@ export async function dataForSeoVolume(tenantId: string, keywords: string[], loc
 }
 
 // --- Microsoft Clarity ------------------------------------------------------------------------------------
+
+// --- Google Places (New) ----------------------------------------------------------------------------------
+
+/** Ficha de ejemplo de la documentación de Google: la prueba solo pide su id, que no lleva datos de pago [NV]. */
+const PLACES_TEST_ID = 'ChIJN1t_tDeuEmsRUsoyG83frY4';
+
+export async function testPlaces(creds: Record<string, string>): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const res = await fetch(`https://places.googleapis.com/v1/places/${PLACES_TEST_ID}`, {
+      headers: { 'X-Goog-Api-Key': creds.apiKey ?? '', 'X-Goog-FieldMask': 'id' },
+      signal: AbortSignal.timeout(15_000)
+    });
+    if (res.ok) return { ok: true };
+    const body = (await res.json().catch(() => null)) as { error?: { message?: string; status?: string } } | null;
+    const msg = body?.error?.message ?? `HTTP ${res.status}`;
+    return { ok: false, error: `${res.status}: ${msg.slice(0, 300)}` };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message.slice(0, 200) : 'sin respuesta' };
+  }
+}
 
 export async function clarityInsights(tenantId: string, days: number, dimension: string | null): Promise<string> {
   const integ = await getIntegration(tenantId, 'clarity');
