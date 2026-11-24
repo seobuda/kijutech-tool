@@ -3,7 +3,7 @@
 // y una confianza. Sin IA: extraer de la web (JSON-LD, enlaces tel:, redes), normalizar y comparar entre fuentes.
 // La identidad se da por confirmada cuando dos señales independientes coinciden (dominio, teléfono, nombre, dirección).
 
-export type FactSource = 'ficha' | 'web' | 'places' | 'wayback' | 'gsc' | 'busqueda' | 'persona' | 'ia';
+export type FactSource = 'ficha' | 'web' | 'places' | 'wayback' | 'gsc' | 'busqueda' | 'persona' | 'ia' | 'cliente';
 
 /** Campos del expediente (lista cerrada). «client» = es un dato de la ficha del cliente (se propone allí, no se pisa). */
 export const DOSSIER_FIELDS: { field: string; label: string; client: boolean }[] = [
@@ -14,6 +14,8 @@ export const DOSSIER_FIELDS: { field: string; label: string; client: boolean }[]
   { field: 'tipo_negocio', label: 'Tipo de negocio', client: true },
   { field: 'perfiles', label: 'Perfiles sociales', client: true },
   { field: 'logo', label: 'Logo', client: true },
+  { field: 'servicios', label: 'Servicios principales', client: true },
+  { field: 'zona', label: 'Zona donde trabaja', client: true },
   { field: 'titulo_inicio', label: 'Título de la página de inicio', client: false },
   { field: 'primera_fecha_web', label: 'Primera vez archivada en Internet', client: false },
   { field: 'datos_search_console', label: 'Datos en Search Console desde', client: false },
@@ -25,7 +27,8 @@ export const DOSSIER_FIELD_SET = new Set(DOSSIER_FIELDS.map((f) => f.field));
 export type FactDraft = { field: string; value: unknown; source: FactSource; sourceRef?: string | null };
 
 /** Confianza de partida por origen (0-100). Una persona confirma: 100. */
-const BASE: Record<FactSource, number> = { persona: 100, gsc: 85, ficha: 70, wayback: 70, places: 75, web: 60, busqueda: 50, ia: 40 };
+// «cliente» = lo respondió el propio cliente a las 3 preguntas (Hito 2): fiable, pero una persona lo confirma.
+const BASE: Record<FactSource, number> = { persona: 100, cliente: 90, gsc: 85, ficha: 70, wayback: 70, places: 75, web: 60, busqueda: 50, ia: 40 };
 
 // --- Normalización -----------------------------------------------------------------------------------------------
 
@@ -91,6 +94,10 @@ export function factKey(field: string, value: unknown): string | null {
       return addrKey(value);
     case 'tipo_negocio':
       return typeof value === 'string' ? value : null;
+    case 'servicios':
+      return Array.isArray(value) ? value.map((x) => normText(x)).filter(Boolean).sort().join('|') || null : null;
+    case 'zona':
+      return normText(value) || null;
     default:
       return value == null ? null : JSON.stringify(value);
   }

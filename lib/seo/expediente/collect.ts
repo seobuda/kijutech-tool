@@ -19,6 +19,7 @@ import { isIndexable, type AuditPage } from '@/lib/seo/salud/audit-rules';
 import { LOCAL_KINDS } from '@/lib/seo/salud/kinds';
 import { auditLocal, LOCAL_SOURCE, parseServices } from '@/lib/seo/local/rules';
 import { brandTokens, extractFromHome, host, isBrandQuery, normPhone, scoreFacts, type FactDraft } from '@/lib/seo/expediente/rules';
+import { maybeAutoQuestions } from '@/lib/seo/preguntas/preguntas';
 
 const SOCIAL_KINDS = ['instagram', 'meta', 'linkedin', 'youtube', 'tiktok'];
 const UA = 'Mozilla/5.0 (compatible; KijutechBot/1.0; +https://kijutech.com)';
@@ -52,6 +53,8 @@ async function fichaFacts(tenantId: string, projectId: string, clientId: string)
   const s = socials.map((x) => x.value?.trim() ?? '').filter((v) => /^https?:\/\//i.test(v));
   if (s.length) facts.push({ field: 'perfiles', value: s, source: 'ficha' });
   if (c.logoUrl) facts.push({ field: 'logo', value: c.logoUrl, source: 'ficha' });
+  const services = parseServices(c.offerings);
+  if (services.length) facts.push({ field: 'servicios', value: services, source: 'ficha' });
   return { facts, names: [c.name, ...(c.aliases ?? [])] };
 }
 
@@ -118,13 +121,13 @@ export async function collectDossier(tenantId: string, projectId: string): Promi
   const { facts: ficha, names } = await fichaFacts(tenantId, projectId, p.clientId);
   const web = await projectWebUrl(tenantId, projectId);
   const [w, wb, g] = await Promise.all([web ? webFacts(web) : [], web ? waybackFacts(web) : [], gscFacts(tenantId, projectId, names)]);
-  // Lo que una persona ya escribió cuenta para la confianza de los demás.
+  // Lo que una persona escribió o el cliente respondió (3 preguntas) cuenta para la confianza de los demás; no se toca aquí.
   const persona = await db
-    .select({ field: seoDossierFacts.field, value: seoDossierFacts.value })
+    .select({ field: seoDossierFacts.field, value: seoDossierFacts.value, source: seoDossierFacts.source })
     .from(seoDossierFacts)
-    .where(and(eq(seoDossierFacts.projectId, projectId), eq(seoDossierFacts.source, 'persona')));
+    .where(and(eq(seoDossierFacts.projectId, projectId), inArray(seoDossierFacts.source, ['persona', 'cliente']), sql`${seoDossierFacts.status} <> 'descartado'`));
   const drafts: FactDraft[] = [...ficha, ...w, ...wb, ...g];
-  const scored = scoreFacts<FactDraft>([...drafts, ...persona.map((x): FactDraft => ({ field: x.field, value: x.value, source: 'persona' }))]).filter((f) => f.source !== 'persona');
+  const scored = scoreFacts<FactDraft>([...drafts, ...persona.map((x): FactDraft => ({ field: x.field, value: x.value, source: x.source as FactDraft['source'] }))]).filter((f) => f.source !== 'persona' && f.source !== 'cliente');
   for (const f of scored) {
     const value = JSON.stringify(f.value ?? null);
     await db
@@ -149,11 +152,13 @@ export async function collectDossier(tenantId: string, projectId: string): Promi
     and(
       eq(seoDossierFacts.projectId, projectId),
       eq(seoDossierFacts.status, 'provisional'),
-      notInArray(seoDossierFacts.source, ['persona']),
+      notInArray(seoDossierFacts.source, ['persona', 'cliente']),
       produced.length ? sql`(${seoDossierFacts.field} || ':' || ${seoDossierFacts.source}) NOT IN (${sql.join(produced.map((x) => sql`${x}`), sql`, `)})` : sql`true`
     )
   );
   const local = await checkLocal(tenantId, projectId, p.clientId);
+  // Lo que no se ha podido averiguar solo: correo de preguntas (pendiente de aprobación; uno cada 30 días como mucho).
+  await maybeAutoQuestions(tenantId, projectId).catch((e) => console.error('[seo] preguntas automáticas:', e instanceof Error ? e.message : e));
   return { facts: scored.length, sources: [...new Set(scored.map((f) => f.source))], local };
 }
 

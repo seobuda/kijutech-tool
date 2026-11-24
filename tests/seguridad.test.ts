@@ -7,7 +7,7 @@ import { cleanupFixtures, createFixtures, emailFor, FIXTURE_PASSWORD, loginAs, P
 
 import { aiProposeClient, applyClientProposal, saveClientOps } from '@/lib/operaciones/client-actions';
 import { decideSaludFindingAction, startSaludAuditAction, saveSeoBusinessTypeAction } from '@/lib/seo/salud-actions';
-import { applyFactToFichaAction, collectDossierAction, decideDossierFactAction, savePersonaFactAction } from '@/lib/seo/expediente-actions';
+import { applyFactToFichaAction, collectDossierAction, decideDossierFactAction, prepareQuestionsAction, savePersonaFactAction } from '@/lib/seo/expediente-actions';
 import { approvePlanItemAction, discardPlanItemAction, regeneratePlanAction, reopenPlanItemAction } from '@/lib/seo/plan-actions';
 import { buildKeywordMapAction, decideCompetitorAction, findCompetitorsAction, updateTopicAction } from '@/lib/seo/mapa-actions';
 import { addTestRequestAction, createSimRequestAction, getPruebasAction, pressSimButtonAction, runScenariosAction, sendSimTextAction, withdrawTestRequestAction } from '@/lib/operaciones/sim/actions';
@@ -228,6 +228,7 @@ const ACCIONES_EDITOR: [string, () => unknown][] = [
   ['saveSeoBusinessTypeAction (SEO: tipo de negocio a la ficha)', () => saveSeoBusinessTypeAction(ZERO, 'Dentist')],
   ['collectDossierAction (SEO: recoger expediente)', () => collectDossierAction(ZERO)],
   ['decideDossierFactAction (SEO: confirmar dato)', () => decideDossierFactAction(ZERO, ZERO, 'confirmado')],
+  ['prepareQuestionsAction (SEO: preparar el correo de preguntas)', () => prepareQuestionsAction(ZERO)],
   ['savePersonaFactAction (SEO: escribir dato)', () => savePersonaFactAction(ZERO, 'telefono', '600000000')],
   ['applyFactToFichaAction (SEO: pasar a la ficha)', () => applyFactToFichaAction(ZERO, ZERO)],
   ['regeneratePlanAction (SEO: rehacer plan)', () => regeneratePlanAction(ZERO)],

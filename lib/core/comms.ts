@@ -269,3 +269,23 @@ export async function receiveClientReply(r: { tenantId: string; inboundId: strin
   }
   return { messageId: m.id };
 }
+
+/**
+ * El mensaje nuestro al que responde un correo (por In-Reply-To / References), para que quien interpreta la respuesta
+ * (el agente del correo) sepa qué le preguntamos. Solo lectura; null si no es respuesta a un mensaje nuestro.
+ */
+export async function repliedClientMessage(
+  tenantId: string,
+  inReplyTo: string | null,
+  references: string | null
+): Promise<{ id: string; kind: string; subject: string; body: string; sentAt: Date | null; projectId: string | null; authorName: string } | null> {
+  const keys = [...new Set([...ourThreadKeys(inReplyTo), ...ourThreadKeys(references)])];
+  if (!keys.length) return null;
+  const [m] = await db
+    .select()
+    .from(clientMessages)
+    .where(and(eq(clientMessages.tenantId, tenantId), inArray(sql`lower(${clientMessages.threadKey})`, keys)))
+    .orderBy(desc(clientMessages.createdAt))
+    .limit(1);
+  return m ? { id: m.id, kind: m.kind, subject: m.subject, body: m.bodyText, sentAt: m.sentAt, projectId: m.projectId, authorName: m.authorName } : null;
+}

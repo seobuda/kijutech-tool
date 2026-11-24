@@ -12,6 +12,7 @@ import { isBusinessType } from '@/lib/core/business-types';
 import { updateCoreClient } from '@/lib/core/clients';
 import { enqueueDossier } from '@/lib/seo/expediente/collect';
 import { DOSSIER_FIELD_SET, normPhone } from '@/lib/seo/expediente/rules';
+import { prepareQuestions } from '@/lib/seo/preguntas/preguntas';
 
 type Ok = { ok: true } | { ok: false; error: string };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -71,6 +72,7 @@ export async function savePersonaFactAction(projectId: string, field: string, ra
       if (!value) return { ok: false, error: 'Teléfono no válido' };
     } else if (field === 'tipo_negocio' && !isBusinessType(text)) return { ok: false, error: 'Tipo de negocio no válido' };
     else if (field === 'perfiles') value = text.split(/[\s,]+/).filter((x) => /^https?:\/\//i.test(x)).slice(0, 12);
+    else if (field === 'servicios') value = [...new Set(text.split(/[,;\n]/).map((x) => x.trim()).filter((x) => x.length >= 2))].slice(0, 15);
     const by = (user.name || user.email).slice(0, 120);
     await db
       .insert(seoDossierFacts)
@@ -101,6 +103,7 @@ export async function applyFactToFichaAction(projectId: string, factId: string):
     if (!f) return { ok: false, error: 'Dato no encontrado' };
     if (f.field === 'tipo_negocio' && typeof f.value === 'string' && isBusinessType(f.value)) await updateCoreClient(user.tenantId, p.clientId, { businessType: f.value });
     else if (f.field === 'logo' && typeof f.value === 'string' && /^https:\/\//i.test(f.value)) await updateCoreClient(user.tenantId, p.clientId, { logoUrl: f.value });
+    else if (f.field === 'servicios' && Array.isArray(f.value) && f.value.length) await updateCoreClient(user.tenantId, p.clientId, { offerings: f.value.map(String).join('\n') });
     else return { ok: false, error: 'Este dato se cambia en la ficha del cliente (Locales, Webs y cuentas).' };
     await db.update(seoDossierFacts).set({ status: 'confirmado', decidedBy: (user.name || user.email).slice(0, 120), decidedAt: new Date(), updatedAt: new Date() }).where(eq(seoDossierFacts.id, f.id));
     await enqueueDossier(user.tenantId, projectId);
@@ -108,5 +111,20 @@ export async function applyFactToFichaAction(projectId: string, factId: string):
     return { ok: true };
   } catch (e) {
     return { ok: false, error: publicError(e, 'No se pudo pasar a la ficha') };
+  }
+}
+
+/** Prepara el correo de preguntas al cliente (sale del buzón del agente solo cuando Enric lo aprueba). */
+export async function prepareQuestionsAction(projectId: string): Promise<Ok> {
+  try {
+    const user = await requirePermission('edit');
+    const p = await ownProject(user.tenantId, projectId);
+    if (!p) return { ok: false, error: 'Proyecto no encontrado' };
+    const r = await prepareQuestions(user.tenantId, projectId, { kind: 'persona', name: (user.name || user.email).slice(0, 120), userId: user.id });
+    if (!r.ok) return { ok: false, error: r.error };
+    revalidatePath(PATH(projectId));
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: publicError(e, 'No se pudo preparar el correo') };
   }
 }
