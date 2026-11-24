@@ -4,15 +4,27 @@ import 'server-only';
 // núcleo: DataForSEO, registrada por Agentes) las búsquedas semilla del proyecto y propone los dominios que más salen.
 // Se guardan en la lista de competidores del cliente (núcleo, client_competitors) como «propuesto»: una persona confirma.
 // Lo confirmado o descartado nunca lo cambia la búsqueda; solo se ponen al día sus datos.
-import { and, asc, desc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, ne, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { clientCompetitors, clientLocations, clients, projects, seoTopics } from '@/lib/db/schema';
+import { clientCompetitors, clientLocations, clients, crawlPages, crawlRuns, projects, seoTopics } from '@/lib/db/schema';
+import { lastCrawl, startCrawl } from '@/lib/core/crawler';
 import { serpSource } from '@/lib/core/capabilities';
 import { enqueueJob, registerJobKind } from '@/lib/core/jobs';
 import { projectWebUrl } from '@/lib/seo/salud/audit';
 import { host } from '@/lib/seo/expediente/rules';
 import { parseServices } from '@/lib/seo/local/rules';
 import { rankCompetitors, rootDomain, seedQueries } from '@/lib/seo/competencia/rules';
+import {
+  COMPETITOR_PAGES,
+  MAX_CRAWLED_COMPETITORS,
+  RECRAWL_DAYS,
+  compareSites,
+  gapQueries,
+  ownPositions,
+  siteProfile,
+  type CrawledPage,
+  type SiteProfile
+} from '@/lib/seo/competencia/compare';
 
 const MAX_SEARCHES = 15;
 
@@ -22,7 +34,7 @@ export class CompetenciaError extends Error {
   }
 }
 
-export async function findCompetitors(tenantId: string, projectId: string): Promise<{ searches: number; candidates: number; created: number; costUsd: number }> {
+export async function findCompetitors(tenantId: string, projectId: string): Promise<{ searches: number; candidates: number; created: number; costUsd: number; clienteSale: number }> {
   const src = serpSource();
   if (!src || !(await src.isConnected(tenantId))) throw new CompetenciaError('DataForSEO no está conectado (Agentes → Integraciones): hace falta para ver quién sale en Google.');
   const [p] = await db
@@ -60,12 +72,13 @@ export async function findCompetitors(tenantId: string, projectId: string): Prom
   }
   const own = [host(web)].filter((x): x is string => Boolean(x));
   const candidates = rankCompetitors(results, own);
+  const ownPos = ownPositions(results, own);
 
   const existing = await db.select().from(clientCompetitors).where(and(eq(clientCompetitors.clientId, p.clientId), eq(clientCompetitors.tenantId, tenantId)));
   const byDomain = new Map(existing.filter((c) => c.domain).map((c) => [rootDomain(c.domain!.replace(/^https?:\/\//, '').split('/')[0]), c]));
   let created = 0;
   for (const c of candidates) {
-    const evidence = { busquedas: c.queries, apariciones: c.appearances, de: results.length, posicionMedia: c.avgPosition, enPaqueteLocal: c.inLocalPack, valoracion: c.rating, resenas: c.reviews };
+    const evidence = { busquedas: c.queries, apariciones: c.appearances, de: results.length, posicionMedia: c.avgPosition, enPaqueteLocal: c.inLocalPack, valoracion: c.rating, resenas: c.reviews, huecos: gapQueries(c.queries, ownPos) };
     const ex = byDomain.get(c.domain);
     if (ex) {
       await db.update(clientCompetitors).set({ evidence, lastSeen: new Date(), projectId: ex.projectId ?? projectId }).where(eq(clientCompetitors.id, ex.id));
@@ -85,7 +98,135 @@ export async function findCompetitors(tenantId: string, projectId: string): Prom
       created++;
     }
   }
-  return { searches: results.length, candidates: candidates.length, created, costUsd: Math.round(cost * 1000) / 1000 };
+  const ownSeen = Object.values(ownPos).filter((x) => x != null).length;
+  return { searches: results.length, candidates: candidates.length, created, costUsd: Math.round(cost * 1000) / 1000, clienteSale: ownSeen };
+}
+
+/** Competidores que se comparan: los confirmados y directos (no directorios), con dominio; los que más salen primero. */
+async function comparedCompetitors(tenantId: string, projectId: string) {
+  const [p] = await db.select({ clientId: projects.clientId }).from(projects).where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId))).limit(1);
+  if (!p?.clientId) return [];
+  const rows = await db
+    .select({ id: clientCompetitors.id, domain: clientCompetitors.domain, evidence: clientCompetitors.evidence })
+    .from(clientCompetitors)
+    .where(and(eq(clientCompetitors.clientId, p.clientId), eq(clientCompetitors.tenantId, tenantId), eq(clientCompetitors.status, 'confirmado'), eq(clientCompetitors.kind, 'directo')));
+  return rows
+    .map((r) => ({ id: r.id, domain: r.domain ? rootDomain(r.domain.replace(/^https?:\/\//i, '').split('/')[0]) : '', apariciones: Number((r.evidence as { apariciones?: number }).apariciones ?? 0) }))
+    .filter((r) => /^[a-z0-9.-]+\.[a-z]{2,}$/.test(r.domain))
+    .sort((a, b) => b.apariciones - a.apariciones)
+    .slice(0, MAX_CRAWLED_COMPETITORS);
+}
+
+const hostOf = (u: string) => {
+  try {
+    return new URL(u).hostname.replace(/^www\./, '').toLowerCase();
+  } catch {
+    return '';
+  }
+};
+
+/**
+ * Rastreo ligero (50 páginas) de las webs de la competencia confirmada. Solo las que no tienen un rastreo de los últimos
+ * 30 días (terminado o en marcha). «onlyId»: solo ese competidor (al confirmarlo). Devuelve cuántos rastreos empieza.
+ */
+export async function crawlCompetitors(tenantId: string, projectId: string, onlyId?: string): Promise<{ started: number; skipped: number }> {
+  const comps = (await comparedCompetitors(tenantId, projectId)).filter((c) => !onlyId || c.id === onlyId);
+  if (!comps.length) return { started: 0, skipped: 0 };
+  const since = new Date(Date.now() - RECRAWL_DAYS * 86_400_000);
+  const recent = await db
+    .select({ rootUrl: crawlRuns.rootUrl })
+    .from(crawlRuns)
+    .where(and(eq(crawlRuns.projectId, projectId), eq(crawlRuns.tenantId, tenantId), eq(crawlRuns.target, 'competidor'), ne(crawlRuns.status, 'error'), gte(crawlRuns.createdAt, since)));
+  const fresh = new Set(recent.map((r) => hostOf(r.rootUrl)));
+  let started = 0;
+  for (const c of comps) {
+    if (fresh.has(c.domain)) continue;
+    await startCrawl({ tenantId, projectId, rootUrl: `https://${c.domain}/`, target: 'competidor', maxPages: COMPETITOR_PAGES });
+    started++;
+  }
+  return { started, skipped: comps.length - started };
+}
+
+export type CompetitorSiteView = SiteProfile & { crawledAt: string | null; status: 'hecho' | 'rastreando' | 'sin_rastrear' | 'error'; error: string | null };
+export type CompetitorComparison = {
+  services: string[];
+  client: (SiteProfile & { crawledAt: string | null }) | null;
+  competitors: CompetitorSiteView[];
+  takeaways: string[];
+  running: boolean;
+};
+
+const PAGE_COLS = {
+  url: crawlPages.url,
+  statusCode: crawlPages.statusCode,
+  title: crawlPages.title,
+  h1: crawlPages.h1,
+  robotsMeta: crawlPages.robotsMeta,
+  canonical: crawlPages.canonical,
+  wordCount: crawlPages.wordCount,
+  schemaTypes: crawlPages.schemaTypes,
+  fetchMs: crawlPages.fetchMs
+};
+
+/** Comparación para la pantalla: la web del cliente (último rastreo completo) frente a cada competidor rastreado. */
+export async function competitorComparison(tenantId: string, projectId: string): Promise<CompetitorComparison> {
+  const [p] = await db
+    .select({ offerings: clients.offerings })
+    .from(projects)
+    .leftJoin(clients, eq(clients.id, projects.clientId))
+    .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)))
+    .limit(1);
+  let services = parseServices(p?.offerings).slice(0, 8);
+  if (!services.length) {
+    const topics = await db
+      .select({ name: seoTopics.name, metrics: seoTopics.metrics })
+      .from(seoTopics)
+      .where(and(eq(seoTopics.projectId, projectId), eq(seoTopics.status, 'activo')))
+      .orderBy(desc(sql`(${seoTopics.metrics}->>'impresiones')::float`))
+      .limit(12);
+    services = topics.filter((t) => !Number((t.metrics as Record<string, number | null>).marca ?? 0)).slice(0, 6).map((t) => t.name);
+  }
+  const comps = await comparedCompetitors(tenantId, projectId);
+  const [own, web] = await Promise.all([lastCrawl(projectId, 'propio'), projectWebUrl(tenantId, projectId)]);
+  const runs = comps.length
+    ? await db
+        .select({ id: crawlRuns.id, rootUrl: crawlRuns.rootUrl, status: crawlRuns.status, finishedAt: crawlRuns.finishedAt, error: crawlRuns.error })
+        .from(crawlRuns)
+        .where(and(eq(crawlRuns.projectId, projectId), eq(crawlRuns.tenantId, tenantId), eq(crawlRuns.target, 'competidor')))
+        .orderBy(desc(crawlRuns.createdAt))
+        .limit(60)
+    : [];
+  const done = new Map<string, (typeof runs)[number]>();
+  const latest = new Map<string, (typeof runs)[number]>();
+  for (const r of runs) {
+    const h = hostOf(r.rootUrl);
+    if (!latest.has(h)) latest.set(h, r);
+    if (r.status === 'hecho' && !done.has(h)) done.set(h, r);
+  }
+  const runIds = [...done.values()].map((r) => r.id);
+  const pages = runIds.length ? await db.select({ runId: crawlPages.runId, ...PAGE_COLS }).from(crawlPages).where(inArray(crawlPages.runId, runIds)) : [];
+  const byRun = new Map<string, CrawledPage[]>();
+  for (const pg of pages) byRun.set(pg.runId, [...(byRun.get(pg.runId) ?? []), pg]);
+
+  let client: CompetitorComparison['client'] = null;
+  if (own) {
+    const ownPages = await db.select(PAGE_COLS).from(crawlPages).where(eq(crawlPages.runId, own.id));
+    client = { ...siteProfile(host(web) ?? hostOf(own.rootUrl), ownPages, services), crawledAt: own.finishedAt?.toISOString() ?? null };
+  }
+  const competitors: CompetitorSiteView[] = comps.map((c) => {
+    const d = done.get(c.domain);
+    const l = latest.get(c.domain);
+    const running = Boolean(l && (l.status === 'pendiente' || l.status === 'en_curso'));
+    const base = siteProfile(c.domain, d ? (byRun.get(d.id) ?? []) : [], services);
+    return {
+      ...base,
+      crawledAt: d?.finishedAt?.toISOString() ?? null,
+      status: running ? 'rastreando' : d ? 'hecho' : l?.status === 'error' ? 'error' : 'sin_rastrear',
+      error: l?.status === 'error' ? (l.error ?? 'El rastreo falló').slice(0, 200) : null
+    };
+  });
+  const crawled = competitors.filter((c) => c.crawledAt && c.pages > 0);
+  return { services, client, competitors, takeaways: compareSites(client, crawled), running: competitors.some((c) => c.status === 'rastreando') };
 }
 
 export async function enqueueCompetitors(tenantId: string, projectId: string): Promise<void> {

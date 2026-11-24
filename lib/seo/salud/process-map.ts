@@ -133,13 +133,26 @@ export const SEO_SALUD_PROCESS_MAP: ProcessStep[] = [
     lane: 'Competencia',
     name: 'Competencia en Google',
     description:
-      'Busca en Google (DataForSEO, por la fuente de búsquedas del núcleo que registra Agentes) hasta 15 búsquedas semilla: los temas que más se ven (sin los de marca) y «servicio + población» de la ficha. Propone los dominios que salen en al menos 3 búsquedas (2 si hay pocas) o 2 veces en el mapa; los directorios conocidos salen marcados. Se guardan en la lista de competidores del cliente (núcleo) como «propuesto»: una persona confirma.',
+      'Busca en Google (DataForSEO, por la fuente de búsquedas del núcleo que registra Agentes) hasta 15 búsquedas semilla: los temas que más se ven (sin los de marca) y «servicio + población» de la ficha. Propone los dominios que salen en al menos 3 búsquedas (2 si hay pocas) o 2 veces en el mapa; los directorios conocidos salen marcados. Se guardan en la lista de competidores del cliente (núcleo) como «propuesto»: una persona confirma. De cada uno se guardan también los huecos: búsquedas donde sale él y la web del cliente no (top 20).',
     status: 'built',
     file: 'lib/seo/competencia/competencia.ts',
     when: 'A mano, desde Proyectos → Palabras (trabajo «seo.competencia.find», un intento: no repite gasto).',
     ai: 'Nada: recuento y posición media por dominio (lib/seo/competencia/rules.ts).',
     code: 'Lo confirmado o descartado nunca lo cambia la búsqueda; solo se ponen al día sus datos (búsquedas, posición, valoración en el mapa). Coste por búsqueda de DataForSEO, unos 0,002 $ [NV].',
     tables: ['client_competitors', 'seo_topics', 'client_locations']
+  },
+  {
+    id: 'seo-competencia-webs',
+    lane: 'Competencia',
+    name: 'Sus webs frente a la del cliente',
+    description:
+      'Rastreo ligero (50 páginas, las de ruta más corta primero) de las webs de hasta 5 competidores confirmados y directos (no directorios), con el rastreador del núcleo (objetivo «competidor»). Se compara con el último rastreo de la web del cliente: qué servicios de la ficha tienen página propia, qué datos estructurados usan, la mediana de respuesta del servidor y de palabras por página. Pantalla: Proyectos → Palabras → Sus webs frente a la del cliente.',
+    status: 'built',
+    file: 'lib/seo/competencia/competencia.ts',
+    when: 'Al confirmar un competidor y a mano («Rastrear sus webs»); como mucho uno por web cada 30 días.',
+    ai: 'Nada: reglas puras en lib/seo/competencia/compare.ts.',
+    code: 'Un servicio tiene página si todas sus palabras están en la dirección, el título o el H1 de una página indexable. Solo se comenta un dato estructurado si lo usa al menos la mitad de la competencia rastreada; el servidor, si el del cliente pasa de 800 ms y es 1,5 veces más lento; el texto, si el cliente tiene menos del 60 %.',
+    tables: ['client_competitors', 'crawl_runs', 'crawl_pages']
   },
   {
     id: 'seo-preguntas',

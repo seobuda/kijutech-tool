@@ -10,6 +10,7 @@ import { checkPermission, requirePagePermission } from '@/lib/auth/permissions';
 import { PageContainer, PageHeader } from '@/components/ui/page';
 import { gscPropertiesForProject } from '@/lib/core/gsc';
 import { ProjectSeoNav } from '../seo-nav';
+import { competitorComparison } from '@/lib/seo/competencia/competencia';
 import { PalabrasPanel, type TopicView } from './palabras-panel';
 
 export default async function PalabrasPage({ params }: { params: Promise<{ projectId: string }> }) {
@@ -38,7 +39,7 @@ export default async function PalabrasPage({ params }: { params: Promise<{ proje
       .from(findings)
       .where(and(eq(findings.projectId, projectId), eq(findings.source, 'seo.mapa:gsc'), eq(findings.status, 'abierto')))
   ]);
-  const [comps, compJobs] = await Promise.all([
+  const [comps, compJobs, comparison] = await Promise.all([
     p.clientId
       ? db.select().from(clientCompetitors).where(and(eq(clientCompetitors.clientId, p.clientId), eq(clientCompetitors.tenantId, user.tenantId))).orderBy(asc(clientCompetitors.status), desc(clientCompetitors.lastSeen))
       : Promise.resolve([]),
@@ -47,7 +48,8 @@ export default async function PalabrasPage({ params }: { params: Promise<{ proje
       .from(jobs)
       .where(and(eq(jobs.tenantId, user.tenantId), eq(jobs.kind, 'seo.competencia.find'), eq(jobs.scopeId, projectId)))
       .orderBy(desc(jobs.createdAt))
-      .limit(1)
+      .limit(1),
+    competitorComparison(user.tenantId, projectId)
   ]);
   const ids = topics.map((t) => t.id);
   const qs = ids.length
@@ -91,6 +93,7 @@ export default async function PalabrasPage({ params }: { params: Promise<{ proje
         cannibal={Number(cannibal[0]?.n ?? 0)}
         competitors={comps.map((c) => ({ id: c.id, name: c.name, domain: c.domain, status: c.status, kind: c.kind, source: c.source, evidence: c.evidence }))}
         compJob={compJobs[0] ? { status: compJobs[0].status, result: (compJobs[0].result ?? null) as Record<string, unknown> | null, error: compJobs[0].error } : null}
+        comparison={comparison}
       />
     </PageContainer>
   );

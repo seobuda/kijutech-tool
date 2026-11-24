@@ -8,8 +8,9 @@ import { ChevronDown, ChevronRight, Loader2, Pencil, RefreshCw, RotateCcw, X } f
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge, EmptyState, Section, StatCard } from '@/components/ui/page';
-import { buildKeywordMapAction, decideCompetitorAction, findCompetitorsAction, updateTopicAction } from '@/lib/seo/mapa-actions';
-import { Check, Search } from 'lucide-react';
+import { buildKeywordMapAction, crawlCompetitorsAction, decideCompetitorAction, findCompetitorsAction, updateTopicAction } from '@/lib/seo/mapa-actions';
+import { Check, Globe, Search } from 'lucide-react';
+import type { CompetitorComparison } from '@/lib/seo/competencia/competencia';
 
 export type TopicView = {
   id: string;
@@ -34,12 +35,12 @@ const path = (u: string) => {
   }
 };
 
-export function PalabrasPanel({ projectId, topics, canEdit, hasGsc, job, cannibal, competitors, compJob }: { projectId: string; topics: TopicView[]; canEdit: boolean; hasGsc: boolean; job: Job | null; cannibal: number; competitors: CompetitorView[]; compJob: CompJob | null }) {
+export function PalabrasPanel({ projectId, topics, canEdit, hasGsc, job, cannibal, competitors, compJob, comparison }: { projectId: string; topics: TopicView[]; canEdit: boolean; hasGsc: boolean; job: Job | null; cannibal: number; competitors: CompetitorView[]; compJob: CompJob | null; comparison: CompetitorComparison }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
   const [filter, setFilter] = useState<'todos' | 'pagina' | 'nueva' | 'descartado'>('todos');
-  const running = job?.status === 'pendiente' || job?.status === 'en_curso' || compJob?.status === 'pendiente' || compJob?.status === 'en_curso';
+  const running = job?.status === 'pendiente' || job?.status === 'en_curso' || compJob?.status === 'pendiente' || compJob?.status === 'en_curso' || comparison.running;
 
   useEffect(() => {
     if (!running) return;
@@ -143,6 +144,7 @@ export function PalabrasPanel({ projectId, topics, canEdit, hasGsc, job, canniba
         </>
       )}
       <CompetitorsSection projectId={projectId} competitors={competitors} job={compJob} canEdit={canEdit} pending={pending} run={run} hasTopics={topics.length > 0} />
+      <ComparisonSection projectId={projectId} data={comparison} canEdit={canEdit} pending={pending} run={run} />
     </div>
   );
 }
@@ -188,7 +190,7 @@ function CompetitorsSection({
       ) : (
         <ul className="divide-y">
           {list.map((c) => {
-            const e = c.evidence as { apariciones?: number; de?: number; posicionMedia?: number | null; enPaqueteLocal?: number; valoracion?: number | null; resenas?: number | null; busquedas?: string[] };
+            const e = c.evidence as { apariciones?: number; de?: number; posicionMedia?: number | null; enPaqueteLocal?: number; valoracion?: number | null; resenas?: number | null; busquedas?: string[]; huecos?: string[] };
             return (
               <li key={c.id} className={c.status === 'descartado' ? 'py-2 text-muted-foreground' : 'py-2'}>
                 <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -215,6 +217,7 @@ function CompetitorsSection({
                   )}
                 </div>
                 {e.busquedas?.length ? <p className="mt-0.5 text-xs text-muted-foreground">Búsquedas: {e.busquedas.slice(0, 5).join(' · ')}</p> : null}
+                {c.status !== 'descartado' && e.huecos?.length ? <p className="mt-0.5 text-xs text-warning-strong">Sale y la web del cliente no: {e.huecos.slice(0, 5).join(' · ')}</p> : null}
               </li>
             );
           })}
@@ -327,5 +330,84 @@ function TopicRow({
         </div>
       )}
     </li>
+  );
+}
+
+const ms = (v: number | null) => (v == null ? '—' : `${v.toLocaleString('es-ES')} ms`);
+const STATUS_TEXT: Record<string, string> = { rastreando: 'Rastreando…', sin_rastrear: 'Sin rastrear', error: 'Falló' };
+
+function ComparisonSection({
+  projectId,
+  data,
+  canEdit,
+  pending,
+  run
+}: {
+  projectId: string;
+  data: CompetitorComparison;
+  canEdit: boolean;
+  pending: boolean;
+  run: (fn: () => Promise<{ ok: true } | { ok: false; error: string }>, okText?: string) => void;
+}) {
+  if (!data.competitors.length) return null;
+  const rows = [...(data.client ? [{ ...data.client, label: 'Cliente', status: 'hecho' as const, error: null }] : []), ...data.competitors.map((c) => ({ ...c, label: '' }))];
+  return (
+    <Section
+      title="Sus webs frente a la del cliente"
+      description="Rastreo ligero (50 páginas, las principales primero) de cada competidor confirmado, sin IA. Se rastrea al confirmarlo y se puede repetir una vez al mes. La web del cliente sale de su última auditoría."
+      actions={
+        canEdit ? (
+          <Button size="sm" variant="outline" disabled={pending || data.running} onClick={() => run(() => crawlCompetitorsAction(projectId), 'Rastreando sus webs: unos minutos por web.')}>
+            {data.running ? <Loader2 className="size-3.5 animate-spin" /> : <Globe className="size-3.5" />}
+            {data.running ? 'Rastreando…' : 'Rastrear sus webs'}
+          </Button>
+        ) : undefined
+      }
+    >
+      {data.takeaways.length > 0 && (
+        <ul className="mb-4 list-disc space-y-1 pl-5 text-sm">
+          {data.takeaways.map((t) => (
+            <li key={t}>{t}</li>
+          ))}
+        </ul>
+      )}
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[560px] text-sm">
+          <thead>
+            <tr className="border-b text-left text-xs text-muted-foreground">
+              <th className="py-1.5 pr-3 font-medium">Web</th>
+              <th className="py-1.5 pr-3 font-medium">Páginas</th>
+              <th className="py-1.5 pr-3 font-medium">Palabras (mediana)</th>
+              <th className="py-1.5 pr-3 font-medium">Servidor</th>
+              <th className="py-1.5 pr-3 font-medium">Servicios con página</th>
+              <th className="py-1.5 font-medium">Datos estructurados</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {rows.map((r) => {
+              const svc = Object.values(r.services);
+              return (
+                <tr key={`${r.label}${r.domain}`} className={r.label ? 'bg-muted/40' : undefined}>
+                  <td className="py-1.5 pr-3">
+                    <span className="font-medium">{r.domain}</span> {r.label && <Badge tone="info">{r.label}</Badge>}
+                    {r.status !== 'hecho' && <span className={r.status === 'error' ? 'ml-1 text-xs text-destructive' : 'ml-1 text-xs text-muted-foreground'}>{STATUS_TEXT[r.status]}</span>}
+                    {r.error && <span className="block text-xs text-destructive">{r.error}</span>}
+                  </td>
+                  <td className="py-1.5 pr-3">{r.status === 'hecho' || r.label ? n(r.pages) : '—'}</td>
+                  <td className="py-1.5 pr-3">{n(r.medianWords)}</td>
+                  <td className="py-1.5 pr-3">{ms(r.medianMs)}</td>
+                  <td className="py-1.5 pr-3" title={Object.entries(r.services).map(([k, v]) => `${k}: ${v ? path(v) : 'no'}`).join('\n')}>
+                    {r.pages ? `${svc.filter(Boolean).length} de ${svc.length}` : '—'}
+                  </td>
+                  <td className="py-1.5 text-xs text-muted-foreground">{r.schemaTypes.length ? r.schemaTypes.slice(0, 6).join(', ') : '—'}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      {!data.client && <p className="mt-3 text-sm text-muted-foreground">Falta el rastreo de la web del cliente: pasa la auditoría en Salud técnica para compararla.</p>}
+      {data.services.length > 0 && <p className="mt-3 text-xs text-muted-foreground">Servicios comparados: {data.services.join(' · ')}. Una página cuenta si todas las palabras del servicio están en su dirección, su título o su H1.</p>}
+    </Section>
   );
 }
