@@ -120,7 +120,7 @@ export const SEO_SALUD_PROCESS_MAP: ProcessStep[] = [
     lane: 'Mapa de palabras',
     name: 'Mapa de palabras sobre Search Console',
     description:
-      'Las búsquedas de 90 días agrupadas en temas: cada búsqueda va a la página que Google más le muestra (≥ 60 % de sus impresiones y posición ≤ 30); las que no tienen página clara se agrupan por significado (embeddings guardados y reutilizados entre proyectos) o, sin embeddings, por palabras, y piden «página nueva». Cifras, tendencia a 28 días, búsquedas de marca y parte de clics anónimos. Pantalla: Proyectos → Palabras.',
+      'Las búsquedas de 90 días agrupadas en temas: cada búsqueda va a la página que Google más le muestra (≥ 60 % de sus impresiones y posición ≤ 30); las que no tienen página clara se agrupan por significado (embeddings guardados y reutilizados entre proyectos, pedidos por tandas de 90; si el proveedor limita el uso, espera un minuto, agrupa con lo que tiene y repite en una hora hasta 6 veces) o, sin embeddings, por palabras, y piden «página nueva». Cifras, tendencia a 28 días, búsquedas de marca y parte de clics anónimos. Pantalla: Proyectos → Palabras.',
     status: 'built',
     file: 'lib/seo/mapa/mapa.ts',
     when: 'Al terminar cada auditoría y a mano (trabajo «seo.mapa.build»).',

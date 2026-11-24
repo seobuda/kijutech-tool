@@ -2,7 +2,7 @@
 // «página nueva»), sus cifras de 90 días y su tendencia; la parte de clics anónimos y la canibalización.
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, lte, sql } from 'drizzle-orm';
 import { ArrowLeft, KeyRound } from 'lucide-react';
 import { db } from '@/lib/db/drizzle';
 import { clientCompetitors, clients, findings, jobs, projects, seoTopicQueries, seoTopics } from '@/lib/db/schema';
@@ -30,7 +30,7 @@ export default async function PalabrasPage({ params }: { params: Promise<{ proje
     db
       .select({ status: jobs.status, result: jobs.result, error: jobs.lastError, finishedAt: jobs.finishedAt })
       .from(jobs)
-      .where(and(eq(jobs.tenantId, user.tenantId), eq(jobs.kind, 'seo.mapa.build'), eq(jobs.scopeId, projectId)))
+      .where(and(eq(jobs.tenantId, user.tenantId), eq(jobs.kind, 'seo.mapa.build'), eq(jobs.scopeId, projectId), lte(jobs.runAt, new Date())))
       .orderBy(desc(jobs.createdAt))
       .limit(1),
     db

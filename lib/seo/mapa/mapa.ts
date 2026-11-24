@@ -26,9 +26,26 @@ export class MapaError extends Error {
   }
 }
 
-/** Agrupa por parecido con embeddings (guardados por texto y modelo); null si no hay embeddings disponibles. */
-async function semanticGroups(tenantId: string, queries: string[]): Promise<{ groups: string[][]; embedded: number } | null> {
-  if (queries.length < 3) return { groups: queries.map((q) => [q]), embedded: 0 };
+/** Tanda de embeddings por llamada: la capa gratuita de Gemini cuenta cada texto como una petición (≈100/min). */
+const EMBED_CHUNK = 90;
+/** Tiempo máximo que una ejecución dedica a pedir embeddings (el trabajo tiene 300 s). */
+const EMBED_BUDGET_MS = 170_000;
+/** Ejecuciones de seguimiento si quedan consultas sin vector (el límite puede ser por minuto o por día). */
+export const MAX_EMBED_ROUNDS = 6;
+
+const isRateLimit = (e: unknown) => /\b429\b|quota|rate.?limit|RESOURCE_EXHAUSTED/i.test(e instanceof Error ? e.message : String(e));
+const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+type SemanticResult = { groups: string[][]; embedded: number; pending: number };
+
+/**
+ * Agrupa por parecido con embeddings (guardados por texto y modelo); null si no hay embeddings disponibles.
+ * Pide los que faltan por tandas y guarda cada tanda al llegar: si el proveedor corta por límite (429), espera un minuto
+ * y lo reintenta una vez; si sigue cortando, agrupa con lo que ya tiene (el resto, por palabras) y devuelve cuántos
+ * quedan pendientes para que una ejecución posterior los complete desde la caché.
+ */
+async function semanticGroups(tenantId: string, queries: string[]): Promise<SemanticResult | null> {
+  if (queries.length < 3) return { groups: queries.map((q) => [q]), embedded: 0, pending: 0 };
   let cfg: { provider: string; model: string; apiKey: string };
   try {
     cfg = await getEmbeddingConfig(tenantId, 'platform');
@@ -45,32 +62,47 @@ async function semanticGroups(tenantId: string, queries: string[]): Promise<{ gr
   const have = new Map(cached.map((c) => [c.h, c.v as number[]]));
   const missing = list.filter((_, i) => !have.has(hashes[i]));
   let embedded = 0;
-  if (missing.length) {
-    try {
-      const vecs = await embedTexts(missing, cfg.provider, cfg.apiKey, cfg.model);
-      for (let i = 0; i < missing.length; i++) {
-        const h = queryHash(missing[i]);
-        have.set(h, vecs[i]);
-        await db.insert(seoTextEmbeddings).values({ textHash: h, model, embedding: vecs[i] }).onConflictDoNothing();
+  let lastError: unknown = null;
+  const t0 = Date.now();
+  for (let i = 0; i < missing.length; i += EMBED_CHUNK) {
+    if (Date.now() - t0 > EMBED_BUDGET_MS) break;
+    const chunk = missing.slice(i, i + EMBED_CHUNK);
+    let vecs: number[][] | null = null;
+    for (let attempt = 0; attempt < 2 && !vecs; attempt++) {
+      try {
+        vecs = await embedTexts(chunk, cfg.provider, cfg.apiKey, cfg.model);
+      } catch (e) {
+        lastError = e;
+        if (attempt === 0 && isRateLimit(e) && Date.now() - t0 + 62_000 < EMBED_BUDGET_MS) await pause(62_000);
+        else break;
       }
-      embedded = missing.length;
-    } catch (e) {
-      console.error('[seo] mapa de palabras: embeddings no disponibles, se agrupa por palabras:', e instanceof Error ? e.message.slice(0, 200) : e);
-      return null;
     }
+    if (!vecs) break;
+    const rowsToSave = chunk.map((q, j) => ({ textHash: queryHash(q), model, embedding: vecs![j] }));
+    rowsToSave.forEach((r) => have.set(r.textHash, r.embedding));
+    await db.insert(seoTextEmbeddings).values(rowsToSave).onConflictDoNothing();
+    embedded += chunk.length;
   }
-  const vectors = list.map((_, i) => have.get(hashes[i])!);
-  const labels = new HDBSCAN({ minClusterSize: 3, minSamples: 2 }).fit(vectors);
+  const withVec = list.filter((_, i) => have.has(hashes[i]));
+  const without = list.filter((_, i) => !have.has(hashes[i]));
+  if (without.length) {
+    console.error(
+      `[seo] mapa de palabras: ${without.length} de ${list.length} consultas sin embeddings (se agrupan por palabras y se reintenta más tarde):`,
+      lastError instanceof Error ? lastError.message.slice(0, 200) : lastError ?? 'tiempo agotado'
+    );
+  }
+  if (withVec.length < 3) return null;
+  const labels = new HDBSCAN({ minClusterSize: 3, minSamples: 2 }).fit(withVec.map((q) => have.get(queryHash(q))!));
   const by = new Map<number, string[]>();
   const noise: string[] = [];
-  labels.forEach((l: number, i: number) => (l === -1 ? noise.push(list[i]) : by.set(l, [...(by.get(l) ?? []), list[i]])));
-  // El ruido de HDBSCAN aún puede agruparse por palabras; lo que no cupo en el tope, también.
-  return { groups: [...by.values(), ...lexicalGroups([...noise, ...queries.slice(MAX_EMBED)])], embedded };
+  labels.forEach((l: number, i: number) => (l === -1 ? noise.push(withVec[i]) : by.set(l, [...(by.get(l) ?? []), withVec[i]])));
+  // El ruido de HDBSCAN, lo que aún no tiene vector y lo que no cupo en el tope se agrupan por palabras.
+  return { groups: [...by.values(), ...lexicalGroups([...noise, ...without, ...queries.slice(MAX_EMBED)])], embedded, pending: without.length };
 }
 
-export type MapaResult = { topics: number; pageTopics: number; newPageTopics: number; queries: number; cannibal: number; anonymousPct: number | null; grouping: 'embeddings' | 'palabras'; embedded: number };
+export type MapaResult = { topics: number; pageTopics: number; newPageTopics: number; queries: number; cannibal: number; anonymousPct: number | null; grouping: 'embeddings' | 'palabras'; embedded: number; pendingEmbeddings: number };
 
-export async function buildKeywordMap(tenantId: string, projectId: string): Promise<MapaResult> {
+export async function buildKeywordMap(tenantId: string, projectId: string, round = 0): Promise<MapaResult> {
   const [p] = await db
     .select({ id: projects.id, clientName: clients.name, aliases: clients.aliases })
     .from(projects)
@@ -145,6 +177,11 @@ export async function buildKeywordMap(tenantId: string, projectId: string): Prom
     FROM gsc_daily_totals WHERE property_id IN (${ids}) AND search_type = 1 AND date > current_date - 90`)) as unknown as { clicks: number; query_clicks: number }[];
   const anon = anonymousShare(Number(tot?.clicks ?? 0), Number(tot?.query_clicks ?? 0));
   if (cannibal.length) await enqueueJob({ tenantId, kind: 'seo.plan.regenerate', payload: { projectId }, scopeType: 'proyecto', scopeId: projectId, priority: 5, dedupeKey: `seo.plan:${projectId}` });
+  // Quedan consultas sin vector (límite del proveedor): otra pasada en una hora, que parte de la caché. Clave propia,
+  // porque la ejecución actual sigue «en curso» y ocupa la clave normal.
+  if (sem?.pending && round < MAX_EMBED_ROUNDS) {
+    await enqueueJob({ tenantId, kind: 'seo.mapa.build', payload: { projectId, round: round + 1 }, scopeType: 'proyecto', scopeId: projectId, priority: 7, runAt: new Date(Date.now() + 60 * 60_000), dedupeKey: `seo.mapa:${projectId}:seguimiento:${round + 1}` });
+  }
   return {
     topics: Math.min(topics.length, 500),
     pageTopics: topics.filter((t) => t.origin === 'pagina').length,
@@ -153,7 +190,8 @@ export async function buildKeywordMap(tenantId: string, projectId: string): Prom
     cannibal: cannibal.length,
     anonymousPct: anon !== null ? Math.round(anon * 100) : null,
     grouping: sem ? 'embeddings' : 'palabras',
-    embedded: sem?.embedded ?? 0
+    embedded: sem?.embedded ?? 0,
+    pendingEmbeddings: sem?.pending ?? 0
   };
 }
 
@@ -165,5 +203,5 @@ let registered = false;
 export function registerMapaJobs(): void {
   if (registered) return;
   registered = true;
-  registerJobKind({ kind: 'seo.mapa.build', timeoutS: 300, maxConcurrent: 1, maxAttempts: 2, run: async (ctx, payload) => buildKeywordMap(ctx.tenantId, String(payload.projectId ?? '')) });
+  registerJobKind({ kind: 'seo.mapa.build', timeoutS: 300, maxConcurrent: 1, maxAttempts: 2, run: async (ctx, payload) => buildKeywordMap(ctx.tenantId, String(payload.projectId ?? ''), Number(payload.round ?? 0) || 0) });
 }

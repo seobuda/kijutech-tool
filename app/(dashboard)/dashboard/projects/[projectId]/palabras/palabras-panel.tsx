@@ -117,7 +117,7 @@ export function PalabrasPanel({ projectId, topics, canEdit, hasGsc, job, canniba
           )}
           <Section
             title="Temas"
-            description={`Ordenados por impresiones (90 días). Agrupado ${r?.grouping === 'embeddings' ? 'por página y por significado' : 'por página y por palabras (sin embeddings disponibles)'}. «Clics anónimos» es la parte de los clics cuya búsqueda Google no enseña.`}
+            description={`Ordenados por impresiones (90 días). Agrupado ${r?.grouping === 'embeddings' ? 'por página y por significado' : 'por página y por palabras (sin embeddings disponibles)'}${Number(r?.pendingEmbeddings ?? 0) > 0 ? ` (${r?.pendingEmbeddings} búsquedas aún por palabras: el proveedor de embeddings limitó el uso; se completa solo en las próximas horas)` : ''}. «Clics anónimos» es la parte de los clics cuya búsqueda Google no enseña.`}
             actions={
               <>
                 <select className="h-8 rounded-md border bg-background px-2 text-sm" value={filter} onChange={(e) => setFilter(e.target.value as typeof filter)} aria-label="Filtrar temas">
