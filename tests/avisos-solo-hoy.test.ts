@@ -38,8 +38,8 @@ import { deferredNoticeAt } from '@/lib/operaciones/deferred-notice';
 import { invalidateAutomations } from '@/lib/operaciones/automations';
 import type { Schedule } from '@/lib/operaciones/team-profiles';
 
-// Lunes 23 nov 2026, 10:00 en Madrid (09:00 UTC).
-const NOW = Date.UTC(2026, 10, 23, 9, 0);
+// Lunes 23 nov 2037 (fecha lejana: la cola compara con la hora real de la base de datos), 10:00 en Madrid (09:00 UTC).
+const NOW = Date.UTC(2037, 10, 23, 9, 0); // lunes, lejos: la cola compara con la hora real de la base de datos
 const sch: Schedule = {
   timezone: 'Europe/Madrid',
   workStart: '09:00',
@@ -56,31 +56,31 @@ const sch: Schedule = {
 describe('avisos de encargo: cuándo salen (cálculo)', () => {
   it('hoy, sin fecha, vencido o urgente: al momento', () => {
     expect(deferredNoticeAt(sch, { dueDate: null, priority: 3 }, NOW)).toBeNull();
-    expect(deferredNoticeAt(sch, { dueDate: '2026-11-23', priority: 3 }, NOW)).toBeNull();
-    expect(deferredNoticeAt(sch, { dueDate: '2026-11-20', priority: 3 }, NOW)).toBeNull();
-    expect(deferredNoticeAt(sch, { dueDate: '2026-11-25', priority: 1 }, NOW)).toBeNull();
-    expect(deferredNoticeAt({ ...sch, active: false }, { dueDate: '2026-11-25', priority: 3 }, NOW)).toBeNull();
+    expect(deferredNoticeAt(sch, { dueDate: '2037-11-23', priority: 3 }, NOW)).toBeNull();
+    expect(deferredNoticeAt(sch, { dueDate: '2037-11-20', priority: 3 }, NOW)).toBeNull();
+    expect(deferredNoticeAt(sch, { dueDate: '2037-11-25', priority: 1 }, NOW)).toBeNull();
+    expect(deferredNoticeAt({ ...sch, active: false }, { dueDate: '2037-11-25', priority: 3 }, NOW)).toBeNull();
   });
 
   it('otro día: ese día a su hora de entrada, en su zona', () => {
     // Miércoles 25, 09:00 en Madrid = 08:00 UTC.
-    expect(deferredNoticeAt(sch, { dueDate: '2026-11-25', priority: 3 }, NOW)).toEqual({ at: Date.UTC(2026, 10, 25, 8, 0), day: '2026-11-25' });
+    expect(deferredNoticeAt(sch, { dueDate: '2037-11-25', priority: 3 }, NOW)).toEqual({ at: Date.UTC(2037, 10, 25, 8, 0), day: '2037-11-25' });
     // En Santo Domingo (UTC-4), las 09:00 son las 13:00 UTC.
-    expect(deferredNoticeAt({ ...sch, timezone: 'America/Santo_Domingo' }, { dueDate: '2026-11-25', priority: 2 }, NOW)?.at).toBe(Date.UTC(2026, 10, 25, 13, 0));
+    expect(deferredNoticeAt({ ...sch, timezone: 'America/Santo_Domingo' }, { dueDate: '2037-11-25', priority: 2 }, NOW)?.at).toBe(Date.UTC(2037, 10, 25, 13, 0));
   });
 
   it('si ese día no trabaja (fin de semana o ausencia), el último día laborable antes', () => {
     // Domingo 29 → viernes 27.
-    expect(deferredNoticeAt(sch, { dueDate: '2026-11-29', priority: 3 }, NOW)?.day).toBe('2026-11-27');
+    expect(deferredNoticeAt(sch, { dueDate: '2037-11-29', priority: 3 }, NOW)?.day).toBe('2037-11-27');
     // Ausente el miércoles 25 → martes 24.
-    expect(deferredNoticeAt({ ...sch, daysOff: new Set(['2026-11-25']) }, { dueDate: '2026-11-25', priority: 3 }, NOW)?.day).toBe('2026-11-24');
+    expect(deferredNoticeAt({ ...sch, daysOff: new Set(['2037-11-25']) }, { dueDate: '2037-11-25', priority: 3 }, NOW)?.day).toBe('2037-11-24');
     // Viernes, encargo para el domingo: el último laborable antes es hoy → al momento.
-    expect(deferredNoticeAt(sch, { dueDate: '2026-11-29', priority: 3 }, Date.UTC(2026, 10, 27, 9, 0))).toBeNull();
+    expect(deferredNoticeAt(sch, { dueDate: '2037-11-29', priority: 3 }, Date.UTC(2037, 10, 27, 9, 0))).toBeNull();
   });
 
   it('la hora de entrada cae en su silencio: sale en el minuto permitido más cercano', () => {
-    const r = deferredNoticeAt({ ...sch, quietStart: '08:00', quietEnd: '09:30' }, { dueDate: '2026-11-25', priority: 3 }, NOW);
-    expect(r?.at).toBe(Date.UTC(2026, 10, 25, 8, 30));
+    const r = deferredNoticeAt({ ...sch, quietStart: '08:00', quietEnd: '09:30' }, { dueDate: '2037-11-25', priority: 3 }, NOW);
+    expect(r?.at).toBe(Date.UTC(2037, 10, 25, 8, 30));
   });
 });
 
@@ -135,24 +135,24 @@ describe('avisos de encargo: circuito con la cola real', () => {
 
   it('para hoy: avisa al momento, con botones', async () => {
     const before = sentTo().length;
-    const { notice } = await newReq('Cambiar el teléfono', { dueDate: '2026-11-23' });
+    const { notice } = await newReq('Cambiar el teléfono', { dueDate: '2037-11-23' });
     expect(notice.status).toBe('enviado');
     expect(sentTo().length).toBe(before + 1);
   });
 
   it('urgente para otro día: avisa al momento', async () => {
     const before = sentTo().length;
-    const { notice } = await newReq('Arreglar la web caída', { dueDate: '2026-11-26', priority: 1 });
+    const { notice } = await newReq('Arreglar la web caída', { dueDate: '2037-11-26', priority: 1 });
     expect(notice.status).toBe('enviado');
     expect(sentTo().length).toBe(before + 1);
   });
 
   it('para otro día: no avisa ahora; sale ese día a su hora de entrada, con botones', async () => {
     const before = sentTo().length;
-    const { req, notice } = await newReq('Revisar el informe SEO', { dueDate: '2026-11-25' });
+    const { req, notice } = await newReq('Revisar el informe SEO', { dueDate: '2037-11-25' });
     expect(notice.status).toBe('pendiente');
-    expect(notice.nextAttemptAt.getTime()).toBe(Date.UTC(2026, 10, 25, 8, 0));
-    expect((notice.payload as { deferredTo?: string }).deferredTo).toBe('2026-11-25');
+    expect(notice.nextAttemptAt.getTime()).toBe(Date.UTC(2037, 10, 25, 8, 0));
+    expect((notice.payload as { deferredTo?: string }).deferredTo).toBe('2037-11-25');
     expect(sentTo().length).toBe(before);
 
     // Antes de su hora no sale.
@@ -160,7 +160,7 @@ describe('avisos de encargo: circuito con la cola real', () => {
     expect(sentTo().length).toBe(before);
 
     // Llega su hora (la cola compara con la hora de la base de datos): sale, con «Empezar ahora».
-    vi.setSystemTime(Date.UTC(2026, 10, 25, 8, 1));
+    vi.setSystemTime(Date.UTC(2037, 10, 25, 8, 1));
     await arrive(notice.id);
     await settle();
     const msgs = sentTo();
@@ -172,11 +172,11 @@ describe('avisos de encargo: circuito con la cola real', () => {
 
   it('si se empezó o cambió de persona antes de su día, ya no se manda', async () => {
     const before = sentTo().length;
-    const a = await newReq('Publicar el artículo', { dueDate: '2026-11-26' });
-    const b = await newReq('Subir las fotos', { dueDate: '2026-11-26' });
+    const a = await newReq('Publicar el artículo', { dueDate: '2037-11-26' });
+    const b = await newReq('Subir las fotos', { dueDate: '2037-11-26' });
     await db.update(opsRequests).set({ workStatus: 'en_curso' }).where(eq(opsRequests.id, a.req.id));
     await db.update(opsRequests).set({ assigneeClickupId: '900000078', assigneeName: 'Otra persona' }).where(eq(opsRequests.id, b.req.id));
-    vi.setSystemTime(Date.UTC(2026, 10, 26, 8, 1));
+    vi.setSystemTime(Date.UTC(2037, 10, 26, 8, 1));
     await arrive(a.notice.id);
     await arrive(b.notice.id);
     await settle();
@@ -194,7 +194,7 @@ describe('avisos de encargo: circuito con la cola real', () => {
     await db.insert(opsAutomations).values({ tenantId: h.tenant, key: 'new_request', enabled: true, config: { onlyToday: false } });
     invalidateAutomations(h.tenant);
     const before = sentTo().length;
-    const { notice } = await newReq('Montar la campaña', { dueDate: '2026-11-27' });
+    const { notice } = await newReq('Montar la campaña', { dueDate: '2037-11-27' });
     expect(notice.status).toBe('enviado');
     expect(sentTo().length).toBe(before + 1);
   });

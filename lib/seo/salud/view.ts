@@ -4,7 +4,8 @@ import 'server-only';
 // lo que pinta sale de la base (rastreo, hallazgos, propiedades de Search Console y ficha del cliente).
 import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { clientAssets, clientLocations, clients, jobs, projectAssets, projects } from '@/lib/db/schema';
+import { clientAssets, clientLocations, clients, jobs, projectAssets, projects, seoPlanItems } from '@/lib/db/schema';
+import { KIND_TECHNIQUE } from '@/lib/seo/plan/rules';
 import { listFindings, openFindingCounts, type Severity } from '@/lib/core/findings';
 import { gscPropertiesForProject } from '@/lib/core/gsc';
 import { latestProjectCrawl, projectWebUrl, SALUD_SOURCE } from '@/lib/seo/salud/audit';
@@ -25,6 +26,10 @@ export type SaludFinding = {
   evidence: Record<string, unknown>;
   firstSeen: string;
   dismissReason: string | null;
+  /** Propuesta del plan de mejora en la que va (pendiente de aprobar, aprobada con su encargo o hecha). */
+  plan: { title: string; status: string; requestUrl: string | null } | null;
+  /** Su tipo genera propuestas en el plan (si no, es solo informativo). */
+  plannable: boolean;
 };
 
 export type SaludView = {
@@ -45,7 +50,10 @@ export type SaludView = {
   jsonld: JsonLdOutput;
 };
 
-const toFinding = (f: Awaited<ReturnType<typeof listFindings>>[number]): SaludFinding => ({
+type PlanRef = SaludFinding['plan'];
+const toFinding = (f: Awaited<ReturnType<typeof listFindings>>[number], planOf: Map<string, NonNullable<PlanRef>> = new Map()): SaludFinding => ({
+  plan: planOf.get(f.id) ?? null,
+  plannable: Boolean(KIND_TECHNIQUE[f.kind]),
   id: f.id,
   kind: f.kind,
   severity: f.severity as Severity,
@@ -83,6 +91,14 @@ export async function getSaludView(tenantId: string, projectId: string, override
     .where(and(eq(jobs.tenantId, tenantId), eq(jobs.scopeId, projectId), inArray(jobs.kind, ['seo.salud.audit', 'seo.plan.regenerate'])))
     .orderBy(desc(jobs.createdAt))
     .limit(10);
+  // En qué propuesta del plan va cada hallazgo (para decir en Salud qué pasará con él).
+  const planRows = await db
+    .select({ title: seoPlanItems.title, status: seoPlanItems.status, requestUrl: seoPlanItems.requestUrl, findingIds: seoPlanItems.findingIds })
+    .from(seoPlanItems)
+    .where(and(eq(seoPlanItems.projectId, projectId), eq(seoPlanItems.tenantId, tenantId), inArray(seoPlanItems.status, ['pendiente', 'aprobada', 'hecha'])))
+    .orderBy(desc(seoPlanItems.updatedAt));
+  const planOf = new Map<string, NonNullable<PlanRef>>();
+  for (const r of planRows) for (const id of r.findingIds) if (!planOf.has(id)) planOf.set(id, { title: r.title, status: r.status, requestUrl: r.requestUrl });
   const auditPending = queue.some((j) => j.status === 'pendiente' || j.status === 'en_curso');
   const lastAudit = queue.find((j) => j.kind === 'seo.salud.audit' && (j.payload as { runId?: string } | null)?.runId === crawl?.id);
   const auditError = !auditPending && lastAudit?.status === 'fallido' ? (lastAudit.error ?? 'La auditoría falló') : null;
@@ -125,8 +141,8 @@ export async function getSaludView(tenantId: string, projectId: string, override
     auditPending,
     auditError,
     counts,
-    open: mine.filter((f) => f.status === 'abierto').map(toFinding),
-    decided: mine.filter((f) => f.status !== 'abierto').map(toFinding),
+    open: mine.filter((f) => f.status === 'abierto').map((f) => toFinding(f, planOf)),
+    decided: mine.filter((f) => f.status !== 'abierto').map((f) => toFinding(f)),
     gsc: gscProps.map((g) => ({ siteUrl: g.siteUrl, status: g.status, firstDate: g.firstDate, lastDate: g.lastDate, lastError: g.lastError })),
     jsonld
   };
