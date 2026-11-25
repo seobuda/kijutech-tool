@@ -86,7 +86,7 @@ export const SEO_SALUD_PROCESS_MAP: ProcessStep[] = [
     status: 'built',
     file: 'lib/seo/plan/plan.ts',
     when: 'Se rehace al terminar cada auditoría (trabajo «seo.plan.regenerate») o a mano. Se aprueba o descarta en la pantalla.',
-    ai: 'Nada: técnica, plantilla y horas por tipo de hallazgo (lib/seo/plan/rules.ts); prioridad por gravedad × páginas × impresiones. El juicio con IA (Sonnet) queda para cuando las reglas no basten.',
+    ai: 'Nada: técnica, plantilla y horas por tipo de hallazgo (lib/seo/plan/rules.ts); prioridad por gravedad × páginas × impacto (impresiones de las páginas o, si es mayor, de las búsquedas o temas afectados, desde el 26 nov) × valor de negocio cuando se sabe (servicio prioritario del cliente, más; lo que no le interesa, menos). El juicio con IA (Sonnet) queda para cuando las reglas no basten.',
     code: 'Lo aprobado o descartado no se vuelve a proponer salvo con hallazgos nuevos; una pendiente sin hallazgos detrás caduca. Respeta las horas al mes del proyecto (marca lo que no cabe). Aprobar reclama la propuesta (nunca dos encargos). Cuando el encargo se termina, la propuesta pasa a «hecha».',
     tables: ['seo_plan_items', 'findings', 'interventions', 'ops_requests']
   },
@@ -120,13 +120,13 @@ export const SEO_SALUD_PROCESS_MAP: ProcessStep[] = [
     lane: 'Mapa de palabras',
     name: 'Mapa de palabras sobre Search Console',
     description:
-      'Las búsquedas de 90 días agrupadas en temas: cada búsqueda va a la página que Google más le muestra (≥ 60 % de sus impresiones y posición ≤ 30); las que no tienen página clara se agrupan por significado (embeddings guardados y reutilizados entre proyectos, pedidos por tandas de 90; si el proveedor limita el uso, espera un minuto, agrupa con lo que tiene y repite en una hora hasta 6 veces) o, sin embeddings, por palabras, y piden «página nueva». Cifras, tendencia a 28 días, búsquedas de marca y parte de clics anónimos. Pantalla: Proyectos → Palabras.',
+      'Las búsquedas de 90 días agrupadas en temas: cada búsqueda va a la página que Google más le muestra (≥ 60 % de sus impresiones y posición ≤ 30); las que no tienen página clara se agrupan por significado (embeddings guardados y reutilizados entre proyectos, pedidos por tandas de 90; si el proveedor limita el uso, espera un minuto, agrupa con lo que tiene y repite en una hora hasta 6 veces) o, sin embeddings, por palabras. Desde el 26 nov 2026 cada tema dice su estado: «con página»; «sin página clara» si Google lo reparte pero una página ya sale en el top 20 (se refuerza esa); o «página nueva» si ninguna pasa de la 20. La marca nunca pide página nueva (va a la página que más ve). Cada tema lleva su valor de negocio (servicio del cliente y su prioridad, lo que dijo que no quiere y lo que más le interesa: expediente, ficha y memoria, alimentados por las Preguntas), los clics al mes que podría ganar, la comparación con el año anterior y sus meses fuertes (con un año de datos mensuales). La sección «Lo que más puede crecer» lista las oportunidades con su propuesta del plan. Cifras, tendencia a 28 días y parte de clics anónimos. Pantalla: Proyectos → Palabras.',
     status: 'built',
     file: 'lib/seo/mapa/mapa.ts',
     when: 'Al terminar cada auditoría y a mano (trabajo «seo.mapa.build»).',
     ai: 'Solo embeddings (si hay proveedor con saldo) para agrupar por significado; el nombre de cada tema es su búsqueda principal (sin IA de texto).',
-    code: 'Reglas puras en lib/seo/mapa/rules.ts. Un tema que una persona descarta o renombra lo sigue estando al rehacer el mapa. Canibalización: búsquedas con ≥ 2 páginas que se turnan el primer puesto semana a semana (≥ 2 cambios, top 20) → hallazgo «seo.cannibalization» (fuente «seo.mapa:gsc») y propuesta del plan.',
-    tables: ['seo_topics', 'seo_topic_queries', 'seo_text_embeddings', 'gsc_daily', 'gsc_queries', 'gsc_pages', 'gsc_daily_totals', 'findings']
+    code: 'Reglas puras en lib/seo/mapa/rules.ts. Un tema que una persona descarta o renombra lo sigue estando al rehacer el mapa. Canibalización: búsquedas con ≥ 2 páginas que se turnan el primer puesto semana a semana (≥ 2 cambios, top 20) → hallazgo «seo.cannibalization» (fuente «seo.mapa:gsc») y propuesta del plan. Oportunidades (misma fuente, al plan; nunca de la marca ni de lo que el cliente no quiere): «seo.topic_new_page» y «seo.topic_unclear_page» (temas con ≥ 300 impresiones; importantes desde 2.000), «seo.striking_distance» (búsquedas con página clara en posición 4-15 y ≥ 100 impresiones, las 60 con más clics posibles) y «seo.low_ctr» (páginas del top 10 con menos de la mitad del CTR normal, las 40 primeras). Clics posibles con una curva de CTR prudente. Descartar o recuperar un tema rehace el mapa.',
+    tables: ['seo_topics', 'seo_topic_queries', 'seo_text_embeddings', 'gsc_daily', 'gsc_queries', 'gsc_pages', 'gsc_daily_totals', 'gsc_monthly', 'findings', 'seo_dossier_facts', 'client_memory']
   },
   {
     id: 'seo-competencia',

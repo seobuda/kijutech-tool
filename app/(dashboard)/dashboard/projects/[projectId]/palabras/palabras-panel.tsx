@@ -1,10 +1,12 @@
 'use client';
 
 // Proyecto → Palabras: parte interactiva (rehacer el mapa, ver las búsquedas de cada tema, renombrar o descartar).
+// Desde el 26 nov 2026: «Lo que más puede crecer» (oportunidades que ya están en el plan), el estado de cada tema (con
+// página, sin página clara o página nueva; la marca aparte), su valor de negocio y su temporada.
 import { useEffect, useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ChevronDown, ChevronRight, Loader2, Pencil, RefreshCw, RotateCcw, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Loader2, Pencil, RefreshCw, RotateCcw, TrendingUp, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge, EmptyState, Section, StatCard } from '@/components/ui/page';
@@ -18,9 +20,46 @@ export type TopicView = {
   url: string | null;
   origin: string;
   status: string;
-  metrics: Record<string, number | null>;
+  metrics: Record<string, number | string | null>;
   queries: { query: string; clicks: number; impressions: number; position: number | null }[];
 };
+export type OpportunityView = {
+  id: string;
+  kind: string;
+  url: string | null;
+  query: string;
+  /** Clics al mes que se podrían ganar (estimación). */
+  gain: number;
+  valor: number | null;
+  servicio: string | null;
+  impressions: number | null;
+  position: number | null;
+  ctr: number | null;
+  ctrExpected: number | null;
+  plan: { title: string; status: string } | null;
+};
+
+const OPP_LABEL: Record<string, string> = {
+  'seo.topic_new_page': 'Crear página',
+  'seo.topic_unclear_page': 'Reforzar una página',
+  'seo.striking_distance': 'Al alcance del top 3',
+  'seo.low_ctr': 'Mejorar el título'
+};
+const PLAN_STATUS: Record<string, { label: string; tone: 'warning' | 'info' | 'success' }> = {
+  pendiente: { label: 'En el plan, por aprobar', tone: 'warning' },
+  aprobada: { label: 'Encargo creado', tone: 'info' },
+  hecha: { label: 'Encargo hecho', tone: 'success' }
+};
+/** Valor de negocio en palabras (lo calcula el mapa con lo que sabemos del cliente). */
+function valueBadge(valor: number | null | undefined, servicio?: string | null) {
+  if (valor == null) return null;
+  if (valor <= 0.5) return <Badge tone="danger">Puede no interesarle</Badge>;
+  if (valor >= 3) return <Badge tone="success">Servicio prioritario{servicio ? `: ${servicio}` : ''}</Badge>;
+  if (valor >= 2) return <Badge tone="info">Servicio{servicio ? `: ${servicio}` : ''}</Badge>;
+  return <Badge tone="neutral">No es un servicio suyo</Badge>;
+}
+const str = (v: unknown) => (typeof v === 'string' && v ? v : null);
+const numv = (v: unknown) => (typeof v === 'number' ? v : null);
 type Job = { status: string; result: Record<string, unknown> | null; error: string | null; finishedAt: string | null };
 export type CompetitorView = { id: string; name: string; domain: string | null; status: string; kind: string; source: string; evidence: Record<string, unknown> };
 type CompJob = { status: string; result: Record<string, unknown> | null; error: string | null };
@@ -35,11 +74,36 @@ const path = (u: string) => {
   }
 };
 
-export function PalabrasPanel({ projectId, topics, canEdit, hasGsc, job, cannibal, competitors, compJob, comparison }: { projectId: string; topics: TopicView[]; canEdit: boolean; hasGsc: boolean; job: Job | null; cannibal: number; competitors: CompetitorView[]; compJob: CompJob | null; comparison: CompetitorComparison }) {
+export function PalabrasPanel({
+  projectId,
+  topics,
+  canEdit,
+  hasGsc,
+  job,
+  cannibal,
+  opportunities,
+  clientId,
+  competitors,
+  compJob,
+  comparison
+}: {
+  projectId: string;
+  topics: TopicView[];
+  canEdit: boolean;
+  hasGsc: boolean;
+  job: Job | null;
+  cannibal: number;
+  opportunities: OpportunityView[];
+  clientId: string | null;
+  competitors: CompetitorView[];
+  compJob: CompJob | null;
+  comparison: CompetitorComparison;
+}) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
-  const [filter, setFilter] = useState<'todos' | 'pagina' | 'nueva' | 'descartado'>('todos');
+  const [filter, setFilter] = useState<'todos' | 'pagina' | 'clara' | 'nueva' | 'descartado'>('todos');
+  const [sort, setSort] = useState<'impresiones' | 'oportunidad'>('impresiones');
   const running = job?.status === 'pendiente' || job?.status === 'en_curso' || compJob?.status === 'pendiente' || compJob?.status === 'en_curso' || comparison.running;
 
   useEffect(() => {
@@ -57,12 +121,13 @@ export function PalabrasPanel({ projectId, topics, canEdit, hasGsc, job, canniba
       router.refresh();
     });
 
+  const state = (t: TopicView) => (t.url ? 'pagina' : t.metrics.candidata ? 'clara' : 'nueva');
   const shown = useMemo(
     () =>
-      topics.filter((t) =>
-        filter === 'descartado' ? t.status === 'descartado' : t.status === 'activo' && (filter === 'todos' || (filter === 'pagina' ? t.url !== null : t.url === null))
-      ),
-    [topics, filter]
+      topics
+        .filter((t) => (filter === 'descartado' ? t.status === 'descartado' : t.status === 'activo' && (filter === 'todos' || state(t) === filter)))
+        .sort((a, b) => (sort === 'oportunidad' ? (numv(b.metrics.oportunidad) ?? 0) - (numv(a.metrics.oportunidad) ?? 0) : 0)),
+    [topics, filter, sort]
   );
   const active = topics.filter((t) => t.status === 'activo');
   const r = job?.result ?? null;
@@ -101,12 +166,27 @@ export function PalabrasPanel({ projectId, topics, canEdit, hasGsc, job, canniba
         />
       ) : (
         <>
-          <div className="grid gap-3 sm:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
             <StatCard label="Temas" value={n(active.length)} />
-            <StatCard label="Con página" value={n(active.filter((t) => t.url).length)} />
-            <StatCard label="Piden página nueva" value={n(active.filter((t) => !t.url).length)} />
+            <StatCard label="Con página" value={n(active.filter((t) => state(t) === 'pagina').length)} />
+            <StatCard label="Sin página clara" value={n(active.filter((t) => state(t) === 'clara').length)} />
+            <StatCard label="Piden página nueva" value={n(active.filter((t) => state(t) === 'nueva').length)} />
             <StatCard label="Clics anónimos" value={typeof r?.anonymousPct === 'number' ? `${r.anonymousPct} %` : '—'} />
           </div>
+          {r && r.hasValueData === false && (
+            <div className="rounded-lg border border-info/30 bg-info-soft p-3 text-sm">
+              Para saber qué temas valen más para el negocio falta saber sus servicios, en orden de prioridad, y lo que no quiere atraer.{' '}
+              {clientId ? (
+                <Link href={`/dashboard/clientes/${clientId}?tab=preguntas`} className="font-medium underline underline-offset-2">
+                  Preguntárselo al cliente
+                </Link>
+              ) : (
+                'Vincula el proyecto a su cliente para poder preguntárselo.'
+              )}
+              . Mientras tanto, todo se ordena solo por clics posibles.
+            </div>
+          )}
+          <OpportunitiesSection projectId={projectId} items={opportunities} />
           {cannibal > 0 && (
             <div className="rounded-lg border border-warning/40 bg-warning-soft p-3 text-sm">
               {cannibal} búsqueda(s) con canibalización: Google alterna entre varias páginas.{' '}
@@ -118,14 +198,19 @@ export function PalabrasPanel({ projectId, topics, canEdit, hasGsc, job, canniba
           )}
           <Section
             title="Temas"
-            description={`Ordenados por impresiones (90 días). Agrupado ${r?.grouping === 'embeddings' ? 'por página y por significado' : 'por página y por palabras (sin embeddings disponibles)'}${Number(r?.pendingEmbeddings ?? 0) > 0 ? ` (${r?.pendingEmbeddings} búsquedas aún por palabras: el proveedor de embeddings limitó el uso; se completa solo en las próximas horas)` : ''}. «Clics anónimos» es la parte de los clics cuya búsqueda Google no enseña.`}
+            description={`Agrupado ${r?.grouping === 'embeddings' ? 'por página y por significado' : 'por página y por palabras (sin embeddings disponibles)'}${Number(r?.pendingEmbeddings ?? 0) > 0 ? ` (${r?.pendingEmbeddings} búsquedas aún por palabras: el proveedor de embeddings limitó el uso; se completa solo en las próximas horas)` : ''}. «Sin página clara»: Google reparte el tema entre varias páginas y una ya sale en el top 20 (se refuerza esa). «Página nueva»: ninguna pasa de la 20. «Clics anónimos» es la parte de los clics cuya búsqueda Google no enseña.`}
             actions={
               <>
                 <select className="h-8 rounded-md border bg-background px-2 text-sm" value={filter} onChange={(e) => setFilter(e.target.value as typeof filter)} aria-label="Filtrar temas">
                   <option value="todos">Todos</option>
                   <option value="pagina">Con página</option>
+                  <option value="clara">Sin página clara</option>
                   <option value="nueva">Página nueva</option>
                   <option value="descartado">Descartados</option>
+                </select>
+                <select className="h-8 rounded-md border bg-background px-2 text-sm" value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} aria-label="Ordenar temas">
+                  <option value="impresiones">Por impresiones</option>
+                  <option value="oportunidad">Por clics posibles</option>
                 </select>
                 {rebuild}
               </>
@@ -244,7 +329,7 @@ function TopicRow({
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(topic.name);
   const m = topic.metrics;
-  const trend = m.tendenciaPct;
+  const trend = numv(m.tendenciaPct);
   return (
     <li className="py-3 first:pt-0 last:pb-0">
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -253,10 +338,22 @@ function TopicRow({
           <span className="min-w-0">
             <span className="block text-sm font-medium">{topic.name}</span>
             <span className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-              {topic.url ? <Badge tone="outline">{path(topic.url)}</Badge> : <Badge tone="warning">Página nueva</Badge>}
-              <span>{n(m.clics)} clics</span>·<span>{n(m.impresiones)} impresiones</span>·<span>posición {m.posicion ?? '—'}</span>·<span>{n(m.consultas)} búsquedas</span>
+              {m.esMarca ? (
+                <Badge tone="neutral">Marca{topic.url ? ` · ${path(topic.url)}` : ''}</Badge>
+              ) : topic.url ? (
+                <Badge tone="outline">{path(topic.url)}</Badge>
+              ) : str(m.candidata) ? (
+                <Badge tone="info">Sin página clara · reforzar {path(str(m.candidata)!)}{numv(m.candidataPos) ? ` (posición ${m.candidataPos})` : ''}</Badge>
+              ) : (
+                <Badge tone="warning">Página nueva</Badge>
+              )}
+              <span>{n(numv(m.clics))} clics</span>·<span>{n(numv(m.impresiones))} impresiones</span>·<span>posición {m.posicion ?? '—'}</span>·<span>{n(numv(m.consultas))} búsquedas</span>
               {trend != null && <Badge tone={trend >= 0 ? 'success' : 'danger'}>{trend > 0 ? '+' : ''}{trend} % clics (28 días)</Badge>}
-              {(m.marca ?? 0) > 0 && <Badge tone="neutral">marca</Badge>}
+              {numv(m.interanualPct) != null && <Badge tone={numv(m.interanualPct)! >= 0 ? 'success' : 'danger'}>{numv(m.interanualPct)! > 0 ? '+' : ''}{m.interanualPct} % frente al año pasado</Badge>}
+              {str(m.mesesFuertes) && <Badge tone="neutral">Temporada alta: {m.mesesFuertes}</Badge>}
+              {!m.esMarca && (numv(m.marca) ?? 0) > 0 && <Badge tone="neutral">con búsquedas de marca</Badge>}
+              {(numv(m.oportunidad) ?? 0) > 0 && <Badge tone="brand">≈ +{n(numv(m.oportunidad))} clics/mes posibles</Badge>}
+              {valueBadge(numv(m.valor), str(m.servicio))}
             </span>
           </span>
         </button>
@@ -281,6 +378,7 @@ function TopicRow({
           </span>
         )}
       </div>
+      {str(m.aviso) && <p className="mt-1 pl-6 text-xs text-destructive">{m.aviso}</p>}
       {editing && (
         <div className="mt-2 flex flex-wrap gap-2">
           <Input className="h-9 max-w-md" value={name} onChange={(e) => setName(e.target.value)} />
@@ -408,6 +506,63 @@ function ComparisonSection({
       </div>
       {!data.client && <p className="mt-3 text-sm text-muted-foreground">Falta el rastreo de la web del cliente: pasa la auditoría en Salud técnica para compararla.</p>}
       {data.services.length > 0 && <p className="mt-3 text-xs text-muted-foreground">Servicios comparados: {data.services.join(' · ')}. Una página cuenta si todas las palabras del servicio están en su dirección, su título o su H1.</p>}
+    </Section>
+  );
+}
+
+/** Las oportunidades del mapa en orden de clics posibles (y valor), cada una con su propuesta en el plan. */
+function OpportunitiesSection({ projectId, items }: { projectId: string; items: OpportunityView[] }) {
+  const [all, setAll] = useState(false);
+  if (!items.length) return null;
+  const total = items.reduce((s2, o) => s2 + o.gain, 0);
+  const list = all ? items : items.slice(0, 10);
+  return (
+    <Section
+      title={
+        <span className="inline-flex items-center gap-2">
+          <TrendingUp className="size-4" />
+          Lo que más puede crecer
+        </span>
+      }
+      description={`${items.length} oportunidades en las búsquedas que ya tiene la web: en total, unos ${n(total)} clics más al mes si se hiciera todo (estimación prudente con el CTR normal de cada posición). Ya están en el plan de mejora, agrupadas en propuestas: al aprobarlas se crea el encargo.`}
+      actions={
+        <Button asChild size="sm" variant="outline">
+          <Link href={`/dashboard/projects/${projectId}/plan`}>Ir al plan</Link>
+        </Button>
+      }
+    >
+      <ul className="divide-y">
+        {list.map((o) => (
+          <li key={o.id} className="flex flex-wrap items-start justify-between gap-2 py-2.5 first:pt-0 last:pb-0">
+            <div className="min-w-0 flex-1 space-y-1">
+              <p className="text-sm">
+                <span className="font-medium">{o.query}</span>
+                {o.url && <span className="text-muted-foreground"> · {path(o.url)}</span>}
+              </p>
+              <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                <Badge tone="outline">{OPP_LABEL[o.kind] ?? o.kind}</Badge>
+                {o.position != null && <span>posición {o.position}</span>}
+                {o.impressions != null && <span>· {n(o.impressions)} impresiones</span>}
+                {o.ctr != null && o.ctrExpected != null && <span>· CTR {o.ctr} % (lo normal: {o.ctrExpected} %)</span>}
+                {valueBadge(o.valor, o.servicio)}
+                {o.plan ? (
+                  <Badge tone={PLAN_STATUS[o.plan.status]?.tone ?? 'neutral'}>
+                    {PLAN_STATUS[o.plan.status]?.label ?? o.plan.status}: {o.plan.title}
+                  </Badge>
+                ) : (
+                  <span>· entrará en el plan en la próxima tanda</span>
+                )}
+              </p>
+            </div>
+            <Badge tone="brand">≈ +{n(o.gain)} clics/mes</Badge>
+          </li>
+        ))}
+      </ul>
+      {items.length > 10 && (
+        <Button size="sm" variant="ghost" className="mt-2" onClick={() => setAll((v) => !v)}>
+          {all ? 'Ver solo las 10 primeras' : `Ver las ${items.length}`}
+        </Button>
+      )}
     </Section>
   );
 }

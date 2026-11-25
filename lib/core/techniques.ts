@@ -30,6 +30,10 @@ export const TECHNIQUES: Technique[] = [
   { key: 'contenido_actualizado', domain: 'seo', label: 'Actualizar contenido existente', metric: 'clics', windowDays: 56 },
   { key: 'nueva_landing_servicio', domain: 'seo', label: 'Crear página por servicio', metric: 'impresiones', windowDays: 90 },
   { key: 'nueva_landing_zona', domain: 'seo', label: 'Crear página por zona', metric: 'impresiones', windowDays: 90 },
+  // Oportunidades del mapa de palabras (26 nov 2026).
+  { key: 'nueva_pagina_tema', domain: 'seo', label: 'Crear página para un tema que no tiene ninguna', metric: 'clics', windowDays: 90 },
+  { key: 'reforzar_pagina_tema', domain: 'seo', label: 'Elegir y reforzar la página de un tema repartido', metric: 'clics', windowDays: 56 },
+  { key: 'optimizar_al_alcance', domain: 'seo', label: 'Subir al top 3 búsquedas al alcance (posición 4-15)', metric: 'clics', windowDays: 42 },
   // Estructura
   { key: 'enlazado_interno', domain: 'seo', label: 'Mejorar el enlazado interno', metric: 'posicion', windowDays: 42 },
   { key: 'arquitectura', domain: 'seo', label: 'Reorganizar la arquitectura de la web', metric: 'clics', windowDays: 90 },

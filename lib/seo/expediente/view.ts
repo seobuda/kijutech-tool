@@ -5,6 +5,7 @@ import { and, desc, eq, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { clients, jobs, projects, seoDossierFacts } from '@/lib/db/schema';
 import { DOSSIER_FIELDS, identity, scoreFacts, type FactSource, type Identity } from '@/lib/seo/expediente/rules';
+import { gscPropertiesForProject } from '@/lib/core/gsc';
 
 export type DossierFactView = {
   id: string;
@@ -42,6 +43,13 @@ export async function getDossierView(tenantId: string, projectId: string): Promi
       .from(jobs)
       .where(and(eq(jobs.tenantId, tenantId), eq(jobs.kind, 'seo.expediente.collect'), eq(jobs.scopeId, projectId), sql`${jobs.status} IN ('pendiente', 'en_curso')`))
   ]);
+  // «Datos en Search Console desde» se guardó al reunir el expediente, pero la descarga del histórico sigue después y
+  // la fecha retrocede: se enseña la de ahora (la misma que ve Salud técnica).
+  const gscFirst = (await gscPropertiesForProject(tenantId, projectId).catch(() => []))
+    .map((g) => g.firstDate)
+    .filter((d): d is string => Boolean(d))
+    .sort()[0];
+  if (gscFirst) for (const r of rows) if (r.field === 'datos_search_console' && r.source === 'gsc') r.value = gscFirst;
   const live = rows.filter((r) => r.status !== 'descartado');
   const scored = scoreFacts(live.map((r) => ({ field: r.field, value: r.value, source: r.source as FactSource, id: r.id })));
   const extra = new Map(scored.map((s) => [s.id, s]));

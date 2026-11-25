@@ -5,7 +5,17 @@
 // mucho BATCH páginas (las que más se ven primero): un encargo manejable; el resto sale en la siguiente.
 
 export type PlanSeverity = 'critico' | 'importante' | 'aviso' | 'info';
-export type PlanFinding = { id: string; kind: string; severity: PlanSeverity; url: string | null; query?: string | null };
+export type PlanFinding = {
+  id: string;
+  kind: string;
+  severity: PlanSeverity;
+  url: string | null;
+  query?: string | null;
+  /** Impresiones de lo que afecta (búsqueda o tema), cuando no es una página entera (90 días). */
+  impressions?: number | null;
+  /** Valor de negocio del tema (0,5-3) según lo que sabemos del cliente; null = no se sabe. */
+  valor?: number | null;
+};
 export type PlanHypothesis = { metric?: string; direction?: 'sube' | 'baja'; magnitudePct?: number; windowDays?: number };
 export type PlanDraft = {
   technique: string;
@@ -45,6 +55,9 @@ const RECIPES: Record<string, Recipe> = {
   canibalizacion_resuelta: { technique: 'canibalizacion_resuelta', title: (n) => `Resolver la canibalización de ${n} página(s)`, how: 'Para cada búsqueda afectada (en «Qué ha encontrado»), Google alterna entre varias páginas. Elige la buena: une el contenido de las demás en ella y redirígelas (301), o diferencia cada página para una intención distinta y enlaza a la buena con el texto de la búsqueda.', minutesPerUrl: 30, baseHours: 0.5, metric: 'posicion', windowDays: 42 },
   nap_coherente: { technique: 'nap_coherente', title: () => 'Unificar nombre, dirección y teléfono', how: 'El nombre, la dirección y el teléfono deben ser idénticos en la web (pie, contacto y datos estructurados), la ficha de Google y los directorios. Confirma con el cliente cuáles son los buenos, corrige la web y actualiza la ficha del cliente.', minutesPerUrl: 0, baseHours: 1, metric: 'impresiones', windowDays: 56 },
   nueva_landing_servicio: { technique: 'nueva_landing_servicio', title: (n) => `Crear la página de ${n} servicio(s)`, how: 'Cada servicio necesita su propia página: qué incluye, para quién, cómo se trabaja, zona, preguntas frecuentes y llamada a la acción. Enlázala desde el menú y desde la portada.', minutesPerUrl: 0, baseHours: 0, minutesPerFinding: 240, metric: 'impresiones', windowDays: 90 },
+  nueva_pagina_tema: { technique: 'nueva_pagina_tema', title: (n) => (n === 1 ? 'Crear una página para búsquedas que no tienen ninguna' : `Crear ${n} páginas para búsquedas que no tienen ninguna`), how: 'Google ya muestra la web para estas búsquedas, pero ninguna página trata el tema. Crea una página por tema, pensada para la búsqueda principal (en el título, el H1 y la URL): qué ofreces, para quién, zona, precio orientativo o proceso, preguntas frecuentes y llamada a la acción. Enlázala desde el menú o desde las páginas relacionadas.', minutesPerUrl: 0, baseHours: 0, minutesPerFinding: 240, metric: 'clics', windowDays: 90 },
+  reforzar_pagina_tema: { technique: 'reforzar_pagina_tema', title: (n) => (n === 1 ? 'Elegir y reforzar la página de un tema que Google reparte' : `Elegir y reforzar la página de ${n} temas que Google reparte`), how: 'Para cada tema, Google reparte las impresiones entre varias páginas. Usa la página indicada (ya sale en el top 20): pon la búsqueda principal en su título y H1, amplía la parte que responde a esas búsquedas y enlázala desde las otras páginas con ese texto. Si las otras dicen lo mismo, únelas a esta con una 301.', minutesPerUrl: 90, baseHours: 0, metric: 'clics', windowDays: 56 },
+  optimizar_al_alcance: { technique: 'optimizar_al_alcance', title: (n) => (n === 1 ? 'Subir al top 3 una página que ya está cerca' : `Subir al top 3 ${n} páginas que ya están cerca`), how: 'Estas páginas salen entre la posición 4 y la 15 para las búsquedas indicadas. Para cada una: lleva la búsqueda al título y al H1 si no está, añade o amplía la sección que la responde, revisa que el contenido sea mejor que el de los tres primeros y enlázala desde otras páginas con el texto de la búsqueda.', minutesPerUrl: 30, baseHours: 0.5, metric: 'clics', windowDays: 42 },
   indexacion_corregida: { technique: 'indexacion_corregida', title: (n) => `Revisar ${n} página(s) que salen en Google y no encontramos en la web`, how: 'Salen en Search Console pero el rastreo no llega a ellas: enlázalas si deben existir o redirígelas si sobran.', minutesPerUrl: 5, baseHours: 0.5, metric: 'impresiones', windowDays: 42 }
 };
 
@@ -86,7 +99,11 @@ export const KIND_TECHNIQUE: Record<string, string> = {
   'seo.nap_phone_missing': 'nap_coherente',
   'seo.nap_address_mismatch': 'nap_coherente',
   'seo.service_page_missing': 'nueva_landing_servicio',
-  'seo.cannibalization': 'canibalizacion_resuelta'
+  'seo.cannibalization': 'canibalizacion_resuelta',
+  'seo.topic_new_page': 'nueva_pagina_tema',
+  'seo.topic_unclear_page': 'reforzar_pagina_tema',
+  'seo.striking_distance': 'optimizar_al_alcance',
+  'seo.low_ctr': 'titulo_reescrito'
 };
 
 const SEV_WEIGHT: Record<PlanSeverity, number> = { critico: 8, importante: 4, aviso: 2, info: 1 };
@@ -116,14 +133,24 @@ export function buildPlan(findings: PlanFinding[], impressions: Map<string, numb
     const inBatch = new Set(batch);
     const chosen = list.filter((f) => !f.url || inBatch.has(f.url));
     const severity = SEV_ORDER.find((s) => chosen.some((f) => f.severity === s)) ?? 'info';
-    const impr = batch.reduce((s, u) => s + (urlImpr.get(u) ?? 0), 0);
+    // Impacto: lo que se ven esas páginas o, si es mayor, lo que se ven las búsquedas o temas afectados (una canibalización
+    // o un tema sin página pesan por sus búsquedas, no por una página concreta).
+    const pageImpr = batch.reduce((s, u) => s + (urlImpr.get(u) ?? 0), 0);
+    const findingImpr = chosen.reduce((s, f) => s + (f.impressions ?? 0), 0);
+    const impr = Math.max(pageImpr, findingImpr);
     const pages = batch.length;
-    const score = round1(SEV_WEIGHT[severity] * (1 + Math.log10(1 + Math.max(pages, 1))) * (1 + Math.log10(1 + impr) / 2));
+    // Valor de negocio (si se sabe): un servicio prioritario del cliente pesa más; lo que no le interesa, menos.
+    const vals = chosen.map((f) => f.valor).filter((v): v is number => typeof v === 'number');
+    const valueFactor = vals.length ? 0.6 + 0.2 * (vals.reduce((a, b) => a + b, 0) / vals.length) : 1;
+    const score = round1(SEV_WEIGHT[severity] * (1 + Math.log10(1 + Math.max(pages, 1))) * (1 + Math.log10(1 + impr) / 2) * valueFactor);
     // Lo importante nunca baja de media: un 404 en dos páginas no es «baja» aunque se vea poco.
     const priority: 1 | 2 | 3 = severity === 'critico' || score >= 14 ? 1 : severity === 'importante' || score >= 5 ? 2 : 3;
     const perFinding = r.minutesPerFinding ? (r.minutesPerFinding * chosen.filter((f) => !f.url).length) / 60 : 0;
     const estHours = Math.min(40, Math.max(0.5, round1(r.baseHours + (r.minutesPerUrl * pages) / 60 + perFinding)));
-    const queries = chosen.map((f) => f.query).filter((q): q is string => Boolean(q));
+    const queries = chosen
+      .filter((f) => f.query)
+      .sort((a, b) => (b.impressions ?? 0) - (a.impressions ?? 0))
+      .map((f) => `${f.query}${f.impressions ? ` (${f.impressions} impresiones en 90 días)` : ''}`);
     const kinds: Record<string, number> = {};
     for (const f of chosen) kinds[f.kind] = (kinds[f.kind] ?? 0) + 1;
     const rest = ranked.length - batch.length;

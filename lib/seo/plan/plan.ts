@@ -57,7 +57,7 @@ export async function regeneratePlan(tenantId: string, projectId: string): Promi
   await markDone(tenantId, projectId);
   const [open, items, impressions] = await Promise.all([
     db
-      .select({ id: findings.id, kind: findings.kind, severity: findings.severity, url: findings.url, query: findings.query })
+      .select({ id: findings.id, kind: findings.kind, severity: findings.severity, url: findings.url, query: findings.query, evidence: findings.evidence })
       .from(findings)
       .where(and(eq(findings.projectId, projectId), eq(findings.tenantId, tenantId), inArray(findings.source, [SALUD_SOURCE, LOCAL_SOURCE, 'seo.mapa:gsc']), eq(findings.status, 'abierto'))),
     db.select().from(seoPlanItems).where(and(eq(seoPlanItems.projectId, projectId), eq(seoPlanItems.tenantId, tenantId))),
@@ -65,7 +65,14 @@ export async function regeneratePlan(tenantId: string, projectId: string): Promi
   ]);
   // Lo que ya está en una propuesta decidida (aprobada, hecha o descartada) no se vuelve a proponer.
   const covered = new Set(items.filter((i) => i.status !== 'pendiente' && i.status !== 'caducada').flatMap((i) => i.findingIds));
-  const free: PlanFinding[] = open.filter((f) => !covered.has(f.id)).map((f) => ({ ...f, severity: f.severity as PlanSeverity }));
+  // Las búsquedas y temas del mapa traen sus impresiones y su valor de negocio en la evidencia.
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+  const free: PlanFinding[] = open
+    .filter((f) => !covered.has(f.id))
+    .map((f) => {
+      const e = (f.evidence ?? {}) as Record<string, unknown>;
+      return { id: f.id, kind: f.kind, url: f.url, query: f.query, severity: f.severity as PlanSeverity, impressions: num(e.impresiones), valor: num(e.valor) };
+    });
   const drafts = buildPlan(free, impressions, project.monthlyHours != null ? Number(project.monthlyHours) : null, LABELS);
 
   let created = 0;

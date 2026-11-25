@@ -63,7 +63,12 @@ export const LOCAL_KINDS: SaludKind[] = [
 
 /** Mapa de palabras (fuente «seo.mapa:gsc», Hito 2): se calculan con el detalle de Search Console, no con el rastreo. */
 export const MAPA_KINDS: SaludKind[] = [
-  { kind: 'seo.cannibalization', group: 'search_console', title: 'Canibalización: dos páginas se turnan una búsqueda', explain: 'Para la misma búsqueda, Google alterna semana a semana entre dos o más páginas de la web: ninguna se consolida y las dos posicionan peor. Hay que elegir una (unir contenidos y redirigir, o diferenciar claramente cada página y enlazar a la buena).', severityDefault: 'aviso', ruleVersion: 1 }
+  { kind: 'seo.cannibalization', group: 'search_console', title: 'Canibalización: dos páginas se turnan una búsqueda', explain: 'Para la misma búsqueda, Google alterna semana a semana entre dos o más páginas de la web: ninguna se consolida y las dos posicionan peor. Hay que elegir una (unir contenidos y redirigir, o diferenciar claramente cada página y enlazar a la buena).', severityDefault: 'aviso', ruleVersion: 1 },
+  // Oportunidades del mapa de palabras (26 nov 2026): no son errores, son trabajo que puede traer clics.
+  { kind: 'seo.topic_new_page', group: 'search_console', title: 'Búsquedas sin página: crear una nueva', explain: 'Google ya muestra la web para estas búsquedas, pero ninguna página trata el tema ni pasa de la posición 20. Una página dedicada al tema puede traer clics nuevos.', severityDefault: 'aviso', ruleVersion: 1 },
+  { kind: 'seo.topic_unclear_page', group: 'search_console', title: 'Búsquedas sin página clara: elegir y reforzar una', explain: 'Para estas búsquedas Google reparte las impresiones entre varias páginas y ninguna se las lleva. Hay una que ya sale en el top 20: conviene reforzarla (título, H1, contenido y enlaces internos) en vez de crear otra.', severityDefault: 'aviso', ruleVersion: 1 },
+  { kind: 'seo.striking_distance', group: 'search_console', title: 'Búsquedas al alcance (posición 4-15)', explain: 'La web ya sale para estas búsquedas cerca del top 3. Con poco trabajo en su página (título, H1, una sección que responda a la búsqueda y enlaces internos) pueden subir y traer bastantes más clics.', severityDefault: 'aviso', ruleVersion: 1 },
+  { kind: 'seo.low_ctr', group: 'search_console', title: 'Páginas con pocos clics para su posición', explain: 'La página sale en el top 10 pero recibe muchos menos clics de lo normal en esa posición: el título o la descripción no atraen. A veces es un resumen de IA de Google que responde antes; aun así, mejorar el título suele ayudar.', severityDefault: 'aviso', ruleVersion: 1 }
 ];
 
 export const SEO_KINDS: SaludKind[] = [...SALUD_KINDS, ...LOCAL_KINDS, ...MAPA_KINDS];
