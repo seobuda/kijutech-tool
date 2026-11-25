@@ -63,8 +63,8 @@ import { madridNoonMs } from '@/lib/operaciones/clickup';
 import { enqueueNewRequestNotification, processNotifications } from '@/lib/operaciones/notifications';
 import { runWatch } from '@/lib/operaciones/watch';
 
-// Lunes 23 nov 2026, 10:00 en Madrid.
-const NOW = Date.UTC(2026, 10, 23, 9, 0);
+// Lunes 23 nov 2037 (fecha lejana: la cola compara con la hora real de la base de datos), 10:00 en Madrid.
+const NOW = Date.UTC(2037, 10, 23, 9, 0);
 const SLUG = 'seg-test-clickup-cambios';
 const ANA = '900000081';
 const BEA = '900000082';
@@ -103,7 +103,7 @@ function task(id: string, o: Partial<WatchTask> & { assigneeIds?: string[] } = {
     createdMs: NOW - 3600_000,
     updatedMs: ++stamp,
     closedMs: null,
-    dueMs: madridNoonMs('2026-11-25'),
+    dueMs: madridNoonMs('2037-11-25'),
     priority: 3,
     dropdowns: { F1: { optionId: 'o1', label: 'Athos', fieldName: 'Cliente' } },
     ...rest
@@ -186,7 +186,7 @@ describe('cambios hechos en ClickUp llegan al encargo', () => {
       status: 'creado',
       assigneeClickupId: ANA,
       assigneeName: 'Ana',
-      dueDate: '2026-11-25',
+      dueDate: '2037-11-25',
       priority: 3,
       clientOptionId: 'o1',
       clientName: 'Athos'
@@ -213,17 +213,17 @@ describe('cambios hechos en ClickUp llegan al encargo', () => {
 
   it('fecha movida: el aviso programado cambia de día; movida a hoy, sale ya', async () => {
     const r = await newReq('cc-fecha');
-    await watch(task('cc-fecha', { dueMs: madridNoonMs('2026-11-27') }));
-    expect((await reqOf(r.id)).dueDate).toBe('2026-11-27');
+    await watch(task('cc-fecha', { dueMs: madridNoonMs('2037-11-27') }));
+    expect((await reqOf(r.id)).dueDate).toBe('2037-11-27');
     let [n] = await noticesOf(r.id);
     expect(n.status).toBe('pendiente');
-    expect(n.nextAttemptAt.getTime()).toBe(Date.UTC(2026, 10, 27, 8, 0));
-    expect((n.payload as { deferredTo?: string }).deferredTo).toBe('2026-11-27');
+    expect(n.nextAttemptAt.getTime()).toBe(Date.UTC(2037, 10, 27, 8, 0));
+    expect((n.payload as { deferredTo?: string }).deferredTo).toBe('2037-11-27');
     const [ev] = await eventsOf(r.id, 'clickup_updated');
-    expect(ev.payload).toMatchObject({ fecha: { from: '2026-11-25', to: '2026-11-27' } });
+    expect(ev.payload).toMatchObject({ fecha: { from: '2037-11-25', to: '2037-11-27' } });
 
     const before = sentTo(ANA).length;
-    await watch(task('cc-fecha', { dueMs: madridNoonMs('2026-11-23') }));
+    await watch(task('cc-fecha', { dueMs: madridNoonMs('2037-11-23') }));
     [n] = await noticesOf(r.id);
     expect(n.status).toBe('enviado');
     expect(sentTo(ANA).length).toBe(before + 1);
@@ -239,14 +239,14 @@ describe('cambios hechos en ClickUp llegan al encargo', () => {
   });
 
   it('título, descripción y cliente cambiados: se copian y el aviso enviado se reescribe', async () => {
-    const r = await newReq('cc-texto', { dueDate: '2026-11-23' }); // para hoy: el aviso sale al momento
+    const r = await newReq('cc-texto', { dueDate: '2037-11-23' }); // para hoy: el aviso sale al momento
     let [n] = await noticesOf(r.id);
     expect(n.status).toBe('enviado');
     h.sent.length = 0;
     await watch(
       task('cc-texto', {
         name: 'Revisar y enviar el informe SEO de noviembre',
-        dueMs: madridNoonMs('2026-11-23'),
+        dueMs: madridNoonMs('2037-11-23'),
         markdown: '## Resultado esperado\n\nInforme enviado al cliente antes de las 14:00',
         description: 'Resultado esperado\nInforme enviado al cliente antes de las 14:00',
         dropdowns: { F1: { optionId: 'o2', label: 'Bravo', fieldName: 'Cliente' } }
@@ -273,27 +273,27 @@ describe('cambios hechos en ClickUp llegan al encargo', () => {
   });
 
   it('alguien añadido sin empezar: entra como candidato y se le avisa; quitado: sale', async () => {
-    const r = await newReq('cc-mas', { dueDate: '2026-11-23' });
-    await watch(task('cc-mas', { dueMs: madridNoonMs('2026-11-23') })); // primera lectura: solo Ana
+    const r = await newReq('cc-mas', { dueDate: '2037-11-23' });
+    await watch(task('cc-mas', { dueMs: madridNoonMs('2037-11-23') })); // primera lectura: solo Ana
     const before = sentTo(BEA).length;
-    await watch(task('cc-mas', { dueMs: madridNoonMs('2026-11-23'), assigneeIds: [ANA, BEA] }));
+    await watch(task('cc-mas', { dueMs: madridNoonMs('2037-11-23'), assigneeIds: [ANA, BEA] }));
     let req = await reqOf(r.id);
     expect(req.candidateIds).toEqual([ANA, BEA]);
     expect(req.assigneeClickupId).toBe(ANA);
     expect(sentTo(BEA).length).toBe(before + 1);
     expect(String(sentTo(BEA).at(-1)!.params.text)).toContain('añadido en ClickUp');
 
-    await watch(task('cc-mas', { dueMs: madridNoonMs('2026-11-23'), assigneeIds: [ANA] }));
+    await watch(task('cc-mas', { dueMs: madridNoonMs('2037-11-23'), assigneeIds: [ANA] }));
     req = await reqOf(r.id);
     expect(req.candidateIds).toEqual([ANA]);
   });
 
   it('se quita a quien lo estaba haciendo: vuelve a «asignado» para quien queda y se le avisa', async () => {
-    const r = await newReq('cc-quita', { dueDate: '2026-11-23', candidateIds: [ANA, BEA] });
+    const r = await newReq('cc-quita', { dueDate: '2037-11-23', candidateIds: [ANA, BEA] });
     await db.update(opsRequests).set({ workStatus: 'en_curso' }).where(eq(opsRequests.id, r.id));
-    await watch(task('cc-quita', { dueMs: madridNoonMs('2026-11-23'), assigneeIds: [ANA, BEA] }));
+    await watch(task('cc-quita', { dueMs: madridNoonMs('2037-11-23'), assigneeIds: [ANA, BEA] }));
     const before = sentTo(BEA).length;
-    await watch(task('cc-quita', { dueMs: madridNoonMs('2026-11-23'), assigneeIds: [BEA] }));
+    await watch(task('cc-quita', { dueMs: madridNoonMs('2037-11-23'), assigneeIds: [BEA] }));
     const req = await reqOf(r.id);
     expect(req.workStatus).toBe('asignado');
     expect(req.assigneeClickupId).toBe(BEA);
@@ -302,9 +302,9 @@ describe('cambios hechos en ClickUp llegan al encargo', () => {
   });
 
   it('pasada a alguien sin Telegram: figura como responsable, sin aviso', async () => {
-    const r = await newReq('cc-carlos', { dueDate: '2026-11-23' });
+    const r = await newReq('cc-carlos', { dueDate: '2037-11-23' });
     const total = h.sent.filter((s) => s.method === 'sendMessage').length;
-    await watch(task('cc-carlos', { dueMs: madridNoonMs('2026-11-23'), assigneeIds: [CARLOS] }));
+    await watch(task('cc-carlos', { dueMs: madridNoonMs('2037-11-23'), assigneeIds: [CARLOS] }));
     const req = await reqOf(r.id);
     expect(req.assigneeClickupId).toBe(CARLOS);
     expect(req.assigneeName).toBe('Carlos');

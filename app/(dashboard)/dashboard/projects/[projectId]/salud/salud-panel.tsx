@@ -142,7 +142,17 @@ export function SaludPanel({ view, canEdit, businessType, businessTypes }: { vie
       {view.crawl && (
         <Section
           title="Hallazgos abiertos"
-          description={total ? 'Ordenados por gravedad. Descarta lo que no sea un problema real o acepta lo que se deja así a propósito: no vuelve a salir.' : undefined}
+          description={
+            total ? (
+              <>
+                Ordenados por gravedad. <strong>Lo que hay que arreglar no se toca aquí:</strong> pasa solo al{' '}
+                <Link href={`/dashboard/projects/${view.project.id}/plan`} className="underline underline-offset-2">
+                  Plan de mejora
+                </Link>
+                , agrupado en propuestas; al aprobar una se crea el encargo para el equipo. Los botones de cada caso son solo para quitar lo que no se va a hacer: «Dejar así» (lo sabemos y es a propósito) o «No es un problema» (falso aviso). Lo quitado no vuelve a salir.
+              </>
+            ) : undefined
+          }
           actions={
             <div className="flex flex-wrap gap-1.5">
               {(Object.keys(SEV) as Severity[]).map((s) => (
@@ -209,6 +219,7 @@ function KindRow({ kind, items, projectId, canEdit }: { kind: string; items: Sal
             <span className="text-sm text-muted-foreground">{items.length === 1 ? '1 caso' : `${items.length} casos`}</span>
           </div>
           {meta && <p className="mt-0.5 text-sm text-muted-foreground">{meta.explain}</p>}
+          <PlanSummary items={items} />
         </div>
       </button>
       {open && (
@@ -263,6 +274,18 @@ function FindingItem({ f, projectId, canEdit }: { f: SaludFinding; projectId: st
           <span className="text-xs text-muted-foreground">Toda la web</span>
         )}
         {detail(f) && <p className="truncate text-xs text-muted-foreground">{detail(f)}</p>}
+        {f.plan && (
+          <p className="text-xs">
+            <Badge tone={PLAN_STATUS[f.plan.status]?.tone ?? 'neutral'}>{PLAN_STATUS[f.plan.status]?.label ?? f.plan.status}</Badge>{' '}
+            {f.plan.requestUrl ? (
+              <a href={f.plan.requestUrl} target="_blank" rel="noreferrer" className="text-muted-foreground underline underline-offset-2">
+                {f.plan.title}
+              </a>
+            ) : (
+              <span className="text-muted-foreground">{f.plan.title}</span>
+            )}
+          </p>
+        )}
         {err && <p className="text-xs text-destructive">{err}</p>}
       </div>
       {canEdit &&
@@ -277,7 +300,7 @@ function FindingItem({ f, projectId, canEdit }: { f: SaludFinding; projectId: st
               maxLength={500}
             />
             <Button size="sm" disabled={pending} onClick={() => decide('descartado')}>
-              Descartar
+              No es un problema
             </Button>
             <Button size="sm" variant="ghost" disabled={pending} onClick={() => setAsking(false)}>
               Cancelar
@@ -285,15 +308,40 @@ function FindingItem({ f, projectId, canEdit }: { f: SaludFinding; projectId: st
           </div>
         ) : (
           <div className="flex shrink-0 gap-1.5">
-            <Button size="sm" variant="outline" disabled={pending} onClick={() => decide('aceptado')} title="Lo sabemos y se deja así a propósito">
-              Aceptar
+            <Button size="sm" variant="outline" disabled={pending} onClick={() => decide('aceptado')} title="Lo sabemos y lo dejamos así a propósito: sale del plan y no vuelve a salir. No crea ninguna tarea.">
+              Dejar así
             </Button>
-            <Button size="sm" variant="ghost" disabled={pending} onClick={() => setAsking(true)} title="No es un problema real">
-              Descartar
+            <Button size="sm" variant="ghost" disabled={pending} onClick={() => setAsking(true)} title="Es un falso aviso: sale del plan y no vuelve a salir. No crea ninguna tarea.">
+              No es un problema
             </Button>
           </div>
         ))}
     </li>
+  );
+}
+
+const PLAN_STATUS: Record<string, { label: string; tone: 'warning' | 'info' | 'success' | 'neutral' }> = {
+  pendiente: { label: 'En el plan, por aprobar', tone: 'warning' },
+  aprobada: { label: 'Encargo creado', tone: 'info' },
+  hecha: { label: 'Encargo hecho, falta reauditar', tone: 'success' }
+};
+
+/** Qué pasará con los casos de un tipo: en qué propuestas del plan van y cuántos quedan fuera. */
+function PlanSummary({ items }: { items: SaludFinding[] }) {
+  if (!items[0]?.plannable) return <p className="mt-1 text-xs text-muted-foreground">Informativo: no genera encargos en el plan.</p>;
+  const props = new Map<string, NonNullable<SaludFinding['plan']>>();
+  for (const f of items) if (f.plan) props.set(f.plan.title, f.plan);
+  const outside = items.filter((f) => !f.plan).length;
+  if (!props.size) return <p className="mt-1 text-xs text-muted-foreground">Entrará en el Plan de mejora la próxima vez que se rehaga.</p>;
+  return (
+    <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+      {[...props.values()].map((p) => (
+        <Badge key={p.title} tone={PLAN_STATUS[p.status]?.tone ?? 'neutral'}>
+          {PLAN_STATUS[p.status]?.label ?? p.status}: {p.title}
+        </Badge>
+      ))}
+      {outside > 0 && <span>{outside} caso(s) más irán en el siguiente lote (cada propuesta lleva como mucho 40 páginas, las que más se ven primero).</span>}
+    </p>
   );
 }
 
@@ -308,7 +356,7 @@ function Decided({ items, projectId, canEdit }: { items: SaludFinding[]; project
     });
   return (
     <Section
-      title={`Descartados y aceptados (${items.length})`}
+      title={`Quitados: «Dejar así» y «No es un problema» (${items.length})`}
       description="No vuelven a salir en las siguientes auditorías. Se pueden reabrir."
       actions={
         <Button size="sm" variant="outline" onClick={() => setOpen((o) => !o)}>
@@ -323,7 +371,7 @@ function Decided({ items, projectId, canEdit }: { items: SaludFinding[]; project
               <div className="min-w-0">
                 <span className="font-medium">{SALUD_KIND_BY_KEY.get(f.kind)?.title ?? f.kind}</span> · <span className="font-mono text-xs">{path(f.url)}</span>
                 <p className="text-xs text-muted-foreground">
-                  {f.status === 'aceptado' ? 'Aceptado' : 'Descartado'}
+                  {f.status === 'aceptado' ? 'Dejado así' : 'No es un problema'}
                   {f.dismissReason ? `: ${f.dismissReason}` : ''}
                 </p>
               </div>
