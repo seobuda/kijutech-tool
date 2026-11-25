@@ -157,15 +157,15 @@ export const SEO_SALUD_PROCESS_MAP: ProcessStep[] = [
   {
     id: 'seo-preguntas',
     lane: 'Expediente',
-    name: 'Correo de 3 preguntas al cliente',
+    name: 'Lo que el expediente pregunta al cliente',
     description:
-      'Lo que el expediente no ha podido averiguar solo (dato que falta, dos fuentes que no coinciden o confianza < 60), en orden: nombre y web > teléfono y dirección > servicios > zona; como mucho 3 preguntas con plantilla. Sale por las comunicaciones del núcleo, desde el buzón del agente, a los contactos marcados para «Preguntas», solo con aprobación de Enric; uno por proyecto cada 30 días. La respuesta entra por el mismo buzón: el núcleo la une a su hilo, aquí Haiku saca cada dato con su cita literal y queda «Respuesta del cliente», provisional, en el expediente (aviso a Enric por Telegram). El agente del correo ve nuestras preguntas en el hilo y propone el agradecimiento. Pantalla: Proyectos → Expediente → Preguntas al cliente.',
+      'Desde el 25 nov 2026 SEO no envía su propio correo: lo que el expediente no ha podido averiguar solo (dato que falta, dos fuentes que no coinciden o confianza < 60) entra como «Datos que faltan (SEO)» en las Preguntas del cliente (núcleo, mapa Clientes), junto a las de sus servicios; si el cliente ya tiene la pregunta del banco que cubre lo mismo (servicios → ficha «qué ofrece», zona → ficha «zona»), no se repite. La respuesta (por correo, cuestionario o a mano) vuelve aquí y queda «Respuesta del cliente», provisional, en el expediente. Los correos de 3 preguntas enviados antes del 25 nov se siguen leyendo aquí. Pantalla: Proyectos → Expediente → Preguntas al cliente (resumen y enlace a la ficha → Preguntas).',
     status: 'built',
     file: 'lib/seo/preguntas/preguntas.ts',
-    when: 'Solo al reunir el expediente (si hay preguntas y se puede: trabajo «seo.preguntas.preparar») o a mano con «Preparar el correo». La lectura, al llegar la respuesta (trabajo «seo.preguntas.leer»).',
-    ai: 'Haiku solo para leer la respuesta (prompt seo_leer_respuestas); sin IA para elegir ni redactar las preguntas. Sin IA disponible, solo se lee un teléfono si hay uno.',
-    code: 'Cada dato debe traer una cita que esté en lo que escribió el cliente (sin nuestro correo citado) y la forma de su campo; si no, se descarta. Nada pasa a la ficha sin que una persona lo confirme («Pasar a la ficha» para los servicios).',
-    tables: ['seo_dossier_facts', 'client_messages', 'client_contact_subscriptions'],
+    when: 'Cada vez que se ponen al día las preguntas del cliente (al abrir su ficha, la pasada diaria y antes de enviar). Al reunir el expediente se pide el envío automático al núcleo (trabajo «seo.preguntas.preparar», que pasa a «clientes.preguntas.auto»). Correos antiguos: «seo.preguntas.leer».',
+    ai: 'Ninguna para elegir ni redactar las preguntas (reglas). Los correos antiguos los lee Haiku con el prompt seo_leer_respuestas; los nuevos, el núcleo (clientes_leer_respuestas).',
+    code: 'Fuente y destino registrados en el núcleo (registerClientQuestionSource / registerClientAnswerHandler, destino «seo:<proyecto>:<campo>»). La respuesta se limpia con la forma de su campo (teléfono válido, dirección con población o código postal, servicios como lista corta) antes de guardarla; nada pasa a la ficha sin que una persona lo confirme.',
+    tables: ['seo_dossier_facts', 'client_questions', 'client_messages'],
     prompts: ['seo_leer_respuestas']
   },
   {

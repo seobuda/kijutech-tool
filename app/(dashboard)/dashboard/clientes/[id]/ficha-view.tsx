@@ -5,7 +5,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, Brain, Building2, ChevronDown, CircleCheck, CircleDashed, ClipboardList, Compass, FolderKanban, Globe, LayoutDashboard, LineChart, Map as MapIcon, Settings2, Sparkles, Swords, Trash2, Users } from 'lucide-react';
+import { ArrowLeft, Brain, Building2, ChevronDown, CircleCheck, CircleDashed, ClipboardList, Compass, FolderKanban, Globe, LayoutDashboard, LineChart, Map as MapIcon, MessageCircleQuestion, Settings2, Sparkles, Swords, Trash2, Users } from 'lucide-react';
 import { DropdownMenu as DM } from 'radix-ui';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/page';
@@ -24,6 +24,8 @@ import { CompetenciaTab } from './tab-competencia';
 import { ClienteRendimiento } from '../../rendimiento/cliente-rendimiento';
 import { ClienteEstrategia } from '../../estrategia/cliente-estrategia';
 import { EncargosTab, openRequests, SeoTab, type ProjectView, type RequestView } from './tab-trabajo';
+import { PreguntasTab } from './tab-preguntas';
+import type { ClientQuestionsView } from '@/lib/core/questions';
 
 export type ClientView = {
   id: string;
@@ -80,6 +82,8 @@ export type FichaData = {
   history: string[];
   /** El trabajo del cliente (fase 4 UX): sus encargos y sus proyectos SEO. */
   work: { requests: RequestView[]; projects: ProjectView[] };
+  /** Preguntas al cliente (25 nov 2026): las de sus servicios, su envío y sus respuestas. */
+  questions: ClientQuestionsView;
 };
 
 // Fase 4 UX (21 nov 2026): a la vista, lo del día a día (como mucho 5 + «Más»); los datos de la ficha, en «Más».
@@ -90,6 +94,8 @@ const TABS = [
   { key: 'rendimiento', label: 'Rendimiento', icon: LineChart, more: false },
   { key: 'estrategia', label: 'Estrategia', icon: Compass, more: false },
   { key: 'seo', label: 'SEO', icon: FolderKanban, more: false },
+  // 25 nov 2026: a la vista (no en «Más») para no tener que buscarla; el número = las que hay por preguntar.
+  { key: 'preguntas', label: 'Preguntas', icon: MessageCircleQuestion, more: false },
   { key: 'empresa', label: 'Empresa y negocio', icon: Building2, more: true },
   { key: 'contactos', label: 'Contactos', icon: Users, more: true },
   { key: 'webs', label: 'Webs y cuentas', icon: Globe, more: true },
@@ -147,7 +153,8 @@ export function FichaView({ data }: { data: FichaData }) {
     webs: data.assets.length,
     competencia: data.competitors.length,
     encargos: openRequests(data.work.requests),
-    seo: data.work.projects.length
+    seo: data.work.projects.length,
+    preguntas: data.questions.questions.filter((q) => q.status === 'pendiente').length
   };
   const moreActive = TABS.find((t) => t.more && t.key === tab);
 
@@ -328,6 +335,7 @@ export function FichaView({ data }: { data: FichaData }) {
         {tab === 'competencia' && <CompetenciaTab clientId={c.id} competitors={data.competitors} />}
         {tab === 'encargos' && <EncargosTab clientId={c.id} requests={data.work.requests} linked={Boolean(data.ops.clickupOptionId)} />}
         {tab === 'seo' && <SeoTab projects={data.work.projects} clientName={c.name} />}
+        {tab === 'preguntas' && <PreguntasTab view={data.questions} isAdmin={data.isAdmin} comms={data.comms} go={go} />}
         {tab === 'rendimiento' && <ClienteRendimiento clientId={c.id} clientName={c.name} />}
         {tab === 'estrategia' && <ClienteEstrategia clientId={c.id} isAdmin={data.isAdmin} />}
         {tab === 'memoria' && (

@@ -6,6 +6,7 @@ import { opsClientActivity, opsRequests, projects } from '@/lib/db/schema';
 import { completeness } from '@/lib/core/client-rules';
 import { clientHistory, getClientSheet } from '@/lib/core/clients';
 import { contactsForRouting } from '@/lib/core/comms';
+import { clientQuestionsView } from '@/lib/core/questions';
 import { tenants } from '@/lib/db/schema';
 import { getStructure, selectedSpaces } from '@/lib/operaciones/structure';
 import { evaluateClient, getLevels, getServices, listClients } from '@/lib/operaciones/clients';
@@ -18,6 +19,7 @@ export const dynamic = 'force-dynamic';
 
 // Ficha del cliente (NÚCLEO, 14 nov 2026): pestañas Resumen, Encargos, Rendimiento, Estrategia y SEO, y en «Ficha y
 // ajustes» Empresa y negocio, Contactos, Webs y cuentas, Competencia, Memoria y Operaciones (fase 4 UX, 21 nov). El contrato (cuota y fechas) solo llega al navegador de un administrador.
+// Desde el 25 nov, pestaña Preguntas: lo que hay que preguntarle (por sus servicios), su envío y sus respuestas.
 export default async function FichaClientePage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requirePagePermission('edit');
   const { id } = await params;
@@ -115,7 +117,8 @@ export default async function FichaClientePage({ params }: { params: Promise<{ i
     options: [...options].map(([oid, label]) => ({ id: oid, label })).sort((a, b) => a.label.localeCompare(b.label, 'es')),
     isAdmin,
     history: isAdmin ? await clientHistory(user.tenantId, id).catch(() => []) : [],
-    work: await clientWork(user.tenantId, id, ops.clickupOptionId, [c.name, ...c.aliases])
+    work: await clientWork(user.tenantId, id, ops.clickupOptionId, [c.name, ...c.aliases]),
+    questions: await clientQuestionsView(user.tenantId, id)
   };
   return (
     <>

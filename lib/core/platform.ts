@@ -13,6 +13,7 @@ import { COMMS_KINDS, type CommsKind } from '@/lib/core/comms-rules';
 import { registerGscJobs } from '@/lib/core/gsc';
 import { registerCrawlJobs } from '@/lib/core/crawler';
 import { registerInterventionJobs } from '@/lib/core/interventions';
+import { registerQuestionsJobs } from '@/lib/core/questions';
 import { registerFeedEvents } from '@/lib/core/knowledge-feed';
 import { findCoreClient } from '@/lib/core/clients';
 
@@ -68,6 +69,7 @@ export function registerPlatformCapabilities(): void {
   registerGscJobs();
   registerCrawlJobs();
   registerInterventionJobs(); // Hito 1 SEO: fecha de «hecho» de las intervenciones (cada hora)
+  registerQuestionsJobs(); // 25 nov 2026: preguntas al cliente (leer respuestas, envío automático y pasada diaria)
   registerFeedEvents(); // Hito 1 SEO: actualizaciones e incidencias de Google como eventos externos
   registerTools([escribirAlCliente]);
   // Trabajos terminados de la cola: se borran con la limpieza semanal (los fallidos se guardan el doble de tiempo).

@@ -594,3 +594,59 @@ export function registerSerpSource(s: SerpSource): void {
 export function serpSource(): SerpSource | null {
   return GSERP.__kijuSerpSource ?? null;
 }
+
+// --- Preguntas al cliente (25 nov 2026) -----------------------------------------------------------------------------
+// El núcleo lleva el banco de preguntas y el envío; lo que no es suyo lo pregunta a quien se haya registrado:
+//   - qué servicios le hacemos a cada cliente y cuáles hay (Operaciones: ops_services y ops_client_services);
+//   - preguntas de datos que le faltan a un módulo (SEO: huecos y datos que no cuadran en el expediente);
+//   - a quién entregar la respuesta de esas preguntas (el destino «<módulo>:…» de la pregunta).
+export type ServiceInfo = { key: string; label: string };
+export type ClientServicesSource = {
+  all: (tenantId: string) => Promise<ServiceInfo[]>;
+  ofClient: (tenantId: string, clientId: string) => Promise<string[]>;
+  /** Clientes que tienen algún servicio (para la pasada diaria). */
+  clientsWithServices: (tenantId: string) => Promise<string[]>;
+};
+export type ModuleQuestion = {
+  /** Única y estable mientras el dato siga faltando («seo:<proyecto>:telefono»). */
+  sourceKey: string;
+  text: string;
+  help: string | null;
+  answerType: 'texto' | 'lista' | 'si_no' | 'numero' | 'direccion' | 'fecha';
+  /** Destino «<módulo>:…»: lo recibe el manejador del módulo. */
+  target: string;
+  serviceKey: string | null;
+  projectId: string | null;
+  /** Destino del banco que cubre lo mismo (p. ej. «ficha.area»): si el cliente ya tiene esa pregunta, esta no se abre. */
+  coveredBy?: string | null;
+};
+export type ModuleAnswer = { tenantId: string; clientId: string; projectId: string | null; target: string; value: unknown; text: string; quote: string; via: string; by: string };
+
+const GQ = globalThis as unknown as {
+  __kijuServices?: ClientServicesSource | null;
+  __kijuQuestionSources?: Map<string, (tenantId: string, clientId: string) => Promise<ModuleQuestion[]>>;
+  __kijuAnswerHandlers?: Map<string, (a: ModuleAnswer) => Promise<void>>;
+};
+
+export function setClientServicesSource(s: ClientServicesSource): void {
+  GQ.__kijuServices = s;
+}
+export function clientServicesSource(): ClientServicesSource | null {
+  return GQ.__kijuServices ?? null;
+}
+
+/** Un módulo aporta preguntas de datos que le faltan de un cliente (se recalculan cada vez). */
+export function registerClientQuestionSource(module: string, fn: (tenantId: string, clientId: string) => Promise<ModuleQuestion[]>): void {
+  (GQ.__kijuQuestionSources ??= new Map()).set(module, fn);
+}
+export function clientQuestionSources(): [string, (tenantId: string, clientId: string) => Promise<ModuleQuestion[]>][] {
+  return [...(GQ.__kijuQuestionSources ?? new Map()).entries()];
+}
+
+/** Un módulo recibe las respuestas a sus preguntas (destino «<módulo>:…»). */
+export function registerClientAnswerHandler(module: string, fn: (a: ModuleAnswer) => Promise<void>): void {
+  (GQ.__kijuAnswerHandlers ??= new Map()).set(module, fn);
+}
+export function clientAnswerHandler(module: string): ((a: ModuleAnswer) => Promise<void>) | null {
+  return GQ.__kijuAnswerHandlers?.get(module) ?? null;
+}
