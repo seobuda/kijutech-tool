@@ -33,7 +33,11 @@ const SIN_GUARD_DE_ROL = new Set([
   'app/(login)/actions.ts:signIn',
   'app/(login)/actions.ts:updatePassword',
   'app/(login)/actions.ts:deleteAccount',
-  'app/(login)/actions.ts:updateAccount'
+  'app/(login)/actions.ts:updateAccount',
+  // Cuestionario en línea del cliente (25 nov 2026): página pública sin sesión; lo protege el token del enlace (solo su
+  // hash en la base de datos, caduca a los 30 días y solo da acceso a las preguntas de ese cuestionario).
+  'lib/core/questionnaire-actions.ts:saveQuestionnaireAnswerAction',
+  'lib/core/questionnaire-actions.ts:submitQuestionnaireAction'
 ]);
 
 describe('auditoría de acciones del servidor', () => {

@@ -3418,6 +3418,152 @@ export const clientMessages = pgTable(
 );
 export type ClientMessage = typeof clientMessages.$inferSelect;
 
+// Preguntas al cliente (25 nov 2026, migración 0064, aprobado por Enric; docs/DISENO-PREGUNTAS-CLIENTE.md).
+// Banco editable por servicio (null = General): de aquí salen las preguntas de cada cliente según lo que le hacemos.
+export const clientQuestionTemplates = pgTable(
+  'client_question_templates',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    // Clave del servicio (ops_services.key, validada en el código); null = General (a todos los clientes).
+    serviceKey: varchar('service_key', { length: 40 }),
+    text: text('text').notNull(),
+    // Para qué la preguntamos: ayuda al cliente en el cuestionario y a la IA al leer la respuesta.
+    help: text('help'),
+    // texto | lista | si_no | numero | direccion | fecha
+    answerType: varchar('answer_type', { length: 12 }).notNull().default('texto'),
+    // Dónde se guarda la respuesta: memoria[.tipo] | ficha.<campo> (validado en el código).
+    target: varchar('target', { length: 60 }).notNull().default('memoria'),
+    // alta (una vez, al empezar) | periodica (otra vez cada repeat_days días tras responderla)
+    askWhen: varchar('ask_when', { length: 12 }).notNull().default('alta'),
+    repeatDays: integer('repeat_days'),
+    sortOrder: integer('sort_order').notNull().default(0),
+    active: boolean('active').notNull().default(true),
+    // sistema (banco inicial) | manual | ia (propuesta por la IA y aceptada por una persona)
+    origin: varchar('origin', { length: 10 }).notNull().default('manual'),
+    updatedBy: varchar('updated_by', { length: 255 }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    index('client_question_templates_tenant_idx').on(table.tenantId, table.serviceKey, table.sortOrder),
+    check('client_question_templates_type_check', sql`${table.answerType} IN ('texto', 'lista', 'si_no', 'numero', 'direccion', 'fecha')`),
+    check('client_question_templates_when_check', sql`${table.askWhen} IN ('alta', 'periodica')`),
+    check('client_question_templates_repeat_check', sql`${table.repeatDays} IS NULL OR ${table.repeatDays} BETWEEN 7 AND 730`),
+    check('client_question_templates_origin_check', sql`${table.origin} IN ('sistema', 'manual', 'ia')`),
+  ]
+);
+export type ClientQuestionTemplate = typeof clientQuestionTemplates.$inferSelect;
+
+// Cuestionario en línea: enlace privado (solo se guarda el hash del token) que caduca.
+export const clientQuestionnaires = pgTable(
+  'client_questionnaires',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    tokenHash: varchar('token_hash', { length: 64 }).notNull(),
+    // activo | completado | anulado
+    status: varchar('status', { length: 12 }).notNull().default('activo'),
+    expiresAt: timestamp('expires_at').notNull(),
+    messageId: uuid('message_id').references(() => clientMessages.id, { onDelete: 'set null' }),
+    createdByName: varchar('created_by_name', { length: 255 }),
+    lastSeenAt: timestamp('last_seen_at'),
+    completedAt: timestamp('completed_at'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    unique('client_questionnaires_token_unique').on(table.tokenHash),
+    index('client_questionnaires_client_idx').on(table.clientId, table.status),
+    check('client_questionnaires_status_check', sql`${table.status} IN ('activo', 'completado', 'anulado')`),
+  ]
+);
+export type ClientQuestionnaire = typeof clientQuestionnaires.$inferSelect;
+
+// Las preguntas de cada cliente: del banco (por sus servicios), sueltas (solo para él) o de un dato que le falta a un
+// módulo (p. ej. el expediente SEO). Guardan su texto (editable por cliente), su estado y la respuesta con su cita.
+export const clientQuestions = pgTable(
+  'client_questions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    // banco | suelta | dato
+    origin: varchar('origin', { length: 10 }).notNull(),
+    templateId: uuid('template_id').references(() => clientQuestionTemplates.id, { onDelete: 'set null' }),
+    // Pregunta de un módulo («seo:<proyecto>:telefono»): quien la registró recibe la respuesta.
+    sourceKey: varchar('source_key', { length: 120 }),
+    serviceKey: varchar('service_key', { length: 40 }),
+    projectId: uuid('project_id').references(() => projects.id, { onDelete: 'set null' }),
+    text: text('text').notNull(),
+    help: text('help'),
+    // El texto se cambió solo para este cliente: el banco ya no lo pisa.
+    customText: boolean('custom_text').notNull().default(false),
+    answerType: varchar('answer_type', { length: 12 }).notNull().default('texto'),
+    target: varchar('target', { length: 120 }).notNull().default('memoria'),
+    // pendiente | enviada | respondida | no_aplica
+    status: varchar('status', { length: 12 }).notNull().default('pendiente'),
+    answer: jsonb('answer'),
+    answerText: text('answer_text'),
+    answerQuote: text('answer_quote'),
+    // correo | cuestionario | manual
+    answeredVia: varchar('answered_via', { length: 12 }),
+    answeredBy: varchar('answered_by', { length: 255 }),
+    answeredAt: timestamp('answered_at'),
+    // aplicada | distinta (la ficha dice otra cosa) | no (no se guarda en la ficha)
+    applied: varchar('applied', { length: 10 }),
+    askedAt: timestamp('asked_at'),
+    messageId: uuid('message_id').references(() => clientMessages.id, { onDelete: 'set null' }),
+    questionnaireId: uuid('questionnaire_id').references(() => clientQuestionnaires.id, { onDelete: 'set null' }),
+    sortOrder: integer('sort_order').notNull().default(0),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    index('client_questions_client_idx').on(table.tenantId, table.clientId, table.status),
+    index('client_questions_message_idx').on(table.messageId),
+    index('client_questions_questionnaire_idx').on(table.questionnaireId),
+    // Como mucho una abierta (pendiente o enviada) por pregunta del banco y por dato de un módulo.
+    uniqueIndex('client_questions_open_template_unique').on(table.clientId, table.templateId).where(sql`${table.templateId} IS NOT NULL AND ${table.status} IN ('pendiente', 'enviada')`),
+    uniqueIndex('client_questions_open_source_unique').on(table.clientId, table.sourceKey).where(sql`${table.sourceKey} IS NOT NULL AND ${table.status} IN ('pendiente', 'enviada')`),
+    check('client_questions_origin_check', sql`${table.origin} IN ('banco', 'suelta', 'dato')`),
+    check('client_questions_type_check', sql`${table.answerType} IN ('texto', 'lista', 'si_no', 'numero', 'direccion', 'fecha')`),
+    check('client_questions_status_check', sql`${table.status} IN ('pendiente', 'enviada', 'respondida', 'no_aplica')`),
+    check('client_questions_via_check', sql`${table.answeredVia} IS NULL OR ${table.answeredVia} IN ('correo', 'cuestionario', 'manual')`),
+    check('client_questions_applied_check', sql`${table.applied} IS NULL OR ${table.applied} IN ('aplicada', 'distinta', 'no')`),
+  ]
+);
+export type ClientQuestion = typeof clientQuestions.$inferSelect;
+
+// Textos editables de los correos a clientes (asunto y cuerpo con huecos {cliente}, {preguntas}, {enlace}…).
+// Sin fila, se usa el texto por defecto del código.
+export const clientCommsTemplates = pgTable(
+  'client_comms_templates',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    key: varchar('key', { length: 40 }).notNull(),
+    subject: varchar('subject', { length: 300 }).notNull(),
+    body: text('body').notNull(),
+    updatedBy: varchar('updated_by', { length: 255 }),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [unique('client_comms_templates_key_unique').on(table.tenantId, table.key)]
+);
+export type ClientCommsTemplate = typeof clientCommsTemplates.$inferSelect;
+
 // Cola de trabajos: la reclama un trabajador (FOR UPDATE SKIP LOCKED), con latido, reintentos y concurrencia por tipo.
 export const jobs = pgTable(
   'jobs',

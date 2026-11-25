@@ -112,5 +112,83 @@ export const CLIENTES_PROCESS_MAP: ProcessStep[] = [
     code: 'Valida contra niveles, servicios, personas y opciones de ClickUp; rechaza contraseñas y duplicados; al editar, los textos se reemplazan y las listas se suman (un contacto con el mismo correo o nombre se completa); quitar es explícito. El contrato solo si quien propone es el dueño o un administrador. Al aplicar en la web se vuelve a validar en el servidor. Lo que falle (p. ej. un correo de otro cliente) se informa sin deshacer el resto.',
     prompts: ['ops_client_fill'],
     tables: ['clients', 'client_contacts', 'client_locations', 'client_assets', 'client_competitors', 'client_memory', 'ops_clients', 'ops_client_services']
+  },
+  {
+    id: 'cli-preguntas-banco',
+    lane: 'Preguntas al cliente',
+    name: 'Banco de preguntas por servicio',
+    description:
+      'Las preguntas que se hacen a cada cliente según los servicios que le hacemos (General para todos, SEO, Google Ads, Web…), con para qué se pregunta, el tipo de respuesta, dónde se guarda (un campo de la ficha o la memoria) y cuándo: una vez al empezar o cada N días (promociones, cambios de presupuesto). Banco inicial redactado como lo haría un experto (migración 0064); se edita sin tocar código. También los textos de los correos (asunto y cuerpo con huecos {cliente}, {preguntas}, {enlace}…). Pantalla: Clientes → Banco de preguntas.',
+    status: 'built',
+    file: 'lib/core/questions.ts',
+    when: 'Al editarlo en Clientes → Banco de preguntas (administrador). Un cambio pone al día las pendientes de todos los clientes que aún no se han enviado ni se han editado para ese cliente.',
+    ai: 'Ninguna para guardar. «Proponer con IA»: ver el paso de propuestas.',
+    code: 'Valida texto, tipo, destino (solo los del banco: memoria y campos de la ficha) y plazo (7–730 días). Borrar una pregunta quita sus pendientes; las ya enviadas o respondidas se quedan en cada cliente.',
+    tables: ['client_question_templates', 'client_comms_templates']
+  },
+  {
+    id: 'cli-preguntas-cliente',
+    lane: 'Preguntas al cliente',
+    name: 'Las preguntas de cada cliente',
+    description:
+      'Pestaña «Preguntas» de la ficha (a la vista, con el número de las que hay por preguntar): de qué servicios salen, quién las recibe (si nadie, se marca el contacto ahí mismo), lo que está en marcha (correo esperando aprobación, que se aprueba, corrige o descarta ahí; cuestionario activo) y la lista por preguntar agrupada por servicio, con «Ya lo sé» (respuesta a mano), editar solo para este cliente, «No aplica», preguntas sueltas y «Proponer con IA». Debajo, enviadas, respondidas (con la cita y a dónde fueron) y las que no aplican.',
+    status: 'built',
+    file: 'lib/core/questions.ts',
+    when: 'Se ponen al día al abrir la ficha, antes de cada envío y en la pasada diaria (syncClientQuestions).',
+    ai: 'Nada para decidir qué preguntar: reglas.',
+    code: 'Se abren las del banco de General y de sus servicios (Operaciones dice cuáles: setClientServicesSource) que no estén abiertas, respondidas ni en «no aplica»; las periódicas, otra vez al pasar su plazo desde la respuesta. Las pendientes de un servicio que se le quita se cierran. Los módulos aportan «datos que faltan» (SEO: huecos del expediente; registerClientQuestionSource) y desaparecen si el dato deja de faltar. Un correo descartado devuelve sus preguntas a «por preguntar». Como mucho una abierta por pregunta del banco o dato (índices únicos parciales).',
+    tables: ['client_questions', 'client_question_templates', 'client_contact_subscriptions']
+  },
+  {
+    id: 'cli-preguntas-envio',
+    lane: 'Preguntas al cliente',
+    name: 'Envío: correo o cuestionario en línea',
+    description:
+      'Hasta 5 preguntas, correo corto (el cliente contesta al correo); con más, cuestionario en línea: un enlace privado de 30 días a /cuestionario/<token>, página pública sin sesión, con guardado automático y «Enviar respuestas». Se puede cambiar el canal y el texto solo para ese envío. Siempre por las comunicaciones del núcleo: destinatarios marcados para «Preguntas» y la política de aprobación del cliente. Envío automático: lo pide un módulo (SEO al reunir el expediente), una vez cada 30 días como mucho.',
+    status: 'built',
+    file: 'lib/core/questions.ts',
+    when: '«Preparar envío» en la pestaña Preguntas; automático con el trabajo «clientes.preguntas.auto».',
+    ai: 'Ninguna: plantilla editable con huecos.',
+    code: 'Solo se guarda el hash (SHA-256) del token; 24 bytes aleatorios. Un cuestionario activo por cliente: el anterior se anula (lo escrito se entrega). Las acciones públicas solo aceptan preguntas de ese cuestionario, con tamaños limitados. Mientras un correo de preguntas espera aprobación no se prepara otro.',
+    tables: ['client_questionnaires', 'client_questions', 'client_messages']
+  },
+  {
+    id: 'cli-preguntas-respuestas',
+    lane: 'Preguntas al cliente',
+    name: 'Respuestas: leerlas y llevarlas a su sitio',
+    description:
+      'Por correo: la respuesta entra por el buzón, el núcleo la une a su hilo y Haiku saca lo que contesta a cada pregunta con la frase exacta. Por cuestionario: llegan ya ordenadas al pulsar «Enviar» (o al anular o caducar el enlace, lo que estuviera escrito). A mano: «Ya lo sé» / «Responder a mano». Cada respuesta va a su destino: un campo de la ficha (solo si estaba vacío; si dice otra cosa, la pestaña ofrece «Usar esta respuesta»), la memoria del cliente (la leen los agentes) o el módulo que la pidió (SEO: expediente, provisional). Aviso a Enric por Telegram.',
+    status: 'built',
+    file: 'lib/core/questions.ts',
+    when: 'Al llegar la respuesta (trabajo «clientes.preguntas.leer»), al enviar el cuestionario o al apuntarla a mano.',
+    ai: 'Haiku (prompt clientes_leer_respuestas) solo para leer el correo; el código descarta lo que no traiga una cita literal presente en lo que escribió el cliente (sin nuestro correo citado) o no tenga la forma de su tipo.',
+    code: 'La respuesta nunca se pierde aunque falle su destino (queda en la pregunta). Nunca se pisa un campo de la ficha con contenido.',
+    tables: ['client_questions', 'clients', 'client_memory'],
+    prompts: ['clientes_leer_respuestas']
+  },
+  {
+    id: 'cli-preguntas-ia',
+    lane: 'Preguntas al cliente',
+    name: '«Proponer con IA»',
+    description: 'Se describe qué hace falta saber («todo lo necesario para configurar su primera campaña de Google Ads») y la IA propone entre 5 y 12 preguntas de experto, sin repetir las que ya hay. Se marcan las buenas y se añaden: al banco (de un servicio) o solo a un cliente (con su ficha como contexto).',
+    status: 'built',
+    file: 'lib/core/questions.ts',
+    when: 'Botón «Proponer con IA» en el banco (administrador) y en la pestaña Preguntas de un cliente.',
+    ai: 'Sonnet (prompt clientes_proponer_preguntas): es razonamiento de experto y se usa pocas veces al mes, así que no compensa un modelo menor. La ficha del cliente va marcada como dato no fiable.',
+    code: 'No guarda nada: una persona elige. Se limpian forma, tipo y destino (solo los del banco) y se quitan las repetidas.',
+    tables: ['client_question_templates', 'client_questions'],
+    prompts: ['clientes_proponer_preguntas']
+  },
+  {
+    id: 'cli-preguntas-diaria',
+    lane: 'Preguntas al cliente',
+    name: 'Pasada diaria',
+    description: 'Pone al día las preguntas de los clientes con servicios (vuelven las periódicas) y cierra los cuestionarios caducados (lo escrito se entrega; lo demás vuelve a «por preguntar»).',
+    status: 'built',
+    file: 'lib/core/questions.ts',
+    when: 'Una vez al día (proceso «clientes.preguntas.diaria» del planificador, dado de alta en la migración 0064).',
+    ai: 'Nada.',
+    code: 'Cada cliente aislado: un fallo no para a los demás.',
+    tables: ['client_questions', 'client_questionnaires']
   }
 ];

@@ -197,6 +197,9 @@ const CORE_TABLES = new Set([
   // Hito 1 SEO (23 nov 2026, migración 0061, aprobado por Enric): registro de intervenciones (técnica + hipótesis de cada
   // encargo), común a SEO, Estrategia y Ads. La bitácora de I+D va en kb_ (familia de la base de conocimiento).
   'interventions',
+  // Preguntas al cliente (25 nov 2026, migración 0064, aprobado por Enric): banco por servicio, preguntas de cada cliente,
+  // cuestionario en línea y textos de los correos. Comunes a todos los departamentos (SEO, Ads, Web…).
+  'client_question_templates', 'client_questions', 'client_questionnaires', 'client_comms_templates',
   // Restos de la plantilla, pendientes de borrar con una migración (ESTADO §16).
   'teams', 'team_members', 'invitations', 'activity_logs'
 ]);

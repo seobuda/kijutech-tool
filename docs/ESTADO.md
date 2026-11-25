@@ -3,7 +3,7 @@
 > **Documento vivo y de referencia.** Recoge todo lo que existe, cómo funciona, qué está decidido, qué se ha probado y qué falta. Se actualiza al cerrar cada paso de trabajo (junto al documento de sesión y al Mapa Visual).
 > **No contiene claves, contraseñas ni valores de `.env`** (solo sus nombres).
 
-**Fecha de esta versión:** 2026-11-25. **Último cambio (rama `fix/salud-botones-plan`, sin migración):** en Salud técnica los botones pasan a «Dejar así» y «No es un problema» y cada hallazgo dice en qué propuesta del Plan de mejora va (las tareas se crean al aprobar en el plan). **Antes (rama `feature/places-integracion`, sin migración):** integración «Google Places» en Agentes → Integraciones (clave de API cifrada, probada al guardar), para las reseñas de la competencia. **Antes (rama `feature/seo-competencia-webs`, sin migración):** rastreo ligero de las webs de la competencia confirmada, comparación con la del cliente y huecos de búsquedas (§6.39). **Antes (rama `feature/seo-3-preguntas`, migración **0063**, solo el prompt `seo_leer_respuestas`):** correo de 3 preguntas al cliente desde el expediente SEO, con la respuesta leída por Haiku y vista por el agente del correo (§6.39). **Antes:** visitas desde asistentes de IA en Analytics (§6.39, sin migración): descarga diaria por fuente filtrada a ChatGPT, Perplexity, Gemini, Copilot, Claude y otros, tabla en Rendimiento y cifra `ga4_ai` que ve el estratega. **Antes:** el mapa de palabras pide los embeddings por tandas y completa solo lo que el proveedor limitó (§6.39, sin migración). **Antes (rama `feature/hito2-seo`, migración **0062**, aprobada por Enric):** **Hito 2 del SEO, primera parte** (§6.39): mapa de palabras sobre Search Console, competencia en Google con DataForSEO y lo que sabe SEO en el expediente del estratega. Antes (sin migración): la **parte local sin Places** (nombre, dirección y teléfono coherentes entre ficha y web, y una página por servicio) y el estado real de la auditoría en Salud (§6.38). Antes, **desplegado el 23 nov (`4f0c3cec`, migración 0061)** el **resto del Hito 1 del SEO** (§6.38): expediente provisional del proyecto, plan de mejora por reglas que se convierte en encargos, registro de intervenciones del núcleo (técnica + hipótesis de cada encargo, también desde Estrategia), bitácora de I+D con las novedades de Google y el tipo de negocio en la ficha del cliente. Antes, **desplegada el 23 nov (`79eab5d2`, sin migración)** la primera parte, la **Salud técnica** (§6.37). Antes, **desplegados el 23 nov (`5ff3234e`, migración 0060)**: los **cimientos de la plataforma** para el departamento SEO (§6.36): proyecto con cliente y alcance, correos a clientes con aprobación, cola de trabajos con trabajador aparte (`kijutech_worker`), Search Console en detalle, rastreador y hallazgos, con el servidor ya ampliado a 4 vCPU / 8 GB / 160 GB. Con ellos salió lo que estaba en `main`: al decidir en Para ti queda un aviso de «hecho» unos segundos, y el aviso de Telegram de lo decidido en la web pierde sus botones (§6.32, §18); antes, Para ti deja decidir ahí mismo correos, propuestas de los agentes y dudas del equipo (§6.32), y detalles de interfaz: «Nuevo encargo» desde la ficha con el cliente elegido, filtro «Sin cliente» en Encargos, el nombre en la última miga, la jornada y las acciones web en la actividad del día y un solo `aria-current="page"` en la barra (§6.33, §6.34, §18), y guard de página en proyectos y «Nuevo encargo» (§16); antes, lo que se cambia en ClickUp (fecha, prioridad, título, descripción, lista, cliente y responsables) se copia al encargo y pone al día sus avisos (§6.6, §18), y la librería `postgres` pasa a 3.4.9 (quita el aviso «TimeoutNegativeWarning»); antes, los avisos de encargos para otro día salen el día que toca (§7, §6, §18; lo detectó Jesús), y examen de prompts desde el panel, con historial (§22, §8; migración **0059**, aprobada por Enric; primer examen en producción hecho y regla «antes del X = X» en el prompt), y pruebas que abren todas las pantallas con cada rol tras desplegar y registro de errores por cuenta de la sesión (§22, §6.27), y barreras de arquitectura, reglas del arnés y batería de prompts. El historial de cada cambio está en la cronología (§18) y en `docs/sessions/`.
+**Fecha de esta versión:** 2026-11-25. **Último cambio (rama `feature/preguntas-cliente`, migración **0064**, aprobada por Enric):** **Preguntas al cliente** en el núcleo (§6.40): banco editable por servicio (Clientes → Banco de preguntas), pestaña «Preguntas» en la ficha de cada cliente, envío por correo o por cuestionario en línea con enlace privado, respuestas a la ficha, la memoria o el módulo que las pidió, y «Proponer con IA»; el correo de 3 preguntas de SEO pasa a ser una fuente más («datos que faltan»). **Antes (rama `fix/salud-botones-plan`, sin migración):** en Salud técnica los botones pasan a «Dejar así» y «No es un problema» y cada hallazgo dice en qué propuesta del Plan de mejora va (las tareas se crean al aprobar en el plan). **Antes (rama `feature/places-integracion`, sin migración):** integración «Google Places» en Agentes → Integraciones (clave de API cifrada, probada al guardar), para las reseñas de la competencia. **Antes (rama `feature/seo-competencia-webs`, sin migración):** rastreo ligero de las webs de la competencia confirmada, comparación con la del cliente y huecos de búsquedas (§6.39). **Antes (rama `feature/seo-3-preguntas`, migración **0063**, solo el prompt `seo_leer_respuestas`):** correo de 3 preguntas al cliente desde el expediente SEO, con la respuesta leída por Haiku y vista por el agente del correo (§6.39). **Antes:** visitas desde asistentes de IA en Analytics (§6.39, sin migración): descarga diaria por fuente filtrada a ChatGPT, Perplexity, Gemini, Copilot, Claude y otros, tabla en Rendimiento y cifra `ga4_ai` que ve el estratega. **Antes:** el mapa de palabras pide los embeddings por tandas y completa solo lo que el proveedor limitó (§6.39, sin migración). **Antes (rama `feature/hito2-seo`, migración **0062**, aprobada por Enric):** **Hito 2 del SEO, primera parte** (§6.39): mapa de palabras sobre Search Console, competencia en Google con DataForSEO y lo que sabe SEO en el expediente del estratega. Antes (sin migración): la **parte local sin Places** (nombre, dirección y teléfono coherentes entre ficha y web, y una página por servicio) y el estado real de la auditoría en Salud (§6.38). Antes, **desplegado el 23 nov (`4f0c3cec`, migración 0061)** el **resto del Hito 1 del SEO** (§6.38): expediente provisional del proyecto, plan de mejora por reglas que se convierte en encargos, registro de intervenciones del núcleo (técnica + hipótesis de cada encargo, también desde Estrategia), bitácora de I+D con las novedades de Google y el tipo de negocio en la ficha del cliente. Antes, **desplegada el 23 nov (`79eab5d2`, sin migración)** la primera parte, la **Salud técnica** (§6.37). Antes, **desplegados el 23 nov (`5ff3234e`, migración 0060)**: los **cimientos de la plataforma** para el departamento SEO (§6.36): proyecto con cliente y alcance, correos a clientes con aprobación, cola de trabajos con trabajador aparte (`kijutech_worker`), Search Console en detalle, rastreador y hallazgos, con el servidor ya ampliado a 4 vCPU / 8 GB / 160 GB. Con ellos salió lo que estaba en `main`: al decidir en Para ti queda un aviso de «hecho» unos segundos, y el aviso de Telegram de lo decidido en la web pierde sus botones (§6.32, §18); antes, Para ti deja decidir ahí mismo correos, propuestas de los agentes y dudas del equipo (§6.32), y detalles de interfaz: «Nuevo encargo» desde la ficha con el cliente elegido, filtro «Sin cliente» en Encargos, el nombre en la última miga, la jornada y las acciones web en la actividad del día y un solo `aria-current="page"` en la barra (§6.33, §6.34, §18), y guard de página en proyectos y «Nuevo encargo» (§16); antes, lo que se cambia en ClickUp (fecha, prioridad, título, descripción, lista, cliente y responsables) se copia al encargo y pone al día sus avisos (§6.6, §18), y la librería `postgres` pasa a 3.4.9 (quita el aviso «TimeoutNegativeWarning»); antes, los avisos de encargos para otro día salen el día que toca (§7, §6, §18; lo detectó Jesús), y examen de prompts desde el panel, con historial (§22, §8; migración **0059**, aprobada por Enric; primer examen en producción hecho y regla «antes del X = X» en el prompt), y pruebas que abren todas las pantallas con cada rol tras desplegar y registro de errores por cuenta de la sesión (§22, §6.27), y barreras de arquitectura, reglas del arnés y batería de prompts. El historial de cada cambio está en la cronología (§18) y en `docs/sessions/`.
 **Producción:** `https://brain.kijutech.com` (droplet `kijutech-brain`, Frankfurt). Procedimiento en `docs/DESPLIEGUE.md`. Rama de trabajo del despliegue: `feature/despliegue`.
 **Ramas:** cada mejora en su rama (`feature/…`, `fix/…`, `docs/…`); `main` solo recibe lo terminado y aprobado y es lo que está en producción. Las ramas antiguas (`operaciones`, `feature/seguridad`, `feature/despliegue`…) ya están fusionadas y se mantienen.
 **Rama `main`:** último despliegue `79eab5d2` (23 nov, Salud técnica, sin migración) sobre `5ff3234e` (23 nov, cimientos, **61 migraciones**, `0000`…`0060`); la **0061** (Hito 1 SEO) va en el siguiente despliegue con `--migrate`; antes `86546d53` (22 nov, pantallas por rol y examen de prompts) con las **60 migraciones** (`0000`…`0059`); el 23 nov, dos despliegues sin migración: avisos solo el día que toca (`5a14d39c`) y cambios de ClickUp al encargo con `postgres` 3.4.9. Revisión de autonomía en `docs/REVISION-AUTONOMIA.md`.
@@ -903,6 +903,56 @@ Diseño aprobado: `docs/DISENO-TECNICO-HITO2.md`. El proyecto tiene una pestaña
 
 **Integración Google Places (25 nov, rama `feature/places-integracion`, sin migración).** Nuevo proveedor `places` en `lib/agentes/integrations.ts`: clave de API de «Places API (New)», cifrada en `agt_integrations`. Al guardarla se prueba con `testPlaces`, que pide solo el id de una ficha de ejemplo. Servirá para la nota, el número de reseñas y las últimas reseñas de la competencia; la descarga todavía no está hecha.
 
+### 6.40 Preguntas al cliente (25 nov 2026, migración 0064, aprobada por Enric)
+Diseño completo y alternativas descartadas: `docs/DISENO-PREGUNTAS-CLIENTE.md`. Lo pidió Enric al probar el correo de 3 preguntas: no se podían editar ni las preguntas ni el texto sin tocar código, las de datos básicos no tenían sentido en un cliente ya captado y costaba encontrar dónde se activaba.
+
+**Tablas del núcleo** (en `CORE_TABLES` de las barreras de arquitectura):
+- `client_question_templates`: el banco por servicio;
+- `client_questions`: las preguntas de cada cliente, con su respuesta, cita y destino;
+- `client_questionnaires`: el cuestionario en línea; solo se guarda el hash del token;
+- `client_comms_templates`: los textos de los correos.
+
+**Código:**
+- `lib/core/questions-rules.ts` (reglas puras) y `lib/core/questions.ts`;
+- acciones en `lib/core/questions-actions.ts` (cliente: `edit`; banco y textos: `admin`) y `lib/core/questionnaire-actions.ts`. Estas dos son públicas: las protege el token y figuran en la lista de la auditoría.
+- Capacidades nuevas del registro:
+  - `setClientServicesSource`: la da Operaciones, con los servicios de cada cliente;
+  - `registerClientQuestionSource` y `registerClientAnswerHandler`: las usa SEO.
+
+**Pantallas:**
+- **Clientes → Banco de preguntas** (pestaña del espacio Clientes y entrada del menú): una pastilla por grupo, edición en línea, ordenar, activar o desactivar, «Proponer con IA» y «Textos de los correos» con ejemplo.
+- **Ficha → Preguntas**, una pestaña a la vista con el número de pendientes:
+  - de qué servicios salen las preguntas y quién las recibe (si nadie, se marca el contacto allí mismo);
+  - el correo que espera aprobación, que se aprueba, se corrige o se descarta allí;
+  - el cuestionario activo;
+  - «Por preguntar» agrupadas, con «Ya lo sé», editar, «No aplica», pregunta suelta y «Proponer con IA», y una barra fija para preparar el envío;
+  - preparadas, enviadas, respondidas (con la cita y adónde fueron) y las que no aplican.
+- **`/cuestionario/<token>`**: la página pública para el cliente, por bloques y con guardado automático.
+- **Expediente SEO**: ya no tiene su propio correo, solo un resumen con enlace a la ficha → Preguntas.
+
+**Banco inicial:** 11 preguntas generales, 10 de SEO, 12 de Google Ads y 6 de Web, para cada cuenta con esos servicios. Lo puede editar Enric.
+
+**Envío:**
+- con 5 preguntas o menos, correo; con más, cuestionario (se puede cambiar);
+- el texto se puede editar solo para ese envío;
+- siempre pasa por la aprobación del cliente;
+- envío automático cuando lo pide SEO al reunir el expediente: como mucho uno cada 30 días.
+
+**Respuestas:**
+- **Por correo:** Haiku (`clientes_leer_respuestas`) extrae cada respuesta con su cita literal.
+- **Por cuestionario:** se entregan al pulsar «Enviar», al anularlo o al caducar.
+- **Destino:**
+  - un campo de la ficha, solo si estaba vacío (si no, «Usar esta respuesta»);
+  - la memoria del cliente;
+  - o el expediente SEO, como provisional.
+- **Aviso:** a Enric por Telegram.
+
+**Pasada diaria:** el proceso `clientes.preguntas.diaria` del planificador vuelve a abrir las periódicas y cierra los cuestionarios caducados.
+
+**Prompts nuevos:** `clientes_leer_respuestas` (Haiku) y `clientes_proponer_preguntas` (Sonnet). `seo_leer_respuestas` solo se usa para leer correos de preguntas anteriores al 25 nov.
+
+**Pruebas:** `tests/preguntas-cliente.test.ts` (20 pruebas) y nuevas entradas en `tests/seguridad.test.ts`.
+
 ## 7. Panel de Automatizaciones: todos los valores
 
 Los valores por defecto viven en el código (`lib/operaciones/automations.ts`); la tabla `ops_automations` solo guarda lo que se cambia (restaurar = borrar la fila). Caché de 10 s. Textos en formato de Telegram (`<b>`, `<i>`, `<u>`, `<code>`, `<a href>`) con huecos validados; una línea con un hueco opcional vacío desaparece.
@@ -1104,6 +1154,11 @@ Construido en agosto de 2026 (Fases A–D). Detalle y auditoría completa en `do
 
 ## 16. Pendientes y deuda técnica
 
+- **Preguntas al cliente (25 nov, §6.40):**
+  - examen (eval) del prompt `clientes_leer_respuestas` con respuestas reales;
+  - que los agentes preparen preguntas por Telegram;
+  - mostrar en Para ti las respuestas que dicen algo distinto de la ficha;
+  - los borradores de un cuestionario que caduca se entregan en la pasada diaria, no en el momento.
 - **Cimientos de la plataforma (23 nov, §6.36):**
   - **Despliegue:** sin desplegar, a la espera del servidor de 4 GB. Con `deploy.sh --migrate`, que hace backup, y el OK de Enric.
   - **Por comprobar en producción:**
@@ -1269,6 +1324,7 @@ Cada uno con su nodo en el nivel 1 del Mapa Visual:
 - **19 nov, protocolo de despliegue autónomo** (rama `feature/autonomia-despliegue`, sin migraciones, aprobado por Enric): Claude fusiona, sube y despliega solo. `deploy.sh` pasa las pruebas y el Mapa Visual sobre el commit exacto, se niega si faltan migraciones sin `--migrate`, guarda la imagen anterior y vuelve atrás sola si la verificación falla. Scripts nuevos `rollback.sh` y `server-status.sh` (solo lectura). `--migrate` y lo delicado siguen necesitando a Enric. Ver `docs/sessions/2026-11-19-12-autonomia-despliegue.md`.
 - **19 nov, pruebas simuladas fase 2 y encargos por Telegram** (rama `feature/pruebas-fase2`, sin migraciones): jornada y tiempos con reloj simulado, ClickUp real en «Pruebas Kiju», «Pedir una prueba», pruebas en producción tras cada despliegue con vuelta atrás; `crear_encargo` con listas de todos los espacios, reglas del trabajo interno y pregunta de lista; arreglos: automatizaciones apagadas de serie que no se podían encender y buenos días sin ClickUp. Ver §6.27, §6.21 y `docs/sessions/2026-11-19-15-pruebas-fase2-encargos-telegram.md`.
 - **19 nov, pruebas simuladas** (rama `feature/pruebas-simuladas`, migración **0054**, esquema aprobado por Enric): entorno de pruebas aislado (otra cuenta, bot y ClickUp centinela, IA bloqueada), 10 escenarios de punta a punta, Telegram simulado en Sistema → Pruebas y `scripts/run-scenarios.sh`. La primera tanda encontró un fallo real: «Empezar» no guardaba quién vio el aviso. Ver §6.27 y `docs/sessions/2026-11-19-13-pruebas-simuladas.md`.
+- **25 nov, preguntas al cliente** (rama `feature/preguntas-cliente`, migración **0064**, aprobada por Enric): banco por servicio editable, pestaña Preguntas en la ficha, correo o cuestionario en línea, respuestas a la ficha, la memoria o el módulo, y «Proponer con IA». Ver §6.40 y `docs/sessions/2026-11-25-23-preguntas-cliente.md`.
 - Historial completo: `git log` y `docs/sessions/`.
 
 ## 19. Mapa de archivos

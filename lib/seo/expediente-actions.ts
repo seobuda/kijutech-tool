@@ -12,7 +12,6 @@ import { isBusinessType } from '@/lib/core/business-types';
 import { updateCoreClient } from '@/lib/core/clients';
 import { enqueueDossier } from '@/lib/seo/expediente/collect';
 import { DOSSIER_FIELD_SET, normPhone } from '@/lib/seo/expediente/rules';
-import { prepareQuestions } from '@/lib/seo/preguntas/preguntas';
 
 type Ok = { ok: true } | { ok: false; error: string };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -111,20 +110,5 @@ export async function applyFactToFichaAction(projectId: string, factId: string):
     return { ok: true };
   } catch (e) {
     return { ok: false, error: publicError(e, 'No se pudo pasar a la ficha') };
-  }
-}
-
-/** Prepara el correo de preguntas al cliente (sale del buzón del agente solo cuando Enric lo aprueba). */
-export async function prepareQuestionsAction(projectId: string): Promise<Ok> {
-  try {
-    const user = await requirePermission('edit');
-    const p = await ownProject(user.tenantId, projectId);
-    if (!p) return { ok: false, error: 'Proyecto no encontrado' };
-    const r = await prepareQuestions(user.tenantId, projectId, { kind: 'persona', name: (user.name || user.email).slice(0, 120), userId: user.id });
-    if (!r.ok) return { ok: false, error: r.error };
-    revalidatePath(PATH(projectId));
-    return { ok: true };
-  } catch (e) {
-    return { ok: false, error: publicError(e, 'No se pudo preparar el correo') };
   }
 }

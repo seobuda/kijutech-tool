@@ -7,7 +7,24 @@ import { cleanupFixtures, createFixtures, emailFor, FIXTURE_PASSWORD, loginAs, P
 
 import { aiProposeClient, applyClientProposal, saveClientOps } from '@/lib/operaciones/client-actions';
 import { decideSaludFindingAction, startSaludAuditAction, saveSeoBusinessTypeAction } from '@/lib/seo/salud-actions';
-import { applyFactToFichaAction, collectDossierAction, decideDossierFactAction, prepareQuestionsAction, savePersonaFactAction } from '@/lib/seo/expediente-actions';
+import { applyFactToFichaAction, collectDossierAction, decideDossierFactAction, savePersonaFactAction } from '@/lib/seo/expediente-actions';
+import {
+  addLooseQuestionAction,
+  addQuestionsRecipientAction,
+  answerManuallyAction,
+  applyAnswerToFichaAction,
+  cancelQuestionnaireAction,
+  createTemplateAction,
+  deleteTemplateAction,
+  editClientQuestionAction,
+  moveTemplateAction,
+  prepareQuestionsSendAction,
+  proposeQuestionsAction,
+  resetCommsTemplateAction,
+  saveCommsTemplateAction,
+  setQuestionStatusAction,
+  updateTemplateAction
+} from '@/lib/core/questions-actions';
 import { approvePlanItemAction, discardPlanItemAction, regeneratePlanAction, reopenPlanItemAction } from '@/lib/seo/plan-actions';
 import { buildKeywordMapAction, crawlCompetitorsAction, decideCompetitorAction, findCompetitorsAction, updateTopicAction } from '@/lib/seo/mapa-actions';
 import { addTestRequestAction, createSimRequestAction, getPruebasAction, pressSimButtonAction, runScenariosAction, sendSimTextAction, withdrawTestRequestAction } from '@/lib/operaciones/sim/actions';
@@ -138,6 +155,13 @@ const form = (data: Record<string, string>) => {
 // Acciones que NO hacen nada si llegaran a ejecutarse (ids que no existen, entradas vacías): así
 // una regresión en un guard hace fallar la prueba sin tocar datos reales.
 const ACCIONES_ADMIN: [string, () => unknown][] = [
+  ['createTemplateAction (Preguntas: añadir al banco)', () => createTemplateAction({ serviceKey: null, text: '', answerType: 'texto', target: 'memoria', askWhen: 'alta' })],
+  ['updateTemplateAction (Preguntas: editar el banco)', () => updateTemplateAction(ZERO, { text: '', answerType: 'texto', target: 'memoria', askWhen: 'alta', active: true })],
+  ['deleteTemplateAction (Preguntas: borrar del banco)', () => deleteTemplateAction(ZERO)],
+  ['moveTemplateAction (Preguntas: ordenar el banco)', () => moveTemplateAction(ZERO, 'up')],
+  ['saveCommsTemplateAction (Preguntas: texto del correo)', () => saveCommsTemplateAction('x', '', '')],
+  ['resetCommsTemplateAction (Preguntas: texto por defecto)', () => resetCommsTemplateAction('x')],
+  ['proposeQuestionsAction (Preguntas: proponer para el banco)', () => proposeQuestionsAction({ serviceKey: null, goal: '' })],
   ['saveTeamSettingsAction (jefe de operaciones: encender y ajustes)', () => saveTeamSettingsAction({ active: false, settings: {} })],
   ['approveQuestionAction (dudas del equipo: enviar propuesta)', () => approveQuestionAction(ZERO)],
   ['answerQuestionAction (dudas del equipo: responder)', () => answerQuestionAction(ZERO, 'x')],
@@ -223,12 +247,20 @@ const ACCIONES_ADMIN: [string, () => unknown][] = [
   ['setClientCommsApprovalAction (correos a clientes)', () => setClientCommsApprovalAction(ZERO, 'nunca')]
 ];
 const ACCIONES_EDITOR: [string, () => unknown][] = [
+  ['addLooseQuestionAction (Preguntas: pregunta suelta)', () => addLooseQuestionAction(ZERO, { text: '', answerType: 'texto', target: 'memoria' })],
+  ['editClientQuestionAction (Preguntas: editar para un cliente)', () => editClientQuestionAction(ZERO, '', null)],
+  ['setQuestionStatusAction (Preguntas: no aplica)', () => setQuestionStatusAction(ZERO, 'no_aplica')],
+  ['answerManuallyAction (Preguntas: responder a mano)', () => answerManuallyAction(ZERO, '')],
+  ['applyAnswerToFichaAction (Preguntas: usar en la ficha)', () => applyAnswerToFichaAction(ZERO)],
+  ['addQuestionsRecipientAction (Preguntas: contacto que las recibe)', () => addQuestionsRecipientAction(ZERO, ZERO)],
+  ['prepareQuestionsSendAction (Preguntas: preparar envío)', () => prepareQuestionsSendAction(ZERO, { ids: [ZERO], delivery: 'correo' })],
+  ['cancelQuestionnaireAction (Preguntas: anular cuestionario)', () => cancelQuestionnaireAction(ZERO, ZERO)],
+  ['proposeQuestionsAction (Preguntas: proponer para un cliente)', () => proposeQuestionsAction({ serviceKey: null, goal: '', clientId: ZERO })],
   ['startSaludAuditAction (SEO: rastrear y auditar)', () => startSaludAuditAction(ZERO)],
   ['decideSaludFindingAction (SEO: descartar hallazgo)', () => decideSaludFindingAction(ZERO, ZERO, 'descartado', 'x')],
   ['saveSeoBusinessTypeAction (SEO: tipo de negocio a la ficha)', () => saveSeoBusinessTypeAction(ZERO, 'Dentist')],
   ['collectDossierAction (SEO: recoger expediente)', () => collectDossierAction(ZERO)],
   ['decideDossierFactAction (SEO: confirmar dato)', () => decideDossierFactAction(ZERO, ZERO, 'confirmado')],
-  ['prepareQuestionsAction (SEO: preparar el correo de preguntas)', () => prepareQuestionsAction(ZERO)],
   ['savePersonaFactAction (SEO: escribir dato)', () => savePersonaFactAction(ZERO, 'telefono', '600000000')],
   ['applyFactToFichaAction (SEO: pasar a la ficha)', () => applyFactToFichaAction(ZERO, ZERO)],
   ['regeneratePlanAction (SEO: rehacer plan)', () => regeneratePlanAction(ZERO)],

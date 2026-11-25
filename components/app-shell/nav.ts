@@ -2,6 +2,7 @@
 // La visibilidad por rol aquí es solo de interfaz: cada página y acción comprueba su permiso en el servidor.
 import {
   Activity,
+  MessageCircleQuestion,
   Bug,
   BookOpen,
   Library,
@@ -183,7 +184,8 @@ export const NAV: NavGroup[] = [
           { href: '/dashboard/operaciones/encargos', label: 'Encargos', icon: ClipboardList, prefix: true, keywords: 'tareas clickup encargos' },
           { href: '/dashboard/rendimiento', label: 'Rendimiento web', icon: LineChart, keywords: 'search console analytics business profile ficha google clics sesiones llamadas métricas histórico informe mensual caídas' },
           { href: '/dashboard/estrategia', label: 'Estrategia', icon: Compass, keywords: 'objetivos planes seguimiento palabras clave salud web velocidad oportunidades señales frecuencias calendario google updates estratega' },
-          { href: '/dashboard/projects', label: 'Proyectos SEO', icon: FolderKanban, prefix: true, keywords: 'seo keywords clusters' }
+          { href: '/dashboard/projects', label: 'Proyectos SEO', icon: FolderKanban, prefix: true, keywords: 'seo keywords clusters' },
+          { href: '/dashboard/clientes/preguntas', label: 'Banco de preguntas', icon: MessageCircleQuestion, keywords: 'preguntas cuestionario cliente onboarding briefing correo plantilla' }
         ]
       },
       {
@@ -291,6 +293,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   rendimiento: 'Rendimiento web',
   estrategia: 'Estrategia',
   projects: 'Proyectos SEO',
+  preguntas: 'Banco de preguntas',
   ai: 'IA',
   settings: 'Ajustes',
   prompts: 'Prompts',
