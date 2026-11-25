@@ -54,6 +54,8 @@ export async function updateTopicAction(projectId: string, topicId: string, patc
       .where(and(eq(seoTopics.id, topicId), eq(seoTopics.projectId, projectId), eq(seoTopics.tenantId, user.tenantId)))
       .returning({ id: seoTopics.id });
     if (!r.length) return { ok: false, error: 'Tema no encontrado' };
+    // Descartar o recuperar un tema cambia sus oportunidades: se rehace el mapa (y con él, el plan).
+    if (patch.status) await enqueueKeywordMap(user.tenantId, projectId);
     revalidatePath(PATH(projectId));
     return { ok: true };
   } catch (e) {

@@ -294,6 +294,11 @@ const SEGMENT_LABELS: Record<string, string> = {
   estrategia: 'Estrategia',
   projects: 'Proyectos SEO',
   preguntas: 'Banco de preguntas',
+  // Pestañas SEO del proyecto (Hito 1 y 2).
+  salud: 'Salud técnica',
+  expediente: 'Expediente',
+  palabras: 'Palabras',
+  plan: 'Plan de mejora',
   ai: 'IA',
   settings: 'Ajustes',
   prompts: 'Prompts',

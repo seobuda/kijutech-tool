@@ -4,10 +4,12 @@ import 'server-only';
 // ya guarda el núcleo (gsc_daily): temas por página dominante y, para lo que no tiene página clara, por parecido
 // (embeddings guardados y reutilizados; si no hay proveedor de embeddings con saldo, por palabras). Sin IA de texto:
 // el nombre de cada tema es su consulta principal. La canibalización sale como hallazgo y entra en el plan de mejora.
+// Desde el 26 nov 2026 también las oportunidades (página nueva, elegir página, al alcance y CTR bajo), con el valor de
+// negocio de cada tema (servicios del cliente, lo que no quiere y lo que más le interesa) y su temporada.
 import { and, eq, inArray, notInArray, sql } from 'drizzle-orm';
 import { HDBSCAN } from 'hdbscan-ts';
 import { db } from '@/lib/db/drizzle';
-import { clients, projects, seoTextEmbeddings, seoTopicQueries, seoTopics } from '@/lib/db/schema';
+import { clientMemory, clients, projects, seoDossierFacts, seoTextEmbeddings, seoTopicQueries, seoTopics } from '@/lib/db/schema';
 import { gscPropertiesForProject } from '@/lib/core/gsc';
 import { syncFindings } from '@/lib/core/findings';
 import { enqueueJob, registerJobKind } from '@/lib/core/jobs';
@@ -15,7 +17,7 @@ import { getEmbeddingConfig } from '@/lib/ai/gateway';
 import { embedTexts } from '@/lib/ai/clustering/layers/1-embeddings';
 import { brandTokens } from '@/lib/seo/expediente/rules';
 import { MAPA_KINDS } from '@/lib/seo/salud/kinds';
-import { anonymousShare, buildTopics, cannibalization, lexicalGroups, queryHash, queryStats, type QueryPageRow, type WeekRow } from '@/lib/seo/mapa/rules';
+import { anonymousShare, buildTopics, cannibalization, lexicalGroups, opportunities, queryHash, queryStats, seasonality, topicGain, topicValue, type MonthRow, type QueryPageRow, type ValueContext, type WeekRow } from '@/lib/seo/mapa/rules';
 
 export const MAPA_SOURCE = 'seo.mapa:gsc';
 const MAX_EMBED = 1500;
@@ -45,7 +47,8 @@ type SemanticResult = { groups: string[][]; embedded: number; pending: number };
  * quedan pendientes para que una ejecución posterior los complete desde la caché.
  */
 async function semanticGroups(tenantId: string, queries: string[]): Promise<SemanticResult | null> {
-  if (queries.length < 3) return { groups: queries.map((q) => [q]), embedded: 0, pending: 0 };
+  // Con menos de 3 búsquedas sin página no hay nada que agrupar por significado: se agrupan por palabras.
+  if (queries.length < 3) return null;
   let cfg: { provider: string; model: string; apiKey: string };
   try {
     cfg = await getEmbeddingConfig(tenantId, 'platform');
@@ -100,11 +103,52 @@ async function semanticGroups(tenantId: string, queries: string[]): Promise<Sema
   return { groups: [...by.values(), ...lexicalGroups([...noise, ...without, ...queries.slice(MAX_EMBED)])], embedded, pending: without.length };
 }
 
-export type MapaResult = { topics: number; pageTopics: number; newPageTopics: number; queries: number; cannibal: number; anonymousPct: number | null; grouping: 'embeddings' | 'palabras'; embedded: number; pendingEmbeddings: number };
+export type MapaResult = {
+  topics: number;
+  pageTopics: number;
+  newPageTopics: number;
+  unclearTopics: number;
+  queries: number;
+  cannibal: number;
+  opportunities: number;
+  gainPerMonth: number;
+  anonymousPct: number | null;
+  grouping: 'embeddings' | 'palabras';
+  embedded: number;
+  pendingEmbeddings: number;
+  /** Hay datos del cliente para el valor de negocio (servicios en orden). */
+  hasValueData: boolean;
+};
+
+/** Lo que sabemos del cliente para el valor de cada tema: servicios en orden, lo que no quiere y lo que más le interesa. */
+async function valueContext(tenantId: string, projectId: string, clientId: string | null, offerings: string | null): Promise<ValueContext> {
+  // Servicios: el dato del expediente (confirmado primero; si no, el de más confianza); si no hay, la ficha.
+  const facts = await db
+    .select({ value: seoDossierFacts.value, status: seoDossierFacts.status, confidence: seoDossierFacts.confidence })
+    .from(seoDossierFacts)
+    .where(and(eq(seoDossierFacts.projectId, projectId), eq(seoDossierFacts.field, 'servicios')));
+  const best = facts.filter((f) => f.status !== 'descartado').sort((a, b) => Number(b.status === 'confirmado') - Number(a.status === 'confirmado') || b.confidence - a.confidence)[0];
+  let services = Array.isArray(best?.value) ? (best!.value as unknown[]).map(String) : [];
+  if (!services.length && offerings) services = offerings.split(/[,;\n·]/).map((x) => x.trim()).filter((x) => x.length >= 3);
+  services = services.slice(0, 20);
+  let avoid: string[] = [];
+  let prefer: string[] = [];
+  if (clientId) {
+    const mem = await db
+      .select({ kind: clientMemory.kind, text: clientMemory.text })
+      .from(clientMemory)
+      .where(and(eq(clientMemory.clientId, clientId), eq(clientMemory.tenantId, tenantId), eq(clientMemory.status, 'aceptado'), inArray(clientMemory.kind, ['restriccion', 'preferencia'])));
+    // Las respuestas a las Preguntas se guardan como «pregunta → respuesta»: solo cuenta la respuesta.
+    const answer = (t: string) => (t.includes('→') ? t.slice(t.lastIndexOf('→') + 1) : t).trim();
+    avoid = mem.filter((m) => m.kind === 'restriccion').map((m) => answer(m.text)).filter(Boolean);
+    prefer = mem.filter((m) => m.kind === 'preferencia').map((m) => answer(m.text)).filter(Boolean);
+  }
+  return { services, avoid, prefer };
+}
 
 export async function buildKeywordMap(tenantId: string, projectId: string, round = 0): Promise<MapaResult> {
   const [p] = await db
-    .select({ id: projects.id, clientName: clients.name, aliases: clients.aliases })
+    .select({ id: projects.id, clientId: projects.clientId, clientName: clients.name, aliases: clients.aliases, offerings: clients.offerings })
     .from(projects)
     .leftJoin(clients, eq(clients.id, projects.clientId))
     .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)))
@@ -127,7 +171,41 @@ export async function buildKeywordMap(tenantId: string, projectId: string, round
   const stats = queryStats(qp);
   const pool = stats.filter((s) => !s.dominant).map((s) => s.query);
   const sem = await semanticGroups(tenantId, pool);
-  const topics = buildTopics(stats, { brandTokens: brandTokens([p.clientName ?? '', ...((p.aliases as string[] | null) ?? [])]), similar: sem ? () => sem.groups : undefined });
+  const brand = brandTokens([p.clientName ?? '', ...((p.aliases as string[] | null) ?? [])]);
+  const topics = buildTopics(stats, { brandTokens: brand, similar: sem ? () => sem.groups : undefined });
+
+  // Valor de negocio, oportunidad y temporada de cada tema.
+  const ctx = await valueContext(tenantId, projectId, p.clientId, p.offerings);
+  for (const t of topics) {
+    const v = topicValue(t, ctx);
+    t.metrics.valor = v.valor;
+    t.metrics.servicio = v.servicio;
+    t.metrics.aviso = v.aviso;
+    t.metrics.oportunidad = topicGain(t);
+  }
+  const [lim] = (await db.execute(sql`SELECT to_char(max(date), 'YYYY-MM-DD') AS d FROM gsc_daily WHERE property_id IN (${ids}) AND search_type = 1`)) as unknown as { d: string | null }[];
+  if (lim?.d) {
+    // Último mes completo: el anterior al de la última fecha, salvo que esa fecha sea el último día del mes.
+    const last = new Date(`${lim.d}T00:00:00Z`);
+    const next = new Date(last.getTime() + 86_400_000);
+    const lastMonth = next.getUTCDate() === 1 ? `${lim.d.slice(0, 7)}-01` : new Date(Date.UTC(last.getUTCFullYear(), last.getUTCMonth() - 1, 1)).toISOString().slice(0, 10);
+    const topQueries = [...new Set(topics.slice(0, 200).flatMap((t) => t.queries.slice(0, 50).map((q) => q.query)))].slice(0, 4000);
+    if (topQueries.length) {
+      const months = (await db.execute(sql`
+        SELECT q.query, to_char(m.month, 'YYYY-MM-DD') AS month, sum(m.clicks)::int AS clicks, sum(m.impressions)::int AS impressions
+        FROM gsc_monthly m JOIN gsc_queries q ON q.id = m.query_id
+        WHERE m.property_id IN (${ids}) AND m.month > (${lastMonth}::date - interval '16 months') AND q.query IN (${sql.join(topQueries.map((x) => sql`${x}`), sql`, `)})
+        GROUP BY 1, 2`)) as unknown as { query: string; month: string; clicks: number; impressions: number }[];
+      const monthRows: MonthRow[] = months.map((r) => ({ query: r.query, month: r.month, clicks: Number(r.clicks), impressions: Number(r.impressions) }));
+      if (monthRows.length) {
+        for (const t of topics.slice(0, 200)) {
+          const s2 = seasonality(t.queries.map((q) => q.query), monthRows, lastMonth);
+          t.metrics.interanualPct = s2.interanualPct;
+          t.metrics.mesesFuertes = s2.mesesFuertes;
+        }
+      }
+    }
+  }
 
   // Guardar: los temas de esta ejecución sustituyen a los activos anteriores; un tema que una persona descartó sigue descartado.
   const now = new Date();
@@ -135,8 +213,8 @@ export async function buildKeywordMap(tenantId: string, projectId: string, round
   for (const t of topics.slice(0, 500)) {
     const [row] = await db
       .insert(seoTopics)
-      .values({ tenantId, projectId, topicKey: t.topicKey, name: t.name.slice(0, 200), url: t.url, origin: t.origin, metrics: t.metrics, runAt: now })
-      .onConflictDoUpdate({ target: [seoTopics.projectId, seoTopics.topicKey], set: { url: t.url, origin: t.origin, metrics: t.metrics, runAt: now, updatedAt: now, name: sql`CASE WHEN ${seoTopics.namedBy} = 'persona' THEN ${seoTopics.name} ELSE ${t.name.slice(0, 200)} END` } })
+      .values({ tenantId, projectId, topicKey: t.topicKey, name: t.name.slice(0, 200), url: t.url, origin: t.origin, metrics: t.metrics as Record<string, number | null>, runAt: now })
+      .onConflictDoUpdate({ target: [seoTopics.projectId, seoTopics.topicKey], set: { url: t.url, origin: t.origin, metrics: t.metrics as Record<string, number | null>, runAt: now, updatedAt: now, name: sql`CASE WHEN ${seoTopics.namedBy} = 'persona' THEN ${seoTopics.name} ELSE ${t.name.slice(0, 200)} END` } })
       .returning({ id: seoTopics.id });
     keep.push(t.topicKey);
     await db.delete(seoTopicQueries).where(eq(seoTopicQueries.topicId, row.id));
@@ -164,11 +242,20 @@ export async function buildKeywordMap(tenantId: string, projectId: string, round
       GROUP BY 1, 2, 3`)) as unknown as { query: string; page: string; week: string; impressions: number; pos_sum: number }[];
     cannibal = cannibalization(weeks.map((w): WeekRow => ({ query: w.query, page: w.page, week: w.week, impressions: Number(w.impressions), posSum: Number(w.pos_sum) })));
   }
+  // Hallazgos del mapa (canibalización y oportunidades): los temas descartados por una persona no proponen trabajo.
+  const discarded = new Set(
+    (await db.select({ k: seoTopics.topicKey }).from(seoTopics).where(and(eq(seoTopics.projectId, projectId), eq(seoTopics.status, 'descartado')))).map((r) => r.k)
+  );
+  const statByQuery = new Map(stats.map((x) => [x.query, x]));
+  const opps = opportunities(topics.slice(0, 500).filter((t) => !discarded.has(t.topicKey)), stats, brand);
   await syncFindings(
     tenantId,
     projectId,
     MAPA_SOURCE,
-    cannibal.slice(0, 100).map((c) => ({ kind: 'seo.cannibalization', dedupeKey: `seo.cannibalization:${queryHash(c.query).slice(0, 16)}`, query: c.query, url: c.pages[0], value: c.switches, metric: 'cambios_de_lider', evidence: { paginas: c.pages, cambios: c.switches, semanas: c.weeks } })),
+    [
+      ...cannibal.slice(0, 100).map((c) => ({ kind: 'seo.cannibalization', dedupeKey: `seo.cannibalization:${queryHash(c.query).slice(0, 16)}`, query: c.query, url: c.pages[0], value: c.switches, metric: 'cambios_de_lider', evidence: { paginas: c.pages, cambios: c.switches, semanas: c.weeks, impresiones: statByQuery.get(c.query)?.impressions ?? null } })),
+      ...opps.map((o) => ({ kind: o.kind, dedupeKey: o.dedupeKey, severity: o.severity, url: o.url, query: o.query, value: o.gain, metric: 'clics_mes', evidence: o.evidence }))
+    ],
     MAPA_KINDS.map((k) => k.kind)
   );
 
@@ -176,7 +263,8 @@ export async function buildKeywordMap(tenantId: string, projectId: string, round
     SELECT coalesce(sum(clicks), 0)::int AS clicks, coalesce(sum(query_clicks), 0)::int AS query_clicks
     FROM gsc_daily_totals WHERE property_id IN (${ids}) AND search_type = 1 AND date > current_date - 90`)) as unknown as { clicks: number; query_clicks: number }[];
   const anon = anonymousShare(Number(tot?.clicks ?? 0), Number(tot?.query_clicks ?? 0));
-  if (cannibal.length) await enqueueJob({ tenantId, kind: 'seo.plan.regenerate', payload: { projectId }, scopeType: 'proyecto', scopeId: projectId, priority: 5, dedupeKey: `seo.plan:${projectId}` });
+  // El plan se rehace siempre: las oportunidades nuevas entran y las resueltas caducan.
+  await enqueueJob({ tenantId, kind: 'seo.plan.regenerate', payload: { projectId }, scopeType: 'proyecto', scopeId: projectId, priority: 5, dedupeKey: `seo.plan:${projectId}` });
   // Quedan consultas sin vector (límite del proveedor): otra pasada en una hora, que parte de la caché. Clave propia,
   // porque la ejecución actual sigue «en curso» y ocupa la clave normal.
   if (sem?.pending && round < MAX_EMBED_ROUNDS) {
@@ -185,9 +273,13 @@ export async function buildKeywordMap(tenantId: string, projectId: string, round
   return {
     topics: Math.min(topics.length, 500),
     pageTopics: topics.filter((t) => t.origin === 'pagina').length,
-    newPageTopics: topics.filter((t) => t.url === null).length,
+    newPageTopics: topics.filter((t) => t.url === null && !t.metrics.candidata).length,
+    unclearTopics: topics.filter((t) => t.url === null && Boolean(t.metrics.candidata)).length,
     queries: stats.length,
     cannibal: cannibal.length,
+    opportunities: opps.length,
+    gainPerMonth: opps.reduce((s3, o) => s3 + o.gain, 0),
+    hasValueData: ctx.services.length > 0,
     anonymousPct: anon !== null ? Math.round(anon * 100) : null,
     grouping: sem ? 'embeddings' : 'palabras',
     embedded: sem?.embedded ?? 0,
