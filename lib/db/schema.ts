@@ -18,6 +18,7 @@ import {
   bigint,
   bigserial,
   doublePrecision,
+  real,
   primaryKey,
   smallint,
   vector,
@@ -4080,6 +4081,36 @@ export const seoDataSpend = pgTable(
   },
   (table) => [index('seo_data_spend_project_idx').on(table.projectId, table.createdAt)]
 );
+
+// Mediciones de velocidad por página (26 nov 2026; migración 0066): datos reales (CrUX) y laboratorio (Lighthouse).
+export const seoSpeedChecks = pgTable(
+  'seo_speed_checks',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    runId: uuid('run_id').notNull(),
+    url: text('url').notNull(),
+    kind: varchar('kind', { length: 12 }).notNull(),
+    scope: varchar('scope', { length: 10 }),
+    category: varchar('category', { length: 10 }),
+    score: integer('score'),
+    lcpMs: integer('lcp_ms'),
+    inpMs: integer('inp_ms'),
+    cls: real('cls'),
+    fcpMs: integer('fcp_ms'),
+    tbtMs: integer('tbt_ms'),
+    siMs: integer('si_ms'),
+    data: jsonb('data').notNull().default({}),
+    measuredAt: timestamp('measured_at').notNull().defaultNow(),
+  },
+  (table) => [index('seo_speed_checks_project_idx').on(table.projectId, table.measuredAt), check('seo_speed_checks_kind_check', sql`${table.kind} IN ('campo', 'laboratorio')`)]
+);
+export type SeoSpeedCheck = typeof seoSpeedChecks.$inferSelect;
 
 export const seoReviews = pgTable(
   'seo_reviews',
