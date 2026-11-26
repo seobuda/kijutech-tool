@@ -1,10 +1,11 @@
 // SEO · Salud técnica, parte 1 (técnico completo, 26 nov 2026; docs/DISENO-SEO-PARTE1.md). Reglas PURAS que se suman
 // a audit-rules.ts: bucles de redirección, anchors del enlazado interno, hreflang y lang. Sin base de datos ni red.
 import { sha1 } from '@/lib/core/crawl-extract';
+import { isAllowed, parseRobots } from '@/lib/core/robots';
 import type { FindingInput } from '@/lib/core/findings-rules';
 import { isIndexable, sameUrl, type AuditPage } from '@/lib/seo/salud/audit-rules';
 
-export type TecnicoPage = AuditPage & { lang?: string | null; hreflang?: { lang: string; url: string }[] | null };
+export type TecnicoPage = AuditPage & { lang?: string | null; hreflang?: { lang: string; url: string }[] | null; facts?: { ext?: string[]; res?: string[] } | null };
 /** Enlaces internos agrupados por destino y texto (n = cuántos enlaces iguales). */
 export type TecnicoLink = { toHash: string; anchor: string | null; n: number };
 
@@ -155,4 +156,56 @@ export function pageRegressions(current: TecnicoPage[], previous: PrevPage[]): F
     out.push(mk('seo.page_regressed', short(p.url), { url: p.url, metric: 'status', value: p.statusCode, evidence: { before: `${before.statusCode} indexable`, now } }));
   }
   return out;
+}
+
+const pathOf = (u: string) => {
+  try {
+    const x = new URL(u);
+    return { origin: x.origin, path: `${x.pathname}${x.search}` };
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * robots.txt evaluado como Googlebot (no como nuestro rastreador): CSS o JS de la propia web bloqueados (Google no puede
+ * pintar la página como la ve un usuario) y URLs del sitemap bloqueadas (señales contradictorias). Un hallazgo por web.
+ */
+export function robotsGoogleIssues(rootUrl: string, robotsTxt: string | null, pages: TecnicoPage[]): FindingInput[] {
+  if (!robotsTxt) return [];
+  const g = parseRobots(robotsTxt, 'googlebot');
+  const root = pathOf(rootUrl);
+  if (!root) return [];
+  const out: FindingInput[] = [];
+  const blockedRes = new Set<string>();
+  for (const p of pages) {
+    for (const r of p.facts?.res ?? []) {
+      const x = pathOf(r);
+      if (x && x.origin === root.origin && !isAllowed(g, x.path)) blockedRes.add(r);
+    }
+  }
+  if (blockedRes.size) out.push(mk('seo.robots_blocks_resources', short(rootUrl), { url: rootUrl, metric: 'recursos', value: blockedRes.size, evidence: { samples: [...blockedRes].slice(0, 10) } }));
+  const blockedSitemap = pages.filter((p) => p.inSitemap && (() => {
+    const x = pathOf(p.url);
+    return x && x.origin === root.origin && !isAllowed(g, x.path);
+  })());
+  if (blockedSitemap.length) out.push(mk('seo.sitemap_blocked', short(rootUrl), { url: blockedSitemap[0].url, metric: 'paginas', value: blockedSitemap.length, evidence: { samples: blockedSitemap.slice(0, 10).map((p) => p.url) } }));
+  return out;
+}
+
+/** Rastreadores de los buscadores con IA (sus respuestas citan webs) y los que solo recogen texto para entrenar. */
+export const AI_SEARCH_BOTS = ['OAI-SearchBot', 'ChatGPT-User', 'PerplexityBot', 'Claude-SearchBot', 'Claude-User', 'Bingbot'];
+export const AI_TRAINING_BOTS = ['GPTBot', 'Google-Extended', 'ClaudeBot', 'Applebot-Extended', 'CCBot'];
+
+/**
+ * ¿Bloquea robots.txt la portada a los rastreadores de IA? Los de búsqueda (ChatGPT, Perplexity, Claude, Bing/Copilot)
+ * importan para salir citado: aviso. Los de entrenamiento son una decisión del cliente: informativo.
+ */
+export function aiCrawlerIssues(rootUrl: string, robotsTxt: string | null): FindingInput[] {
+  if (!robotsTxt) return [];
+  const blocked = (bot: string) => !isAllowed(parseRobots(robotsTxt, bot.toLowerCase()), '/');
+  const search = AI_SEARCH_BOTS.filter(blocked);
+  const training = AI_TRAINING_BOTS.filter(blocked);
+  if (!search.length && !training.length) return [];
+  return [mk('seo.ai_crawlers_blocked', short(rootUrl), { url: new URL('/robots.txt', rootUrl).toString(), severity: search.length ? 'aviso' : 'info', metric: 'bots', value: search.length + training.length, evidence: { search, training } })];
 }

@@ -17,7 +17,7 @@ import { addMemory } from '@/lib/core/clients';
 import { registerJobKind } from '@/lib/core/jobs';
 import { linkFindingToRequest } from '@/lib/core/findings';
 import { gscPropertiesForProject } from '@/lib/core/gsc';
-import { cancelIntervention, interventionsBySource, recordIntervention } from '@/lib/core/interventions';
+import { cancelIntervention, completeHypothesis, interventionsBySource, recordIntervention } from '@/lib/core/interventions';
 import { SALUD_SOURCE, startProjectAudit } from '@/lib/seo/salud/audit';
 import { enqueueKeywordMap } from '@/lib/seo/mapa/mapa';
 import { SEO_KINDS } from '@/lib/seo/salud/kinds';
@@ -65,7 +65,7 @@ export async function regeneratePlan(tenantId: string, projectId: string): Promi
     db
       .select({ id: findings.id, kind: findings.kind, severity: findings.severity, url: findings.url, query: findings.query, evidence: findings.evidence })
       .from(findings)
-      .where(and(eq(findings.projectId, projectId), eq(findings.tenantId, tenantId), inArray(findings.source, [SALUD_SOURCE, LOCAL_SOURCE, 'seo.mapa:gsc', ...VIGILANCIA_SOURCES]), eq(findings.status, 'abierto'))),
+      .where(and(eq(findings.projectId, projectId), eq(findings.tenantId, tenantId), inArray(findings.source, [SALUD_SOURCE, LOCAL_SOURCE, 'seo.mapa:gsc', 'seo.salud:externos', ...VIGILANCIA_SOURCES]), eq(findings.status, 'abierto'))),
     db.select().from(seoPlanItems).where(and(eq(seoPlanItems.projectId, projectId), eq(seoPlanItems.tenantId, tenantId))),
     impressionsByUrl(tenantId, projectId)
   ]);
@@ -172,7 +172,8 @@ export async function approvePlanItem(tenantId: string, projectId: string, itemI
   if (title !== item.title || estHours !== Number(item.estHours) || dropped.length) {
     await db.update(seoPlanItems).set({ title, estHours: estHours.toFixed(1), urls: keepUrls, findingIds, description, updatedAt: new Date() }).where(eq(seoPlanItems.id, item.id));
   }
-  const full = [description, o.note?.trim() ? `\n**Nota de ${by}:** ${o.note.trim().slice(0, 1000)}` : '', `\n_Plan de mejora SEO del proyecto ${project.name} (${estHours} h estimadas)._`].filter(Boolean).join('\n');
+  const hyp = completeHypothesis(item.technique, item.hypothesis ?? undefined);
+  const full = [description, hyp.verify ? `\n**Cómo verificaremos:** ${hyp.verify.how}` : '', o.note?.trim() ? `\n**Nota de ${by}:** ${o.note.trim().slice(0, 1000)}` : '', `\n_Plan de mejora SEO del proyecto ${project.name} (${estHours} h estimadas)._`].filter(Boolean).join('\n');
   const r = await ws.createTask(tenantId, {
     clientId: project.clientId,
     title,

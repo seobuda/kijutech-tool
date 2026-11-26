@@ -79,14 +79,26 @@ export const SEO_SALUD_PROCESS_MAP: ProcessStep[] = [
   {
     id: 'salud-reglas',
     lane: 'Auditoría',
-    name: 'Comprobaciones técnicas (38 reglas, sin IA)',
-    description: 'Sobre las páginas rastreadas: respuestas 4xx/5xx, cadenas de redirección y enlaces a redirecciones, sitemap, noindex en el sitemap, canonical a otra URL o roto, títulos (falta, largo, repetido), meta descripción, H1, contenido escaso, duplicado y casi duplicado (simhash), imágenes sin alt, huérfanas, profundidad, HTTPS, servidor lento (mediana ≥ 2,5 s), web pintada con JavaScript y datos estructurados (negocio sin marcar o incompleto, FAQ, reseñas propias). Desde la parte 1 (26 nov 2026, `audit-rules-tecnico.ts`): bucles de redirección, páginas enlazadas casi siempre con textos genéricos, hreflang (código no válido, sin vuelta, hacia una página rota), páginas sin idioma y regresiones (páginas que en el rastreo anterior eran indexables y ahora, al volver a pedirlas, dan error o noindex; nunca por ausencia).',
+    name: 'Comprobaciones técnicas (41 reglas, sin IA)',
+    description: 'Sobre las páginas rastreadas: respuestas 4xx/5xx, cadenas de redirección y enlaces a redirecciones, sitemap, noindex en el sitemap, canonical a otra URL o roto, títulos (falta, largo, repetido), meta descripción, H1, contenido escaso, duplicado y casi duplicado (simhash), imágenes sin alt, huérfanas, profundidad, HTTPS, servidor lento (mediana ≥ 2,5 s), web pintada con JavaScript y datos estructurados (negocio sin marcar o incompleto, FAQ, reseñas propias). Desde la parte 1 (26 nov 2026, `audit-rules-tecnico.ts`): bucles de redirección, páginas enlazadas casi siempre con textos genéricos, hreflang (código no válido, sin vuelta, hacia una página rota), páginas sin idioma y regresiones (páginas que en el rastreo anterior eran indexables y ahora, al volver a pedirlas, dan error o noindex; nunca por ausencia). Técnico 2a (26 nov): robots.txt evaluado como Googlebot (CSS/JS de la web bloqueados, URLs del sitemap bloqueadas) y rastreadores de IA bloqueados (los de búsqueda, aviso; los de entrenamiento, informativo).',
     status: 'built',
     file: 'lib/seo/salud/audit-rules.ts',
     when: 'Cuando termina el rastreo (trabajo «seo.salud.audit» en la cola).',
     ai: 'Nada: son reglas fijas y versionadas (cada hallazgo guarda la versión de la regla que lo detectó).',
     code: 'Solo las páginas indexables (200, sin noindex y con canonical propio) cuentan para títulos y contenido. Las huérfanas solo si el rastreo fue completo. Repetidos: un hallazgo por grupo. Casi duplicados: simhash a ≤ 3 bits, hasta 1.500 páginas.',
     tables: ['crawl_pages', 'crawl_links']
+  },
+  {
+    id: 'salud-externos',
+    lane: 'Auditoría',
+    name: 'Enlaces rotos hacia otras webs',
+    description: 'Comprueba los enlaces de la web hacia otras webs (el rastreador guarda hasta 100 por página en crawl_pages.facts) y marca los que dan 404/410 o apuntan a un dominio que ya no existe, con las páginas que los enlazan.',
+    status: 'built',
+    file: 'lib/seo/salud/externos.ts',
+    when: 'Tras cada auditoría (trabajo «seo.salud.externos», aparte).',
+    ai: 'Nada.',
+    code: 'Hasta 300 URLs por pasada, 4 a la vez y una por web de destino, HEAD y GET si hace falta, 8 s por petición y 200 s en total; primero las que ya tenían hallazgo abierto. Solo webs públicas conectando a la IP validada (publicFetch, sin DNS rebinding). 403/429/5xx/tiempo agotado = no se sabe: se conserva lo que había. Dominio inexistente: informativo la primera vez, aviso si se repite. Fuente propia «seo.salud:externos» y lista de tipos aparte.',
+    tables: ['crawl_pages', 'findings']
   },
   {
     id: 'salud-gsc',

@@ -5,6 +5,11 @@ import 'server-only';
 // lib/estrategia/web.ts; ahora la usan también otros módulos (SEO: scraper de competidores).
 import { isIP } from 'node:net';
 import { lookup } from 'node:dns/promises';
+import dns from 'node:dns';
+import http from 'node:http';
+import https from 'node:https';
+import { Readable, pipeline } from 'node:stream';
+import zlib from 'node:zlib';
 
 /** Solo http(s) a nombres públicos: evita que una URL mal puesta en una ficha apunte a la red interna. */
 export function isPublicUrl(u: string): boolean {
@@ -26,7 +31,7 @@ function privateV4(ip: string): boolean {
   return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127) || a >= 224;
 }
 
-function privateIp(ip: string): boolean {
+export function privateIp(ip: string): boolean {
   if (isIP(ip) === 4) return privateV4(ip);
   const v = ip.toLowerCase();
   const mapped = v.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
@@ -48,14 +53,100 @@ export async function resolvesPublic(u: string): Promise<boolean> {
 }
 
 /**
- * fetch que solo sigue redirecciones hacia direcciones públicas (cada salto se comprueba; como mucho 5). Devuelve la
- * respuesta final o un error legible.
+ * Resolución DNS que solo deja conectar a direcciones públicas. Se usa como `lookup` del socket: la dirección que se
+ * comprueba es exactamente a la que se conecta (sin una segunda resolución), así un dominio no puede cambiar su DNS
+ * entre la comprobación y la conexión para apuntar a la red interna (DNS rebinding; auditoría SEO parte 1, 26 nov 2026).
  */
-export async function fetchPublic(url: string, init: Omit<RequestInit, 'redirect'> = {}, maxRedirects = 5): Promise<{ res: Response; url: string } | { error: string }> {
+export function publicLookup(hostname: string, options: dns.LookupOptions, cb: (err: NodeJS.ErrnoException | null, address: string | dns.LookupAddress[], family?: number) => void): void {
+  dns.lookup(hostname, { ...options, all: true }, (err, addrs) => {
+    if (err) return cb(err, '', 0);
+    const list = (addrs as dns.LookupAddress[]).filter((a) => !privateIp(a.address));
+    if (!list.length || list.length !== (addrs as dns.LookupAddress[]).length) {
+      const e = new Error('Dirección no permitida (solo webs públicas).') as NodeJS.ErrnoException;
+      e.code = 'EPRIVATEADDR';
+      return cb(e, '', 0);
+    }
+    if (options.all) return cb(null, list);
+    cb(null, list[0].address, list[0].family);
+  });
+}
+
+export type PublicFetchInit = { method?: string; headers?: Record<string, string>; body?: string; signal?: AbortSignal };
+
+/**
+ * Una sola petición HTTP(S) a una web pública, SIN seguir redirecciones (el que llama decide), conectando solo a
+ * direcciones públicas validadas al conectar. Devuelve una Response estándar (cuerpo descomprimido). Sustituye al fetch
+ * global para pedir webs de terceros (clientes, competidores, enlaces externos).
+ */
+export function publicFetch(url: string, init: PublicFetchInit = {}): Promise<Response> {
+  return new Promise((resolve, reject) => {
+    let u: URL;
+    try {
+      u = new URL(url);
+    } catch {
+      return reject(new Error('URL no válida'));
+    }
+    if (!isPublicUrl(url)) return reject(new Error('Dirección no permitida (solo webs públicas).'));
+    const mod = u.protocol === 'https:' ? https : http;
+    const host = u.hostname.replace(/^\[|\]$/g, '');
+    const req = mod.request(
+      {
+        protocol: u.protocol,
+        hostname: host,
+        port: u.port || undefined,
+        path: `${u.pathname}${u.search}`,
+        method: init.method ?? 'GET',
+        headers: { 'accept-encoding': 'gzip, deflate, br', ...(init.headers ?? {}) },
+        lookup: isIP(host) ? undefined : publicLookup,
+        signal: init.signal,
+        servername: isIP(host) ? undefined : host
+      },
+      (res) => {
+        const enc = String(res.headers['content-encoding'] ?? '').toLowerCase();
+        const dec = enc === 'gzip' || enc === 'x-gzip' ? zlib.createGunzip() : enc === 'deflate' ? zlib.createInflate() : enc === 'br' ? zlib.createBrotliDecompress() : null;
+        // pipeline propaga en los dos sentidos: si la conexión se corta (o salta el tiempo máximo) el descompresor da
+        // error y quien lee no se queda colgado; si quien lee cancela, se cierra también la conexión.
+        const stream: Readable = dec ? (pipeline(res, dec, () => undefined) as unknown as Readable) : res;
+        const headers = new Headers();
+        for (const [k, v] of Object.entries(res.headers)) {
+          if (v == null || k === 'content-encoding' || k === 'content-length') continue;
+          if (Array.isArray(v)) v.forEach((x) => headers.append(k, x));
+          else headers.set(k, String(v));
+        }
+        const status = res.statusCode ?? 0;
+        // Response no admite cuerpo con 204/304 ni estados fuera de 200-599.
+        const noBody = status === 204 || status === 304 || (init.method ?? 'GET').toUpperCase() === 'HEAD';
+        const body = noBody ? null : (Readable.toWeb(stream as Readable) as unknown as ReadableStream);
+        if (noBody) res.resume();
+        try {
+          resolve(new Response(body, { status: status >= 200 && status <= 599 ? status : 599, headers }));
+        } catch (e) {
+          reject(e);
+        }
+      }
+    );
+    // Con tiempo máximo, el error es el motivo de la señal (TimeoutError), como con el fetch global.
+    req.on('error', (e) => reject(init.signal?.aborted && init.signal.reason ? init.signal.reason : e));
+    if (init.body) req.write(init.body);
+    req.end();
+  });
+}
+
+/**
+ * Petición que solo sigue redirecciones hacia direcciones públicas (cada salto se comprueba al conectar; como mucho 5).
+ * Devuelve la respuesta final o un error legible.
+ */
+export async function fetchPublic(url: string, init: PublicFetchInit = {}, maxRedirects = 5): Promise<{ res: Response; url: string } | { error: string }> {
   let current = url;
   for (let i = 0; i <= maxRedirects; i++) {
     if (!(await resolvesPublic(current))) return { error: 'Dirección no permitida (solo webs públicas).' };
-    const res = await fetch(current, { ...init, redirect: 'manual' });
+    let res: Response;
+    try {
+      res = await publicFetch(current, init);
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException)?.code === 'EPRIVATEADDR') return { error: 'Dirección no permitida (solo webs públicas).' };
+      throw e;
+    }
     const loc = res.status >= 300 && res.status < 400 ? res.headers.get('location') : null;
     if (!loc) return { res, url: current };
     void res.body?.cancel().catch(() => undefined);

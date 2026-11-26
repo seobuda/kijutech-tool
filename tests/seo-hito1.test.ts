@@ -37,8 +37,8 @@ describe('Técnicas y tipos de negocio (núcleo)', () => {
   });
 
   it('la hipótesis se completa con lo típico de la técnica', () => {
-    expect(completeHypothesis('titulo_reescrito', {})).toEqual({ metric: 'ctr', direction: 'sube', windowDays: 28 });
-    expect(completeHypothesis('otra', { metric: 'clics', direction: 'baja', magnitudePct: 12.4, windowDays: 3 })).toEqual({ metric: 'clics', direction: 'baja', magnitudePct: 12, windowDays: 7 });
+    expect(completeHypothesis('titulo_reescrito', {})).toMatchObject({ metric: 'ctr', direction: 'sube', windowDays: 28, verify: { check: 'gsc' } });
+    expect(completeHypothesis('otra', { metric: 'clics', direction: 'baja', magnitudePct: 12.4, windowDays: 3 })).toMatchObject({ metric: 'clics', direction: 'baja', magnitudePct: 12, windowDays: 7 });
   });
 
   it('tipos de negocio', () => {
@@ -338,7 +338,7 @@ describe('Plan → encargo → intervención (base de datos, fuente de trabajo s
     expect(linked.every((f) => f.requestId === approved.requestRef)).toBe(true);
     const [iv] = await db.select().from(interventions).where(and(eq(interventions.tenantId, T), eq(interventions.source, PLAN_SOURCE), eq(interventions.sourceRef, titles.id)));
     expect(iv).toMatchObject({ technique: 'titulo_reescrito', businessType: 'Dentist', status: 'prevista', requestRef: approved.requestRef, clientId: CLIENT });
-    expect(iv.hypothesis).toEqual({ metric: 'ctr', direction: 'sube', windowDays: 28 });
+    expect(iv.hypothesis).toMatchObject({ metric: 'ctr', direction: 'sube', windowDays: 28 });
 
     // Aprobar dos veces no crea dos encargos.
     await expect(approvePlanItem(T, PROJECT, titles.id, 'Prueba')).rejects.toThrow();

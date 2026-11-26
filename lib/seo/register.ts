@@ -7,6 +7,7 @@ import { registerDossierJobs } from '@/lib/seo/expediente/collect';
 import { registerPlanJobs } from '@/lib/seo/plan/plan';
 import { registerSeoWatch } from '@/lib/seo/id/watch';
 import { registerVigilancia } from '@/lib/seo/vigilancia/vigilancia';
+import { registerExternosJob } from '@/lib/seo/salud/externos';
 import { registerMapaJobs } from '@/lib/seo/mapa/mapa';
 import { registerCompetenciaJobs } from '@/lib/seo/competencia/competencia';
 import { registerPreguntasJobs } from '@/lib/seo/preguntas/preguntas';
@@ -21,6 +22,7 @@ export function registerSeoCapabilities(): void {
   registerCompetenciaJobs(); // Hito 2: competencia en Google (DataForSEO por el núcleo)
   registerPreguntasJobs(); // Hito 2: correo de 3 preguntas y lectura de la respuesta del cliente
   registerSeoWatch();
+  registerExternosJob(); // parte 1: enlaces rotos hacia otras webs, tras cada auditoría
   registerVigilancia(); // parte 0: vigilancia, auditoría, velocidad y detectores programados por proyecto
   // Hito 2: lo que SEO sabe de cada proyecto, para el expediente del estratega (por el núcleo).
   registerProjectDossierProvider('seo', seoProjectDossier); // I+D fase A: fuentes oficiales de Google (cada 3 h) y resumen semanal

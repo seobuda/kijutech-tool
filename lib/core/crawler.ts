@@ -10,7 +10,7 @@ import 'server-only';
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { crawlLinks, crawlPages, crawlRuns, type CrawlRun } from '@/lib/db/schema';
-import { resolvesPublic } from '@/lib/core/net';
+import { publicFetch, resolvesPublic } from '@/lib/core/net';
 import { enqueueJob, registerJobKind, type JobContext } from '@/lib/core/jobs';
 import { extractPage, normalizeUrl, sameSite, sha1 } from '@/lib/core/crawl-extract';
 import { isAllowed, locsFromSitemap, parseRobots, type RobotsRules } from '@/lib/core/robots';
@@ -28,7 +28,7 @@ export const safeFetcher: Fetcher = async (url) => {
   const t0 = Date.now();
   if (!(await resolvesPublic(url))) return { status: 0, location: null, contentType: null, xRobots: null, body: null, bytes: 0, ms: 0, error: 'Dirección no permitida' };
   try {
-    const res = await fetch(url, { redirect: 'manual', headers: { 'User-Agent': CRAWLER_UA, Accept: 'text/html,application/xhtml+xml,text/plain,application/xml;q=0.9,*/*;q=0.5' }, signal: AbortSignal.timeout(20_000) });
+    const res = await publicFetch(url, { headers: { 'User-Agent': CRAWLER_UA, Accept: 'text/html,application/xhtml+xml,text/plain,application/xml;q=0.9,*/*;q=0.5' }, signal: AbortSignal.timeout(20_000) });
     const contentType = res.headers.get('content-type');
     const isText = /text\/|xml|xhtml/i.test(contentType ?? '');
     let body: string | null = null;
@@ -182,6 +182,8 @@ export async function crawlSlice(ctx: Pick<JobContext, 'heartbeat' | 'signal'>, 
         jsonld: page?.jsonld.length && JSON.stringify(page.jsonld).length <= 200_000 ? page.jsonld : null,
         schemaTypes: page?.schemaTypes.length ? page.schemaTypes : null,
         imagesWithoutAlt: page?.imagesWithoutAlt ?? null,
+        // Hechos acotados (parte 1 SEO): enlaces a otras webs y recursos CSS/JS (para robots y enlaces rotos).
+        facts: page ? { ext: [...new Set(page.links.filter((l) => !l.internal && /^https?:/i.test(l.url)).map((l) => l.url.split('#')[0]))].slice(0, 100), res: page.resources } : null,
         bytes: r.bytes,
         fetchMs: r.ms,
         error: r.error?.slice(0, 500) ?? (page?.maybeJsRendered ? 'posible web pintada con JavaScript' : null)

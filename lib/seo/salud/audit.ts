@@ -14,7 +14,7 @@ import { inlinkCounts, startCrawl } from '@/lib/core/crawler';
 import { registerFindingKind, syncFindings } from '@/lib/core/findings';
 import { gscPropertiesForProject } from '@/lib/core/gsc';
 import { auditCrawl, type AuditPage } from '@/lib/seo/salud/audit-rules';
-import { genericAnchors, hreflangIssues, langMissing, pageRegressions, redirectLoops, type PrevPage, type TecnicoPage } from '@/lib/seo/salud/audit-rules-tecnico';
+import { aiCrawlerIssues, genericAnchors, hreflangIssues, langMissing, pageRegressions, redirectLoops, robotsGoogleIssues, type PrevPage, type TecnicoPage } from '@/lib/seo/salud/audit-rules-tecnico';
 import { SALUD_KINDS, SEO_KINDS } from '@/lib/seo/salud/kinds';
 
 export const SALUD_SOURCE = 'seo.salud:rastreo';
@@ -121,7 +121,9 @@ export async function auditFinishedCrawl(tenantId: string, projectId: string, ru
     ...genericAnchors(tp, [...anchorRows].map((r) => ({ toHash: r.to_hash, anchor: r.anchor, n: Number(r.n) }))),
     ...hreflangIssues(tp),
     ...langMissing(run.rootUrl, tp),
-    ...pageRegressions(tp, await previousCrawlPages(projectId, run))
+    ...pageRegressions(tp, await previousCrawlPages(projectId, run)),
+    ...robotsGoogleIssues(run.rootUrl, run.robotsTxt, tp),
+    ...aiCrawlerIssues(run.rootUrl, run.robotsTxt)
   );
   // Todos los tipos de Salud: lo que ya no aparece se resuelve solo.
   const r = await syncFindings(tenantId, projectId, SALUD_SOURCE, found, SALUD_KINDS.map((k) => k.kind));
@@ -158,6 +160,8 @@ export function registerSaludAudit(): void {
       await enqueueJob({ ...base, kind: 'seo.expediente.collect', priority: 6, dedupeKey: `seo.expediente:${projectId}` });
       // Hito 2: el mapa de palabras se rehace con cada auditoría (usa Search Console, no el rastreo).
       await enqueueJob({ ...base, kind: 'seo.mapa.build', priority: 6, dedupeKey: `seo.mapa:${projectId}` });
+      // Parte 1 (técnico 2a): enlaces a otras webs, en un trabajo aparte (peticiones a terceros, con su tiempo).
+      await enqueueJob({ ...base, payload: { projectId, runId: run.id }, kind: 'seo.salud.externos', priority: 8, dedupeKey: `seo.salud.externos:${projectId}` });
       return r;
     }
   });

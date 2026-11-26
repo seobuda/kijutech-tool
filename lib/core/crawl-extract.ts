@@ -33,6 +33,8 @@ export type ExtractedPage = {
   imagesWithoutAlt: number;
   /** Poco texto y muchos scripts: posible web que se pinta con JavaScript (el rastreador no lo ejecuta). */
   maybeJsRendered: boolean;
+  /** Hojas de estilo y scripts que carga la página (URLs absolutas, como mucho 40): para ver si robots.txt los bloquea. */
+  resources: string[];
 };
 
 const attr = (n: Node, name: string) => n.attrs?.find((a) => a.name === name)?.value ?? null;
@@ -146,6 +148,7 @@ export function extractPage(html: string, pageUrl: string): ExtractedPage {
   const hreflang: { lang: string; url: string }[] = [];
   const links: ExtractedLink[] = [];
   const jsonld: unknown[] = [];
+  const resources: string[] = [];
   let jsonldErrors = 0;
   let imagesWithoutAlt = 0;
   let scripts = 0;
@@ -165,6 +168,10 @@ export function extractPage(html: string, pageUrl: string): ExtractedPage {
       const rel = (attr(n, 'rel') ?? '').toLowerCase().split(/\s+/);
       const href = attr(n, 'href');
       if (rel.includes('canonical') && href && canonical === null) canonical = normalizeUrl(href, pageUrl);
+      if (rel.includes('stylesheet') && href && resources.length < 40) {
+        const r = normalizeUrl(href, pageUrl);
+        if (r) resources.push(r);
+      }
       if (rel.includes('alternate') && attr(n, 'hreflang') && href) {
         const u = normalizeUrl(href, pageUrl);
         if (u) hreflang.push({ lang: (attr(n, 'hreflang') ?? '').toLowerCase(), url: u });
@@ -183,6 +190,11 @@ export function extractPage(html: string, pageUrl: string): ExtractedPage {
       if (attr(n, 'alt') === null) imagesWithoutAlt++;
     } else if (tag === 'script') {
       scripts++;
+      const src = attr(n, 'src');
+      if (src && resources.length < 40) {
+        const r = normalizeUrl(src, pageUrl);
+        if (r) resources.push(r);
+      }
       if ((attr(n, 'type') ?? '').toLowerCase().includes('ld+json')) {
         const raw = textOf(n, new Set());
         try {
@@ -215,6 +227,7 @@ export function extractPage(html: string, pageUrl: string): ExtractedPage {
     jsonldErrors,
     schemaTypes,
     imagesWithoutAlt,
-    maybeJsRendered: words < 50 && scripts >= 5
+    maybeJsRendered: words < 50 && scripts >= 5,
+    resources: [...new Set(resources)]
   };
 }

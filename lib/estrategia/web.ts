@@ -4,7 +4,7 @@ import 'server-only';
 // (siguiendo redirecciones), certificado SSL, robots.txt, sitemap y PageSpeed Insights (Core Web Vitals).
 // Solo se piden URLs públicas: nunca direcciones internas (localhost, redes privadas, nombres sin dominio).
 import tls from 'node:tls';
-import { isPublicUrl, resolvesPublic } from '@/lib/core/net';
+import { isPublicUrl, publicFetch, resolvesPublic } from '@/lib/core/net';
 import { parseHtml, type PageFacts } from '@/lib/estrategia/rules';
 
 const UA = 'Mozilla/5.0 (compatible; KijutechMonitor/1.0)';
@@ -36,7 +36,7 @@ export async function fetchPage(url: string): Promise<PageFacts | { error: strin
     if (!(await resolvesPublic(current))) return { error: isPublicUrl(current) ? 'el dominio no resuelve a una dirección pública' : 'URL no pública' };
     let res: Response;
     try {
-      res = await fetch(current, { redirect: 'manual', headers: { 'User-Agent': UA, Accept: 'text/html,application/xhtml+xml' }, signal: AbortSignal.timeout(TIMEOUT) });
+      res = await publicFetch(current, { headers: { 'User-Agent': UA, Accept: 'text/html,application/xhtml+xml' }, signal: AbortSignal.timeout(TIMEOUT) });
     } catch (e) {
       const msg = e instanceof Error ? (e.name === 'TimeoutError' ? 'tarda demasiado (más de 15 s)' : e.message) : 'error de red';
       return { error: msg.slice(0, 150) };
@@ -61,7 +61,7 @@ export async function fetchText(url: string): Promise<string | null> {
     // Redirecciones a mano, comprobando cada destino (un robots.txt público no puede llevar a la red interna).
     for (let hop = 0; hop <= 5; hop++) {
       if (!(await resolvesPublic(current))) return null;
-      const res = await fetch(current, { redirect: 'manual', headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(TIMEOUT) });
+      const res = await publicFetch(current, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(TIMEOUT) });
       if (res.status >= 300 && res.status < 400 && res.headers.get('location')) {
         void res.body?.cancel().catch(() => undefined);
         current = new URL(res.headers.get('location')!, current).toString();
