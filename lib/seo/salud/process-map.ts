@@ -49,8 +49,8 @@ export const SEO_SALUD_PROCESS_MAP: ProcessStep[] = [
     file: 'lib/seo/vigilancia/vigilancia.ts',
     when: 'Cada 30 días por defecto (editable: 7, 14 o 30). El laboratorio tarda 20-60 s por página (tiempo máximo del trabajo: 10 min).',
     ai: 'Nada.',
-    code: 'La fuente de velocidad la registra Agentes en el núcleo con la clave de Integraciones → PageSpeed / CrUX (de reserva, PAGESPEED_API_KEY del .env). Umbrales públicos de Google: lenta si alguna métrica es mala, mejorable si alguna necesita mejorar. Fuente «seo.velocidad:crux»; entra en el plan como «velocidad».',
-    tables: ['findings', 'agt_integrations', 'gsc_daily', 'gsc_pages']
+    code: 'La fuente de velocidad la registra Agentes en el núcleo con la clave de Integraciones → PageSpeed / CrUX (de reserva, PAGESPEED_API_KEY del .env). Umbrales públicos de Google: lenta si alguna métrica es mala, mejorable si alguna necesita mejorar. Fuente «seo.velocidad:crux»; entra en el plan como «velocidad». Cada medición se guarda por página (seo_speed_checks) y Salud → Velocidad la enseña como PageSpeed: datos reales (LCP, INP, CLS), nota de laboratorio y métricas, problemas y evolución de la nota.',
+    tables: ['findings', 'seo_speed_checks', 'agt_integrations', 'gsc_daily', 'gsc_pages']
   },
   {
     id: 'vigilancia-detectores',

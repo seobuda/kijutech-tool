@@ -650,6 +650,8 @@ export type SpeedLab = {
   totalKb: number | null;
   /** false = Lighthouse no trajo ninguna auditoría de imágenes conocida: no se juzgan (ni se resuelven) las imágenes. */
   imagesKnown: boolean;
+  /** Métricas de laboratorio (como en PageSpeed): primer contenido, mayor contenido, bloqueo total, CLS e índice de velocidad. */
+  metrics: { fcpMs: number | null; lcpMs: number | null; tbtMs: number | null; cls: number | null; siMs: number | null };
 };
 const GSPEED = globalThis as unknown as { __kijuSpeedSource?: SpeedSource | null };
 export function registerSpeedSource(s: SpeedSource): void {

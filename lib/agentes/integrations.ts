@@ -295,6 +295,7 @@ type LhAudit = { score?: number | null; numericValue?: number; details?: { items
 /** Resume las auditorías de Lighthouse que usa SEO (puro: se prueba con una respuesta guardada). */
 export function summarizeLighthouse(lh: { categories?: { performance?: { score?: number | null } }; audits?: Record<string, LhAudit> } | undefined): import('@/lib/core/capabilities').SpeedLab {
   const a = lh?.audits ?? {};
+  const num = (x?: LhAudit) => (typeof x?.numericValue === 'number' ? Math.round(x.numericValue) : null);
   const pass = (id: string) => (a[id] && typeof a[id].score === 'number' ? a[id].score! >= 0.9 : null);
   // Lighthouse cambió las auditorías de imágenes por «insights» (image-delivery-insight); se leen las dos versiones.
   const legacyImg = ['uses-optimized-images', 'modern-image-formats', 'uses-responsive-images'].filter((id) => a[id]);
@@ -313,7 +314,14 @@ export function summarizeLighthouse(lh: { categories?: { performance?: { score?:
     unsizedImages: a['unsized-images']?.details?.items?.length ?? 0,
     imageSavingsKb: Math.round(savings / 1024),
     totalKb: typeof a['total-byte-weight']?.numericValue === 'number' ? Math.round(a['total-byte-weight'].numericValue / 1024) : null,
-    imagesKnown: legacyImg.length > 0 || Boolean(insight)
+    imagesKnown: legacyImg.length > 0 || Boolean(insight),
+    metrics: {
+      fcpMs: num(a['first-contentful-paint']),
+      lcpMs: num(a['largest-contentful-paint']),
+      tbtMs: num(a['total-blocking-time']),
+      cls: typeof a['cumulative-layout-shift']?.numericValue === 'number' ? Math.round(a['cumulative-layout-shift'].numericValue * 1000) / 1000 : null,
+      siMs: num(a['speed-index'])
+    }
   };
 }
 

@@ -10,6 +10,7 @@ import { BUSINESS_TYPES } from '@/lib/core/business-types';
 import { ProjectSeoNav } from '../seo-nav';
 import { SaludPanel } from './salud-panel';
 import { VigilanciaPanel } from './vigilancia-panel';
+import { VelocidadPanel } from './velocidad-panel';
 import { getVigilanciaView } from '@/lib/seo/vigilancia/view';
 
 export default async function SaludPage({ params, searchParams }: { params: Promise<{ projectId: string }>; searchParams: Promise<{ tipo?: string }> }) {
@@ -38,6 +39,7 @@ export default async function SaludPage({ params, searchParams }: { params: Prom
       />
       <ProjectSeoNav projectId={projectId} active="salud" />
       {vigilancia && <VigilanciaPanel projectId={projectId} view={vigilancia} canEdit={canEdit} />}
+      {vigilancia && <VelocidadPanel speed={vigilancia.speed} />}
       <SaludPanel view={view} canEdit={canEdit} businessType={view.businessType} businessTypes={BUSINESS_TYPES} />
     </PageContainer>
   );

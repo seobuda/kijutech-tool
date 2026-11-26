@@ -463,6 +463,13 @@
       "when": 1796100000000,
       "tag": "0065_seo_data_spend",
       "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1796200000000,
+      "tag": "0066_seo_speed_checks",
+      "breakpoints": true
     }
   ]
 }

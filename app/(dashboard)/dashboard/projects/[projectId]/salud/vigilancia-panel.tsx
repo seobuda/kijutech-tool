@@ -3,7 +3,7 @@
 // Proyecto → Salud técnica → Vigilancia automática (SEO parte 0, 26 nov 2026): los procesos que se repiten solos en este
 // proyecto (vigilancia de la web, auditoría, velocidad y detectores), con su frecuencia editable, pausa y «Comprobar
 // ahora», y el gasto del mes en datos de pago frente al tope.
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2, Pause, Play, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -30,6 +30,14 @@ export function VigilanciaPanel({ projectId, view, canEdit }: { projectId: strin
       router.refresh();
     });
   };
+
+  // Mientras algo está en cola o en marcha, la pantalla se refresca sola cada 15 s para enseñar el resultado.
+  const anyRunning = view.processes.some((p) => p.running);
+  useEffect(() => {
+    if (!anyRunning) return;
+    const t = setInterval(() => router.refresh(), 15_000);
+    return () => clearInterval(t);
+  }, [anyRunning, router]);
 
   const pct = view.spend.budget > 0 ? Math.min(100, Math.round((view.spend.spent / view.spend.budget) * 100)) : 0;
 
@@ -58,9 +66,21 @@ export function VigilanciaPanel({ projectId, view, canEdit }: { projectId: strin
                     ) : null}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Última: {fmt(p.lastRunAt)} · Próxima: {paused ? '—' : fmt(p.nextRunAt)}
-                    {p.lastError ? ` · ${p.lastError}` : ''}
+                    {p.running ? (
+                      <span className="inline-flex items-center gap-1 text-brand">
+                        <Loader2 className="size-3 animate-spin" /> En marcha…
+                      </span>
+                    ) : (
+                      <>Última: {fmt(p.last?.at ?? p.lastRunAt)}</>
+                    )}{' '}
+                    · Próxima: {paused ? '—' : fmt(p.nextRunAt)}
                   </p>
+                  {p.last && !p.running && (
+                    <p className={p.last.status === 'error' ? 'text-xs text-destructive' : p.last.status === 'aviso' ? 'text-xs text-warning-strong' : 'text-xs text-muted-foreground'}>
+                      {p.last.status === 'omitido' ? 'No se hizo: ' : ''}
+                      {p.last.summary}
+                    </p>
+                  )}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <label className="sr-only" htmlFor={`every-${p.key}`}>

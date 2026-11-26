@@ -11,11 +11,12 @@ import 'server-only';
 //     páginas que pierden clics (detalle de Search Console del núcleo, sin la API) e indexación de las más importantes.
 // Las frecuencias se editan y se pausan por proyecto (pestaña Salud). Un proyecto SEO activo con web se da de alta solo.
 import tls from 'node:tls';
+import { randomUUID } from 'node:crypto';
 import { and, eq, isNotNull, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { projects } from '@/lib/db/schema';
+import { projects, seoSpeedChecks } from '@/lib/db/schema';
 import { disableSchedule, enqueueJob, ensureScheduleIfMissing, listSchedulesForScope, pauseSchedule, registerJobKind, registerProcess, stableOffsetMinutes } from '@/lib/core/jobs';
-import { emitProjectAlert, metricSources, registerScheduled, speedSource, telegramOutbound } from '@/lib/core/capabilities';
+import { emitProjectAlert, metricSources, registerScheduled, speedSource, telegramOutbound, type SpeedLab } from '@/lib/core/capabilities';
 import { findingKind, listFindings, syncFindings } from '@/lib/core/findings';
 import { fetchPublic, resolvesPublic } from '@/lib/core/net';
 import { extractPage } from '@/lib/core/crawl-extract';
@@ -193,6 +194,30 @@ async function topPages(tenantId: string, projectId: string, n: number): Promise
   return [...m].sort((a, b) => b[1] - a[1]).slice(0, n).map(([u]) => u);
 }
 
+/** Guarda cada medición por página (la pantalla de Salud enseña la última y su evolución). */
+async function saveSpeedChecks(tenantId: string, projectId: string, field: CwvRow[], lab: (LabRow & { metrics?: SpeedLab['metrics'] })[]): Promise<void> {
+  if (!field.length && !lab.length) return;
+  const runId = randomUUID();
+  const values = [
+    ...field.map((r) => ({ tenantId, projectId, runId, url: r.url, kind: 'campo', scope: r.scope, category: r.category, lcpMs: r.lcpMs, inpMs: r.inpMs, cls: r.cls })),
+    ...lab.map((r) => ({
+      tenantId,
+      projectId,
+      runId,
+      url: r.url,
+      kind: 'laboratorio',
+      score: r.score,
+      lcpMs: r.metrics?.lcpMs ?? null,
+      cls: r.metrics?.cls ?? null,
+      fcpMs: r.metrics?.fcpMs ?? null,
+      tbtMs: r.metrics?.tbtMs ?? null,
+      siMs: r.metrics?.siMs ?? null,
+      data: { viewportOk: r.viewportOk, httpsOk: r.httpsOk, insecureRequests: r.insecureRequests.length, unsizedImages: r.unsizedImages, imageSavingsKb: r.imageSavingsKb, totalKb: r.totalKb, imagesKnown: r.imagesKnown }
+    }))
+  ];
+  await db.insert(seoSpeedChecks).values(values);
+}
+
 export async function runVelocidad(tenantId: string, projectId: string, heartbeat: () => Promise<void> = async () => undefined): Promise<Outcome> {
   const src = speedSource();
   if (!src || !(await src.hasKey(tenantId))) return { status: 'omitido', summary: 'Falta la clave de PageSpeed / CrUX (Agentes → Integraciones).' };
@@ -208,7 +233,7 @@ export async function runVelocidad(tenantId: string, projectId: string, heartbea
   const found = velocidadFindings(rows);
   // Parte 1: prueba de laboratorio (Lighthouse en Google) de hasta 5 páginas representativas: viewport, contenido
   // mixto e imágenes. Si una página no se deja medir, se omite; si no se pudo medir ninguna, sus hallazgos no se tocan.
-  const labRows: LabRow[] = [];
+  const labRows: (LabRow & { metrics?: SpeedLab['metrics'] })[] = [];
   let labTried = 0;
   let labOpen: Parameters<typeof labSyncSet>[2] = [];
   if (src.lab) {
@@ -225,6 +250,7 @@ export async function runVelocidad(tenantId: string, projectId: string, heartbea
     }
   }
   const lab = labFindings(labRows);
+  await saveSpeedChecks(tenantId, projectId, rows, labRows).catch((e) => console.error('[seo] guardar mediciones de velocidad:', e instanceof Error ? e.message : e));
   // Solo se resuelve lo de las páginas medidas; lo de las que fallaron (o no se midieron) se conserva tal cual.
   // Si Lighthouse no trajo auditorías de imágenes, los hallazgos de imágenes tampoco se tocan.
   const imagesKnown = labRows.some((r) => r.imagesKnown);
