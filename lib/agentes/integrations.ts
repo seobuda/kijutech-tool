@@ -290,6 +290,41 @@ export async function cruxField(tenantId: string, url: string): Promise<import('
   return null;
 }
 
+type LhAudit = { score?: number | null; numericValue?: number; details?: { items?: { url?: string }[]; overallSavingsBytes?: number } };
+
+/** Resume las auditorías de Lighthouse que usa SEO (puro: se prueba con una respuesta guardada). */
+export function summarizeLighthouse(lh: { categories?: { performance?: { score?: number | null } }; audits?: Record<string, LhAudit> } | undefined): import('@/lib/core/capabilities').SpeedLab {
+  const a = lh?.audits ?? {};
+  const pass = (id: string) => (a[id] && typeof a[id].score === 'number' ? a[id].score! >= 0.9 : null);
+  const savings = ['uses-optimized-images', 'modern-image-formats', 'uses-responsive-images'].reduce((t, id) => t + (a[id]?.details?.overallSavingsBytes ?? 0), 0);
+  const score = lh?.categories?.performance?.score;
+  return {
+    score: typeof score === 'number' ? Math.round(score * 100) : null,
+    viewportOk: pass('viewport'),
+    httpsOk: pass('is-on-https'),
+    insecureRequests: (a['is-on-https']?.details?.items ?? []).map((i) => String(i.url ?? '')).filter(Boolean).slice(0, 20),
+    unsizedImages: a['unsized-images']?.details?.items?.length ?? 0,
+    imageSavingsKb: Math.round(savings / 1024),
+    totalKb: typeof a['total-byte-weight']?.numericValue === 'number' ? Math.round(a['total-byte-weight'].numericValue / 1024) : null
+  };
+}
+
+/** PageSpeed Insights (Lighthouse en Google, móvil) de una URL. Tarda 20-60 s. */
+export async function pageSpeedLab(tenantId: string, url: string): Promise<import('@/lib/core/capabilities').SpeedLab | null> {
+  const key = await effectivePageSpeedKey(tenantId);
+  if (!key) throw new Error('Falta la clave de PageSpeed / CrUX (Agentes → Integraciones)');
+  const q = new URLSearchParams({ url, strategy: 'mobile', key });
+  for (const c of ['performance', 'best-practices', 'seo']) q.append('category', c);
+  const res = await fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?${q}`, { signal: AbortSignal.timeout(90_000) });
+  if (!res.ok) {
+    if (res.status === 429) await markIntegration(tenantId, 'pagespeed', false, 'PageSpeed (429)').catch(() => undefined);
+    if (res.status === 400 || res.status === 500) return null; // la web no se dejó medir (Lighthouse no pudo cargarla)
+    throw new Error(`PageSpeed (${res.status})`);
+  }
+  const j = (await res.json()) as { lighthouseResult?: Parameters<typeof summarizeLighthouse>[0] };
+  return summarizeLighthouse(j.lighthouseResult);
+}
+
 export async function clarityInsights(tenantId: string, days: number, dimension: string | null): Promise<string> {
   const integ = await getIntegration(tenantId, 'clarity');
   const creds = readCredentials(integ);

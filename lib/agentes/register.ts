@@ -19,6 +19,7 @@ import {
   dataForSeoSerp,
   dataForSeoSerpResult,
   cruxField,
+  pageSpeedLab,
   effectivePageSpeedKey,
   dataForSeoVolume,
   ga4Properties,
@@ -241,5 +242,5 @@ export function registerAgentesCapabilities(): void {
   // Resultados de Google por búsqueda (DataForSEO) para la competencia de SEO (Hito 2), sin que SEO sepa del proveedor.
   registerSerpSource({ isConnected: (t) => isConnected(t, 'dataforseo'), search: dataForSeoSerpResult });
   // Core Web Vitals reales (Chrome UX Report) para la Salud técnica de SEO (parte 0), con la clave de Integraciones.
-  registerSpeedSource({ hasKey: async (t) => Boolean(await effectivePageSpeedKey(t)), field: cruxField });
+  registerSpeedSource({ hasKey: async (t) => Boolean(await effectivePageSpeedKey(t)), field: cruxField, lab: pageSpeedLab });
 }

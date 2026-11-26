@@ -44,10 +44,10 @@ export const SEO_SALUD_PROCESS_MAP: ProcessStep[] = [
     id: 'vigilancia-velocidad',
     lane: 'Vigilancia continua',
     name: 'Velocidad real de los usuarios (Core Web Vitals)',
-    description: 'LCP, INP y CLS de usuarios reales de Chrome en móvil (Chrome UX Report, 28 días) de la portada y las 3 páginas con más clics; si una página no tiene datos, los del dominio.',
+    description: 'LCP, INP y CLS de usuarios reales de Chrome en móvil (Chrome UX Report, 28 días) de la portada y las 3 páginas con más clics; si una página no tiene datos, los del dominio. Desde la parte 1, además, prueba de laboratorio (Lighthouse de PageSpeed Insights, en los servidores de Google) de hasta 5 páginas representativas: viewport móvil, contenido mixto, imágenes sin tamaño e imágenes que se pueden aligerar.',
     status: 'built',
     file: 'lib/seo/vigilancia/vigilancia.ts',
-    when: 'Cada 30 días por defecto (editable: 7, 14 o 30).',
+    when: 'Cada 30 días por defecto (editable: 7, 14 o 30). El laboratorio tarda 20-60 s por página (tiempo máximo del trabajo: 10 min).',
     ai: 'Nada.',
     code: 'La fuente de velocidad la registra Agentes en el núcleo con la clave de Integraciones → PageSpeed / CrUX (de reserva, PAGESPEED_API_KEY del .env). Umbrales públicos de Google: lenta si alguna métrica es mala, mejorable si alguna necesita mejorar. Fuente «seo.velocidad:crux»; entra en el plan como «velocidad».',
     tables: ['findings', 'agt_integrations', 'gsc_daily', 'gsc_pages']
@@ -79,8 +79,8 @@ export const SEO_SALUD_PROCESS_MAP: ProcessStep[] = [
   {
     id: 'salud-reglas',
     lane: 'Auditoría',
-    name: 'Comprobaciones técnicas (31 reglas, sin IA)',
-    description: 'Sobre las páginas rastreadas: respuestas 4xx/5xx, cadenas de redirección y enlaces a redirecciones, sitemap, noindex en el sitemap, canonical a otra URL o roto, títulos (falta, largo, repetido), meta descripción, H1, contenido escaso, duplicado y casi duplicado (simhash), imágenes sin alt, huérfanas, profundidad, HTTPS, servidor lento (mediana ≥ 2,5 s), web pintada con JavaScript y datos estructurados (negocio sin marcar o incompleto, FAQ, reseñas propias).',
+    name: 'Comprobaciones técnicas (38 reglas, sin IA)',
+    description: 'Sobre las páginas rastreadas: respuestas 4xx/5xx, cadenas de redirección y enlaces a redirecciones, sitemap, noindex en el sitemap, canonical a otra URL o roto, títulos (falta, largo, repetido), meta descripción, H1, contenido escaso, duplicado y casi duplicado (simhash), imágenes sin alt, huérfanas, profundidad, HTTPS, servidor lento (mediana ≥ 2,5 s), web pintada con JavaScript y datos estructurados (negocio sin marcar o incompleto, FAQ, reseñas propias). Desde la parte 1 (26 nov 2026, `audit-rules-tecnico.ts`): bucles de redirección, páginas enlazadas casi siempre con textos genéricos, hreflang (código no válido, sin vuelta, hacia una página rota), páginas sin idioma y regresiones (páginas que en el rastreo anterior eran indexables y ahora, al volver a pedirlas, dan error o noindex; nunca por ausencia).',
     status: 'built',
     file: 'lib/seo/salud/audit-rules.ts',
     when: 'Cuando termina el rastreo (trabajo «seo.salud.audit» en la cola).',
