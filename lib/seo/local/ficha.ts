@@ -6,9 +6,9 @@ import 'server-only';
 //   (o pega la URL de Maps); al confirmar se guarda lo confirmado (baseline) y los cambios se comparan con eso.
 // - Proceso «seo.local» (semanal): foto del cliente cada semana y de los competidores confirmados cada 4 semanas.
 //   «Cerrada» se vuelve a mirar a los 30 min y solo entonces se avisa (una vez por ficha y estado).
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, ne, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { clientCompetitors, clientLocations, clients, projects, seoDossierFacts, seoLocalPlaces, seoLocalSnapshots, type SeoLocalPlace } from '@/lib/db/schema';
+import { clientCompetitors, clientLocations, clients, findings, jobs, projects, seoDossierFacts, seoLocalPlaces, seoLocalSnapshots, type SeoLocalPlace } from '@/lib/db/schema';
 import { businessSource, emitProjectAlert, serpSource, telegramOutbound, type BusinessInfo } from '@/lib/core/capabilities';
 import { enqueueJob, registerJobKind } from '@/lib/core/jobs';
 import { findingKind, syncFindings } from '@/lib/core/findings';
@@ -19,10 +19,16 @@ import { pickLocation, zoneTowns } from '@/lib/seo/posiciones/rules';
 import { changedFields, FICHA_SOURCE, fichaFindings, matchesClient, reviewsBehind, reviewsStalled, type Baseline, type ReviewPoint } from '@/lib/seo/local/ficha-rules';
 
 const INFO_COST = 0.0054;
+
+export class PlaceError extends Error {
+  constructor(public userMessage: string) {
+    super(userMessage);
+  }
+}
 const CONFIRM_KIND = 'seo.local.confirmar';
 const FICHA_KIND_KEYS = ['seo.gbp_closed', 'seo.gbp_changed', 'seo.reviews_behind', 'seo.reviews_stalled'];
 
-type Outcome = { status: 'ok' | 'aviso' | 'omitido'; summary: string };
+type Outcome = { status: 'ok' | 'aviso' | 'omitido'; summary: string; proposed?: boolean };
 
 async function projectClient(tenantId: string, projectId: string) {
   const [p] = await db
@@ -80,7 +86,7 @@ async function upsertPlace(tenantId: string, clientId: string, role: 'cliente' |
   const [row] = await db
     .insert(seoLocalPlaces)
     .values(values)
-    .onConflictDoUpdate({ target: [seoLocalPlaces.clientId, seoLocalPlaces.cid], set: { title: values.title, placeId: values.placeId, updatedAt: new Date(), ...(opts.status === 'confirmada' ? { status: 'confirmada', baseline: values.baseline, decidedBy: values.decidedBy, decidedAt: values.decidedAt, role } : {}) } })
+    .onConflictDoUpdate({ target: [seoLocalPlaces.clientId, seoLocalPlaces.cid], set: { title: values.title, placeId: values.placeId, updatedAt: new Date(), ...(opts.status === 'confirmada' ? { status: 'confirmada', baseline: values.baseline, decidedBy: values.decidedBy, decidedAt: values.decidedAt } : {}) } })
     .returning();
   return row;
 }
@@ -124,9 +130,13 @@ export async function proposeClientPlace(tenantId: string, projectId: string): P
 export async function setPlaceFromCid(tenantId: string, projectId: string, cid: string, role: 'cliente' | 'competidor', by: string, competitorId?: string | null): Promise<BusinessInfo | null> {
   const pc = await projectClient(tenantId, projectId);
   if (!pc) return null;
+  if (role === 'competidor') {
+    const [own] = await db.select({ id: seoLocalPlaces.id }).from(seoLocalPlaces).where(and(eq(seoLocalPlaces.clientId, pc.clientId), eq(seoLocalPlaces.cid, cid), eq(seoLocalPlaces.role, 'cliente'))).limit(1);
+    if (own) throw new PlaceError('Esa es la ficha del propio cliente, no la de un competidor.');
+  }
   const info = await fetchInfo(tenantId, projectId, `cid:${cid}`, 'Spain');
   if (!info?.cid) return null;
-  if (role === 'cliente') await db.update(seoLocalPlaces).set({ status: 'descartada', updatedAt: new Date() }).where(and(eq(seoLocalPlaces.clientId, pc.clientId), eq(seoLocalPlaces.role, 'cliente'), eq(seoLocalPlaces.status, 'confirmada')));
+  if (role === 'cliente') await db.update(seoLocalPlaces).set({ status: 'descartada', updatedAt: new Date() }).where(and(eq(seoLocalPlaces.clientId, pc.clientId), eq(seoLocalPlaces.role, 'cliente'), eq(seoLocalPlaces.status, 'confirmada'), ne(seoLocalPlaces.cid, cid)));
   const row = await upsertPlace(tenantId, pc.clientId, role, info, { status: 'confirmada', by, competitorId });
   await saveSnapshot(tenantId, row.id, info);
   return info;
@@ -137,7 +147,7 @@ export async function decidePlace(tenantId: string, placeRowId: string, status: 
   const [row] = await db.select().from(seoLocalPlaces).where(and(eq(seoLocalPlaces.id, placeRowId), eq(seoLocalPlaces.tenantId, tenantId))).limit(1);
   if (!row) return false;
   const [snap] = await db.select().from(seoLocalSnapshots).where(eq(seoLocalSnapshots.placeRowId, row.id)).orderBy(desc(seoLocalSnapshots.takenAt)).limit(1);
-  if (status === 'confirmada' && row.role === 'cliente') await db.update(seoLocalPlaces).set({ status: 'descartada', updatedAt: new Date() }).where(and(eq(seoLocalPlaces.clientId, row.clientId), eq(seoLocalPlaces.role, 'cliente'), eq(seoLocalPlaces.status, 'confirmada')));
+  if (status === 'confirmada' && row.role === 'cliente') await db.update(seoLocalPlaces).set({ status: 'descartada', updatedAt: new Date() }).where(and(eq(seoLocalPlaces.clientId, row.clientId), eq(seoLocalPlaces.role, 'cliente'), eq(seoLocalPlaces.status, 'confirmada'), ne(seoLocalPlaces.id, row.id)));
   await db
     .update(seoLocalPlaces)
     .set({ status, decidedBy: by.slice(0, 120), decidedAt: new Date(), updatedAt: new Date(), ...(status === 'confirmada' && snap ? { baseline: toBaseline({ title: snap.title, category: snap.category, phone: snap.phone, domain: snap.domain, hours: (snap.hours as Record<string, string> | null) ?? null }) as Record<string, unknown> } : {}) })
@@ -162,10 +172,15 @@ export async function runLocal(tenantId: string, projectId: string, confirmPass 
   const places = await db.select().from(seoLocalPlaces).where(eq(seoLocalPlaces.clientId, pc.clientId));
   const client = places.find((p) => p.role === 'cliente' && p.status === 'confirmada');
   if (!client) {
-    const recentProposal = places.some((p) => p.role === 'cliente' && p.status === 'propuesta' && Date.now() - p.createdAt.getTime() < 30 * 86_400_000);
-    if (recentProposal) return { status: 'omitido', summary: 'Falta confirmar la ficha de Google del cliente (pestaña Local).' };
+    // Como mucho una búsqueda automática cada 30 días: también si la anterior no encontró nada o se descartó (si no, se
+    // pagaría una consulta cada semana sin que nadie vea nada nuevo).
+    const [tried] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(jobs)
+      .where(and(eq(jobs.tenantId, tenantId), eq(jobs.kind, 'seo.local'), eq(jobs.scopeId, projectId), eq(jobs.status, 'hecho'), sql`${jobs.result}->>'proposed' = 'true'`, gte(jobs.finishedAt, new Date(Date.now() - 30 * 86_400_000))));
+    if (Number(tried?.n ?? 0) > 0 || places.some((p) => p.role === 'cliente' && p.status === 'propuesta')) return { status: 'omitido', summary: 'Falta confirmar la ficha de Google del cliente (pestaña Local): búscala o pega su enlace de Google Maps.' };
     const r = await proposeClientPlace(tenantId, projectId);
-    return { status: 'aviso', summary: r.found ? `Propuesta la ficha de Google del cliente${r.matches ? ' (coincide su web o su teléfono)' : ''}: confírmala en la pestaña Local.` : 'No se encontró su ficha de Google por nombre y población: pega su enlace de Google Maps en la pestaña Local.' };
+    return { status: 'aviso', proposed: true, summary: r.found ? `Propuesta la ficha de Google del cliente${r.matches ? ' (coincide su web o su teléfono)' : ''}: confírmala en la pestaña Local.` : 'No se encontró su ficha de Google por nombre y población: pega su enlace de Google Maps en la pestaña Local.' } as Outcome;
   }
   // Foto del cliente.
   const info = await fetchInfo(tenantId, projectId, `cid:${client.cid}`, 'Spain');
@@ -191,7 +206,8 @@ export async function runLocal(tenantId: string, projectId: string, confirmPass 
     }
     if (cur) compPoints.push({ rating: cur.rating, votes: cur.votes, takenAt: cur.takenAt.toISOString() });
   }
-  const hist = await latestSnapshots(client.id, 8);
+  // Fotos de los últimos 75 días (con cadencia semanal, 8 fotos solo cubren 49 y «paradas» no podría saltar nunca).
+  const hist = await db.select().from(seoLocalSnapshots).where(and(eq(seoLocalSnapshots.placeRowId, client.id), gte(seoLocalSnapshots.takenAt, new Date(Date.now() - 75 * 86_400_000)))).orderBy(desc(seoLocalSnapshots.takenAt)).limit(20);
   const clientPoint: ReviewPoint = { rating: info.rating, votes: info.votes, takenAt: new Date().toISOString() };
   const base = (client.baseline as Baseline | null) ?? null;
   const cur = toBaseline(info);
@@ -207,11 +223,17 @@ export async function runLocal(tenantId: string, projectId: string, confirmPass 
     client: clientPoint,
     stalled: reviewsStalled(hist.map((h) => ({ rating: h.rating, votes: h.votes, takenAt: h.takenAt.toISOString() })))
   });
+  const [wasClosed] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(findings)
+    .where(and(eq(findings.projectId, projectId), eq(findings.source, FICHA_SOURCE), eq(findings.kind, 'seo.gbp_closed'), eq(findings.status, 'abierto')));
   await syncFindings(tenantId, projectId, FICHA_SOURCE, found, FICHA_KIND_KEYS);
-  if (closed) {
+  // Se avisa (y se despierta al estratega) cuando el cierre aparece, no cada semana mientras dure; si se reabre y se
+  // vuelve a cerrar, el hallazgo se abre de nuevo y vuelve a avisar.
+  if (closed && Number(wasClosed?.n ?? 0) === 0) {
     const label = closed === 'cerrada_definitiva' ? 'CERRADA DEFINITIVAMENTE' : 'cerrada temporalmente';
     // Una vez por ficha y estado (la cola de avisos no repite la misma clave).
-    await telegramOutbound()?.notifyOwner(tenantId, `seo.local.cerrada:${client.cid}:${closed}`, `🚨 <b>${pc.name}</b>: su ficha de Google aparece ${label}. Si no es así, hay que corregirlo ya en Business Profile (pierde llamadas y visitas).`);
+    await telegramOutbound()?.notifyOwner(tenantId, `seo.local.cerrada:${client.cid}:${closed}:${new Date().toISOString().slice(0, 10)}`, `🚨 <b>${pc.name}</b>: su ficha de Google aparece ${label}. Si no es así, hay que corregirlo ya en Business Profile (pierde llamadas y visitas).`);
     await emitProjectAlert({ tenantId, clientId: pc.clientId, projectId, title: `Ficha de Google ${label}`, source: 'seo.local' });
   }
   return {

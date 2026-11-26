@@ -119,3 +119,11 @@ La hizo un subagente Opus 5.5 con esfuerzo alto, que comprobó en la web los té
   - la cobertura de `my_business_info` en España con una cuenta real;
   - las condiciones de DataForSEO sobre guardar sus datos;
   - las reseñas fechadas (endpoint de reseñas, solo en cola), que van a una tanda posterior.
+
+## Revisión de código (aprobada con cambios, corregida)
+- Las reseñas paradas leen las fotos de los últimos 75 días: con 8 fotos semanales no se llegaba a 60 días.
+- La ficha del cliente se busca sola como mucho cada 30 días, también si la búsqueda salió vacía o se descartó la propuesta. Eso queda marcado en el resultado del trabajo.
+- El aviso de cerrada y la alerta al estratega salen cuando el cierre aparece (se abre el hallazgo), no cada semana. Si la ficha se reabre y se vuelve a cerrar, se avisa de nuevo.
+- No se puede pegar la ficha del propio cliente como competidor, y el papel de una ficha ya existente no se cambia.
+- Confirmar no descarta la propia ficha.
+- La pasada de confirmación de «cerrada» gasta una consulta más (es lo previsto).

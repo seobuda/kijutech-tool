@@ -10,7 +10,7 @@ import { requirePermission } from '@/lib/auth/permissions';
 import { publicError } from '@/lib/errors';
 import { enqueueJob } from '@/lib/core/jobs';
 import { cidFromInput } from '@/lib/seo/local/ficha-rules';
-import { acceptChanges, decidePlace, proposeClientPlace, proposeCompetitorPlaces, setPlaceFromCid } from '@/lib/seo/local/ficha';
+import { acceptChanges, decidePlace, PlaceError, proposeClientPlace, proposeCompetitorPlaces, setPlaceFromCid } from '@/lib/seo/local/ficha';
 
 type Ok = { ok: true; message?: string } | { ok: false; error: string };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -53,7 +53,7 @@ export async function setPlaceFromUrlAction(projectId: string, raw: string, role
     revalidatePath(PATH(projectId));
     return info ? { ok: true, message: `Guardada: ${info.title}.` } : { ok: false, error: 'Google no devolvió esa ficha.' };
   } catch (e) {
-    return { ok: false, error: publicError(e, 'No se pudo guardar la ficha') };
+    return { ok: false, error: e instanceof PlaceError ? e.userMessage : publicError(e, 'No se pudo guardar la ficha') };
   }
 }
 
