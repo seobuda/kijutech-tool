@@ -25,7 +25,7 @@ import {
   setQuestionStatusAction,
   updateTemplateAction
 } from '@/lib/core/questions-actions';
-import { approvePlanItemAction, discardPlanItemAction, regeneratePlanAction, reopenPlanItemAction } from '@/lib/seo/plan-actions';
+import { approvePlanItemAction, approveThisMonthAction, discardPlanItemAction, regeneratePlanAction, reopenPlanItemAction } from '@/lib/seo/plan-actions';
 import { buildKeywordMapAction, crawlCompetitorsAction, decideCompetitorAction, findCompetitorsAction, updateTopicAction } from '@/lib/seo/mapa-actions';
 import { addTestRequestAction, createSimRequestAction, getPruebasAction, pressSimButtonAction, runScenariosAction, sendSimTextAction, withdrawTestRequestAction } from '@/lib/operaciones/sim/actions';
 import { POST as pruebasRunPost } from '@/app/api/pruebas/run/route';
@@ -265,6 +265,7 @@ const ACCIONES_EDITOR: [string, () => unknown][] = [
   ['applyFactToFichaAction (SEO: pasar a la ficha)', () => applyFactToFichaAction(ZERO, ZERO)],
   ['regeneratePlanAction (SEO: rehacer plan)', () => regeneratePlanAction(ZERO)],
   ['approvePlanItemAction (SEO: aprobar propuesta)', () => approvePlanItemAction(ZERO, ZERO)],
+  ['approveThisMonthAction (SEO: aprobar lo de este mes)', () => approveThisMonthAction(ZERO)],
   ['discardPlanItemAction (SEO: descartar propuesta)', () => discardPlanItemAction(ZERO, ZERO, 'x')],
   ['reopenPlanItemAction (SEO: recuperar propuesta)', () => reopenPlanItemAction(ZERO, ZERO)],
   ['buildKeywordMapAction (SEO: calcular mapa de palabras)', () => buildKeywordMapAction(ZERO)],

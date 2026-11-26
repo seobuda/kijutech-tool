@@ -418,17 +418,49 @@ export type WorkSource = {
   effortByType?: (tenantId: string, sinceDays: number) => Promise<Record<string, { medianMinutes: number; n: number }>>;
   /** Tipos de trabajo de la cuenta (clave y nombre). */
   workTypes?: (tenantId: string) => Promise<{ key: string; label: string }[]>;
-  /** Crea un encargo para un cliente (lista, responsable y fecha los elige Operaciones con sus fichas). */
+  /**
+   * Crea un encargo para un cliente. Si no se le dan lista, responsable y fecha, los elige Operaciones con sus fichas;
+   * si se le dan (lo elegido por una persona en la vista previa del plan, 26 nov 2026), los usa tal cual.
+   */
   createTask?: (tenantId: string, input: NewTaskInput) => Promise<{ ok: boolean; ref: string | null; url: string | null; message: string }>;
+  /**
+   * Opciones para crear un encargo de un cliente sin llamar a la fuente (de su caché): listas, personas y lo que
+   * pondría por defecto (lista habitual del cliente, responsable del servicio y plazo de entrega). 26 nov 2026.
+   */
+  taskOptions?: (tenantId: string, clientId: string, serviceKey: string | null) => Promise<TaskOptions>;
   /**
    * Estado de varios encargos por su referencia (Hito 1 SEO, 23 nov 2026): el registro de intervenciones del núcleo lo
    * pregunta cada hora para poner la fecha de «hecho» sin que la fuente de trabajo tenga que avisar (sirve igual con
    * ClickUp o con la herramienta propia que lo sustituya). Las referencias que no conoce no aparecen en la respuesta.
    */
-  requestStatus?: (tenantId: string, refs: string[]) => Promise<{ ref: string; doneAt: string | null; cancelled: boolean }[]>;
+  requestStatus?: (tenantId: string, refs: string[]) => Promise<RequestStatus[]>;
 };
 export type OpenWorkItem = { ref: string; title: string; workType: string | null; status: string; dueDate: string | null };
-export type NewTaskInput = { clientId: string; title: string; description: string; workType: string | null; requestedBy: string; /** Proyecto del que nace (cimientos, 23 nov 2026). */ projectId?: string | null };
+export type NewTaskInput = {
+  clientId: string;
+  title: string;
+  description: string;
+  workType: string | null;
+  requestedBy: string;
+  /** Proyecto del que nace (cimientos, 23 nov 2026). */
+  projectId?: string | null;
+  /** Elegido por una persona (26 nov 2026): si viene la lista, no se pregunta a la IA. */
+  listId?: string | null;
+  assigneeId?: string | null;
+  /** AAAA-MM-DD */
+  dueDate?: string | null;
+  /** 1 urgente … 4 baja */
+  priority?: number | null;
+  /** De dónde sale el encargo, para el equipo («Plan de mejora SEO de …»). */
+  origin?: string | null;
+};
+export type TaskOptions = {
+  lists: { id: string; name: string }[];
+  members: { id: string; name: string }[];
+  defaults: { listId: string | null; assigneeId: string | null; dueDays: number | null };
+};
+/** Estado de un encargo: hecho o no, y (si la fuente lo sabe) su estado, responsable y fecha. */
+export type RequestStatus = { ref: string; doneAt: string | null; cancelled: boolean; status?: string | null; assigneeName?: string | null; dueDate?: string | null };
 export function registerWorkSource(w: WorkSource): void {
   GK.__kijuWorkSource = w;
 }

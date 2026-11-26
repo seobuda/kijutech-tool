@@ -12,13 +12,13 @@ import 'server-only';
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, ne, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { opsClientActivity, opsClients, opsRequests, opsTaskTimes, roles, userRoles, users } from '@/lib/db/schema';
-import type { NewTaskInput, OpenWorkItem, WorkItem, WorkSource } from '@/lib/core/capabilities';
+import type { NewTaskInput, OpenWorkItem, RequestStatus, TaskOptions, WorkItem, WorkSource } from '@/lib/core/capabilities';
 import { getPrompt } from '@/lib/ai/gateway';
 import { publicError } from '@/lib/errors';
-import { listClients } from '@/lib/operaciones/clients';
+import { clientDeliveryDays, getLevels, listClients } from '@/lib/operaciones/clients';
 import { enqueueNotification } from '@/lib/operaciones/notifications';
 import { NOTE_PROMPT_KEY, proposeRequests } from '@/lib/operaciones/request-proposer';
-import { getStructure, validClient } from '@/lib/operaciones/structure';
+import { getStructure, selectedSpaces, validClient } from '@/lib/operaciones/structure';
 import { syncToClickUp } from '@/lib/operaciones/sync';
 import { escapeHtml } from '@/lib/operaciones/telegram';
 import { getWorkTypes, validWorkTypeKey } from '@/lib/operaciones/work-types';
@@ -189,14 +189,36 @@ async function ownerUserId(tenantId: string): Promise<number | null> {
 }
 
 /**
- * Crea un encargo para un cliente desde otro módulo: la IA de notas elige lista, responsable y fecha con las fichas
- * (como «crear_encargo»); el título, la descripción y el tipo son los que llegan. Se sube a ClickUp con reintentos.
+ * Opciones para crear un encargo de un cliente, de la caché (sin llamar a ClickUp): listas de su espacio habitual (o de
+ * los espacios elegidos), personas, y por defecto su primera lista habitual, el responsable del servicio y su plazo.
+ */
+async function taskOptions(tenantId: string, clientId: string, serviceKey: string | null): Promise<TaskOptions> {
+  const [clientsList, structure, levels] = await Promise.all([listClients(tenantId), getStructure(tenantId), getLevels(tenantId)]);
+  const client = clientsList.find((c) => c.id === clientId);
+  const spaces = selectedSpaces(structure);
+  const usual = client?.usualSpaceId ? spaces.filter((sp) => sp.id === client.usualSpaceId) : [];
+  const lists = (usual.length ? usual : spaces).flatMap((sp) => sp.lists.map((l) => ({ id: l.id, name: `${usual.length ? '' : `${sp.name} / `}${l.folder ? `${l.folder} / ` : ''}${l.name}` })));
+  const valid = new Set(lists.map((l) => l.id));
+  const listId = client?.usualListIds.find((id) => valid.has(id)) ?? null;
+  const assigneeId = (serviceKey ? client?.services.find((sv) => sv.serviceKey === serviceKey)?.responsibleClickupId : null) ?? null;
+  return {
+    lists,
+    members: structure.members.map((m) => ({ id: m.id, name: m.username })).sort((a, b) => a.name.localeCompare(b.name, 'es')),
+    defaults: { listId, assigneeId: assigneeId && structure.members.some((m) => m.id === assigneeId) ? assigneeId : null, dueDays: client ? clientDeliveryDays(client, levels) : null }
+  };
+}
+
+/**
+ * Crea un encargo para un cliente desde otro módulo. Si llega la lista (elegida por una persona), se usa con el
+ * responsable, la fecha y la prioridad que lleguen, sin IA. Si no, la IA de notas elige lista, responsable y fecha con
+ * las fichas (como «crear_encargo»). El título, la descripción y el tipo son los que llegan. Se sube a ClickUp con reintentos.
  */
 async function createTask(tenantId: string, input: NewTaskInput): Promise<{ ok: boolean; ref: string | null; url: string | null; message: string }> {
   try {
     const client = (await listClients(tenantId)).find((c) => c.id === input.clientId);
     if (!client) return { ok: false, ref: null, url: null, message: 'El cliente no está en Operaciones.' };
     const structure = await getStructure(tenantId);
+    if (input.listId) return await createChosenTask(tenantId, input, client, structure);
     const spaceId = client.usualSpaceId ?? structure.spaces.find((s) => s.selected && s.lists.length)?.id;
     const space = structure.spaces.find((s) => s.id === spaceId);
     if (!space) return { ok: false, ref: null, url: null, message: 'El cliente no tiene espacio habitual de ClickUp en su ficha.' };
@@ -218,7 +240,7 @@ async function createTask(tenantId: string, input: NewTaskInput): Promise<{ ok: 
         clickupListId: item.listId,
         clickupListName: lists.get(item.listId) ?? null,
         title: input.title.slice(0, 500),
-        originalRequest: `Propuesto por el estratega y aprobado por ${input.requestedBy}.`.slice(0, 8000),
+        originalRequest: `${input.origin ?? 'Propuesto por el estratega'} · aprobado por ${input.requestedBy}.`.slice(0, 8000),
         preparedDescription: input.description,
         assigneeClickupId: item.assigneeId || null,
         assigneeName: item.assigneeName || null,
@@ -244,16 +266,59 @@ async function createTask(tenantId: string, input: NewTaskInput): Promise<{ ok: 
   }
 }
 
+/** Encargo con la lista, el responsable y la fecha que eligió una persona (sin IA). */
+async function createChosenTask(
+  tenantId: string,
+  input: NewTaskInput,
+  client: Awaited<ReturnType<typeof listClients>>[number],
+  structure: Awaited<ReturnType<typeof getStructure>>
+): Promise<{ ok: boolean; ref: string | null; url: string | null; message: string }> {
+  const lists = new Map(structure.spaces.flatMap((sp) => sp.lists.map((l) => [l.id, l.name])));
+  if (!lists.has(input.listId!)) return { ok: false, ref: null, url: null, message: 'Esa lista de ClickUp ya no existe: elige otra.' };
+  const member = input.assigneeId ? structure.members.find((m) => m.id === input.assigneeId) : null;
+  if (input.assigneeId && !member) return { ok: false, ref: null, url: null, message: 'Esa persona ya no está en ClickUp: elige otra.' };
+  const due = input.dueDate && /^\d{4}-\d{2}-\d{2}$/.test(input.dueDate) ? input.dueDate : null;
+  const createdBy = await ownerUserId(tenantId);
+  if (!createdBy) return { ok: false, ref: null, url: null, message: 'No hay administrador en la cuenta.' };
+  const [row] = await db
+    .insert(opsRequests)
+    .values({
+      tenantId,
+      createdBy,
+      clickupListId: input.listId!,
+      clickupListName: lists.get(input.listId!) ?? null,
+      title: input.title.slice(0, 500),
+      originalRequest: `${input.origin ?? 'Propuesto desde otro módulo'} · aprobado por ${input.requestedBy}.`.slice(0, 8000),
+      preparedDescription: input.description,
+      assigneeClickupId: member?.id ?? null,
+      assigneeName: member?.username ?? null,
+      dueDate: due,
+      priority: input.priority && input.priority >= 1 && input.priority <= 4 ? Math.round(input.priority) : 3,
+      workTypeKey: await validWorkTypeKey(tenantId, input.workType ?? null),
+      ...validClient(structure, input.listId!, client.clickupOptionId ?? ''),
+      projectId: input.projectId ?? null,
+      status: 'pendiente_clickup'
+    })
+    .returning({ id: opsRequests.id });
+  const res = await syncToClickUp(row.id, tenantId, false);
+  return {
+    ok: true,
+    ref: row.id,
+    url: res.ok ? (res.taskUrl ?? null) : null,
+    message: res.ok ? `Encargo creado${member ? ` para ${member.username}` : ''}.` : 'Encargo guardado, pero ClickUp falló: reinténtalo desde Encargos.'
+  };
+}
+
 /** Estado de varios encargos (registro de intervenciones del núcleo). Operaciones no tiene «cancelado»: un encargo
  * borrado simplemente no aparece. */
-async function requestStatus(tenantId: string, refs: string[]): Promise<{ ref: string; doneAt: string | null; cancelled: boolean }[]> {
+async function requestStatus(tenantId: string, refs: string[]): Promise<RequestStatus[]> {
   const ids = [...new Set(refs.filter((r) => /^[0-9a-f-]{36}$/i.test(r)))].slice(0, 500);
   if (!ids.length) return [];
   const rows = await db
-    .select({ id: opsRequests.id, workStatus: opsRequests.workStatus, at: opsRequests.workStatusAt })
+    .select({ id: opsRequests.id, workStatus: opsRequests.workStatus, at: opsRequests.workStatusAt, assigneeName: opsRequests.assigneeName, dueDate: opsRequests.dueDate })
     .from(opsRequests)
     .where(and(eq(opsRequests.tenantId, tenantId), inArray(opsRequests.id, ids)));
-  return rows.map((r) => ({ ref: r.id, doneAt: r.workStatus === 'completado' ? r.at.toISOString() : null, cancelled: false }));
+  return rows.map((r) => ({ ref: r.id, doneAt: r.workStatus === 'completado' ? r.at.toISOString() : null, cancelled: false, status: r.workStatus, assigneeName: r.assigneeName, dueDate: r.dueDate ? String(r.dueDate).slice(0, 10) : null }));
 }
 
-export const OPS_WORK_SOURCE: WorkSource = { completedSince, clientCompleted, workload, askAboutTask, clientOpen, effortByType, workTypes, createTask, requestStatus };
+export const OPS_WORK_SOURCE: WorkSource = { completedSince, clientCompleted, workload, askAboutTask, clientOpen, effortByType, workTypes, createTask, taskOptions, requestStatus };
