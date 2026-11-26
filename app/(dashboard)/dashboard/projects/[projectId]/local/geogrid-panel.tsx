@@ -49,8 +49,13 @@ export function GeogridPanel({ projectId, grid, canEdit }: { projectId: string; 
           {msg.text}
         </p>
       )}
+      {grid.nextAt && (
+        <p className="mb-3 rounded-lg border border-brand/30 bg-brand-soft p-3 text-sm">
+          Medición programada para el <b>{new Date(grid.nextAt).toLocaleString('es-ES', { timeZone: 'Europe/Madrid', weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}</b>: el mapa se mide en días laborables de 10 a 12 (Google favorece en el mapa a los negocios abiertos, así que de noche los resultados no serían fiables).
+        </p>
+      )}
       {!grid.runs.length ? (
-        <EmptyState icon={Grid3x3} title="Aún no hay mediciones" description="Necesita la ficha de Google confirmada (arriba), sus servicios confirmados en el Expediente y saber cómo atiende. Se mide sola cada mes o con «Medir ahora»." />
+        <EmptyState icon={Grid3x3} title={grid.nextAt ? 'Primera medición programada' : 'Aún no hay mediciones'} description="Necesita la ficha de Google confirmada (arriba), sus servicios confirmados en el Expediente y saber cómo atiende. Se mide sola cada mes o con «Medir ahora» (si no es horario comercial, se programa para la siguiente franja)." />
       ) : (
         <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
           {grid.runs.map((r) => (
