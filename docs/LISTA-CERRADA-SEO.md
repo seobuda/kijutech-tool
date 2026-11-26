@@ -39,6 +39,8 @@ Ningún precio está verificado en esta lista [NV]: se comprueba en la documenta
 
 El detalle, el porqué de cada pieza y la supervisión de Opus están en `docs/INVESTIGACION-SEO-MERCADO.md` §7-§8. El orden anterior (0 a 8) queda sustituido por este.
 
+**Decisiones de Enric (26 nov, noche):** el informe pasa al final, después de integrar GoHighLevel (los leads de cada cliente llegan a su subcuenta por formularios incrustados en su web). Siguiente: posiciones.
+
 **Decisiones de Enric (26 nov, tarde):**
 - Plan nuevo aprobado.
 - Alta de la cartera: **la IA propone y el equipo confirma**.
@@ -57,7 +59,6 @@ El detalle, el porqué de cada pieza y la supervisión de Opus están en `docs/I
 | ✅ | 1 · Técnico, tanda 1 | Hecho (§6.45) y velocidad visible (§6.46) |
 | ✅ 1 | **Técnico 2a + verificación** (hecho el 26 nov, §6.47) | `fetchPublic` blindado, columna `facts`, robots contra Googlebot (recursos, sitemap, rastreadores de IA), enlaces externos rotos; «cómo y cuándo se verifica» en la hipótesis de cada encargo |
 | ✅ 2 | **Alta de la cartera (3-5 proyectos de prueba)** (construido el 26 nov, §6.48; falta que el equipo dé de alta rfserveis y centrosdym) | Lista de comprobación y semáforo «proyecto incompleto». La IA propone web, servicios, zona, coordenadas y competencia, y el equipo confirma |
-| 3 | **Informe mensual v1** | GSC, GA4 (con contactos) y trabajo del mes, en borrador. Solo se envía con aprobación (línea roja 2) |
 | 4 | **Posiciones (semilla mínima)** | Semilla: temas de GSC + servicio × zona + marca, 50 como máximo y editable. Orgánico, paquete local y AI Overview por coordenadas e idioma. Filas compactas y volumen de lo que se sigue |
 | 5 | **Local** | Geo-grid mensual, reseñas propias y de la competencia, vigilancia de la ficha de Google, spam en Maps, conseguir reseñas, citas, páginas de zona con la regla anti-páginas puerta |
 | 6 | **Técnico 2b + 2c** | Reglas WordPress (metas duplicadas, soft 404, staging, nofollow, sitemap frente a canonical, datos incoherentes, rastreadores de IA, tecnología, web hackeada) + registro de cambios (tabla propia y protocolo) + páginas de dinero (campos estructurados) |
@@ -66,6 +67,8 @@ El detalle, el porqué de cada pieza y la supervisión de Opus están en `docs/I
 | 9 | **Contenido → WordPress** | Brief, nota, enlazado interno, contenido que pierde tráfico; publicar con aprobación |
 | 10 | **Autoridad** | Tras verificar el precio y la cobertura en 3 webs reales y con el OK de Enric (contratar es línea roja) |
 | 11 | **Orquestar, panel de IA mensual y tendencias entre clientes** | Cuando haya unas 50 intervenciones por técnica |
+| 10b | **Integración GoHighLevel** (pedida por Enric el 26 nov) | Leer por API (solo lectura) los leads de la subcuenta de cada cliente y de sus formularios incrustados en la web: cuántos, cuándo, desde qué página y, si se puede, desde qué búsqueda. Necesita el token de Enric |
+| 12 | **Informe y panel en vivo** (movido al final por Enric el 26 nov) | Panel en vivo por cliente (leads de GoHighLevel + Search Console + GA4 + trabajo hecho; búsquedas y páginas que traen leads, horas…) y después el informe mensual, en borrador y enviado solo con aprobación tras muchas pruebas |
 | — | **Migraciones de web** | En cualquier momento después de la parte 6 |
 
 **No se hace:**

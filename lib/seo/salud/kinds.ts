@@ -106,5 +106,11 @@ export const EXTERNOS_KINDS: SaludKind[] = [
   { kind: 'seo.external_broken', group: 'enlazado', title: 'Enlace roto hacia otra web', explain: 'La web enlaza a una página de otra web que ya no existe (404/410) o a un dominio que ha dejado de existir. Al visitante le sale un error y transmite descuido: hay que quitar el enlace o cambiarlo por uno que funcione.', severityDefault: 'aviso', ruleVersion: 1 }
 ];
 
-export const SEO_KINDS: SaludKind[] = [...SALUD_KINDS, ...LOCAL_KINDS, ...MAPA_KINDS, ...VIGILANCIA_KINDS, ...EXTERNOS_KINDS];
+/** Posiciones (fuente «seo.posiciones:serp», parte 4): con margen para no avisar por la volatilidad semanal de Google. */
+export const POSICIONES_KINDS: SaludKind[] = [
+  { kind: 'seo.rank_drop', group: 'search_console', title: 'Búsqueda importante que sale del top 10', explain: 'Esta búsqueda estaba en la primera página de Google y lleva dos semanas seguidas fuera. Mirar qué página salía, si cambió, quién la ha adelantado y si coincide con una actualización de Google.', severityDefault: 'importante', ruleVersion: 1 },
+  { kind: 'seo.lost_local_pack', group: 'local', title: 'Ya no sale en el mapa de Google para esta búsqueda', explain: 'Google sigue enseñando el mapa con negocios para esta búsqueda, pero el cliente ha dejado de aparecer dos semanas seguidas. Revisar su ficha de Google (categoría, horario, reseñas recientes, si está marcada como cerrada) y quién ha entrado.', severityDefault: 'importante', ruleVersion: 1 }
+];
+
+export const SEO_KINDS: SaludKind[] = [...SALUD_KINDS, ...LOCAL_KINDS, ...MAPA_KINDS, ...VIGILANCIA_KINDS, ...EXTERNOS_KINDS, ...POSICIONES_KINDS];
 export const SALUD_KIND_BY_KEY = new Map(SEO_KINDS.map((k) => [k.kind, k]));

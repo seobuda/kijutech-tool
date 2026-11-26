@@ -9,6 +9,7 @@ import { registerSeoWatch } from '@/lib/seo/id/watch';
 import { registerVigilancia } from '@/lib/seo/vigilancia/vigilancia';
 import { registerExternosJob } from '@/lib/seo/salud/externos';
 import { registerAltaJobs } from '@/lib/seo/alta/alta';
+import { registerPosicionesJobs } from '@/lib/seo/posiciones/posiciones';
 import { registerMapaJobs } from '@/lib/seo/mapa/mapa';
 import { registerCompetenciaJobs } from '@/lib/seo/competencia/competencia';
 import { registerPreguntasJobs } from '@/lib/seo/preguntas/preguntas';
@@ -23,6 +24,7 @@ export function registerSeoCapabilities(): void {
   registerCompetenciaJobs(); // Hito 2: competencia en Google (DataForSEO por el núcleo)
   registerPreguntasJobs(); // Hito 2: correo de 3 preguntas y lectura de la respuesta del cliente
   registerSeoWatch();
+  registerPosicionesJobs(); // parte 4: recogida de las posiciones enviadas a la cola de DataForSEO
   registerAltaJobs(); // parte 2: la IA propone la ficha (servicios, zona…) tras cada expediente
   registerExternosJob(); // parte 1: enlaces rotos hacia otras webs, tras cada auditoría
   registerVigilancia(); // parte 0: vigilancia, auditoría, velocidad y detectores programados por proyecto

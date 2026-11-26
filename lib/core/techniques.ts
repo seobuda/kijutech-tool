@@ -27,6 +27,7 @@ export const TECHNIQUES: Technique[] = [
   { key: 'adaptar_movil', domain: 'seo', label: 'Adaptar la página al móvil', metric: 'impresiones', windowDays: 56 },
   { key: 'imagenes_optimizadas', domain: 'seo', label: 'Optimizar imágenes', metric: 'clics', windowDays: 56 },
   { key: 'enlaces_externos_corregidos', domain: 'seo', label: 'Arreglar enlaces rotos hacia otras webs', metric: 'impresiones', windowDays: 42 },
+  { key: 'recuperar_mapa', domain: 'seo', label: 'Recuperar el puesto en el mapa de Google', metric: 'impresiones', windowDays: 42 },
   { key: 'recuperar_pagina', domain: 'seo', label: 'Recuperar una página que pierde clics', metric: 'clics', windowDays: 56 },
   { key: 'canibalizacion_resuelta', domain: 'seo', label: 'Resolver una canibalización (una página por búsqueda)', metric: 'posicion', windowDays: 42 },
   { key: 'contenido_duplicado', domain: 'seo', label: 'Quitar o unificar contenido duplicado', metric: 'clics', windowDays: 56 },
@@ -97,7 +98,7 @@ export function techniqueFromCategory(category: string | null | undefined): stri
  * nueva auditoría (el hallazgo debe desaparecer); las de velocidad, con la medición de velocidad; las de contenido y
  * posiciones, solo con el resultado en Search Console. Después, siempre, el efecto en la métrica de la hipótesis.
  */
-const GSC_ONLY = new Set(['optimizar_al_alcance', 'reforzar_pagina_tema', 'nueva_pagina_tema', 'nueva_landing_servicio', 'canibalizacion_resuelta', 'contenido_ampliado', 'recuperar_pagina', 'enlazado_interno', 'titulo_reescrito', 'meta_descripcion']);
+const GSC_ONLY = new Set(['recuperar_mapa', 'optimizar_al_alcance', 'reforzar_pagina_tema', 'nueva_pagina_tema', 'nueva_landing_servicio', 'canibalizacion_resuelta', 'contenido_ampliado', 'recuperar_pagina', 'enlazado_interno', 'titulo_reescrito', 'meta_descripcion']);
 const SPEED = new Set(['velocidad', 'imagenes_optimizadas']);
 const METRIC_LABEL: Record<string, string> = { clics: 'los clics', impresiones: 'las impresiones', ctr: 'el CTR', posicion: 'la posición media' };
 

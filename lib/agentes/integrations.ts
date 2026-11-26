@@ -175,6 +175,92 @@ export async function dataForSeoSerpResult(tenantId: string, q: { keyword: strin
   };
 }
 
+// --- DataForSEO: cola asíncrona para las posiciones de SEO (parte 4, 26 nov 2026) --------------------------------------
+// Se cobra al enviar (task_post devuelve el coste de cada tarea); recoger por id (task_get) es gratis durante 30 días.
+// Cada tarea lleva su propio status_code: una ubicación no válida dentro de un lote falla sola, no el lote.
+
+type DfsTask<R> = { id?: string; status_code?: number; status_message?: string; cost?: number; data?: { tag?: string }; result?: R[] | null };
+
+export async function dataForSeoPostTasks(tenantId: string, tasks: import('@/lib/core/capabilities').SerpTaskInput[]): Promise<import('@/lib/core/capabilities').SerpTaskPosted[]> {
+  const creds = readCredentials(await getIntegration(tenantId, 'dataforseo'));
+  const out: import('@/lib/core/capabilities').SerpTaskPosted[] = [];
+  for (let i = 0; i < tasks.length; i += 100) {
+    const batch = tasks.slice(i, i + 100);
+    const r = await dfs<{ tasks?: DfsTask<unknown>[] }>(
+      creds,
+      '/serp/google/organic/task_post',
+      batch.map((t) => ({ keyword: t.keyword.slice(0, 200), location_name: t.location, language_code: t.language, device: t.device, depth: Math.min(t.depth, 100), tag: t.tag.slice(0, 255), priority: 1, load_async_ai_overview: true }))
+    );
+    const got = r.tasks ?? [];
+    batch.forEach((t, k) => {
+      // Se busca por la etiqueta; si no viene, por el orden del lote.
+      const task = got.find((x) => x.data?.tag === t.tag) ?? got[k];
+      const ok = task && task.status_code === 20100 && task.id;
+      out.push({ tag: t.tag, id: ok ? task!.id! : null, costUsd: typeof task?.cost === 'number' ? task.cost : 0, error: ok ? null : `${task?.status_code ?? '?'}: ${task?.status_message ?? 'sin respuesta'}`.slice(0, 300) });
+    });
+  }
+  await markIntegration(tenantId, 'dataforseo', true);
+  return out;
+}
+
+type SerpItem = { type: string; rank_group?: number; rank_absolute?: number; domain?: string; url?: string; title?: string; is_paid?: boolean; items?: SerpItem[]; references?: { domain?: string; url?: string }[] };
+
+/** Resume una SERP avanzada de DataForSEO (puro: se prueba con una respuesta guardada). */
+export function summarizeSerpItems(items: SerpItem[]): Extract<import('@/lib/core/capabilities').SerpTaskResult, { status: 'hecha' }> {
+  const host = (u: string | undefined) => {
+    try {
+      return u ? new URL(u).hostname.replace(/^www\./, '').toLowerCase() : null;
+    } catch {
+      return null;
+    }
+  };
+  const organic = items.filter((i) => i.type === 'organic' && i.url).map((i) => ({ rank: i.rank_group ?? i.rank_absolute ?? 0, domain: (i.domain ?? host(i.url) ?? '').replace(/^www\./, '').toLowerCase(), url: i.url! }));
+  const lp = items.find((i) => i.type === 'local_pack') ? items.filter((i) => i.type === 'local_pack') : [];
+  // Algunas respuestas traen el paquete local como un bloque con sus fichas dentro.
+  const lpItems = lp.flatMap((b) => (b.items?.length ? b.items : [b]));
+  const localPack = lpItems.map((i, n) => ({ rank: n + 1, title: i.title ?? '', domain: host(i.url) ?? (i.domain ? i.domain.replace(/^www\./, '').toLowerCase() : null), paid: Boolean(i.is_paid) }));
+  const aioItem = items.find((i) => i.type === 'ai_overview');
+  const refs = [...(aioItem?.references ?? []), ...(aioItem?.items ?? []).flatMap((x) => x.references ?? [])];
+  const aio = { present: Boolean(aioItem), domains: [...new Set(refs.map((r) => (r.domain ?? host(r.url) ?? '').replace(/^www\./, '').toLowerCase()).filter(Boolean))].slice(0, 20) };
+  const features = [...new Set(items.map((i) => i.type).filter((t) => t !== 'organic'))].slice(0, 20);
+  return { status: 'hecha', organic, localPack, aio, features };
+}
+
+export async function dataForSeoGetTask(tenantId: string, id: string): Promise<import('@/lib/core/capabilities').SerpTaskResult> {
+  const creds = readCredentials(await getIntegration(tenantId, 'dataforseo'));
+  const r = await dfs<{ tasks?: DfsTask<{ items?: SerpItem[] }>[] }>(creds, `/serp/google/organic/task_get/advanced/${encodeURIComponent(id)}`);
+  const t = r.tasks?.[0];
+  if (!t) return { status: 'error', error: 'sin respuesta' };
+  // 40601 (en manos del sistema) y 40602 (en cola): aún no está.
+  if (t.status_code === 40601 || t.status_code === 40602) return { status: 'pendiente' };
+  if (t.status_code !== 20000) return { status: 'error', error: `${t.status_code}: ${t.status_message ?? ''}`.slice(0, 300) };
+  return summarizeSerpItems(t.result?.[0]?.items ?? []);
+}
+
+const G_LOC = globalThis as unknown as { __kijuDfsLocations?: Map<string, { at: number; list: { name: string; type: string }[] }> };
+/** Ubicaciones de un país (gratis en DataForSEO), cacheadas un día en memoria. */
+export async function dataForSeoLocations(tenantId: string, country: string): Promise<{ name: string; type: string }[]> {
+  const key = country.toLowerCase();
+  const cache = (G_LOC.__kijuDfsLocations ??= new Map());
+  const hit = cache.get(key);
+  if (hit && Date.now() - hit.at < 86_400_000) return hit.list;
+  const creds = readCredentials(await getIntegration(tenantId, 'dataforseo'));
+  const r = await dfs<{ tasks?: DfsTask<{ location_name: string; location_type: string }>[] }>(creds, `/serp/google/locations/${encodeURIComponent(key)}`);
+  const list = (r.tasks?.[0]?.result ?? []).map((x) => ({ name: x.location_name, type: x.location_type }));
+  cache.set(key, { at: Date.now(), list });
+  return list;
+}
+
+/** Volumen mensual medio (Google Ads) de hasta 1000 búsquedas, con su coste. */
+export async function dataForSeoVolumes(tenantId: string, keywords: string[], location: string, language: string): Promise<{ volumes: Map<string, number | null>; costUsd: number }> {
+  const creds = readCredentials(await getIntegration(tenantId, 'dataforseo'));
+  type Res = { keyword: string; search_volume: number | null };
+  const r = await dfs<{ cost?: number; tasks?: DfsTask<Res>[] }>(creds, '/keywords_data/google_ads/search_volume/live', [{ keywords: keywords.slice(0, 1000), location_name: location, language_code: language }]);
+  const t = r.tasks?.[0];
+  if (t && t.status_code !== 20000) throw new Error(`DataForSEO volumen: ${t.status_code} ${t.status_message ?? ''}`);
+  return { volumes: new Map((t?.result ?? []).map((x) => [x.keyword.toLowerCase(), x.search_volume])), costUsd: typeof r.cost === 'number' ? r.cost : 0 };
+}
+
 export async function dataForSeoVolume(tenantId: string, keywords: string[], location: string, language: string): Promise<string> {
   const creds = readCredentials(await getIntegration(tenantId, 'dataforseo'));
   type Res = { keyword: string; search_volume: number | null; competition: string | null; cpc: number | null };

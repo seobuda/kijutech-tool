@@ -18,6 +18,10 @@ import {
   clarityInsights,
   dataForSeoSerp,
   dataForSeoSerpResult,
+  dataForSeoPostTasks,
+  dataForSeoGetTask,
+  dataForSeoLocations,
+  dataForSeoVolumes,
   cruxField,
   pageSpeedLab,
   effectivePageSpeedKey,
@@ -240,7 +244,7 @@ export function registerAgentesCapabilities(): void {
   // Histórico diario para el módulo Rendimiento (lib/rendimiento/sync.ts), sin que Rendimiento sepa de Google.
   registerMetricSource(GOOGLE_METRIC_SOURCE);
   // Resultados de Google por búsqueda (DataForSEO) para la competencia de SEO (Hito 2), sin que SEO sepa del proveedor.
-  registerSerpSource({ isConnected: (t) => isConnected(t, 'dataforseo'), search: dataForSeoSerpResult });
+  registerSerpSource({ isConnected: (t) => isConnected(t, 'dataforseo'), search: dataForSeoSerpResult, postTasks: dataForSeoPostTasks, getTask: dataForSeoGetTask, locations: dataForSeoLocations, volumes: dataForSeoVolumes });
   // Core Web Vitals reales (Chrome UX Report) para la Salud técnica de SEO (parte 0), con la clave de Integraciones.
   registerSpeedSource({ hasKey: async (t) => Boolean(await effectivePageSpeedKey(t)), field: cruxField, lab: pageSpeedLab });
 }
