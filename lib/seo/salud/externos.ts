@@ -13,6 +13,7 @@ import { crawlPages, findings } from '@/lib/db/schema';
 import { registerJobKind, type JobContext } from '@/lib/core/jobs';
 import { syncFindings } from '@/lib/core/findings';
 import { fetchPublic } from '@/lib/core/net';
+import { lookup as dnsLookup } from 'node:dns/promises';
 import { checkOrder, classifyExternal, externalFindings, type ExternalCheck } from '@/lib/seo/salud/externos-rules';
 
 export const EXTERNOS_SOURCE = 'seo.salud:externos';
@@ -21,7 +22,18 @@ const CONCURRENCY = 4;
 const BUDGET_MS = 200_000;
 const UA = 'Mozilla/5.0 (compatible; KijutechBot/1.0; +https://kijutech.com)';
 
+/** ¿El dominio no existe (NXDOMAIN)? Distinto de un fallo pasajero del DNS, que no dice nada. */
+async function domainMissing(url: string): Promise<boolean> {
+  try {
+    await dnsLookup(new URL(url).hostname);
+    return false;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException)?.code === 'ENOTFOUND';
+  }
+}
+
 async function checkUrl(url: string): Promise<ExternalCheck> {
+  if (await domainMissing(url)) return classifyExternal(0, 'ENOTFOUND');
   const attempt = async (method: 'HEAD' | 'GET') => {
     const r = await fetchPublic(url, { method, headers: { 'User-Agent': UA, Accept: 'text/html,*/*;q=0.5' }, signal: AbortSignal.timeout(8_000) }, 5);
     if ('error' in r) return { status: 0, error: r.error };
@@ -30,7 +42,8 @@ async function checkUrl(url: string): Promise<ExternalCheck> {
   };
   try {
     let r = await attempt('HEAD');
-    if ([403, 405, 501].includes(r.status)) r = await attempt('GET');
+    // Algunos servidores responden mal a HEAD (403/405/501, e incluso 404): se confirma siempre con GET.
+    if ([403, 404, 405, 410, 501].includes(r.status)) r = await attempt('GET');
     return classifyExternal(r.status, r.error);
   } catch (e) {
     const code = (e as NodeJS.ErrnoException)?.code ?? (e as { cause?: { code?: string } })?.cause?.code;
@@ -40,12 +53,15 @@ async function checkUrl(url: string): Promise<ExternalCheck> {
 
 export async function checkExternalLinks(ctx: Pick<JobContext, 'heartbeat' | 'signal'>, tenantId: string, projectId: string, runId: string) {
   const started = Date.now();
+  if (!runId) return { skipped: 'sin rastreo' };
   const pages = await db.select({ url: crawlPages.url, facts: crawlPages.facts }).from(crawlPages).where(eq(crawlPages.runId, runId));
+  // Rastreo borrado o vacío: no se toca nada (si no, se resolverían todos los hallazgos sin motivo).
+  if (!pages.length) return { skipped: 'rastreo sin páginas' };
   // Cada URL externa con las páginas que la enlazan.
   const linkedFrom = new Map<string, string[]>();
   for (const p of pages) for (const e of p.facts?.ext ?? []) linkedFrom.set(e, [...(linkedFrom.get(e) ?? []), p.url]);
   const open = await db
-    .select({ kind: findings.kind, dedupeKey: findings.dedupeKey, url: findings.url, value: findings.value, evidence: findings.evidence })
+    .select({ kind: findings.kind, dedupeKey: findings.dedupeKey, url: findings.url, value: findings.value, severity: findings.severity, evidence: findings.evidence })
     .from(findings)
     .where(and(eq(findings.projectId, projectId), eq(findings.source, EXTERNOS_SOURCE), eq(findings.status, 'abierto')));
   const openTargets = new Set(open.map((f) => String((f.evidence as { target?: string })?.target ?? '')));
@@ -67,6 +83,7 @@ export async function checkExternalLinks(ctx: Pick<JobContext, 'heartbeat' | 'si
         order.push(url);
         if (order.length > MAX_URLS * 3) break;
         await new Promise((r) => setTimeout(r, 200));
+        await ctx.heartbeat();
         continue;
       }
       busyHosts.add(host);
@@ -80,7 +97,7 @@ export async function checkExternalLinks(ctx: Pick<JobContext, 'heartbeat' | 'si
   };
   await Promise.all(Array.from({ length: CONCURRENCY }, worker));
   const prevDns = new Set(open.filter((f) => (f.evidence as { dns?: boolean })?.dns).map((f) => String((f.evidence as { target?: string }).target)));
-  const sync = externalFindings(results, linkedFrom, prevDns, open.map((f) => ({ kind: f.kind, dedupeKey: f.dedupeKey, url: f.url, value: f.value, evidence: (f.evidence ?? {}) as Record<string, unknown> })));
+  const sync = externalFindings(results, linkedFrom, prevDns, open.map((f) => ({ kind: f.kind, dedupeKey: f.dedupeKey, url: f.url, value: f.value, severity: f.severity, evidence: (f.evidence ?? {}) as Record<string, unknown> })));
   const r = await syncFindings(tenantId, projectId, EXTERNOS_SOURCE, sync, ['seo.external_broken']);
   const broken = sync.filter((f) => results.has(String(f.evidence?.target))).length;
   return { externas: linkedFrom.size, comprobadas: results.size, rotas: broken, ...r };

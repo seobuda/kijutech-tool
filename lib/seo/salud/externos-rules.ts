@@ -18,7 +18,7 @@ export function checkOrder(urls: string[], openTargets: Set<string>, seed: strin
   return [...urls].sort((a, b) => Number(openTargets.has(b)) - Number(openTargets.has(a)) || (key(a) < key(b) ? -1 : 1));
 }
 
-type OpenFinding = { kind: string; dedupeKey: string; url: string | null; value: number | null; evidence: Record<string, unknown> };
+type OpenFinding = { kind: string; dedupeKey: string; url: string | null; value: number | null; severity?: string | null; evidence: Record<string, unknown> };
 
 /**
  * Lo que se sincroniza: los rotos comprobados en esta pasada (un hallazgo por URL de destino, con las páginas que la
@@ -43,9 +43,13 @@ export function externalFindings(results: Map<string, ExternalCheck>, linkedFrom
       evidence: { target, status: r.status, dns: r.state === 'dns', pages: from.slice(0, 10) }
     });
   }
+  // Se conservan los abiertos que esta pasada no ha podido decidir, pero solo si la web sigue enlazándolos: si el
+  // enlace ya no está en la web, el hallazgo se resuelve (se arregló quitándolo).
   for (const f of open) {
     const target = String(f.evidence?.target ?? '');
-    if (!decided.has(target)) out.push({ kind: f.kind, dedupeKey: f.dedupeKey, url: f.url, value: f.value, evidence: f.evidence });
+    if (!decided.has(target) && linkedFrom.has(target)) out.push({ kind: f.kind, dedupeKey: f.dedupeKey, url: f.url, value: f.value, evidence: f.evidence, ...(isSeverity(f.severity) ? { severity: f.severity } : {}) });
   }
   return out;
 }
+
+const isSeverity = (x: unknown): x is 'info' | 'aviso' | 'importante' | 'critico' => x === 'info' || x === 'aviso' || x === 'importante' || x === 'critico';

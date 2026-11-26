@@ -8,7 +8,7 @@ import { lookup } from 'node:dns/promises';
 import dns from 'node:dns';
 import http from 'node:http';
 import https from 'node:https';
-import { Readable } from 'node:stream';
+import { Readable, pipeline } from 'node:stream';
 import zlib from 'node:zlib';
 
 /** Solo http(s) a nombres públicos: evita que una URL mal puesta en una ficha apunte a la red interna. */
@@ -103,12 +103,10 @@ export function publicFetch(url: string, init: PublicFetchInit = {}): Promise<Re
       },
       (res) => {
         const enc = String(res.headers['content-encoding'] ?? '').toLowerCase();
-        let stream: NodeJS.ReadableStream = res;
-        if (enc === 'gzip' || enc === 'x-gzip') stream = res.pipe(zlib.createGunzip());
-        else if (enc === 'deflate') stream = res.pipe(zlib.createInflate());
-        else if (enc === 'br') stream = res.pipe(zlib.createBrotliDecompress());
-        // Si quien lee cancela (tope de tamaño), se cierra también la conexión, no solo el descompresor.
-        if (stream !== res) (stream as NodeJS.ReadableStream & { on: (e: string, f: () => void) => void }).on('close', () => res.destroy());
+        const dec = enc === 'gzip' || enc === 'x-gzip' ? zlib.createGunzip() : enc === 'deflate' ? zlib.createInflate() : enc === 'br' ? zlib.createBrotliDecompress() : null;
+        // pipeline propaga en los dos sentidos: si la conexión se corta (o salta el tiempo máximo) el descompresor da
+        // error y quien lee no se queda colgado; si quien lee cancela, se cierra también la conexión.
+        const stream: Readable = dec ? (pipeline(res, dec, () => undefined) as unknown as Readable) : res;
         const headers = new Headers();
         for (const [k, v] of Object.entries(res.headers)) {
           if (v == null || k === 'content-encoding' || k === 'content-length') continue;
@@ -127,7 +125,8 @@ export function publicFetch(url: string, init: PublicFetchInit = {}): Promise<Re
         }
       }
     );
-    req.on('error', reject);
+    // Con tiempo máximo, el error es el motivo de la señal (TimeoutError), como con el fetch global.
+    req.on('error', (e) => reject(init.signal?.aborted && init.signal.reason ? init.signal.reason : e));
     if (init.body) req.write(init.body);
     req.end();
   });

@@ -106,6 +106,11 @@ describe('enlaces rotos hacia otras webs', () => {
     expect(f.find((x) => x.evidence?.target === 'https://b.com/')?.severity).toBe('info');
     expect(externalFindings(results, linked, new Set(['https://b.com/']), []).find((x) => x.evidence?.target === 'https://b.com/')?.severity).toBe('aviso');
     expect(checkOrder(['https://z.com', 'https://c.com/'], new Set(['https://c.com/']), 'r')[0]).toBe('https://c.com/');
+    // Si el enlace ya no está en la web, el hallazgo abierto no se arrastra: se resuelve.
+    const quitado = externalFindings(new Map(), new Map(), new Set(), [{ kind: 'seo.external_broken', dedupeKey: 'k', url: 'https://w.com/1', value: 1, severity: 'info', evidence: { target: 'https://x.com/vieja' } }]);
+    expect(quitado).toEqual([]);
+    const sigue = externalFindings(new Map(), new Map([['https://x.com/vieja', ['https://w.com/1']]]), new Set(), [{ kind: 'seo.external_broken', dedupeKey: 'k', url: 'https://w.com/1', value: 1, severity: 'info', evidence: { target: 'https://x.com/vieja' } }]);
+    expect(sigue[0].severity).toBe('info');
   });
 
   it('los tipos están en listas que se resuelven bien y tienen técnica', () => {
