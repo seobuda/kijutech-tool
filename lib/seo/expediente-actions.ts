@@ -5,15 +5,17 @@
 import { revalidatePath } from 'next/cache';
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { projects, seoDossierFacts } from '@/lib/db/schema';
+import { clients, projects, seoDossierFacts } from '@/lib/db/schema';
 import { requirePermission } from '@/lib/auth/permissions';
 import { publicError } from '@/lib/errors';
 import { isBusinessType } from '@/lib/core/business-types';
 import { updateCoreClient } from '@/lib/core/clients';
 import { enqueueDossier } from '@/lib/seo/expediente/collect';
-import { DOSSIER_FIELD_SET, normPhone } from '@/lib/seo/expediente/rules';
+import { ATENCION_OPTIONS, DOSSIER_FIELD_SET, normPhone } from '@/lib/seo/expediente/rules';
+import { enqueueProposal } from '@/lib/seo/alta/alta';
+import { SaludError, startProjectAudit } from '@/lib/seo/salud/audit';
 
-type Ok = { ok: true } | { ok: false; error: string };
+type Ok = { ok: true } | { ok: false; error: string; needsReplace?: string };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PATH = (id: string) => `/dashboard/projects/${id}/expediente`;
 
@@ -72,6 +74,12 @@ export async function savePersonaFactAction(projectId: string, field: string, ra
     } else if (field === 'tipo_negocio' && !isBusinessType(text)) return { ok: false, error: 'Tipo de negocio no válido' };
     else if (field === 'perfiles') value = text.split(/[\s,]+/).filter((x) => /^https?:\/\//i.test(x)).slice(0, 12);
     else if (field === 'servicios') value = [...new Set(text.split(/[,;\n]/).map((x) => x.trim()).filter((x) => x.length >= 2))].slice(0, 15);
+    else if (field === 'atencion' && !ATENCION_OPTIONS.some((o) => o.value === text)) return { ok: false, error: 'Elige una opción' };
+    else if (field === 'idiomas') {
+      value = [...new Set(text.toLowerCase().split(/[\s,;]+/).filter((x) => /^[a-z]{2}$/.test(x)))].slice(0, 4);
+      if (!(value as string[]).length) return { ok: false, error: 'Escribe los códigos de idioma, p. ej. «es, ca»' };
+    } else if (field === 'negocio' || field === 'publico') value = text.slice(0, 300);
+    else if (field === 'zona') value = text.slice(0, 255);
     const by = (user.name || user.email).slice(0, 120);
     await db
       .insert(seoDossierFacts)
@@ -87,8 +95,15 @@ export async function savePersonaFactAction(projectId: string, field: string, ra
   }
 }
 
-/** Pasa a la ficha del cliente un dato que la ficha guarda como campo propio (tipo de negocio, logo). */
-export async function applyFactToFichaAction(projectId: string, factId: string): Promise<Ok> {
+/** Campos de la ficha que se pueden rellenar desde el expediente (texto libre: nunca se pisa sin confirmarlo). */
+const FICHA_TEXT: Record<string, 'offerings' | 'area' | 'business' | 'audience'> = { servicios: 'offerings', zona: 'area', negocio: 'business', publico: 'audience' };
+
+/**
+ * Pasa a la ficha del cliente un dato del expediente. Los campos de texto (servicios, zona, a qué se dedica, público)
+ * no se pisan: si la ficha ya tiene texto distinto, devuelve `needsReplace` con lo que hay y solo se cambia si la
+ * persona lo pide con `replace` (alta de la cartera, 26 nov 2026).
+ */
+export async function applyFactToFichaAction(projectId: string, factId: string, replace = false): Promise<Ok> {
   try {
     const user = await requirePermission('edit');
     const p = await ownProject(user.tenantId, projectId);
@@ -102,13 +117,48 @@ export async function applyFactToFichaAction(projectId: string, factId: string):
     if (!f) return { ok: false, error: 'Dato no encontrado' };
     if (f.field === 'tipo_negocio' && typeof f.value === 'string' && isBusinessType(f.value)) await updateCoreClient(user.tenantId, p.clientId, { businessType: f.value });
     else if (f.field === 'logo' && typeof f.value === 'string' && /^https:\/\//i.test(f.value)) await updateCoreClient(user.tenantId, p.clientId, { logoUrl: f.value });
-    else if (f.field === 'servicios' && Array.isArray(f.value) && f.value.length) await updateCoreClient(user.tenantId, p.clientId, { offerings: f.value.map(String).join('\n') });
-    else return { ok: false, error: 'Este dato se cambia en la ficha del cliente (Locales, Webs y cuentas).' };
+    else if (FICHA_TEXT[f.field]) {
+      const col = FICHA_TEXT[f.field];
+      const text = f.field === 'servicios' ? (Array.isArray(f.value) ? f.value.map(String).join('\n') : '') : typeof f.value === 'string' ? f.value : '';
+      if (!text.trim()) return { ok: false, error: 'El dato está vacío' };
+      const [c] = await db.select({ offerings: clients.offerings, area: clients.area, business: clients.business, audience: clients.audience }).from(clients).where(and(eq(clients.id, p.clientId), eq(clients.tenantId, user.tenantId))).limit(1);
+      const current = (c?.[col] ?? '').trim();
+      if (current && current !== text.trim() && !replace) return { ok: false, error: 'La ficha ya tiene un texto distinto.', needsReplace: current.slice(0, 400) };
+      await updateCoreClient(user.tenantId, p.clientId, { [col]: text } as Parameters<typeof updateCoreClient>[2]);
+    } else return { ok: false, error: 'Este dato se cambia en la ficha del cliente (Locales, Webs y cuentas).' };
     await db.update(seoDossierFacts).set({ status: 'confirmado', decidedBy: (user.name || user.email).slice(0, 120), decidedAt: new Date(), updatedAt: new Date() }).where(eq(seoDossierFacts.id, f.id));
     await enqueueDossier(user.tenantId, projectId);
     revalidatePath(PATH(projectId));
     return { ok: true };
   } catch (e) {
     return { ok: false, error: publicError(e, 'No se pudo pasar a la ficha') };
+  }
+}
+
+/** Vuelve a pedir a la IA la propuesta de ficha (servicios, zona, a qué se dedica, público) con el último rastreo. */
+export async function proposeFichaAction(projectId: string): Promise<Ok> {
+  try {
+    const user = await requirePermission('edit');
+    const p = await ownProject(user.tenantId, projectId);
+    if (!p) return { ok: false, error: 'Proyecto no encontrado' };
+    await enqueueProposal(user.tenantId, projectId, true);
+    revalidatePath(PATH(projectId));
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: publicError(e, 'No se pudo pedir la propuesta') };
+  }
+}
+
+/** «Ponerlo en marcha»: lanza el rastreo; lo demás (auditoría, expediente, mapa, propuesta de la IA) va encadenado solo. */
+export async function startProjectSetupAction(projectId: string): Promise<Ok> {
+  try {
+    const user = await requirePermission('edit');
+    const p = await ownProject(user.tenantId, projectId);
+    if (!p) return { ok: false, error: 'Proyecto no encontrado' };
+    await startProjectAudit(user.tenantId, projectId);
+    revalidatePath(PATH(projectId));
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof SaludError ? e.userMessage : publicError(e, 'No se pudo poner en marcha') };
   }
 }

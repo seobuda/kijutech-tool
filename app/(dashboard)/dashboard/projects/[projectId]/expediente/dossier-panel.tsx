@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge, EmptyState, Section } from '@/components/ui/page';
 import type { DossierFactView, DossierView } from '@/lib/seo/expediente/view';
-import { display } from '@/lib/seo/expediente/rules';
+import { ATENCION_OPTIONS, display } from '@/lib/seo/expediente/rules';
 import { applyFactToFichaAction, collectDossierAction, decideDossierFactAction, savePersonaFactAction } from '@/lib/seo/expediente-actions';
 import type { dossierQuestionsSummary } from '@/lib/seo/preguntas/preguntas';
 
@@ -22,11 +22,13 @@ const STATUS: Record<string, { label: string; tone: 'success' | 'neutral' | 'war
   provisional: { label: 'Provisional', tone: 'warning' },
   descartado: { label: 'Descartado', tone: 'neutral' }
 };
-const EDITABLE = new Set(['nombre', 'web', 'telefono', 'tipo_negocio', 'perfiles', 'logo', 'servicios', 'zona']);
+const EDITABLE = new Set(['nombre', 'negocio', 'web', 'telefono', 'tipo_negocio', 'perfiles', 'logo', 'servicios', 'zona', 'publico', 'atencion', 'idiomas']);
+const TO_FICHA = new Set(['tipo_negocio', 'logo', 'servicios', 'zona', 'negocio', 'publico']);
 const fmt = (iso: string | null) => (iso ? new Date(iso).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' }) : '—');
 
 function valueText(field: string, v: unknown, types: { value: string; label: string }[]): string {
   if (field === 'tipo_negocio' && typeof v === 'string') return types.find((t) => t.value === v)?.label ?? v;
+  if (field === 'atencion' && typeof v === 'string') return ATENCION_OPTIONS.find((o) => o.value === v)?.label ?? v;
   if (field === 'marca_en_google' && v && typeof v === 'object') {
     const m = v as { busquedas?: number; clics?: number; impresiones?: number; ejemplos?: string[] };
     return `${m.clics ?? 0} clics y ${m.impresiones ?? 0} impresiones en ${m.busquedas ?? 0} búsquedas${m.ejemplos?.length ? ` (p. ej. «${m.ejemplos.slice(0, 3).join('», «')}»)` : ''}`;
@@ -41,10 +43,10 @@ export function DossierPanel({ view, canEdit, businessTypes, questions }: { view
   const [msg, setMsg] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
-    if (!view.collecting) return;
+    if (!view.collecting && !view.proposing) return;
     const t = setInterval(() => router.refresh(), 8_000);
     return () => clearInterval(t);
-  }, [view.collecting, router]);
+  }, [view.collecting, view.proposing, router]);
 
   const run = (fn: () => Promise<{ ok: true } | { ok: false; error: string }>, okText?: string) =>
     start(async () => {
@@ -210,7 +212,16 @@ function FieldRow({
       </div>
       {editing && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          {field.field === 'tipo_negocio' ? (
+          {field.field === 'atencion' ? (
+            <select className="h-9 rounded-md border bg-background px-2 text-sm" value={text} onChange={(e) => setText(e.target.value)} aria-label="Cómo atiende">
+              <option value="">Elige…</option>
+              {ATENCION_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          ) : field.field === 'tipo_negocio' ? (
             <select className="h-9 rounded-md border bg-background px-2 text-sm" value={text} onChange={(e) => setText(e.target.value)}>
               <option value="">Elige…</option>
               {businessTypes.map((t) => (
@@ -220,7 +231,7 @@ function FieldRow({
               ))}
             </select>
           ) : (
-            <Input className="h-9 max-w-md" value={text} onChange={(e) => setText(e.target.value)} placeholder={field.field === 'perfiles' ? 'URLs separadas por comas' : ''} />
+            <Input className="h-9 max-w-md" value={text} onChange={(e) => setText(e.target.value)} placeholder={field.field === 'perfiles' ? 'URLs separadas por comas' : field.field === 'idiomas' ? 'Códigos: es, ca' : field.field === 'servicios' ? 'Separados por comas' : ''} />
           )}
           <Button
             size="sm"
@@ -265,7 +276,21 @@ function FactLine({
   businessTypes: { value: string; label: string }[];
 }) {
   const st = STATUS[fact.status];
-  const toFicha = canEdit && fact.source !== 'ficha' && fact.status !== 'descartado' && (fact.field === 'tipo_negocio' || fact.field === 'logo' || fact.field === 'servicios');
+  const toFicha = canEdit && fact.source !== 'ficha' && fact.status !== 'descartado' && TO_FICHA.has(fact.field);
+  const [replace, setReplace] = useState<string | null>(null);
+  const [busy, startBusy] = useTransition();
+  const router = useRouter();
+  const toFichaNow = (force: boolean) =>
+    startBusy(async () => {
+      const r = await applyFactToFichaAction(projectId, fact.id, force);
+      if (!r.ok && r.needsReplace) setReplace(r.needsReplace);
+      else {
+        setReplace(null);
+        if (!r.ok) run(async () => r);
+        router.refresh();
+      }
+    });
+  const evidence = fact.source === 'ia' ? iaEvidence(fact.sourceRef) : null;
   return (
     <li className={fact.status === 'descartado' ? 'flex flex-wrap items-center gap-2 text-sm text-muted-foreground line-through' : 'flex flex-wrap items-center gap-2 text-sm'}>
       <span className="break-all">{valueText(fact.field, fact.value, businessTypes)}</span>
@@ -301,12 +326,47 @@ function FactLine({
             </Button>
           )}
           {toFicha && (
-            <Button size="sm" variant="outline" disabled={pending} onClick={() => run(() => applyFactToFichaAction(projectId, fact.id), 'Pasado a la ficha del cliente.')}>
+            <Button size="sm" variant="outline" disabled={pending || busy} onClick={() => toFichaNow(false)}>
               Pasar a la ficha
             </Button>
           )}
         </span>
       )}
+      {evidence && <span className="basis-full text-xs text-muted-foreground">{evidence}</span>}
+      {replace !== null && (
+        <span className="basis-full rounded-md border border-warning/40 bg-warning-soft p-2 text-xs">
+          La ficha ya dice: «{replace}». ¿La reemplazamos por este dato?{' '}
+          <Button size="sm" variant="outline" className="ml-2 h-7" disabled={busy} onClick={() => toFichaNow(true)}>
+            Reemplazar en la ficha
+          </Button>
+          <Button size="sm" variant="ghost" className="h-7" onClick={() => setReplace(null)}>
+            Dejar la ficha como está
+          </Button>
+        </span>
+      )}
     </li>
   );
+}
+
+/** Las pruebas de una propuesta de la IA (alta de la cartera): de qué página y frase sale cada servicio, o que no lleva cita. */
+function iaEvidence(ref: string | null): string | null {
+  if (!ref) return null;
+  try {
+    const e = JSON.parse(ref) as { items?: { n: string; u: string | null; c: string }[]; c?: string; sinCita?: boolean };
+    if (e.sinCita) return 'Propuesto por la IA a partir de la web y de las búsquedas, sin una frase concreta que lo pruebe: revísalo antes de confirmarlo.';
+    if (e.items?.length) {
+      const path = (u: string) => {
+        try {
+          return decodeURI(new URL(u).pathname);
+        } catch {
+          return u;
+        }
+      };
+      return `Propuesto por la IA. De dónde sale: ${e.items.map((i) => `${i.n} → «${i.c}» ${i.u ? `(${path(i.u)})` : '(sin página propia en la web)'}`).join(' · ')}`;
+    }
+    if (e.c) return `Propuesto por la IA. De dónde sale: «${e.c}»`;
+  } catch {
+    return null;
+  }
+  return null;
 }

@@ -43,7 +43,9 @@ async function dossierQuestions(projectId: string): Promise<Question[]> {
   if (!facts.length) return [];
   // Lo que el cliente ya contestó y espera que una persona lo confirme no se le vuelve a preguntar (si se descarta, sí).
   const answered = new Set(facts.filter((f) => f.source === 'cliente' && f.status !== 'descartado').map((f) => f.field));
-  return questionCandidates(facts.map((f) => ({ ...f, source: f.source as FactSource }))).filter((q) => !answered.has(q.field));
+  // Una propuesta de la IA sin confirmar no se le enseña al cliente: para las preguntas, ese dato falta.
+  const usable = facts.filter((f) => f.source !== 'ia' || f.status === 'confirmado');
+  return questionCandidates(usable.map((f) => ({ ...f, source: f.source as FactSource }))).filter((q) => !answered.has(q.field));
 }
 
 const FIELD_TYPE: Record<QuestionField, ModuleQuestion['answerType']> = { nombre: 'texto', web: 'texto', telefono: 'texto', direccion: 'direccion', servicios: 'lista', zona: 'texto' };
