@@ -132,4 +132,5 @@ Las decisiones no triviales pasan por el protocolo de decisión (3 puntos de vis
 | Parte | Estado | Despliegue | Documento de sesión |
 |---|---|---|---|
 | 0 | hecha | 26 nov (migración 0065) | `docs/sessions/2026-11-26-13-seo-parte0-consolidar.md` |
-| 1 | siguiente | — | — |
+| 1 (tanda 1) | hecha | 26 nov (sin migración) | `docs/sessions/2026-11-26-15-seo-parte1-tanda1.md` |
+| 1 (tanda 2) | siguiente: enlaces externos, recursos bloqueados, fetchPublic blindado | — | — |

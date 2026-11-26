@@ -16,7 +16,7 @@ import { db } from '@/lib/db/drizzle';
 import { projects } from '@/lib/db/schema';
 import { disableSchedule, enqueueJob, ensureScheduleIfMissing, listSchedulesForScope, pauseSchedule, registerJobKind, registerProcess, stableOffsetMinutes } from '@/lib/core/jobs';
 import { emitProjectAlert, metricSources, registerScheduled, speedSource, telegramOutbound } from '@/lib/core/capabilities';
-import { findingKind, syncFindings } from '@/lib/core/findings';
+import { findingKind, listFindings, syncFindings } from '@/lib/core/findings';
 import { fetchPublic, resolvesPublic } from '@/lib/core/net';
 import { extractPage } from '@/lib/core/crawl-extract';
 import { gscPropertiesForProject } from '@/lib/core/gsc';
@@ -28,7 +28,11 @@ import {
   SEO_PROCESS_KEYS,
   VELOCIDAD_SOURCE,
   VIGILANCIA_SOURCE,
+  LAB_KINDS,
   addDays,
+  labFindings,
+  labSyncSet,
+  representativeUrls,
   pageDropFindings,
   shouldAlert,
   velocidadFindings,
@@ -36,6 +40,7 @@ import {
   yoyAvailable,
   type CwvRow,
   type HomeCheck,
+  type LabRow,
   type SeoProcessKey
 } from '@/lib/seo/vigilancia/rules';
 
@@ -188,21 +193,48 @@ async function topPages(tenantId: string, projectId: string, n: number): Promise
   return [...m].sort((a, b) => b[1] - a[1]).slice(0, n).map(([u]) => u);
 }
 
-export async function runVelocidad(tenantId: string, projectId: string): Promise<Outcome> {
+export async function runVelocidad(tenantId: string, projectId: string, heartbeat: () => Promise<void> = async () => undefined): Promise<Outcome> {
   const src = speedSource();
   if (!src || !(await src.hasKey(tenantId))) return { status: 'omitido', summary: 'Falta la clave de PageSpeed / CrUX (Agentes → Integraciones).' };
   const home = await projectWebUrl(tenantId, projectId);
   if (!home) return { status: 'omitido', summary: 'El proyecto no tiene web en su alcance.' };
-  const urls = [...new Set([home, ...(await topPages(tenantId, projectId, 3).catch(() => [] as string[]))])].slice(0, 4);
+  const top = await topPages(tenantId, projectId, 30).catch(() => [] as string[]);
+  const urls = [...new Set([home, ...top.slice(0, 3)])].slice(0, 4);
   const rows: CwvRow[] = [];
   for (const url of urls) {
     const f = await src.field(tenantId, url);
     if (f) rows.push({ url, ...f });
   }
   const found = velocidadFindings(rows);
-  await syncFindings(tenantId, projectId, VELOCIDAD_SOURCE, found, ['seo.cwv_slow', 'seo.cwv_average']);
-  if (!rows.length) return { status: 'ok', summary: 'Google aún no tiene datos reales de velocidad de esta web (poco tráfico de Chrome).' };
-  return { status: found.some((f) => f.kind === 'seo.cwv_slow') ? 'aviso' : 'ok', summary: `${rows.length} página(s) medida(s) con datos reales: ${found.length ? `${found.length} con velocidad mejorable o lenta` : 'velocidad correcta'}.` };
+  // Parte 1: prueba de laboratorio (Lighthouse en Google) de hasta 5 páginas representativas: viewport, contenido
+  // mixto e imágenes. Si una página no se deja medir, se omite; si no se pudo medir ninguna, sus hallazgos no se tocan.
+  const labRows: LabRow[] = [];
+  let labTried = 0;
+  let labOpen: Parameters<typeof labSyncSet>[2] = [];
+  if (src.lab) {
+    const openLab = await listFindings(tenantId, projectId, { status: ['abierto'] }).then((fs) => fs.filter((f) => f.source === VELOCIDAD_SOURCE && LAB_KINDS.includes(f.kind)));
+    labOpen = openLab.map((f) => ({ kind: f.kind, dedupeKey: f.dedupeKey, url: f.url, value: f.value, evidence: (f.evidence ?? {}) as Record<string, unknown> }));
+    for (const url of representativeUrls(home, top, 5, [...new Set(openLab.map((f) => f.url).filter((u): u is string => Boolean(u)))])) {
+      labTried++;
+      await heartbeat();
+      const r = await src.lab(tenantId, url).catch((e) => {
+        console.error('[seo] laboratorio de velocidad:', e instanceof Error ? e.message : e);
+        return null;
+      });
+      if (r) labRows.push({ url, ...r });
+    }
+  }
+  const lab = labFindings(labRows);
+  // Solo se resuelve lo de las páginas medidas; lo de las que fallaron (o no se midieron) se conserva tal cual.
+  // Si Lighthouse no trajo auditorías de imágenes, los hallazgos de imágenes tampoco se tocan.
+  const imagesKnown = labRows.some((r) => r.imagesKnown);
+  const measured = new Set(labRows.map((r) => r.url));
+  const labKinds = labRows.length ? LAB_KINDS.filter((k) => imagesKnown || !k.startsWith('seo.images_')) : [];
+  const labSet = labSyncSet(lab, measured, labOpen.filter((f) => labKinds.includes(f.kind)));
+  await syncFindings(tenantId, projectId, VELOCIDAD_SOURCE, [...found, ...labSet], ['seo.cwv_slow', 'seo.cwv_average', ...labKinds]);
+  const labText = labTried ? ` Laboratorio: ${labRows.length} de ${labTried} página(s) medida(s)${lab.length ? `, ${lab.length} problema(s)` : ''}${labRows.length && !imagesKnown ? '; Lighthouse no trajo las auditorías de imágenes (no se juzgan)' : ''}.` : '';
+  if (!rows.length) return { status: lab.length ? 'aviso' : 'ok', summary: `Google aún no tiene datos reales de velocidad de esta web (poco tráfico de Chrome).${labText}` };
+  return { status: found.some((f) => f.kind === 'seo.cwv_slow') || lab.length ? 'aviso' : 'ok', summary: `${rows.length} página(s) medida(s) con datos reales: ${found.length ? `${found.length} con velocidad mejorable o lenta` : 'velocidad correcta'}.${labText}` };
 }
 
 export async function runDetectores(tenantId: string, projectId: string): Promise<Outcome> {
@@ -286,13 +318,13 @@ const G = globalThis as unknown as { __kijuSeoSchedSync?: Map<string, number> };
 export function registerVigilancia(): void {
   if (registered) return;
   registered = true;
-  const run = (key: SeoProcessKey, fn: (tenantId: string, projectId: string) => Promise<Outcome>, timeoutS: number) => {
-    registerJobKind({ kind: key, timeoutS, maxConcurrent: key === 'seo.vigilancia' ? 4 : 2, maxAttempts: 2, run: async (ctx, payload) => fn(ctx.tenantId, String(payload.projectId ?? '')) });
+  const run = (key: SeoProcessKey, fn: (tenantId: string, projectId: string, heartbeat: () => Promise<void>) => Promise<Outcome>, timeoutS: number) => {
+    registerJobKind({ kind: key, timeoutS, maxConcurrent: key === 'seo.vigilancia' ? 4 : 2, maxAttempts: 2, run: async (ctx, payload) => fn(ctx.tenantId, String(payload.projectId ?? ''), ctx.heartbeat) });
     registerProcess({ key, scopeType: 'proyecto', label: `SEO: ${SEO_PROCESSES[key].label}`, defaultEveryMinutes: SEO_PROCESSES[key].every, enqueue: (_t, scopeId) => ({ kind: key, payload: { projectId: scopeId }, priority: key === 'seo.vigilancia' ? 3 : 7 }) });
   };
   run('seo.vigilancia', (t, p) => runVigilancia(t, p, false), 120);
   run('seo.auditoria', runAuditoriaProgramada, 60);
-  run('seo.velocidad', runVelocidad, 180);
+  run('seo.velocidad', runVelocidad, 600);
   run('seo.detectores', runDetectores, 240);
   registerJobKind({ kind: CONFIRM_KIND, timeoutS: 120, maxConcurrent: 4, maxAttempts: 2, run: async (ctx, payload) => runVigilancia(ctx.tenantId, String(payload.projectId ?? ''), true) });
   // Alta de los procesos de los proyectos: como mucho una vez cada hora por cuenta.

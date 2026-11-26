@@ -635,6 +635,21 @@ export type SpeedSource = {
   hasKey: (tenantId: string) => Promise<boolean>;
   /** Datos reales de la URL (o de su origen si la URL no tiene tráfico suficiente). null = Google no tiene datos. */
   field: (tenantId: string, url: string) => Promise<SpeedField | null>;
+  /** Prueba de laboratorio en móvil (Lighthouse en los servidores de Google): viewport, HTTPS y contenido mixto,
+   *  imágenes sin tamaño y peso que se puede ahorrar (SEO parte 1). null = la prueba no pudo hacerse. */
+  lab?: (tenantId: string, url: string) => Promise<SpeedLab | null>;
+};
+export type SpeedLab = {
+  score: number | null;
+  /** null = la auditoría no vino en la respuesta. */
+  viewportOk: boolean | null;
+  httpsOk: boolean | null;
+  insecureRequests: string[];
+  unsizedImages: number;
+  imageSavingsKb: number;
+  totalKb: number | null;
+  /** false = Lighthouse no trajo ninguna auditoría de imágenes conocida: no se juzgan (ni se resuelven) las imágenes. */
+  imagesKnown: boolean;
 };
 const GSPEED = globalThis as unknown as { __kijuSpeedSource?: SpeedSource | null };
 export function registerSpeedSource(s: SpeedSource): void {

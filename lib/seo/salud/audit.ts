@@ -6,7 +6,7 @@ import 'server-only';
 //   3. aplica las reglas puras (audit-rules.ts) con el cruce de Search Console y guarda los hallazgos (núcleo: findings),
 //      que se resuelven solos cuando dejan de aparecer.
 // No usa IA: la IA llega después, para el juicio (prioridades y plan de mejora).
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, lt, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { clientAssets, crawlPages, crawlRuns, projectAssets, projects, type CrawlRun } from '@/lib/db/schema';
 import { enqueueJob, ensureScheduleIfMissing, registerJobKind } from '@/lib/core/jobs';
@@ -14,6 +14,7 @@ import { inlinkCounts, startCrawl } from '@/lib/core/crawler';
 import { registerFindingKind, syncFindings } from '@/lib/core/findings';
 import { gscPropertiesForProject } from '@/lib/core/gsc';
 import { auditCrawl, type AuditPage } from '@/lib/seo/salud/audit-rules';
+import { genericAnchors, hreflangIssues, langMissing, pageRegressions, redirectLoops, type PrevPage, type TecnicoPage } from '@/lib/seo/salud/audit-rules-tecnico';
 import { SALUD_KINDS, SEO_KINDS } from '@/lib/seo/salud/kinds';
 
 export const SALUD_SOURCE = 'seo.salud:rastreo';
@@ -89,11 +90,39 @@ async function gscPagesForProject(tenantId: string, projectId: string): Promise<
   return rows.map((r) => ({ url: r.url, impressions: Number(r.impressions), clicks: Number(r.clicks) }));
 }
 
+/** Páginas del rastreo terminado anterior a este (misma web), con solo las columnas que hacen falta. */
+async function previousCrawlPages(projectId: string, run: CrawlRun): Promise<PrevPage[]> {
+  const [prev] = await db
+    .select({ id: crawlRuns.id })
+    .from(crawlRuns)
+    .where(and(eq(crawlRuns.projectId, projectId), eq(crawlRuns.target, 'propio'), eq(crawlRuns.rootUrl, run.rootUrl), eq(crawlRuns.status, 'hecho'), lt(crawlRuns.createdAt, run.createdAt)))
+    .orderBy(desc(crawlRuns.createdAt))
+    .limit(1);
+  if (!prev) return [];
+  return db
+    .select({ url: crawlPages.url, statusCode: crawlPages.statusCode, contentType: crawlPages.contentType, robotsMeta: crawlPages.robotsMeta, xRobots: crawlPages.xRobots, canonical: crawlPages.canonical })
+    .from(crawlPages)
+    .where(eq(crawlPages.runId, prev.id));
+}
+
 /** Aplica las reglas a un rastreo terminado y pone al día los hallazgos del proyecto. */
 export async function auditFinishedCrawl(tenantId: string, projectId: string, run: CrawlRun) {
   const pages = (await db.select().from(crawlPages).where(eq(crawlPages.runId, run.id))) as unknown as AuditPage[];
   const [inlinks, gscPages] = await Promise.all([inlinkCounts(run.id), gscPagesForProject(tenantId, projectId)]);
   const found = auditCrawl({ rootUrl: run.rootUrl, pages, inlinks, truncated: run.pagesDone >= run.maxPages, gscPages });
+  // Parte 1 (técnico completo): bucles de redirección, anchors, hreflang y lang, con lo que el rastreo ya guardaba.
+  const anchorRows = (await db.execute(sql`
+    SELECT to_hash, anchor, count(*)::int AS n FROM crawl_links
+    WHERE run_id = ${run.id} AND from_hash <> to_hash AND NOT nofollow
+    GROUP BY to_hash, anchor`)) as unknown as { to_hash: string; anchor: string | null; n: number }[];
+  const tp = pages as TecnicoPage[];
+  found.push(
+    ...redirectLoops(tp),
+    ...genericAnchors(tp, [...anchorRows].map((r) => ({ toHash: r.to_hash, anchor: r.anchor, n: Number(r.n) }))),
+    ...hreflangIssues(tp),
+    ...langMissing(run.rootUrl, tp),
+    ...pageRegressions(tp, await previousCrawlPages(projectId, run))
+  );
   // Todos los tipos de Salud: lo que ya no aparece se resuelve solo.
   const r = await syncFindings(tenantId, projectId, SALUD_SOURCE, found, SALUD_KINDS.map((k) => k.kind));
   return { pages: pages.length, gscPages: gscPages.length, ...r };
