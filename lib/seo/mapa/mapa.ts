@@ -124,10 +124,11 @@ export type MapaResult = {
 async function valueContext(tenantId: string, projectId: string, clientId: string | null, offerings: string | null): Promise<ValueContext> {
   // Servicios: el dato del expediente (confirmado primero; si no, el de más confianza); si no hay, la ficha.
   const facts = await db
-    .select({ value: seoDossierFacts.value, status: seoDossierFacts.status, confidence: seoDossierFacts.confidence })
+    .select({ value: seoDossierFacts.value, status: seoDossierFacts.status, confidence: seoDossierFacts.confidence, source: seoDossierFacts.source })
     .from(seoDossierFacts)
     .where(and(eq(seoDossierFacts.projectId, projectId), eq(seoDossierFacts.field, 'servicios')));
-  const best = facts.filter((f) => f.status !== 'descartado').sort((a, b) => Number(b.status === 'confirmado') - Number(a.status === 'confirmado') || b.confidence - a.confidence)[0];
+  // La propuesta de la IA solo cuenta si una persona la confirmó.
+  const best = facts.filter((f) => f.status !== 'descartado' && (f.source !== 'ia' || f.status === 'confirmado')).sort((a, b) => Number(b.status === 'confirmado') - Number(a.status === 'confirmado') || b.confidence - a.confidence)[0];
   let services = Array.isArray(best?.value) ? (best!.value as unknown[]).map(String) : [];
   if (!services.length && offerings) services = offerings.split(/[,;\n·]/).map((x) => x.trim()).filter((x) => x.length >= 3);
   services = services.slice(0, 20);

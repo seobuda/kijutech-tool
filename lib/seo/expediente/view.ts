@@ -26,6 +26,8 @@ export type DossierView = {
   identity: Identity;
   lastUpdate: string | null;
   collecting: boolean;
+  /** La IA está preparando la propuesta de ficha (alta de la cartera). */
+  proposing: boolean;
 };
 
 export async function getDossierView(tenantId: string, projectId: string): Promise<DossierView | null> {
@@ -43,6 +45,10 @@ export async function getDossierView(tenantId: string, projectId: string): Promi
       .from(jobs)
       .where(and(eq(jobs.tenantId, tenantId), eq(jobs.kind, 'seo.expediente.collect'), eq(jobs.scopeId, projectId), sql`${jobs.status} IN ('pendiente', 'en_curso')`))
   ]);
+  const [proposingRow] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(jobs)
+    .where(and(eq(jobs.tenantId, tenantId), eq(jobs.kind, 'seo.alta.proponer'), eq(jobs.scopeId, projectId), sql`${jobs.status} IN ('pendiente', 'en_curso')`));
   // «Datos en Search Console desde» se guardó al reunir el expediente, pero la descarga del histórico sigue después y
   // la fecha retrocede: se enseña la de ahora (la misma que ve Salud técnica).
   const gscFirst = (await gscPropertiesForProject(tenantId, projectId).catch(() => []))
@@ -74,6 +80,7 @@ export async function getDossierView(tenantId: string, projectId: string): Promi
     ),
     identity: identity(live.map((r) => ({ field: r.field, value: r.value, source: r.source as FactSource }))),
     lastUpdate: rows.length ? new Date(Math.max(...rows.map((r) => r.updatedAt.getTime()))).toISOString() : null,
-    collecting: Number(running?.n ?? 0) > 0
+    collecting: Number(running?.n ?? 0) > 0,
+    proposing: Number(proposingRow?.n ?? 0) > 0
   };
 }

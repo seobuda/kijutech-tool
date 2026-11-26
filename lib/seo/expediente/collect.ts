@@ -20,6 +20,7 @@ import { LOCAL_KINDS } from '@/lib/seo/salud/kinds';
 import { auditLocal, LOCAL_SOURCE, parseServices } from '@/lib/seo/local/rules';
 import { brandTokens, extractFromHome, host, isBrandQuery, normPhone, scoreFacts, type FactDraft } from '@/lib/seo/expediente/rules';
 import { maybeAutoQuestions } from '@/lib/seo/preguntas/preguntas';
+import { crawlLanguages, enqueueProposal } from '@/lib/seo/alta/alta';
 
 const SOCIAL_KINDS = ['instagram', 'meta', 'linkedin', 'youtube', 'tiktok'];
 const UA = 'Mozilla/5.0 (compatible; KijutechBot/1.0; +https://kijutech.com)';
@@ -55,6 +56,10 @@ async function fichaFacts(tenantId: string, projectId: string, clientId: string)
   if (c.logoUrl) facts.push({ field: 'logo', value: c.logoUrl, source: 'ficha' });
   const services = parseServices(c.offerings);
   if (services.length) facts.push({ field: 'servicios', value: services, source: 'ficha' });
+  // Alta de la cartera (26 nov): lo que la ficha ya dice de a qué se dedica, su zona y su público.
+  if (c.business?.trim()) facts.push({ field: 'negocio', value: c.business.trim().slice(0, 300), source: 'ficha' });
+  if (c.area?.trim()) facts.push({ field: 'zona', value: c.area.trim().slice(0, 255), source: 'ficha' });
+  if (c.audience?.trim()) facts.push({ field: 'publico', value: c.audience.trim().slice(0, 300), source: 'ficha' });
   return { facts, names: [c.name, ...(c.aliases ?? [])] };
 }
 
@@ -125,9 +130,11 @@ export async function collectDossier(tenantId: string, projectId: string): Promi
   const persona = await db
     .select({ field: seoDossierFacts.field, value: seoDossierFacts.value, source: seoDossierFacts.source })
     .from(seoDossierFacts)
-    .where(and(eq(seoDossierFacts.projectId, projectId), inArray(seoDossierFacts.source, ['persona', 'cliente']), sql`${seoDossierFacts.status} <> 'descartado'`));
-  const drafts: FactDraft[] = [...ficha, ...w, ...wb, ...g];
-  const scored = scoreFacts<FactDraft>([...drafts, ...persona.map((x): FactDraft => ({ field: x.field, value: x.value, source: x.source as FactDraft['source'] }))]).filter((f) => f.source !== 'persona' && f.source !== 'cliente');
+    .where(and(eq(seoDossierFacts.projectId, projectId), inArray(seoDossierFacts.source, ['persona', 'cliente', 'ia']), sql`${seoDossierFacts.status} <> 'descartado'`));
+  // Idiomas de la web (sin IA): del último rastreo.
+  const langs = await crawlLanguages(projectId).catch(() => [] as string[]);
+  const drafts: FactDraft[] = [...ficha, ...w, ...wb, ...g, ...(langs.length ? [{ field: 'idiomas', value: langs, source: 'web' as const }] : [])];
+  const scored = scoreFacts<FactDraft>([...drafts, ...persona.map((x): FactDraft => ({ field: x.field, value: x.value, source: x.source as FactDraft['source'] }))]).filter((f) => f.source !== 'persona' && f.source !== 'cliente' && f.source !== 'ia');
   for (const f of scored) {
     const value = JSON.stringify(f.value ?? null);
     await db
@@ -152,11 +159,14 @@ export async function collectDossier(tenantId: string, projectId: string): Promi
     and(
       eq(seoDossierFacts.projectId, projectId),
       eq(seoDossierFacts.status, 'provisional'),
-      notInArray(seoDossierFacts.source, ['persona', 'cliente']),
+      // Las propuestas de la IA (alta de la cartera) solo las cambia su propio trabajo.
+      notInArray(seoDossierFacts.source, ['persona', 'cliente', 'ia']),
       produced.length ? sql`(${seoDossierFacts.field} || ':' || ${seoDossierFacts.source}) NOT IN (${sql.join(produced.map((x) => sql`${x}`), sql`, `)})` : sql`true`
     )
   );
   const local = await checkLocal(tenantId, projectId, p.clientId);
+  // Alta de la cartera: propuesta de la IA (servicios, zona…) si aún no la hay con este rastreo.
+  await enqueueProposal(tenantId, projectId).catch((e) => console.error('[seo] propuesta de ficha:', e instanceof Error ? e.message : e));
   // Lo que no se ha podido averiguar solo: correo de preguntas (pendiente de aprobación; uno cada 30 días como mucho).
   await maybeAutoQuestions(tenantId, projectId).catch((e) => console.error('[seo] preguntas automáticas:', e instanceof Error ? e.message : e));
   return { facts: scored.length, sources: [...new Set(scored.map((f) => f.source))], local };

@@ -477,6 +477,13 @@
       "when": 1796300000000,
       "tag": "0067_crawl_facts",
       "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1796400000000,
+      "tag": "0068_seo_proponer_ficha_prompt",
+      "breakpoints": true
     }
   ]
 }

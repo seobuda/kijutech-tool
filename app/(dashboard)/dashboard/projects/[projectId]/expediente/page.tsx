@@ -10,12 +10,14 @@ import { dossierQuestionsSummary } from '@/lib/seo/preguntas/preguntas';
 import { BUSINESS_TYPES } from '@/lib/core/business-types';
 import { ProjectSeoNav } from '../seo-nav';
 import { DossierPanel } from './dossier-panel';
+import { PuestaEnMarcha } from './puesta-en-marcha';
+import { projectReadiness } from '@/lib/seo/alta/alta';
 
 export default async function ExpedientePage({ params }: { params: Promise<{ projectId: string }> }) {
   const user = await requirePagePermission('view');
   const { projectId } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(projectId)) notFound();
-  const [view, canEdit, questions] = await Promise.all([getDossierView(user.tenantId, projectId), checkPermission('edit').then((r) => r.ok), dossierQuestionsSummary(user.tenantId, projectId)]);
+  const [view, canEdit, questions, ready] = await Promise.all([getDossierView(user.tenantId, projectId), checkPermission('edit').then((r) => r.ok), dossierQuestionsSummary(user.tenantId, projectId), projectReadiness(user.tenantId, projectId)]);
   if (!view) notFound();
   return (
     <PageContainer>
@@ -34,6 +36,7 @@ export default async function ExpedientePage({ params }: { params: Promise<{ pro
         }
       />
       <ProjectSeoNav projectId={projectId} active="expediente" />
+      {ready && view.project.clientId && <PuestaEnMarcha projectId={projectId} items={ready.items} done={ready.done} total={ready.total} canEdit={canEdit} audited={ready.items.find((i) => i.key === 'auditoria')?.ok ?? false} proposing={view.proposing} />}
       <DossierPanel view={view} canEdit={canEdit} businessTypes={BUSINESS_TYPES} questions={questions} />
     </PageContainer>
   );

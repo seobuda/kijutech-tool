@@ -8,6 +8,7 @@ export type FactSource = 'ficha' | 'web' | 'places' | 'wayback' | 'gsc' | 'busqu
 /** Campos del expediente (lista cerrada). «client» = es un dato de la ficha del cliente (se propone allí, no se pisa). */
 export const DOSSIER_FIELDS: { field: string; label: string; client: boolean }[] = [
   { field: 'nombre', label: 'Nombre comercial', client: true },
+  { field: 'negocio', label: 'A qué se dedica', client: true },
   { field: 'web', label: 'Web', client: true },
   { field: 'telefono', label: 'Teléfono', client: true },
   { field: 'direccion', label: 'Dirección', client: true },
@@ -16,6 +17,9 @@ export const DOSSIER_FIELDS: { field: string; label: string; client: boolean }[]
   { field: 'logo', label: 'Logo', client: true },
   { field: 'servicios', label: 'Servicios principales', client: true },
   { field: 'zona', label: 'Zona donde trabaja', client: true },
+  { field: 'publico', label: 'Público (a quién vende)', client: true },
+  { field: 'atencion', label: 'Cómo atiende (local, a domicilio, online)', client: false },
+  { field: 'idiomas', label: 'Idiomas en los que le buscan', client: false },
   { field: 'titulo_inicio', label: 'Título de la página de inicio', client: false },
   { field: 'primera_fecha_web', label: 'Primera vez archivada en Internet', client: false },
   { field: 'datos_search_console', label: 'Datos en Search Console desde', client: false },
@@ -23,6 +27,14 @@ export const DOSSIER_FIELDS: { field: string; label: string; client: boolean }[]
   { field: 'paginas_con_impresiones', label: 'Páginas que salen en Google (90 días)', client: false }
 ];
 export const DOSSIER_FIELD_SET = new Set(DOSSIER_FIELDS.map((f) => f.field));
+
+/** Cómo atiende el negocio (alta de la cartera): cambia el sentido de la zona y del mapa de Google. */
+export const ATENCION_OPTIONS = [
+  { value: 'local', label: 'En su local (los clientes van)' },
+  { value: 'domicilio', label: 'A domicilio (va a casa del cliente)' },
+  { value: 'ambos', label: 'Las dos cosas' },
+  { value: 'online', label: 'Solo online o a distancia' }
+] as const;
 
 export type FactDraft = { field: string; value: unknown; source: FactSource; sourceRef?: string | null };
 
@@ -97,7 +109,12 @@ export function factKey(field: string, value: unknown): string | null {
     case 'servicios':
       return Array.isArray(value) ? value.map((x) => normText(x)).filter(Boolean).sort().join('|') || null : null;
     case 'zona':
+    case 'negocio':
+    case 'publico':
+    case 'atencion':
       return normText(value) || null;
+    case 'idiomas':
+      return Array.isArray(value) ? value.map((x) => String(x).toLowerCase()).sort().join('|') || null : null;
     default:
       return value == null ? null : JSON.stringify(value);
   }

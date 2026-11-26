@@ -17,6 +17,31 @@ export const SEO_SALUD_PROCESS_MAP: ProcessStep[] = [
     tables: ['crawl_runs', 'jobs', 'project_assets', 'client_assets']
   },
   {
+    id: 'alta-propuesta',
+    lane: 'Alta del proyecto',
+    name: 'La IA propone la ficha (servicios, zona, negocio, público)',
+    description: 'Con la web rastreada (títulos, H1, H2 y textos de los enlaces de las páginas más enlazadas, sin legales ni blog), su JSON-LD y las 50 búsquedas sin marca con más impresiones, Haiku propone a qué se dedica, los servicios con su página y una frase literal, la zona y el público. Queda en el expediente como provisional («IA», 40 %), con sus pruebas, hasta que una persona lo confirma o lo pasa a la ficha (sin pisar lo que ya tenga, salvo que lo pida).',
+    status: 'built',
+    file: 'lib/seo/alta/alta.ts',
+    when: 'Al terminar cada recogida del expediente (tras cada auditoría), solo si aún no hay propuesta con ese rastreo; o con «Volver a proponer con IA» en el Expediente.',
+    ai: 'Haiku 5.5 (prompt seo_proponer_ficha): nombrar y agrupar los servicios, deducir la zona y resumir el negocio y el público. Una llamada por proyecto y rastreo.',
+    code: 'Valida todo lo que propone: cada servicio con URL necesita una cita que esté en el título, el H1 o el texto de un enlace de ESA página; sin URL, en un H2, el JSON-LD o una búsqueda de Search Console (queda «sin página»); la zona, en la dirección, el área de servicio o las búsquedas. Nombres de ≤ 6 palabras sin comas, como mucho 15 servicios. El texto de la web va delimitado como no fiable. Lo de la IA sin confirmar no entra en el mapa de palabras ni en las preguntas al cliente, y la recogida del expediente no lo borra.',
+    prompts: ['seo_proponer_ficha'],
+    tables: ['seo_dossier_facts', 'crawl_pages', 'crawl_links', 'gsc_daily', 'gsc_queries', 'ai_jobs', 'clients']
+  },
+  {
+    id: 'alta-puesta-en-marcha',
+    lane: 'Alta del proyecto',
+    name: 'Puesta en marcha del proyecto',
+    description: 'Lista de 11 puntos con lo que necesita el proyecto para el informe, las posiciones, el local y la medición: web, Search Console con datos, auditoría, mapa, a qué se dedica, servicios, zona, cómo atiende, idiomas, competencia (3 o más) y un contacto con correo que reciba los informes. «Ponerlo en marcha» lanza el rastreo y lo demás va encadenado.',
+    status: 'built',
+    file: 'app/(dashboard)/dashboard/projects/[projectId]/expediente/puesta-en-marcha.tsx',
+    when: 'Arriba del Expediente de cada proyecto.',
+    ai: 'Nada.',
+    code: 'Un punto cuenta si está confirmado por una persona o el cliente, o viene de la ficha. Los idiomas salen de la web sin IA (lang de cada página y hreflang).',
+    tables: ['seo_dossier_facts', 'seo_topics', 'client_competitors', 'client_contacts', 'client_contact_subscriptions', 'gsc_properties', 'crawl_runs']
+  },
+  {
     id: 'vigilancia-alta',
     lane: 'Vigilancia continua',
     name: 'Alta de la vigilancia de cada proyecto',
