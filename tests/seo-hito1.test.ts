@@ -209,7 +209,7 @@ describe('Local sin Places: NAP y páginas por servicio', () => {
       null
     );
     const svc = plan.find((p) => p.technique === 'nueva_landing_servicio')!;
-    expect(svc.title).toBe('Crear la página de 2 servicio(s)');
+    expect(svc.title).toBe('Crear la página de 2 servicios');
     expect(svc.estHours).toBe(8);
     expect(svc.description).toContain('- Cocinas');
     expect(plan.find((p) => p.technique === 'nap_coherente')!.priority).toBe(2);

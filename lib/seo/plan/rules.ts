@@ -3,6 +3,9 @@
 // se agrupan por técnica, se ordenan por gravedad, número de páginas e impresiones en Google de esas páginas, se estiman
 // las horas (minutos por página + base) y se marcan las que no caben en las horas del proyecto. Cada propuesta lleva como
 // mucho BATCH páginas (las que más se ven primero): un encargo manejable; el resto sale en la siguiente.
+// Desde el 26 nov 2026 (Plan A+B): la prioridad también pesa el esfuerzo (a igual impacto, antes lo que cuesta menos), cada
+// propuesta lleva los clics al mes que puede traer y el porqué de su puesto, y las propuestas se reparten por meses con
+// las horas del proyecto (scheduleMonths).
 
 export type PlanSeverity = 'critico' | 'importante' | 'aviso' | 'info';
 export type PlanFinding = {
@@ -15,6 +18,8 @@ export type PlanFinding = {
   impressions?: number | null;
   /** Valor de negocio del tema (0,5-3) según lo que sabemos del cliente; null = no se sabe. */
   valor?: number | null;
+  /** Clics al mes que se podrían ganar (oportunidades del mapa). */
+  gain?: number | null;
 };
 export type PlanHypothesis = { metric?: string; direction?: 'sube' | 'baja'; magnitudePct?: number; windowDays?: number };
 export type PlanDraft = {
@@ -27,7 +32,18 @@ export type PlanDraft = {
   score: number;
   estHours: number;
   hypothesis: PlanHypothesis;
-  evidence: { kinds: Record<string, number>; pages: number; pagesTotal: number; impressions: number; severity: PlanSeverity; overHours?: boolean };
+  evidence: {
+    kinds: Record<string, number>;
+    pages: number;
+    pagesTotal: number;
+    impressions: number;
+    severity: PlanSeverity;
+    overHours?: boolean;
+    /** Clics al mes que se podrían ganar (suma de las oportunidades del mapa; 0 si es un arreglo sin estimación). */
+    gainPerMonth?: number;
+    /** Valor de negocio medio de lo que toca (si se sabe). */
+    valor?: number | null;
+  };
 };
 
 export const BATCH = 40;
@@ -57,7 +73,7 @@ const RECIPES: Record<string, Recipe> = {
   nueva_landing_servicio: { technique: 'nueva_landing_servicio', title: (n) => `Crear la página de ${n} servicio(s)`, how: 'Cada servicio necesita su propia página: qué incluye, para quién, cómo se trabaja, zona, preguntas frecuentes y llamada a la acción. Enlázala desde el menú y desde la portada.', minutesPerUrl: 0, baseHours: 0, minutesPerFinding: 240, metric: 'impresiones', windowDays: 90 },
   nueva_pagina_tema: { technique: 'nueva_pagina_tema', title: (n) => (n === 1 ? 'Crear una página para búsquedas que no tienen ninguna' : `Crear ${n} páginas para búsquedas que no tienen ninguna`), how: 'Google ya muestra la web para estas búsquedas, pero ninguna página trata el tema. Crea una página por tema, pensada para la búsqueda principal (en el título, el H1 y la URL): qué ofreces, para quién, zona, precio orientativo o proceso, preguntas frecuentes y llamada a la acción. Enlázala desde el menú o desde las páginas relacionadas.', minutesPerUrl: 0, baseHours: 0, minutesPerFinding: 240, metric: 'clics', windowDays: 90 },
   reforzar_pagina_tema: { technique: 'reforzar_pagina_tema', title: (n) => (n === 1 ? 'Elegir y reforzar la página de un tema que Google reparte' : `Elegir y reforzar la página de ${n} temas que Google reparte`), how: 'Para cada tema, Google reparte las impresiones entre varias páginas. Usa la página indicada (ya sale en el top 20): pon la búsqueda principal en su título y H1, amplía la parte que responde a esas búsquedas y enlázala desde las otras páginas con ese texto. Si las otras dicen lo mismo, únelas a esta con una 301.', minutesPerUrl: 90, baseHours: 0, metric: 'clics', windowDays: 56 },
-  optimizar_al_alcance: { technique: 'optimizar_al_alcance', title: (n) => (n === 1 ? 'Subir al top 3 una página que ya está cerca' : `Subir al top 3 ${n} páginas que ya están cerca`), how: 'Estas páginas salen entre la posición 4 y la 15 para las búsquedas indicadas. Para cada una: lleva la búsqueda al título y al H1 si no está, añade o amplía la sección que la responde, revisa que el contenido sea mejor que el de los tres primeros y enlázala desde otras páginas con el texto de la búsqueda.', minutesPerUrl: 30, baseHours: 0.5, metric: 'clics', windowDays: 42 },
+  optimizar_al_alcance: { technique: 'optimizar_al_alcance', title: (n) => (n === 1 ? 'Subir al top 3 una página que ya está cerca' : `Subir al top 3: ${n} páginas que ya están cerca`), how: 'Estas páginas salen entre la posición 4 y la 15 para las búsquedas indicadas. Para cada una: lleva la búsqueda al título y al H1 si no está, añade o amplía la sección que la responde, revisa que el contenido sea mejor que el de los tres primeros y enlázala desde otras páginas con el texto de la búsqueda.', minutesPerUrl: 30, baseHours: 0.5, metric: 'clics', windowDays: 42 },
   indexacion_corregida: { technique: 'indexacion_corregida', title: (n) => `Revisar ${n} página(s) que salen en Google y no encontramos en la web`, how: 'Salen en Search Console pero el rastreo no llega a ellas: enlázalas si deben existir o redirígelas si sobran.', minutesPerUrl: 5, baseHours: 0.5, metric: 'impresiones', windowDays: 42 }
 };
 
@@ -110,6 +126,8 @@ const SEV_WEIGHT: Record<PlanSeverity, number> = { critico: 8, importante: 4, av
 const SEV_ORDER: PlanSeverity[] = ['critico', 'importante', 'aviso', 'info'];
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
+/** «1 página(s)» → «1 página»; «3 página(s)» → «3 páginas» (también servicio, tema). */
+export const plural = (t: string) => t.replace(/\b1 (página|servicio|tema)\(s\)/g, '1 $1').replace(/(\d+) (página|servicio|tema)\(s\)/g, '$1 $2s');
 
 /**
  * Propuestas a partir de los hallazgos abiertos. «impressions» = impresiones (90 días) por URL en Search Console;
@@ -141,12 +159,17 @@ export function buildPlan(findings: PlanFinding[], impressions: Map<string, numb
     const pages = batch.length;
     // Valor de negocio (si se sabe): un servicio prioritario del cliente pesa más; lo que no le interesa, menos.
     const vals = chosen.map((f) => f.valor).filter((v): v is number => typeof v === 'number');
-    const valueFactor = vals.length ? 0.6 + 0.2 * (vals.reduce((a, b) => a + b, 0) / vals.length) : 1;
-    const score = round1(SEV_WEIGHT[severity] * (1 + Math.log10(1 + Math.max(pages, 1))) * (1 + Math.log10(1 + impr) / 2) * valueFactor);
+    const valor = vals.length ? Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10 : null;
+    const valueFactor = valor !== null ? 0.6 + 0.2 * valor : 1;
+    const perFindingH = r.minutesPerFinding ? (r.minutesPerFinding * chosen.filter((f) => !f.url).length) / 60 : 0;
+    const hours = Math.min(40, Math.max(0.5, round1(r.baseHours + (r.minutesPerUrl * pages) / 60 + perFindingH)));
+    // Esfuerzo: a igual impacto, antes lo que cuesta menos (0,5 h → ×0,98; 4 h → ×0,83; 20 h → ×0,5).
+    const effortFactor = 1 / (1 + hours / 20);
+    const gainPerMonth = Math.round(chosen.reduce((a, f) => a + (f.gain ?? 0), 0));
+    const score = round1(SEV_WEIGHT[severity] * (1 + Math.log10(1 + Math.max(pages, 1))) * (1 + Math.log10(1 + impr) / 2) * valueFactor * effortFactor * 1.2);
     // Lo importante nunca baja de media: un 404 en dos páginas no es «baja» aunque se vea poco.
     const priority: 1 | 2 | 3 = severity === 'critico' || score >= 14 ? 1 : severity === 'importante' || score >= 5 ? 2 : 3;
-    const perFinding = r.minutesPerFinding ? (r.minutesPerFinding * chosen.filter((f) => !f.url).length) / 60 : 0;
-    const estHours = Math.min(40, Math.max(0.5, round1(r.baseHours + (r.minutesPerUrl * pages) / 60 + perFinding)));
+    const estHours = hours;
     const queries = chosen
       .filter((f) => f.query)
       .sort((a, b) => (b.impressions ?? 0) - (a.impressions ?? 0))
@@ -166,7 +189,7 @@ export function buildPlan(findings: PlanFinding[], impressions: Map<string, numb
     ];
     drafts.push({
       technique,
-      title: r.title(r.minutesPerFinding ? chosen.length : pages),
+      title: plural(r.title(r.minutesPerFinding ? chosen.length : pages)),
       description: lines.join('\n'),
       findingIds: chosen.map((f) => f.id),
       urls: batch,
@@ -174,7 +197,7 @@ export function buildPlan(findings: PlanFinding[], impressions: Map<string, numb
       score,
       estHours,
       hypothesis: { metric: r.metric, direction: 'sube', windowDays: r.windowDays },
-      evidence: { kinds, pages, pagesTotal: ranked.length, impressions: impr, severity }
+      evidence: { kinds, pages, pagesTotal: ranked.length, impressions: impr, severity, gainPerMonth, valor }
     });
   }
   drafts.sort((a, b) => a.priority - b.priority || b.score - a.score);
@@ -186,4 +209,51 @@ export function buildPlan(findings: PlanFinding[], impressions: Map<string, numb
     }
   }
   return drafts;
+}
+
+// --- Reparto por meses (26 nov 2026) -------------------------------------------------------------------------------
+
+export type ScheduleItem = { id: string; estHours: number; priority: number; severity?: string | null };
+/**
+ * Reparte las propuestas pendientes (ya ordenadas por prioridad) en meses con las horas del proyecto: el mes actual
+ * tiene lo que queda tras lo aprobado este mes. Lo crítico va siempre este mes. Una propuesta más grande que un mes
+ * entero ocupa su propio mes. Sin horas definidas, todo es «este mes». Devuelve el índice de mes de cada una (0 = este).
+ */
+export function scheduleMonths(items: ScheduleItem[], monthlyHours: number | null, usedThisMonth: number): Map<string, number> {
+  const out = new Map<string, number>();
+  if (!monthlyHours || monthlyHours <= 0) {
+    for (const i of items) out.set(i.id, 0);
+    return out;
+  }
+  const used: number[] = [Math.max(0, usedThisMonth)];
+  for (const i of items) {
+    if (i.severity === 'critico') {
+      out.set(i.id, 0);
+      used[0] += i.estHours;
+      continue;
+    }
+    let m = 0;
+    for (;;) {
+      used[m] ??= 0;
+      const room = monthlyHours - used[m];
+      if (i.estHours <= room + 1e-9 || (used[m] === 0 && i.estHours > monthlyHours)) break;
+      m++;
+      if (m > 24) break;
+    }
+    used[m] = (used[m] ?? 0) + i.estHours;
+    out.set(i.id, m);
+  }
+  return out;
+}
+
+/** Por qué una propuesta está donde está, en una línea (para la pantalla). */
+export function whyLine(e: { impressions?: number; gainPerMonth?: number; valor?: number | null; severity?: string }, estHours: number): string {
+  const parts: string[] = [];
+  if (e.severity === 'critico') parts.push('es grave: va primero');
+  else if (e.severity === 'importante') parts.push('es importante');
+  if (e.impressions) parts.push(`${e.impressions.toLocaleString('es-ES')} impresiones en 90 días`);
+  if (e.gainPerMonth) parts.push(`≈ +${e.gainPerMonth.toLocaleString('es-ES')} clics/mes posibles (${Math.round(e.gainPerMonth / Math.max(estHours, 0.5)).toLocaleString('es-ES')} por hora de trabajo)`);
+  if (e.valor != null) parts.push(e.valor >= 3 ? 'toca un servicio prioritario del cliente' : e.valor >= 2 ? 'toca un servicio del cliente' : e.valor <= 0.5 ? 'puede no interesarle al cliente' : 'no es un servicio suyo');
+  parts.push(`${estHours.toLocaleString('es-ES', { maximumFractionDigits: 1 })} h`);
+  return parts.join(' · ');
 }
