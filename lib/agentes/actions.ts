@@ -14,7 +14,7 @@ import { getTool } from '@/lib/core/capabilities';
 import { addMessage, getAgent, getOrCreateConversation, listAgents, recentMessages, SERVER_TOOLS } from '@/lib/agentes/store';
 import { runAgent } from '@/lib/agentes/engine';
 import { DEFAULT_TONE, saveVoiceSettings, speak, VOICES } from '@/lib/agentes/voice';
-import { deleteIntegration, getIntegration, isProvider, PROVIDERS, readCredentials, saveIntegration, testDataForSeo, testPlaces } from '@/lib/agentes/integrations';
+import { deleteIntegration, getIntegration, isProvider, PROVIDERS, readCredentials, saveIntegration, testDataForSeo, testPageSpeed, testPlaces } from '@/lib/agentes/integrations';
 
 type Res<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 const PATH = '/dashboard/agentes';
@@ -159,6 +159,13 @@ export async function saveIntegrationAction(provider: string, fields: Record<str
     if (provider === 'places') {
       const t = await testPlaces(creds);
       if (!t.ok) return { ok: false, error: `Google no aceptó la clave (${t.error}). Revisa que «Places API (New)» esté activada en ese proyecto y que la clave la permita.` };
+      await saveIntegration(user.tenantId, provider, creds, { status: 'conectada' });
+      revalidatePath(`${PATH}/integraciones`);
+      return { ok: true, message: 'Conectada: Google acepta la clave.' };
+    }
+    if (provider === 'pagespeed') {
+      const t = await testPageSpeed(creds);
+      if (!t.ok) return { ok: false, error: `Google no aceptó la clave (${t.error}). Revisa que «Chrome UX Report API» y «PageSpeed Insights API» estén activadas en ese proyecto y que la clave las permita.` };
       await saveIntegration(user.tenantId, provider, creds, { status: 'conectada' });
       revalidatePath(`${PATH}/integraciones`);
       return { ok: true, message: 'Conectada: Google acepta la clave.' };

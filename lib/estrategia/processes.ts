@@ -4,9 +4,10 @@ import 'server-only';
 // resultado (salud, señales, objetivos, palabras, URLs) y devuelve un resumen para la agenda. Sin IA salvo la
 // extracción de datos de los encargos (modelo pequeño). Google llega por el núcleo (fuente de métricas con «search» e
 // «inspectUrl», registrada por Agentes); las cifras, por el proveedor de KPI (Rendimiento); el trabajo, por Operaciones.
-import { and, eq, gte, like, sql } from 'drizzle-orm';
+import { and, eq, gte, like, ne, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { aiJobs, type EstSettings, type EstIssue } from '@/lib/db/schema';
+import { aiJobs, projects, type EstSettings, type EstIssue } from '@/lib/db/schema';
+import { hasActiveSchedule } from '@/lib/core/jobs';
 import { kpiProvider, metricSources, telegramOutbound, workSource, type MetricSource, type SearchRow, type WorkItem } from '@/lib/core/capabilities';
 import { listPrimaryAssets } from '@/lib/core/clients';
 import { callAI, getPrompt } from '@/lib/ai/gateway';
@@ -91,7 +92,21 @@ export type Ctx = {
   homes: string[];
   domains: string[];
   processes: EffectiveProcess[];
+  /** El cliente tiene un proyecto SEO con la vigilancia programada (SEO parte 0): crítico, salud, velocidad y los
+   *  detectores de Search Console los hace el módulo SEO por proyecto; aquí se omiten para no avisar dos veces. */
+  seoCovered: boolean;
 };
+
+/** ¿Vigila ya el módulo SEO la web de este cliente? (solo tablas del núcleo: proyectos y procesos programados). */
+export async function coveredBySeo(tenantId: string, clientId: string): Promise<boolean> {
+  const ps = await db
+    .select({ id: projects.id })
+    .from(projects)
+    .where(and(eq(projects.tenantId, tenantId), eq(projects.clientId, clientId), ne(projects.status, 'archived')));
+  return hasActiveSchedule(tenantId, 'seo.vigilancia', ps.map((p) => p.id));
+}
+
+const SEO_COVERED = 'Lo vigila el módulo SEO en el proyecto del cliente (pestaña Salud).';
 
 /** Lo que necesita cualquier proceso de un cliente: su propiedad de Search Console, su web y su configuración. */
 export async function loadCtx(tenantId: string, clientId: string, now = new Date()): Promise<Ctx | null> {
@@ -109,7 +124,7 @@ export async function loadCtx(tenantId: string, clientId: string, now = new Date
   const homes = [...new Set([...assets.filter((a) => a.kind === 'web' || a.kind === 'dominio').map((a) => homeOf(a.value)), gsc ? homeOf(gsc.property) : null].filter((h): h is string => Boolean(h)))].slice(0, 2);
   const domains = [...new Set(homes.map((h) => hostOf(h)).filter((d): d is string => Boolean(d)))];
   const name = clientName || (await import('@/lib/core/clients').then((m) => m.getClient(tenantId, clientId)).then((c) => c?.name ?? ''));
-  return { tenantId, clientId, clientName: name, today: madridNow(now).date, settings: await getSettings(tenantId), gsc, homes, domains, processes: eff.processes };
+  return { tenantId, clientId, clientName: name, today: madridNow(now).date, settings: await getSettings(tenantId), gsc, homes, domains, processes: eff.processes, seoCovered: await coveredBySeo(tenantId, clientId).catch(() => false) };
 }
 
 const isOn = (ctx: Ctx, k: ProcessKey) => ctx.processes.some((p) => p.key === k && p.on);
@@ -170,6 +185,10 @@ async function topPages(ctx: Ctx, n: number): Promise<string[]> {
 // --- Vigilancia crítica (diaria) -----------------------------------------------------------------------------------
 
 export async function runCritico(ctx: Ctx): Promise<ProcessOutcome> {
+  if (ctx.seoCovered) {
+    await upsertSignals(ctx.tenantId, ctx.clientId, ['critico'], []);
+    return { status: 'omitido', summary: SEO_COVERED };
+  }
   if (!ctx.homes.length) return { status: 'omitido', summary: 'El cliente no tiene web en su ficha (Webs y cuentas).' };
   const issues: EstIssue[] = [];
   const metrics: Record<string, unknown> = {};
@@ -212,6 +231,10 @@ export async function runCritico(ctx: Ctx): Promise<ProcessOutcome> {
 // --- Salud técnica (semanal) ----------------------------------------------------------------------------------------
 
 export async function runSalud(ctx: Ctx): Promise<ProcessOutcome> {
+  if (ctx.seoCovered) {
+    await upsertSignals(ctx.tenantId, ctx.clientId, ['tecnico'], []);
+    return { status: 'omitido', summary: SEO_COVERED };
+  }
   if (!ctx.homes.length) return { status: 'omitido', summary: 'El cliente no tiene web en su ficha.' };
   const home = ctx.homes[0];
   const robots = await fetchText(new URL('/robots.txt', home).toString());
@@ -277,6 +300,10 @@ export async function runSalud(ctx: Ctx): Promise<ProcessOutcome> {
 // --- Velocidad (mensual) --------------------------------------------------------------------------------------------
 
 export async function runVelocidad(ctx: Ctx): Promise<ProcessOutcome> {
+  if (ctx.seoCovered) {
+    await upsertSignals(ctx.tenantId, ctx.clientId, ['velocidad'], []);
+    return { status: 'omitido', summary: SEO_COVERED };
+  }
   if (!ctx.homes.length) return { status: 'omitido', summary: 'El cliente no tiene web en su ficha.' };
   const top = await topPages(ctx, 3).catch(() => [] as string[]);
   const urls = [...new Set([ctx.homes[0], ...top])].slice(0, 3);
@@ -481,7 +508,8 @@ const DETECTOR_KINDS = ['al_alcance', 'ctr_bajo', 'pagina_cae', 'consulta_nueva'
 export async function runDetectores(ctx: Ctx): Promise<ProcessOutcome> {
   const signals: Signal[] = [];
   let gscRows = 0;
-  if (ctx.gsc) {
+  // Con el módulo SEO vigilando el proyecto, aquí solo queda el embudo de Analytics (no es SEO).
+  if (ctx.gsc && !ctx.seoCovered) {
     const to = addDays(ctx.today, -3);
     const cur = { from: addDays(to, -27), to };
     const prev = { from: addDays(to, -55), to: addDays(to, -28) };
@@ -506,13 +534,16 @@ export async function runDetectores(ctx: Ctx): Promise<ProcessOutcome> {
     if (f) signals.push(f);
   }
   if (!ctx.gsc && !s) return { status: 'omitido', summary: 'Sin Search Console ni Analytics asignados: no hay datos que analizar.' };
-  // Sin Search Console (o Google desconectado un momento) no se tocan sus señales: solo el embudo de Analytics.
-  const fresh = await upsertSignals(ctx.tenantId, ctx.clientId, ctx.gsc ? DETECTOR_KINDS : ['embudo'], signals);
+  // Sin Search Console (o Google desconectado un momento) no se tocan sus señales: solo el embudo de Analytics. Si lo
+  // cubre SEO, las de Search Console se resuelven aquí (ahora son hallazgos del proyecto).
+  const fresh = await upsertSignals(ctx.tenantId, ctx.clientId, ctx.gsc || ctx.seoCovered ? DETECTOR_KINDS : ['embudo'], signals);
   await notifySignals(ctx, 'detectores', fresh);
   const count = (kind: string) => signals.filter((x) => x.kind === kind).length;
   return {
     status: signals.some((x) => x.severity === 'aviso') ? 'aviso' : 'ok',
-    summary: `${gscRows ? `${gscRows} combinaciones consulta-página analizadas. ` : ''}Al alcance: ${count('al_alcance')} · CTR bajo: ${count('ctr_bajo')} · páginas en caída: ${count('pagina_cae')} · consultas nuevas: ${count('consulta_nueva')} · canibalización: ${count('canibalizacion')}${count('embudo') ? ' · embudo roto' : ''}. Nuevas: ${fresh.length}.`
+    summary: ctx.seoCovered
+      ? `Embudo de Analytics${count('embudo') ? ': roto' : ': correcto'}. ${SEO_COVERED}`
+      : `${gscRows ? `${gscRows} combinaciones consulta-página analizadas. ` : ''}Al alcance: ${count('al_alcance')} · CTR bajo: ${count('ctr_bajo')} · páginas en caída: ${count('pagina_cae')} · consultas nuevas: ${count('consulta_nueva')} · canibalización: ${count('canibalizacion')}${count('embudo') ? ' · embudo roto' : ''}. Nuevas: ${fresh.length}.`
   };
 }
 

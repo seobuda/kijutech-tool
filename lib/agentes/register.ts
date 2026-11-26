@@ -4,7 +4,7 @@ import 'server-only';
 //   - atiende los mensajes libres de Telegram y correo del dueño (agente principal);
 //   - publica sus herramientas: trabajos de subagentes e integraciones (DataForSEO, Clarity, Google);
 //   - programa los trabajos de los subagentes en el planificador.
-import { registerAssetDirectory, registerMetricSource, registerRetention, registerSerpSource, registerScheduled, registerTools, setAgentJobCreator, setInboundHandler, type AgentTool, type ToolContext } from '@/lib/core/capabilities';
+import { registerAssetDirectory, registerMetricSource, registerRetention, registerSerpSource, registerSpeedSource, registerScheduled, registerTools, setAgentJobCreator, setInboundHandler, type AgentTool, type ToolContext } from '@/lib/core/capabilities';
 import { and, eq, lt } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { agtMessages } from '@/lib/db/schema';
@@ -18,6 +18,8 @@ import {
   clarityInsights,
   dataForSeoSerp,
   dataForSeoSerpResult,
+  cruxField,
+  effectivePageSpeedKey,
   dataForSeoVolume,
   ga4Properties,
   ga4PropertyList,
@@ -238,4 +240,6 @@ export function registerAgentesCapabilities(): void {
   registerMetricSource(GOOGLE_METRIC_SOURCE);
   // Resultados de Google por búsqueda (DataForSEO) para la competencia de SEO (Hito 2), sin que SEO sepa del proveedor.
   registerSerpSource({ isConnected: (t) => isConnected(t, 'dataforseo'), search: dataForSeoSerpResult });
+  // Core Web Vitals reales (Chrome UX Report) para la Salud técnica de SEO (parte 0), con la clave de Integraciones.
+  registerSpeedSource({ hasKey: async (t) => Boolean(await effectivePageSpeedKey(t)), field: cruxField });
 }

@@ -11,6 +11,7 @@ import { lastCrawl, startCrawl } from '@/lib/core/crawler';
 import { serpSource } from '@/lib/core/capabilities';
 import { enqueueJob, registerJobKind } from '@/lib/core/jobs';
 import { projectWebUrl } from '@/lib/seo/salud/audit';
+import { canSpend, recordDataSpend } from '@/lib/seo/gasto';
 import { host } from '@/lib/seo/expediente/rules';
 import { parseServices } from '@/lib/seo/local/rules';
 import { rankCompetitors, rootDomain, seedQueries } from '@/lib/seo/competencia/rules';
@@ -27,6 +28,9 @@ import {
 } from '@/lib/seo/competencia/compare';
 
 const MAX_SEARCHES = 15;
+
+/** Coste estimado de una búsqueda en vivo de DataForSEO cuando el proveedor no lo devuelve [NV]. */
+const SERP_COST_ESTIMATE_USD = 0.002;
 
 export class CompetenciaError extends Error {
   constructor(public userMessage: string) {
@@ -63,12 +67,19 @@ export async function findCompetitors(tenantId: string, projectId: string): Prom
     MAX_SEARCHES
   );
   if (!seeds.length) throw new CompetenciaError('No hay búsquedas de partida: calcula antes el mapa de palabras o pon los servicios en la ficha («Qué vende u ofrece»).');
+  // Tope de gasto en datos del proyecto (parte 0): unos 0,002 $ por búsqueda en vivo [NV precio de DataForSEO].
+  const budget = await canSpend(projectId, seeds.length * SERP_COST_ESTIMATE_USD);
+  if (!budget.ok) throw new CompetenciaError(`Este proyecto ya ha gastado ${budget.spent.toFixed(2)} $ de ${budget.budget} $ en datos este mes: la búsqueda de competencia espera al mes que viene (o sube el tope en Configuración SEO).`);
   const results = [];
   let cost = 0;
-  for (const q of seeds) {
-    const serp = await src.search(tenantId, { keyword: q, location: 'Spain', language: 'es', depth: 20 });
-    cost += serp.costUsd ?? 0;
-    results.push({ query: q, serp });
+  try {
+    for (const q of seeds) {
+      const serp = await src.search(tenantId, { keyword: q, location: 'Spain', language: 'es', depth: 20 });
+      cost += serp.costUsd ?? SERP_COST_ESTIMATE_USD;
+      results.push({ query: q, serp });
+    }
+  } finally {
+    await recordDataSpend(tenantId, projectId, 'serp', 'competencia: búsquedas en Google', cost).catch((e) => console.error('[seo] gasto de datos:', e instanceof Error ? e.message : e));
   }
   const own = [host(web)].filter((x): x is string => Boolean(x));
   const candidates = rankCompetitors(results, own);

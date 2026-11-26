@@ -38,7 +38,7 @@ export const ESTRATEGIA_PROCESS_MAP: ProcessStep[] = [
     file: 'lib/estrategia/processes.ts',
     when: 'Según el plan: por defecto, vigilancia crítica cada día, salud técnica cada semana y velocidad cada mes.',
     ai: 'Nada.',
-    code: 'Los problemas críticos solo avisan si siguen en una segunda comprobación 30 minutos después. Solo se piden URLs públicas (nunca la red interna). PageSpeed usa PAGESPEED_API_KEY si está en el .env. Se guardan las 20 últimas comprobaciones de cada tipo.',
+    code: 'Los problemas críticos solo avisan si siguen en una segunda comprobación 30 minutos después. Solo se piden URLs públicas (nunca la red interna). PageSpeed usa PAGESPEED_API_KEY si está en el .env. Desde el 26 nov 2026, en los clientes con un proyecto SEO con vigilancia programada se omiten crítico, salud y velocidad, y los detectores solo calculan el embudo de Analytics: lo hace el módulo SEO por proyecto (Salud → Vigilancia automática). Se guardan las 20 últimas comprobaciones de cada tipo.',
     tables: ['est_health_checks', 'est_signals']
   },
   {

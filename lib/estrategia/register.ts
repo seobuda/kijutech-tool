@@ -11,6 +11,7 @@ import {
   registerClientDeleteGuard,
   registerHealthCheck,
   registerModuleButtons,
+  registerProjectAlertListener,
   registerReportSection,
   registerScheduled,
   registerTaskAnswerHandler,
@@ -21,8 +22,8 @@ import {
 import { findCoreClient } from '@/lib/core/clients';
 import { eventsOverlapping, historyBlocker, listRuns } from '@/lib/estrategia/store';
 import { runEstrategia } from '@/lib/estrategia/scheduler';
-import { answerUrlQuestion } from '@/lib/estrategia/processes';
-import { handleStrategistButton, handleStrategistText } from '@/lib/estrategia/strategist';
+import { answerUrlQuestion, loadCtx } from '@/lib/estrategia/processes';
+import { handleStrategistButton, handleStrategistText, maybeAlertAnalysis } from '@/lib/estrategia/strategist';
 import { strategyText, weeklyLines } from '@/lib/estrategia/report';
 import { PROCESS, isProcessKey } from '@/lib/estrategia/rules';
 
@@ -56,7 +57,7 @@ export async function strategyHealth(tenantId: string): Promise<ModuleCheck[]> {
       label: 'Estrategia de clientes (procesos de seguimiento)',
       status: bad.length ? 'aviso' : 'ok',
       detail: bad.length ? `${bad.length} proceso(s) fallan: ${[...new Set(bad.map((r) => `${isProcessKey(r.process) ? PROCESS[r.process].label : r.process}: ${(r.lastError ?? '').slice(0, 80)}`))].slice(0, 5).join(' | ')}` : `${runs.length} procesos programados sin errores repetidos.`,
-      recommendation: bad.length ? 'Abre el panel Estrategia para ver qué cliente es. Si es de Google, revisa que la propiedad de Search Console esté asignada y con acceso; si es PageSpeed, añade PAGESPEED_API_KEY al .env.' : ''
+      recommendation: bad.length ? 'Abre el panel Estrategia para ver qué cliente es. Si es de Google, revisa que la propiedad de Search Console esté asignada y con acceso; si es PageSpeed, pega la clave en Agentes → Integraciones → PageSpeed / CrUX (o PAGESPEED_API_KEY en el .env).' : ''
     }
   ];
 }
@@ -82,4 +83,10 @@ export function registerEstrategiaCapabilities(): void {
   // D6: con histórico, el cliente se da de baja antes de borrarlo y el borrado pide escribir su nombre.
   registerClientDeleteGuard('estrategia', historyBlocker);
   registerModuleButtons('est', { callback: handleStrategistButton, text: handleStrategistText });
+  // SEO parte 0: una alerta grave de un proyecto (p. ej. la web caída, confirmada) despierta al estratega del cliente,
+  // con los mismos topes que sus propias alertas. Llega por el núcleo, sin importar a SEO.
+  registerProjectAlertListener('estrategia', async (a) => {
+    const ctx = await loadCtx(a.tenantId, a.clientId);
+    if (ctx) await maybeAlertAnalysis(ctx, a.title.slice(0, 300));
+  });
 }

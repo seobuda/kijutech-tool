@@ -23,6 +23,7 @@ export const TECHNIQUES: Technique[] = [
   { key: 'meta_descripcion', domain: 'seo', label: 'Escribir meta descripciones', metric: 'ctr', windowDays: 28 },
   { key: 'encabezados', domain: 'seo', label: 'Ordenar encabezados (H1)', metric: 'posicion', windowDays: 42 },
   { key: 'contenido_ampliado', domain: 'seo', label: 'Ampliar contenido escaso', metric: 'impresiones', windowDays: 56 },
+  { key: 'recuperar_pagina', domain: 'seo', label: 'Recuperar una página que pierde clics', metric: 'clics', windowDays: 56 },
   { key: 'canibalizacion_resuelta', domain: 'seo', label: 'Resolver una canibalización (una página por búsqueda)', metric: 'posicion', windowDays: 42 },
   { key: 'contenido_duplicado', domain: 'seo', label: 'Quitar o unificar contenido duplicado', metric: 'clics', windowDays: 56 },
   { key: 'imagenes_alt', domain: 'seo', label: 'Texto alternativo en imágenes', metric: 'impresiones', windowDays: 56 },

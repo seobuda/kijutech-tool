@@ -13,6 +13,7 @@ import { publicError } from '@/lib/errors';
 import { decideFinding } from '@/lib/core/findings';
 import { SaludError, SALUD_SOURCE, startProjectAudit } from '@/lib/seo/salud/audit';
 import { LOCAL_SOURCE } from '@/lib/seo/local/rules';
+import { VIGILANCIA_SOURCES } from '@/lib/seo/vigilancia/rules';
 
 type Ok<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 
@@ -55,7 +56,7 @@ export async function decideSaludFindingAction(projectId: string, findingId: str
     const [f] = await db
       .select({ id: findings.id })
       .from(findings)
-      .where(and(eq(findings.id, findingId), eq(findings.projectId, projectId), eq(findings.tenantId, user.tenantId), inArray(findings.source, [SALUD_SOURCE, LOCAL_SOURCE, 'seo.mapa:gsc'])))
+      .where(and(eq(findings.id, findingId), eq(findings.projectId, projectId), eq(findings.tenantId, user.tenantId), inArray(findings.source, [SALUD_SOURCE, LOCAL_SOURCE, 'seo.mapa:gsc', ...VIGILANCIA_SOURCES])))
       .limit(1);
     if (!f) return { ok: false, error: 'Hallazgo no encontrado' };
     await decideFinding(user.tenantId, findingId, status, user.name || user.email, reason);

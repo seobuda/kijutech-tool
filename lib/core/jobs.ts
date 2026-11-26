@@ -9,7 +9,7 @@ import 'server-only';
 // - El trabajador corre en su propio contenedor (APP_ROLE=worker): lo pesado no comparte proceso con la web ni el bot.
 // Este archivo no importa ningún módulo: los módulos registran aquí lo suyo desde wireApp().
 import { randomUUID } from 'crypto';
-import { and, eq, lt, sql } from 'drizzle-orm';
+import { and, eq, inArray, lt, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { jobs, jobSchedules, type Job } from '@/lib/db/schema';
 
@@ -207,6 +207,65 @@ export async function ensureSchedule(tenantId: string, processKey: string, scope
     .insert(jobSchedules)
     .values({ tenantId, processKey, scopeType: p?.scopeType ?? 'cuenta', scopeId, everyMinutes: every, nextRunAt: firstRunAt ?? new Date() })
     .onConflictDoUpdate({ target: [jobSchedules.tenantId, jobSchedules.processKey, jobSchedules.scopeId], set: { everyMinutes: every, enabled: true, updatedAt: new Date() } });
+}
+
+/**
+ * Da de alta un proceso solo si no existe: nunca toca la frecuencia ni la pausa que alguien haya cambiado (26 nov 2026;
+ * ensureSchedule las sobrescribía en cada alta). Devuelve true si lo creó.
+ */
+export async function ensureScheduleIfMissing(tenantId: string, processKey: string, scopeId: string, everyMinutes?: number, firstRunAt?: Date): Promise<boolean> {
+  const p = processDef(processKey);
+  const every = everyMinutes ?? p?.defaultEveryMinutes ?? 1440;
+  const rows = await db
+    .insert(jobSchedules)
+    .values({ tenantId, processKey, scopeType: p?.scopeType ?? 'cuenta', scopeId, everyMinutes: every, nextRunAt: firstRunAt ?? new Date() })
+    .onConflictDoNothing({ target: [jobSchedules.tenantId, jobSchedules.processKey, jobSchedules.scopeId] })
+    .returning({ k: jobSchedules.processKey });
+  return rows.length > 0;
+}
+
+/** Cambia la frecuencia de un proceso ya dado de alta (la siguiente ejecución se recoloca desde la última). */
+export async function setScheduleEvery(tenantId: string, processKey: string, scopeId: string, everyMinutes: number): Promise<boolean> {
+  const every = Math.max(1, Math.round(everyMinutes));
+  const rows = await db
+    .update(jobSchedules)
+    .set({ everyMinutes: every, nextRunAt: sql`LEAST(${jobSchedules.nextRunAt}, coalesce(${jobSchedules.lastRunAt}, now()) + make_interval(mins => ${every}))`, updatedAt: new Date() })
+    .where(and(eq(jobSchedules.tenantId, tenantId), eq(jobSchedules.processKey, processKey), eq(jobSchedules.scopeId, scopeId)))
+    .returning({ k: jobSchedules.processKey });
+  return rows.length > 0;
+}
+
+/** Pausa hasta una fecha (null = reanudar) o enciende/apaga un proceso. */
+export async function pauseSchedule(tenantId: string, processKey: string, scopeId: string, opts: { pausedUntil?: Date | null; enabled?: boolean }): Promise<boolean> {
+  const rows = await db
+    .update(jobSchedules)
+    .set({ ...(opts.pausedUntil !== undefined ? { pausedUntil: opts.pausedUntil } : {}), ...(opts.enabled !== undefined ? { enabled: opts.enabled } : {}), updatedAt: new Date() })
+    .where(and(eq(jobSchedules.tenantId, tenantId), eq(jobSchedules.processKey, processKey), eq(jobSchedules.scopeId, scopeId)))
+    .returning({ k: jobSchedules.processKey });
+  return rows.length > 0;
+}
+
+/** Procesos programados de un ámbito (p. ej. un proyecto), para enseñarlos en su pantalla. */
+export async function listSchedulesForScope(tenantId: string, scopeId: string): Promise<(typeof jobSchedules.$inferSelect)[]> {
+  return db.select().from(jobSchedules).where(and(eq(jobSchedules.tenantId, tenantId), eq(jobSchedules.scopeId, scopeId)));
+}
+
+/** ¿Tiene este ámbito el proceso dado de alta y encendido? */
+export async function hasActiveSchedule(tenantId: string, processKey: string, scopeIds: string[]): Promise<boolean> {
+  if (!scopeIds.length) return false;
+  const rows = await db
+    .select({ k: jobSchedules.processKey })
+    .from(jobSchedules)
+    .where(and(eq(jobSchedules.tenantId, tenantId), eq(jobSchedules.processKey, processKey), eq(jobSchedules.enabled, true), inArray(jobSchedules.scopeId, scopeIds)))
+    .limit(1);
+  return rows.length > 0;
+}
+
+/** Desfase estable (0..every-1 minutos) por ámbito: reparte las primeras ejecuciones para que no coincidan todas. */
+export function stableOffsetMinutes(seed: string, everyMinutes: number): number {
+  let h = 0;
+  for (const c of seed) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return everyMinutes > 1 ? h % everyMinutes : 0;
 }
 
 export async function disableSchedule(tenantId: string, processKey: string, scopeId: string): Promise<void> {
