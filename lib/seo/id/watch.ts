@@ -3,7 +3,7 @@ import 'server-only';
 // SEO · I+D fase A (Hito 1, 23 nov 2026): vigilar las fuentes oficiales de Google Search. Sin IA: cada 3 horas lee las
 // fuentes, guarda lo nuevo en la bitácora del núcleo y avisa al dueño de las actualizaciones e incidencias. Los lunes,
 // el resumen semanal lo redacta la IA de la base de conocimiento como propuesta de entrada (solo si hubo novedades).
-import { ensureSchedule, registerJobKind, registerProcess } from '@/lib/core/jobs';
+import { ensureScheduleIfMissing, registerJobKind, registerProcess } from '@/lib/core/jobs';
 import { fetchPublic } from '@/lib/core/net';
 import { notifyFeedAlerts, saveFeedItems, weeklyDigest } from '@/lib/core/knowledge-feed';
 import { SEO_SOURCES } from '@/lib/seo/id/sources';
@@ -36,8 +36,8 @@ export async function watchSeoSources(tenantId: string): Promise<{ read: number;
 
 /** Da de alta la vigilancia de la cuenta (idempotente). La llaman las pantallas de SEO al usarse. */
 export async function ensureSeoWatch(tenantId: string): Promise<void> {
-  await ensureSchedule(tenantId, ID_WATCH, '', 180);
-  await ensureSchedule(tenantId, ID_DIGEST, '', 7 * 24 * 60, nextMonday9());
+  await ensureScheduleIfMissing(tenantId, ID_WATCH, '', 180);
+  await ensureScheduleIfMissing(tenantId, ID_DIGEST, '', 7 * 24 * 60, nextMonday9());
 }
 
 function nextMonday9(now = new Date()): Date {

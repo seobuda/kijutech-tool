@@ -22,6 +22,7 @@ import { SALUD_SOURCE, startProjectAudit } from '@/lib/seo/salud/audit';
 import { enqueueKeywordMap } from '@/lib/seo/mapa/mapa';
 import { SEO_KINDS } from '@/lib/seo/salud/kinds';
 import { LOCAL_SOURCE } from '@/lib/seo/local/rules';
+import { VIGILANCIA_SOURCES } from '@/lib/seo/vigilancia/rules';
 import { buildPlan, scheduleMonths, type PlanFinding, type PlanSeverity } from '@/lib/seo/plan/rules';
 
 export const PLAN_SOURCE = 'seo.plan';
@@ -64,7 +65,7 @@ export async function regeneratePlan(tenantId: string, projectId: string): Promi
     db
       .select({ id: findings.id, kind: findings.kind, severity: findings.severity, url: findings.url, query: findings.query, evidence: findings.evidence })
       .from(findings)
-      .where(and(eq(findings.projectId, projectId), eq(findings.tenantId, tenantId), inArray(findings.source, [SALUD_SOURCE, LOCAL_SOURCE, 'seo.mapa:gsc']), eq(findings.status, 'abierto'))),
+      .where(and(eq(findings.projectId, projectId), eq(findings.tenantId, tenantId), inArray(findings.source, [SALUD_SOURCE, LOCAL_SOURCE, 'seo.mapa:gsc', ...VIGILANCIA_SOURCES]), eq(findings.status, 'abierto'))),
     db.select().from(seoPlanItems).where(and(eq(seoPlanItems.projectId, projectId), eq(seoPlanItems.tenantId, tenantId))),
     impressionsByUrl(tenantId, projectId)
   ]);

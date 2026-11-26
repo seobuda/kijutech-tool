@@ -12,6 +12,7 @@ import { latestProjectCrawl, projectWebUrl, SALUD_SOURCE } from '@/lib/seo/salud
 import { buildJsonLd, type JsonLdOutput } from '@/lib/seo/salud/jsonld';
 import { isBusinessType } from '@/lib/core/business-types';
 import { LOCAL_SOURCE } from '@/lib/seo/local/rules';
+import { VIGILANCIA_SOURCES } from '@/lib/seo/vigilancia/rules';
 
 const SOCIAL_KINDS = ['instagram', 'meta', 'linkedin', 'youtube', 'tiktok'];
 
@@ -83,7 +84,7 @@ export async function getSaludView(tenantId: string, projectId: string, override
     listFindings(tenantId, projectId, { status: ['abierto', 'descartado', 'aceptado'], limit: 3000 }),
     gscPropertiesForProject(tenantId, projectId)
   ]);
-  const mine = findingsAll.filter((f) => f.source === SALUD_SOURCE || f.source === LOCAL_SOURCE || f.source === 'seo.mapa:gsc');
+  const mine = findingsAll.filter((f) => f.source === SALUD_SOURCE || f.source === LOCAL_SOURCE || f.source === 'seo.mapa:gsc' || VIGILANCIA_SOURCES.includes(f.source));
   // Estado real de la auditoría en la cola (antes se suponían 4 minutos tras el rastreo).
   const queue = await db
     .select({ kind: jobs.kind, status: jobs.status, error: jobs.lastError, payload: jobs.payload })

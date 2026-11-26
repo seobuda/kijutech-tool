@@ -4,7 +4,6 @@ import {
   Activity,
   MessageCircleQuestion,
   Bug,
-  BookOpen,
   Library,
   ListTodo,
   Bot,
@@ -214,7 +213,6 @@ export const NAV: NavGroup[] = [
       { href: '/dashboard/ai/my-keys', label: 'Mis claves de IA', icon: Bot, show: (r) => r.canAccessAi && !r.isSuperAdmin },
       { href: '/dashboard/ai/brain', label: 'Cerebro', icon: Brain, keywords: 'aprendizaje costes', show: (r) => r.isSuperAdmin },
       { href: '/dashboard/architecture', label: 'Mapa del sistema', icon: Network, keywords: 'arquitectura procesos', show: (r) => r.isSuperAdmin },
-      { href: '/dashboard/seo/admin/cards', label: 'Fichas SEO', icon: BookOpen, keywords: 'conocimiento seo tarjetas', show: adminOnly },
       { href: '/dashboard/seo/admin/settings', label: 'Configuración SEO', icon: SlidersHorizontal, show: (r) => r.isSuperAdmin }
     ]
   },

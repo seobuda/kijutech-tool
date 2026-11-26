@@ -456,6 +456,13 @@
       "when": 1796000000000,
       "tag": "0064_preguntas_cliente",
       "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1796100000000,
+      "tag": "0065_seo_data_spend",
+      "breakpoints": true
     }
   ]
 }

@@ -2,9 +2,10 @@
 
 export type Severity = 'info' | 'aviso' | 'importante' | 'critico';
 export type SaludKind = { kind: string; title: string; explain: string; severityDefault: Severity; ruleVersion: number; group: SaludGroup };
-export type SaludGroup = 'rastreo' | 'indexacion' | 'contenido' | 'enlazado' | 'datos_estructurados' | 'search_console' | 'local';
+export type SaludGroup = 'vigilancia' | 'rastreo' | 'indexacion' | 'contenido' | 'enlazado' | 'datos_estructurados' | 'search_console' | 'local';
 
 export const SALUD_GROUP_LABEL: Record<SaludGroup, string> = {
+  vigilancia: 'Vigilancia continua: web caída, velocidad e indexación',
   rastreo: 'Rastreo y respuestas',
   indexacion: 'Indexación y canonical',
   contenido: 'Títulos, encabezados y contenido',
@@ -71,5 +72,18 @@ export const MAPA_KINDS: SaludKind[] = [
   { kind: 'seo.low_ctr', group: 'search_console', title: 'Páginas con pocos clics para su posición', explain: 'La página sale en el top 10 pero recibe muchos menos clics de lo normal en esa posición: el título o la descripción no atraen. A veces es un resumen de IA de Google que responde antes; aun así, mejorar el título suele ayudar.', severityDefault: 'aviso', ruleVersion: 1 }
 ];
 
-export const SEO_KINDS: SaludKind[] = [...SALUD_KINDS, ...LOCAL_KINDS, ...MAPA_KINDS];
+/** Vigilancia continua (SEO parte 0, 26 nov 2026): procesos programados por proyecto (lib/seo/vigilancia/). */
+export const VIGILANCIA_KINDS: SaludKind[] = [
+  { kind: 'seo.site_down', group: 'vigilancia', title: 'La web no responde o da error del servidor', explain: 'La portada no carga o devuelve un error 5xx: nadie puede ver la web y, si dura, Google empieza a quitar páginas del índice. Es urgente.', severityDefault: 'critico', ruleVersion: 1 },
+  { kind: 'seo.home_error', group: 'vigilancia', title: 'La portada responde con error', explain: 'La portada devuelve un error 4xx (no existe o está prohibida): los visitantes y Google llegan a una página de error.', severityDefault: 'critico', ruleVersion: 1 },
+  { kind: 'seo.home_noindex', group: 'vigilancia', title: 'La portada tiene «noindex»', explain: 'La portada pide a Google que no la muestre. Suele pasar al publicar una web nueva olvidando quitar la opción de WordPress «Disuadir a los motores de búsqueda». Google la quitará de los resultados.', severityDefault: 'critico', ruleVersion: 1 },
+  { kind: 'seo.robots_block_all', group: 'vigilancia', title: 'robots.txt bloquea toda la web', explain: 'El robots.txt prohíbe a Google rastrear la web entera («Disallow: /»). En pocos días deja de actualizar y mostrar sus páginas.', severityDefault: 'critico', ruleVersion: 1 },
+  { kind: 'seo.ssl_expiring', group: 'vigilancia', title: 'Certificado SSL caducado o a punto de caducar', explain: 'Con el certificado caducado el navegador avisa de «sitio no seguro» y casi todos los visitantes se van. Se renueva en el alojamiento.', severityDefault: 'importante', ruleVersion: 1 },
+  { kind: 'seo.cwv_slow', group: 'vigilancia', title: 'Lenta para los usuarios reales (Core Web Vitals)', explain: 'Los datos reales de Chrome de los últimos 28 días suspenden alguna Core Web Vital (LCP, INP o CLS) en móvil. Afecta a la experiencia, a la conversión y un poco al posicionamiento.', severityDefault: 'aviso', ruleVersion: 1 },
+  { kind: 'seo.cwv_average', group: 'vigilancia', title: 'Velocidad mejorable (Core Web Vitals)', explain: 'Los datos reales de Chrome dan alguna Core Web Vital en «necesita mejorar». No es grave, pero conviene mejorarla antes de que empeore.', severityDefault: 'info', ruleVersion: 1 },
+  { kind: 'seo.not_indexed', group: 'vigilancia', title: 'Página importante que Google no tiene indexada', explain: 'Search Console dice que esta página (de las que más clics traen o la portada) no está en el índice de Google. Hay que ver el motivo en la inspección de URL.', severityDefault: 'importante', ruleVersion: 1 },
+  { kind: 'seo.page_drop', group: 'search_console', title: 'Página que pierde clics', explain: 'Esta página ha perdido una parte importante de sus clics de Google en las últimas 4 semanas frente a las 4 anteriores. Si el año pasado no pasó lo mismo, no es temporada: revisar si cambió la página, si un competidor la adelantó o si hubo una actualización de Google.', severityDefault: 'aviso', ruleVersion: 1 }
+];
+
+export const SEO_KINDS: SaludKind[] = [...SALUD_KINDS, ...LOCAL_KINDS, ...MAPA_KINDS, ...VIGILANCIA_KINDS];
 export const SALUD_KIND_BY_KEY = new Map(SEO_KINDS.map((k) => [k.kind, k]));

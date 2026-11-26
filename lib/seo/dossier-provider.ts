@@ -10,7 +10,8 @@ import { clientCompetitors, findings, projects, seoPlanItems, seoTopics } from '
 import type { ProjectDossierSection } from '@/lib/core/capabilities';
 import { SALUD_KIND_BY_KEY } from '@/lib/seo/salud/kinds';
 
-const SOURCES = ['seo.salud:rastreo', 'seo.local:nap', 'seo.mapa:gsc'];
+// Parte 0 (26 nov 2026): también la vigilancia continua, la velocidad real y los detectores (antes, Estrategia).
+const SOURCES = ['seo.salud:rastreo', 'seo.local:nap', 'seo.mapa:gsc', 'seo.vigilancia:web', 'seo.velocidad:crux', 'seo.detectores:gsc'];
 
 export async function seoProjectDossier(tenantId: string, clientId: string): Promise<ProjectDossierSection[]> {
   const ps = await db

@@ -45,7 +45,7 @@ import {
   type StrategistSettings
 } from '@/lib/estrategia/strategist-rules';
 import { clientEffective, getSettings, listSignals, patchSettingsState } from '@/lib/estrategia/store';
-import { aiSpentThisMonth, loadCtx, search, type Ctx } from '@/lib/estrategia/processes';
+import { aiSpentThisMonth, seoCoverage, loadCtx, search, type Ctx } from '@/lib/estrategia/processes';
 import { clientStrategy } from '@/lib/estrategia/report';
 
 export const STRATEGIST_PROMPT = 'est_strategist';
@@ -294,9 +294,10 @@ export async function buildDossier(tenantId: string, clientId: string, now = new
     section(`Páginas con más clics (mismo periodo)`, pLines);
   }
 
-  // Salud de la web.
+  // Salud de la web (si la vigila el módulo SEO, va en su apartado del proyecto y aquí no se repite lo antiguo).
   const hLines: string[] = [];
-  for (const kind of ['critico', 'salud', 'velocidad'] as const) {
+  const seoCovers = await seoCoverage(tenantId, clientId).catch(() => new Set<string>());
+  for (const kind of (['critico', 'salud', 'velocidad'] as const).filter((k) => !seoCovers.has(k))) {
     const h = view.health[kind];
     if (!h) continue;
     hLines.push(`${kind} (${h.checkedAt.slice(0, 10)}): ${h.status}`);
@@ -306,7 +307,7 @@ export async function buildDossier(tenantId: string, clientId: string, now = new
     }
     if (kind === 'velocidad' && h.metrics) hLines.push(`  métricas: ${JSON.stringify(h.metrics).slice(0, 400)}`);
   }
-  section('Salud de la web (última revisión de cada tipo)', hLines.length ? hLines : ['(sin revisiones todavía)']);
+  section('Salud de la web (última revisión de cada tipo)', hLines.length ? hLines : [seoCovers.size ? '(la vigila el módulo SEO: ver los hallazgos del proyecto SEO más abajo)' : '(sin revisiones todavía)']);
 
   // Trabajo hecho y URLs trabajadas.
   const since90 = addDays(today, -90);

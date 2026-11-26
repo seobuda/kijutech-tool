@@ -4062,6 +4062,25 @@ export type SeoPlanItem = typeof seoPlanItems.$inferSelect;
 
 // SEO: reseñas de la ficha de Google del cliente (es del cliente, no del proyecto: varios proyectos comparten ficha).
 // El borrador de respuesta siempre se aprueba antes de publicarse.
+// Gasto en datos de pago por proyecto (SEO parte 0, 26 nov 2026; migración 0065): tope mensual por proyecto.
+export const seoDataSpend = pgTable(
+  'seo_data_spend',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    provider: varchar('provider', { length: 30 }).notNull(),
+    operation: varchar('operation', { length: 60 }).notNull(),
+    costUsd: decimal('cost_usd', { precision: 10, scale: 4 }).notNull().default('0'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [index('seo_data_spend_project_idx').on(table.projectId, table.createdAt)]
+);
+
 export const seoReviews = pgTable(
   'seo_reviews',
   {

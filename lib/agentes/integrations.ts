@@ -18,7 +18,7 @@ import { agtIntegrations, type AgtIntegration } from '@/lib/db/schema';
 import { decrypt, encrypt } from '@/lib/ai/encryption';
 import type { SerpResult } from '@/lib/core/capabilities';
 
-export type ProviderKey = 'dataforseo' | 'clarity' | 'google' | 'places';
+export type ProviderKey = 'dataforseo' | 'clarity' | 'google' | 'places' | 'pagespeed';
 
 export const PROVIDERS: Record<ProviderKey, { title: string; what: string; fields: { key: string; label: string; secret: boolean; placeholder?: string }[]; howTo: string }> = {
   dataforseo: {
@@ -55,6 +55,13 @@ export const PROVIDERS: Record<ProviderKey, { title: string; what: string; field
     fields: [{ key: 'apiKey', label: 'Clave de API', secret: true }],
     howTo:
       'En console.cloud.google.com, en el mismo proyecto que la conexión de Google: activa «Places API (New)» (no la antigua «Places API»), con la facturación activada. En Credenciales → Crear credenciales → Clave de API; edítala y en «Restricciones de API» deja solo «Places API (New)». Pégala aquí: al guardar se prueba con una consulta que no lleva datos de pago.'
+  },
+  pagespeed: {
+    title: 'PageSpeed / CrUX',
+    what: 'Velocidad real de los usuarios (Core Web Vitals del Chrome UX Report) y la prueba de laboratorio de PageSpeed Insights, para la Salud técnica de los proyectos SEO. Sin clave, Google limita mucho las peticiones.',
+    fields: [{ key: 'apiKey', label: 'Clave de API', secret: true }],
+    howTo:
+      'En console.cloud.google.com, en el proyecto de la conexión de Google: activa «PageSpeed Insights API» y «Chrome UX Report API». En Credenciales → Crear credenciales → Clave de API; edítala y en «Restricciones de API» deja solo esas dos. Pégala aquí: al guardar se prueba con una consulta al Chrome UX Report.'
   }
 };
 
@@ -197,6 +204,90 @@ export async function testPlaces(creds: Record<string, string>): Promise<{ ok: t
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message.slice(0, 200) : 'sin respuesta' };
   }
+}
+
+// --- PageSpeed / CrUX (26 nov 2026) -------------------------------------------------------------------------
+
+/** Prueba la clave con el Chrome UX Report (rápido, sin Lighthouse): un origen público con datos seguros. */
+export async function testPageSpeed(creds: Record<string, string>): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const res = await fetch(`https://chromeuxreport.googleapis.com/v1/records:queryRecord?key=${encodeURIComponent(creds.apiKey ?? '')}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ origin: 'https://www.google.com', formFactor: 'PHONE', metrics: ['largest_contentful_paint'] }),
+      signal: AbortSignal.timeout(15_000)
+    });
+    if (res.ok) return { ok: true };
+    const body = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
+    return { ok: false, error: `${res.status}: ${(body?.error?.message ?? `HTTP ${res.status}`).slice(0, 300)}` };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message.slice(0, 200) : 'sin respuesta' };
+  }
+}
+
+/** La clave guardada (o null si no hay integración conectada). */
+export async function pageSpeedKey(tenantId: string): Promise<string | null> {
+  const i = await getIntegration(tenantId, 'pagespeed');
+  if (!i || i.status === 'pendiente') return null;
+  return readCredentials(i).apiKey || null;
+}
+
+/** La clave a usar: la de Integraciones y, de reserva, PAGESPEED_API_KEY del .env. */
+export async function effectivePageSpeedKey(tenantId: string): Promise<string | null> {
+  return (await pageSpeedKey(tenantId).catch(() => null)) || process.env.PAGESPEED_API_KEY || null;
+}
+
+type CruxMetric = { percentiles?: { p75?: number | string } };
+const p75 = (m?: CruxMetric): number | null => {
+  const v = m?.percentiles?.p75;
+  const n = typeof v === 'string' ? Number(v) : v;
+  return typeof n === 'number' && Number.isFinite(n) ? n : null;
+};
+
+/** Categoría global de Core Web Vitals con los umbrales públicos de Google (p75): lenta si alguna es mala. */
+export function cwvCategory(lcpMs: number | null, inpMs: number | null, cls: number | null): 'FAST' | 'AVERAGE' | 'SLOW' | null {
+  const parts: ('good' | 'ni' | 'poor')[] = [];
+  if (lcpMs !== null) parts.push(lcpMs <= 2500 ? 'good' : lcpMs <= 4000 ? 'ni' : 'poor');
+  if (inpMs !== null) parts.push(inpMs <= 200 ? 'good' : inpMs <= 500 ? 'ni' : 'poor');
+  if (cls !== null) parts.push(cls <= 0.1 ? 'good' : cls <= 0.25 ? 'ni' : 'poor');
+  if (!parts.length) return null;
+  if (parts.includes('poor')) return 'SLOW';
+  return parts.every((p) => p === 'good') ? 'FAST' : 'AVERAGE';
+}
+
+/** Core Web Vitals reales en móvil (Chrome UX Report): de la URL y, si no tiene datos, de su origen. */
+export async function cruxField(tenantId: string, url: string): Promise<import('@/lib/core/capabilities').SpeedField | null> {
+  const key = await effectivePageSpeedKey(tenantId);
+  if (!key) throw new Error('Falta la clave de PageSpeed / CrUX (Agentes → Integraciones)');
+  let origin: string;
+  try {
+    origin = new URL(url).origin;
+  } catch {
+    return null;
+  }
+  for (const [scope, body] of [
+    ['url', { url }],
+    ['origin', { origin }]
+  ] as const) {
+    const res = await fetch(`https://chromeuxreport.googleapis.com/v1/records:queryRecord?key=${encodeURIComponent(key)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...body, formFactor: 'PHONE', metrics: ['largest_contentful_paint', 'interaction_to_next_paint', 'cumulative_layout_shift'] }),
+      signal: AbortSignal.timeout(20_000)
+    });
+    if (res.status === 404) continue; // Sin tráfico suficiente para esta URL: se prueba el origen.
+    if (!res.ok) {
+      await markIntegration(tenantId, 'pagespeed', false, `CrUX (${res.status})`).catch(() => undefined);
+      throw new Error(res.status === 429 ? 'Chrome UX Report: límite de peticiones' : `Chrome UX Report (${res.status})`);
+    }
+    const j = (await res.json()) as { record?: { metrics?: Record<string, CruxMetric> } };
+    const m = j.record?.metrics ?? {};
+    const lcpMs = p75(m.largest_contentful_paint);
+    const inpMs = p75(m.interaction_to_next_paint);
+    const cls = p75(m.cumulative_layout_shift);
+    return { lcpMs, inpMs, cls, category: cwvCategory(lcpMs, inpMs, cls), scope };
+  }
+  return null;
 }
 
 export async function clarityInsights(tenantId: string, days: number, dimension: string | null): Promise<string> {

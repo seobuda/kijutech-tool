@@ -627,6 +627,42 @@ export function serpSource(): SerpSource | null {
   return GSERP.__kijuSerpSource ?? null;
 }
 
+// --- Velocidad real de una web (SEO parte 0, 26 nov 2026) ------------------------------------------------------------
+// Core Web Vitals de usuarios reales (Chrome UX Report) y, si se pide, la prueba de laboratorio de PageSpeed. Lo registra
+// quien tenga la clave (Agentes, con su integración «pagespeed» y el .env de reserva); SEO lo usa sin saber de dónde sale.
+export type SpeedField = { lcpMs: number | null; inpMs: number | null; cls: number | null; category: 'FAST' | 'AVERAGE' | 'SLOW' | null; scope: 'url' | 'origin' };
+export type SpeedSource = {
+  hasKey: (tenantId: string) => Promise<boolean>;
+  /** Datos reales de la URL (o de su origen si la URL no tiene tráfico suficiente). null = Google no tiene datos. */
+  field: (tenantId: string, url: string) => Promise<SpeedField | null>;
+};
+const GSPEED = globalThis as unknown as { __kijuSpeedSource?: SpeedSource | null };
+export function registerSpeedSource(s: SpeedSource): void {
+  GSPEED.__kijuSpeedSource = s;
+}
+export function speedSource(): SpeedSource | null {
+  return GSPEED.__kijuSpeedSource ?? null;
+}
+
+// --- Alertas graves de un proyecto (SEO parte 0, 26 nov 2026) ---------------------------------------------------------
+// Un módulo que vigila un proyecto (SEO) avisa de algo grave; quien quiera reaccionar (Estrategia: despertar al
+// estratega del cliente) se registra aquí. Así ningún módulo importa a otro.
+export type ProjectAlert = { tenantId: string; clientId: string; projectId: string; title: string; source: string };
+type ProjectAlertListener = (a: ProjectAlert) => Promise<void>;
+const GPA = globalThis as unknown as { __kijuProjectAlertListeners?: Map<string, ProjectAlertListener> };
+export function registerProjectAlertListener(key: string, fn: ProjectAlertListener): void {
+  (GPA.__kijuProjectAlertListeners ??= new Map()).set(key, fn);
+}
+export async function emitProjectAlert(a: ProjectAlert): Promise<void> {
+  for (const [key, fn] of GPA.__kijuProjectAlertListeners ?? new Map<string, ProjectAlertListener>()) {
+    try {
+      await fn(a);
+    } catch (e) {
+      console.error(`[núcleo] alerta de proyecto ${key}:`, e instanceof Error ? e.message : e);
+    }
+  }
+}
+
 // --- Preguntas al cliente (25 nov 2026) -----------------------------------------------------------------------------
 // El núcleo lleva el banco de preguntas y el envío; lo que no es suyo lo pregunta a quien se haya registrado:
 //   - qué servicios le hacemos a cada cliente y cuáles hay (Operaciones: ops_services y ops_client_services);

@@ -62,6 +62,7 @@ const RECIPES: Record<string, Recipe> = {
   titulo_reescrito: { technique: 'titulo_reescrito', title: (n) => `Reescribir el título de ${n} página(s)`, how: 'Un título único por página, de unos 55-60 caracteres, con el servicio y la zona al principio. Revisa también el nombre del sitio que se añade al final.', minutesPerUrl: 6, baseHours: 0.5, metric: 'ctr', windowDays: 28 },
   meta_descripcion: { technique: 'meta_descripcion', title: (n) => `Escribir la meta descripción de ${n} página(s)`, how: 'Una descripción única por página, de unos 140-155 caracteres, que diga qué se ofrece y por qué hacer clic.', minutesPerUrl: 5, baseHours: 0.5, metric: 'ctr', windowDays: 28 },
   encabezados: { technique: 'encabezados', title: (n) => `Ordenar el H1 de ${n} página(s)`, how: 'Un único H1 por página que diga de qué trata; el resto de títulos, H2 y H3.', minutesPerUrl: 4, baseHours: 0.5, metric: 'posicion', windowDays: 42 },
+  recuperar_pagina: { technique: 'recuperar_pagina', title: (n) => (n === 1 ? 'Recuperar una página que pierde clics' : `Recuperar ${n} páginas que pierden clics`), how: 'Han perdido muchos clics de Google en 4 semanas y no es temporada. Para cada una: mira en Search Console qué búsquedas bajaron y en qué posición estaban; comprueba si la página cambió (título, contenido, noindex, redirección), quién la ha adelantado en Google y si coincide con una actualización de Google. Luego actualiza el contenido (fecha, datos, lo que ahora tienen los primeros) y refuerza sus enlaces internos.', minutesPerUrl: 60, baseHours: 0, metric: 'clics', windowDays: 56 },
   contenido_ampliado: { technique: 'contenido_ampliado', title: (n) => `Ampliar el contenido de ${n} página(s)`, how: 'Páginas con muy poco texto. Amplíalas con lo que el cliente necesita saber (servicio, proceso, precios orientativos, preguntas frecuentes) o únelas a otra.', minutesPerUrl: 45, baseHours: 0, metric: 'impresiones', windowDays: 56 },
   contenido_duplicado: { technique: 'contenido_duplicado', title: (n) => `Quitar contenido duplicado en ${n} página(s)`, how: 'Páginas con el mismo texto (o casi). Busca qué bloque las repite (p. ej. un listado de entradas que incrusta otras completas), une las que sobran con una 301 o diferencia su contenido.', minutesPerUrl: 15, baseHours: 1, metric: 'clics', windowDays: 56 },
   imagenes_alt: { technique: 'imagenes_alt', title: (n) => `Texto alternativo en las imágenes de ${n} página(s)`, how: 'Describe cada imagen en su atributo alt (qué se ve, sin rellenar con palabras clave).', minutesPerUrl: 5, baseHours: 0.5, metric: 'impresiones', windowDays: 56 },
@@ -119,7 +120,17 @@ export const KIND_TECHNIQUE: Record<string, string> = {
   'seo.topic_new_page': 'nueva_pagina_tema',
   'seo.topic_unclear_page': 'reforzar_pagina_tema',
   'seo.striking_distance': 'optimizar_al_alcance',
-  'seo.low_ctr': 'titulo_reescrito'
+  'seo.low_ctr': 'titulo_reescrito',
+  // Vigilancia continua (parte 0, 26 nov 2026).
+  'seo.page_drop': 'recuperar_pagina',
+  'seo.site_down': 'error_servidor_corregido',
+  'seo.home_error': 'error_servidor_corregido',
+  'seo.home_noindex': 'indexacion_corregida',
+  'seo.robots_block_all': 'indexacion_corregida',
+  'seo.not_indexed': 'indexacion_corregida',
+  'seo.ssl_expiring': 'https',
+  'seo.cwv_slow': 'velocidad',
+  'seo.cwv_average': 'velocidad'
 };
 
 const SEV_WEIGHT: Record<PlanSeverity, number> = { critico: 8, importante: 4, aviso: 2, info: 1 };

@@ -9,13 +9,15 @@ import { getSaludView } from '@/lib/seo/salud/view';
 import { BUSINESS_TYPES } from '@/lib/core/business-types';
 import { ProjectSeoNav } from '../seo-nav';
 import { SaludPanel } from './salud-panel';
+import { VigilanciaPanel } from './vigilancia-panel';
+import { getVigilanciaView } from '@/lib/seo/vigilancia/view';
 
 export default async function SaludPage({ params, searchParams }: { params: Promise<{ projectId: string }>; searchParams: Promise<{ tipo?: string }> }) {
   const user = await requirePagePermission('view');
   const { projectId } = await params;
   const { tipo } = await searchParams;
   if (!/^[0-9a-f-]{36}$/i.test(projectId)) notFound();
-  const [view, canEdit] = await Promise.all([getSaludView(user.tenantId, projectId, tipo ?? null), checkPermission('edit').then((r) => r.ok)]);
+  const [view, canEdit, vigilancia] = await Promise.all([getSaludView(user.tenantId, projectId, tipo ?? null), checkPermission('edit').then((r) => r.ok), getVigilanciaView(user.tenantId, projectId)]);
   if (!view) notFound();
 
   return (
@@ -35,6 +37,7 @@ export default async function SaludPage({ params, searchParams }: { params: Prom
         }
       />
       <ProjectSeoNav projectId={projectId} active="salud" />
+      {vigilancia && <VigilanciaPanel projectId={projectId} view={vigilancia} canEdit={canEdit} />}
       <SaludPanel view={view} canEdit={canEdit} businessType={view.businessType} businessTypes={BUSINESS_TYPES} />
     </PageContainer>
   );

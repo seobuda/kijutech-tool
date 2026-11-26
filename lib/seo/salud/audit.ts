@@ -9,7 +9,7 @@ import 'server-only';
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { clientAssets, crawlPages, crawlRuns, projectAssets, projects, type CrawlRun } from '@/lib/db/schema';
-import { enqueueJob, ensureSchedule, registerJobKind } from '@/lib/core/jobs';
+import { enqueueJob, ensureScheduleIfMissing, registerJobKind } from '@/lib/core/jobs';
 import { inlinkCounts, startCrawl } from '@/lib/core/crawler';
 import { registerFindingKind, syncFindings } from '@/lib/core/findings';
 import { gscPropertiesForProject } from '@/lib/core/gsc';
@@ -57,8 +57,8 @@ export async function startProjectAudit(tenantId: string, projectId: string, max
   if (!web) throw new SaludError('El proyecto no tiene web en su alcance: edita el proyecto y marca la web del cliente.');
   const runId = await startCrawl({ tenantId, projectId, rootUrl: web, target: 'propio', maxPages });
   // La vigilancia de novedades de Google (I+D) se da de alta con el primer uso de SEO en la cuenta.
-  await ensureSchedule(tenantId, 'seo.id.watch', '', 180);
-  await ensureSchedule(tenantId, 'seo.id.digest', '', 7 * 24 * 60, new Date(Date.now() + 3_600_000));
+  await ensureScheduleIfMissing(tenantId, 'seo.id.watch', '', 180);
+  await ensureScheduleIfMissing(tenantId, 'seo.id.digest', '', 7 * 24 * 60, new Date(Date.now() + 3_600_000));
   await enqueueAuditWait(tenantId, projectId, runId, 0, 1);
   return { runId, already: false };
 }
