@@ -4264,6 +4264,68 @@ export const seoLocalSnapshots = pgTable(
 );
 export type SeoLocalSnapshot = typeof seoLocalSnapshots.$inferSelect;
 
+// Geo-grid (SEO parte 5b, 27 nov 2026; migración 0071): una ejecución por búsqueda y una fila por punto de la cuadrícula.
+export const seoGeogridRuns = pgTable(
+  'seo_geogrid_runs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    placeRowId: uuid('place_row_id')
+      .notNull()
+      .references(() => seoLocalPlaces.id, { onDelete: 'cascade' }),
+    batchId: uuid('batch_id').notNull(),
+    keyword: varchar('keyword', { length: 150 }).notNull(),
+    lat: doublePrecision('lat').notNull(),
+    lng: doublePrecision('lng').notNull(),
+    stepKm: real('step_km').notNull(),
+    zoom: integer('zoom').notNull(),
+    size: integer('size').notNull().default(5),
+    language: varchar('language', { length: 5 }).notNull().default('es'),
+    summary: jsonb('summary').$type<Record<string, unknown>>(),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [index('seo_geogrid_runs_project_idx').on(table.projectId, table.createdAt)]
+);
+export type SeoGeogridRun = typeof seoGeogridRuns.$inferSelect;
+
+export const seoGeogridPoints = pgTable(
+  'seo_geogrid_points',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    runId: uuid('run_id')
+      .notNull()
+      .references(() => seoGeogridRuns.id, { onDelete: 'cascade' }),
+    row: integer('row').notNull(),
+    col: integer('col').notNull(),
+    lat: doublePrecision('lat').notNull(),
+    lng: doublePrecision('lng').notNull(),
+    taskId: varchar('task_id', { length: 64 }),
+    status: varchar('status', { length: 10 }).notNull().default('pendiente'),
+    rank: integer('rank'),
+    // Los 20 primeros: { r: puesto, c: cid, t: título, d: dominio, v: nota, n: reseñas, k: categoría }
+    results: jsonb('results').$type<{ r: number; c: string | null; t: string; d: string | null; v: number | null; n: number | null; k: string | null }[]>(),
+    costUsd: decimal('cost_usd', { precision: 10, scale: 5 }),
+    error: text('error'),
+    postedAt: timestamp('posted_at'),
+    checkedAt: timestamp('checked_at'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('seo_geogrid_points_unique').on(table.runId, table.row, table.col),
+    index('seo_geogrid_points_open_idx').on(table.status).where(sql`${table.status} IN ('pendiente', 'enviada')`),
+    check('seo_geogrid_points_status_check', sql`${table.status} IN ('pendiente', 'enviada', 'hecha', 'fallida', 'caducada')`),
+  ]
+);
+export type SeoGeogridPoint = typeof seoGeogridPoints.$inferSelect;
+
 export const seoReviews = pgTable(
   'seo_reviews',
   {

@@ -105,3 +105,16 @@ export async function checkLocalNowAction(projectId: string): Promise<Ok> {
     return { ok: false, error: publicError(e, 'No se pudo lanzar') };
   }
 }
+
+export async function checkGeogridNowAction(projectId: string): Promise<Ok> {
+  try {
+    const user = await requirePermission('edit');
+    if (!(await ownProject(user.tenantId, projectId))) return { ok: false, error: 'Proyecto no encontrado' };
+    // Misma clave que el proceso programado: nunca dos mediciones a la vez (fuera de horario comercial se aplaza sola).
+    const r = await enqueueJob({ tenantId: user.tenantId, kind: 'seo.geogrid', payload: { projectId }, scopeType: 'proyecto', scopeId: projectId, priority: 4, dedupeKey: `sched:seo.geogrid:${projectId}` });
+    revalidatePath(PATH(projectId));
+    return { ok: true, message: r.created ? 'En marcha: si no es horario comercial (laborables de 10 a 12) se aplaza a la siguiente franja.' : 'Ya estaba en marcha.' };
+  } catch (e) {
+    return { ok: false, error: publicError(e, 'No se pudo lanzar') };
+  }
+}

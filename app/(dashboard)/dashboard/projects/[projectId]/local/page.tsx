@@ -9,12 +9,14 @@ import { getLocalView } from '@/lib/seo/local/view';
 import { getDossierView } from '@/lib/seo/expediente/view';
 import { ProjectSeoNav } from '../seo-nav';
 import { LocalPanel } from './local-panel';
+import { GeogridPanel } from './geogrid-panel';
+import { getGeogridView } from '@/lib/seo/local/geogrid-view';
 
 export default async function LocalPage({ params }: { params: Promise<{ projectId: string }> }) {
   const user = await requirePagePermission('view');
   const { projectId } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(projectId)) notFound();
-  const [view, canEdit, dossier] = await Promise.all([getLocalView(user.tenantId, projectId), checkPermission('edit').then((r) => r.ok), getDossierView(user.tenantId, projectId)]);
+  const [view, canEdit, dossier, grid] = await Promise.all([getLocalView(user.tenantId, projectId), checkPermission('edit').then((r) => r.ok), getDossierView(user.tenantId, projectId), getGeogridView(user.tenantId, projectId)]);
   if (!view || !dossier) notFound();
   return (
     <PageContainer>
@@ -29,6 +31,7 @@ export default async function LocalPage({ params }: { params: Promise<{ projectI
       />
       <ProjectSeoNav projectId={projectId} active="local" />
       <LocalPanel projectId={projectId} view={view} canEdit={canEdit} clientName={dossier.project.clientName ?? dossier.project.name} />
+      {view.client && <GeogridPanel projectId={projectId} grid={grid} canEdit={canEdit} />}
     </PageContainer>
   );
 }

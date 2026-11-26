@@ -30,6 +30,8 @@ export const TECHNIQUES: Technique[] = [
   { key: 'recuperar_mapa', domain: 'seo', label: 'Recuperar el puesto en el mapa de Google', metric: 'impresiones', windowDays: 42 },
   { key: 'ficha_google_corregida', domain: 'seo', label: 'Corregir la ficha de Google', metric: 'impresiones', windowDays: 28 },
   { key: 'campana_resenas', domain: 'seo', label: 'Campaña para conseguir reseñas', metric: 'impresiones', windowDays: 56 },
+  { key: 'optimizar_ficha_zona', domain: 'seo', label: 'Mejorar la presencia en el mapa por zonas', metric: 'impresiones', windowDays: 56 },
+  { key: 'denunciar_spam', domain: 'seo', label: 'Sugerir a Google la corrección de un competidor', metric: 'impresiones', windowDays: 42 },
   { key: 'recuperar_pagina', domain: 'seo', label: 'Recuperar una página que pierde clics', metric: 'clics', windowDays: 56 },
   { key: 'canibalizacion_resuelta', domain: 'seo', label: 'Resolver una canibalización (una página por búsqueda)', metric: 'posicion', windowDays: 42 },
   { key: 'contenido_duplicado', domain: 'seo', label: 'Quitar o unificar contenido duplicado', metric: 'clics', windowDays: 56 },
@@ -100,7 +102,7 @@ export function techniqueFromCategory(category: string | null | undefined): stri
  * nueva auditoría (el hallazgo debe desaparecer); las de velocidad, con la medición de velocidad; las de contenido y
  * posiciones, solo con el resultado en Search Console. Después, siempre, el efecto en la métrica de la hipótesis.
  */
-const GSC_ONLY = new Set(['ficha_google_corregida', 'campana_resenas', 'recuperar_mapa', 'optimizar_al_alcance', 'reforzar_pagina_tema', 'nueva_pagina_tema', 'nueva_landing_servicio', 'canibalizacion_resuelta', 'contenido_ampliado', 'recuperar_pagina', 'enlazado_interno', 'titulo_reescrito', 'meta_descripcion']);
+const GSC_ONLY = new Set(['optimizar_ficha_zona', 'denunciar_spam', 'ficha_google_corregida', 'campana_resenas', 'recuperar_mapa', 'optimizar_al_alcance', 'reforzar_pagina_tema', 'nueva_pagina_tema', 'nueva_landing_servicio', 'canibalizacion_resuelta', 'contenido_ampliado', 'recuperar_pagina', 'enlazado_interno', 'titulo_reescrito', 'meta_descripcion']);
 const SPEED = new Set(['velocidad', 'imagenes_optimizadas']);
 const METRIC_LABEL: Record<string, string> = { clics: 'los clics', impresiones: 'las impresiones', ctr: 'el CTR', posicion: 'la posición media' };
 
