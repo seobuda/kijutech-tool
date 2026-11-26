@@ -56,7 +56,7 @@ El detalle, el porqué de cada pieza y la supervisión de Opus están en `docs/I
 | ✅ | 0 · Consolidar | Hecho (§6.44) |
 | ✅ | 1 · Técnico, tanda 1 | Hecho (§6.45) y velocidad visible (§6.46) |
 | ✅ 1 | **Técnico 2a + verificación** (hecho el 26 nov, §6.47) | `fetchPublic` blindado, columna `facts`, robots contra Googlebot (recursos, sitemap, rastreadores de IA), enlaces externos rotos; «cómo y cuándo se verifica» en la hipótesis de cada encargo |
-| 2 | **Alta de la cartera (3-5 proyectos de prueba)** | Lista de comprobación y semáforo «proyecto incompleto». La IA propone web, servicios, zona, coordenadas y competencia, y el equipo confirma |
+| ✅ 2 | **Alta de la cartera (3-5 proyectos de prueba)** (construido el 26 nov, §6.48; falta que el equipo dé de alta rfserveis y centrosdym) | Lista de comprobación y semáforo «proyecto incompleto». La IA propone web, servicios, zona, coordenadas y competencia, y el equipo confirma |
 | 3 | **Informe mensual v1** | GSC, GA4 (con contactos) y trabajo del mes, en borrador. Solo se envía con aprobación (línea roja 2) |
 | 4 | **Posiciones (semilla mínima)** | Semilla: temas de GSC + servicio × zona + marca, 50 como máximo y editable. Orgánico, paquete local y AI Overview por coordenadas e idioma. Filas compactas y volumen de lo que se sigue |
 | 5 | **Local** | Geo-grid mensual, reseñas propias y de la competencia, vigilancia de la ficha de Google, spam en Maps, conseguir reseñas, citas, páginas de zona con la regla anti-páginas puerta |
