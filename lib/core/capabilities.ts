@@ -680,6 +680,41 @@ export function speedSource(): SpeedSource | null {
   return GSPEED.__kijuSpeedSource ?? null;
 }
 
+// --- Fichas de Google de negocios (SEO parte 5, local, 26 nov 2026) --------------------------------------------------
+// Datos públicos de la ficha de Google de un negocio (categoría real, nota, reseñas, estado, horario…). Lo registra quien
+// tenga un proveedor que permita guardarlos (Agentes, con DataForSEO; Google Places NO lo permite en el EEE).
+export type BusinessInfo = {
+  cid: string | null;
+  placeId: string | null;
+  title: string;
+  category: string | null;
+  additionalCategories: string[];
+  phone: string | null;
+  domain: string | null;
+  address: string | null;
+  lat: number | null;
+  lng: number | null;
+  rating: number | null;
+  votes: number | null;
+  distribution: Record<string, number> | null;
+  status: 'abierta' | 'cerrada_temporal' | 'cerrada_definitiva' | null;
+  isClaimed: boolean | null;
+  /** Franjas del horario normalizadas (día → «09:00-14:00,16:00-20:00»), para comparar sin depender del idioma. */
+  hours: Record<string, string> | null;
+};
+export type BusinessSource = {
+  isConnected: (tenantId: string) => Promise<boolean>;
+  /** Busca por «nombre + población» o por «cid:123…» y devuelve la ficha (o null) con su coste. */
+  info: (tenantId: string, q: { keyword: string; location: string; language: string }) => Promise<{ info: BusinessInfo | null; costUsd: number }>;
+};
+const GBIZ = globalThis as unknown as { __kijuBusinessSource?: BusinessSource | null };
+export function registerBusinessSource(s: BusinessSource): void {
+  GBIZ.__kijuBusinessSource = s;
+}
+export function businessSource(): BusinessSource | null {
+  return GBIZ.__kijuBusinessSource ?? null;
+}
+
 // --- Alertas graves de un proyecto (SEO parte 0, 26 nov 2026) ---------------------------------------------------------
 // Un módulo que vigila un proyecto (SEO) avisa de algo grave; quien quiera reaccionar (Estrategia: despertar al
 // estratega del cliente) se registra aquí. Así ningún módulo importa a otro.
