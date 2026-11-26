@@ -44,6 +44,13 @@ export type ServiceProposal = { nombre: string; url: string | null; cita: string
 export type AltaProposal = { negocio: string | null; servicios: ServiceProposal[]; zona: { texto: string; cita: string } | null; publico: string | null };
 
 const has = (hay: string, needle: string) => normText(hay).includes(normText(needle));
+/** Palabras con significado (4 letras o más), normalizadas; quita plurales sencillos para comparar «reformas» y «reforma». */
+const tokens = (s: string) => new Set(normText(s).split(' ').filter((w) => w.length >= 4).map((w) => w.replace(/(es|s)$/, '')));
+/** El nombre del servicio y su cita comparten alguna palabra con significado (la cita prueba ESE servicio). */
+const related = (name: string, quote: string) => {
+  const q = tokens(quote);
+  return [...tokens(name)].some((t) => q.has(t));
+};
 const goodQuote = (q: unknown): q is string => typeof q === 'string' && q.trim().length >= 4 && /\p{L}{3,}/u.test(q);
 /** Un servicio, como los guarda la ficha: ≤ 60 caracteres, ≤ 6 palabras y sin comas. */
 const goodName = (n: unknown): n is string => typeof n === 'string' && n.trim().length >= 3 && n.trim().length <= 60 && n.trim().split(/\s+/).length <= 6 && !/[,;]/.test(n);
@@ -58,12 +65,12 @@ const goodName = (n: unknown): n is string => typeof n === 'string' && n.trim().
 export function validateProposal(raw: unknown, input: AltaInput): AltaProposal {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const byUrl = new Map(input.pages.map((p) => [p.url, p]));
-  const h2All = input.pages.flatMap((p) => p.h2).join(' \n ');
+  const h2All = input.pages.flatMap((p) => p.h2);
   const services: ServiceProposal[] = [];
   const seen = new Set<string>();
   for (const s of Array.isArray(r.servicios) ? r.servicios : []) {
     const o = (s && typeof s === 'object' ? s : {}) as Record<string, unknown>;
-    if (!goodName(o.nombre) || !goodQuote(o.cita)) continue;
+    if (!goodName(o.nombre) || !goodQuote(o.cita) || !related(o.nombre, o.cita)) continue;
     const name = o.nombre.trim();
     const key = normText(name);
     if (!key || seen.has(key)) continue;
@@ -72,7 +79,7 @@ export function validateProposal(raw: unknown, input: AltaInput): AltaProposal {
     if (url) {
       const p = byUrl.get(url)!;
       ok = [p.title ?? '', ...p.h1, ...p.anchors].some((t) => has(t, o.cita as string));
-    } else ok = has(h2All, o.cita) || has(input.jsonldText, o.cita) || input.gscQueries.some((q) => has(q, o.cita as string));
+    } else ok = h2All.some((h) => has(h, o.cita as string)) || has(input.jsonldText, o.cita) || input.gscQueries.some((q) => has(q, o.cita as string));
     if (!ok) continue;
     seen.add(key);
     services.push({ nombre: name, url, cita: (o.cita as string).trim().slice(0, 160), sinPagina: !url });

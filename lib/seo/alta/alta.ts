@@ -9,7 +9,7 @@ import 'server-only';
 // - Puesta en marcha: qué le falta al proyecto (readiness) para el informe, las posiciones, el local y la medición.
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { clientCompetitors, clientContactSubscriptions, clientContacts, crawlPages, crawlRuns, projects, seoDossierFacts, seoTopics, clients } from '@/lib/db/schema';
+import { clientCompetitors, clientContactSubscriptions, clientContacts, crawlPages, crawlRuns, jobs, projects, seoDossierFacts, seoTopics, clients } from '@/lib/db/schema';
 import { enqueueJob, registerJobKind } from '@/lib/core/jobs';
 import { callAI, getPrompt } from '@/lib/ai/gateway';
 import { extractJsonFromLLMResponse } from '@/lib/ai/parsers/json-extractor';
@@ -106,8 +106,8 @@ async function upsertIaFact(tenantId: string, projectId: string, field: string, 
       set: {
         value: sql`${v}::jsonb`,
         sourceRef: ref,
-        // Si la propuesta no cambia, se respeta lo decidido (confirmado o descartado).
-        status: sql`CASE WHEN ${seoDossierFacts.value} = ${v}::jsonb THEN ${seoDossierFacts.status} ELSE 'provisional' END`,
+        // Si la propuesta no cambia, se respeta lo decidido; lo descartado sigue descartado aunque cambie.
+        status: sql`CASE WHEN ${seoDossierFacts.value} = ${v}::jsonb OR ${seoDossierFacts.status} = 'descartado' THEN ${seoDossierFacts.status} ELSE 'provisional' END`,
         updatedAt: new Date()
       }
     });
@@ -124,9 +124,15 @@ export async function proposeFicha(tenantId: string, projectId: string, force = 
   if (!p) return { skipped: 'sin proyecto' };
   const run = await lastDoneCrawl(projectId);
   if (!run) return { skipped: 'sin rastreo terminado' };
-  // Solo si aún no hay propuesta o si el rastreo es otro (la referencia guarda el rastreo usado).
-  const prev = await db.select({ sourceRef: seoDossierFacts.sourceRef }).from(seoDossierFacts).where(and(eq(seoDossierFacts.projectId, projectId), eq(seoDossierFacts.source, 'ia')));
-  if (!force && prev.some((f) => (f.sourceRef ?? '').includes(run.id))) return { skipped: 'ya propuesto con este rastreo' };
+  // Solo una vez por rastreo, aunque la propuesta saliera vacía: el resultado del trabajo guarda el rastreo usado
+  // (si no, una web de la que no se puede proponer nada volvería a llamar a la IA en cada recogida).
+  if (!force) {
+    const [done] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(jobs)
+      .where(and(eq(jobs.tenantId, tenantId), eq(jobs.kind, JOB), eq(jobs.scopeId, projectId), eq(jobs.status, 'hecho'), sql`${jobs.result}->>'run' = ${run.id}`));
+    if (Number(done?.n ?? 0) > 0) return { skipped: 'ya propuesto con este rastreo', run: run.id };
+  }
   const prompt = await getPrompt(PROPOSE_PROMPT);
   if (!prompt) return { skipped: 'sin prompt' };
   const input = await buildInput(tenantId, projectId, run.id, [p.clientName ?? p.name, ...((p.aliases as string[] | null) ?? [])]);
@@ -154,11 +160,11 @@ export async function proposeFicha(tenantId: string, projectId: string, force = 
   if (prop.zona) await upsertIaFact(tenantId, projectId, 'zona', prop.zona.texto, ev({ c: prop.zona.cita }));
   if (prop.negocio) await upsertIaFact(tenantId, projectId, 'negocio', prop.negocio, ev({ sinCita: true }));
   if (prop.publico) await upsertIaFact(tenantId, projectId, 'publico', prop.publico, ev({ sinCita: true }));
-  return { servicios: prop.servicios.length, zona: Boolean(prop.zona), negocio: Boolean(prop.negocio), publico: Boolean(prop.publico), paginas: input.pages.length, busquedas: input.gscQueries.length };
+  return { run: run.id, servicios: prop.servicios.length, zona: Boolean(prop.zona), negocio: Boolean(prop.negocio), publico: Boolean(prop.publico), paginas: input.pages.length, busquedas: input.gscQueries.length };
 }
 
 export async function enqueueProposal(tenantId: string, projectId: string, force = false): Promise<void> {
-  await enqueueJob({ tenantId, kind: JOB, payload: { projectId, force }, scopeType: 'proyecto', scopeId: projectId, priority: 7, dedupeKey: `${JOB}:${projectId}` });
+  await enqueueJob({ tenantId, kind: JOB, payload: { projectId, force }, scopeType: 'proyecto', scopeId: projectId, priority: 7, dedupeKey: `${JOB}:${projectId}:${force ? 'forzada' : 'auto'}` });
 }
 
 /** Idiomas de la web (sin IA) para el expediente: del último rastreo. */

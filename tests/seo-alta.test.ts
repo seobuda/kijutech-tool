@@ -28,7 +28,8 @@ describe('alta: propuesta de la IA validada', () => {
           { nombre: 'Reformas de cocinas', url: 'https://w.com/reformas-cocinas/', cita: 'Reformas de cocinas' },
           { nombre: 'Reforma de baños', url: 'https://w.com/banos/', cita: 'Reformas de cocinas' }, // cita de otra página
           { nombre: 'Platos de ducha', url: null, cita: 'Platos de ducha de obra' }, // de un H2: sin página
-          { nombre: 'Pintura', url: null, cita: 'pintor sabadell' }, // de una búsqueda de Google
+          { nombre: 'Pintor', url: null, cita: 'pintor sabadell' }, // de una búsqueda de Google
+          { nombre: 'Descuento del 90 por ciento', url: 'https://w.com/reformas-cocinas/', cita: 'Reformas' }, // cita que no prueba ese nombre
           { nombre: 'Piscinas', url: null, cita: 'piscinas de obra' }, // inventado
           { nombre: 'Cocinas, baños y más', url: null, cita: 'Reformas integrales' }, // nombre con comas
           { nombre: 'Reformas de cocinas', url: 'https://w.com/reformas-cocinas/', cita: 'Cocinas' } // repetido
@@ -41,7 +42,7 @@ describe('alta: propuesta de la IA validada', () => {
     expect(p.servicios.map((s) => [s.nombre, s.sinPagina])).toEqual([
       ['Reformas de cocinas', false],
       ['Platos de ducha', true],
-      ['Pintura', true]
+      ['Pintor', true]
     ]);
     expect(p.zona).toEqual({ texto: 'Sabadell, Terrassa', cita: 'Sabadell' });
     expect(p.negocio).toMatch(/reformas/);
