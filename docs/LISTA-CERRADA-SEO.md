@@ -131,4 +131,5 @@ Las decisiones no triviales pasan por el protocolo de decisión (3 puntos de vis
 
 | Parte | Estado | Despliegue | Documento de sesión |
 |---|---|---|---|
-| 0 | en curso | — | — |
+| 0 | hecha | 26 nov (migración 0065) | `docs/sessions/2026-11-26-13-seo-parte0-consolidar.md` |
+| 1 | siguiente | — | — |
