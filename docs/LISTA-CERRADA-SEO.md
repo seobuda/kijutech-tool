@@ -35,97 +35,50 @@ Ningún precio está verificado en esta lista [NV]: se comprueba en la documenta
 - **Bajo demanda:** geo-grid de posiciones en el mapa, todas las palabras de un competidor y perfil de enlaces.
 - **Autoridad (parte 6):** si el proveedor exige una suscripción mínima que no cabe en el tope, se deja diseñada y se pregunta a Enric. Contratar un servicio de pago es línea roja.
 
-## Partes
+## Partes (replanteadas el 26 nov tras la investigación de mercado; aprobadas por Enric)
 
-Cada parte se cierra con:
-- pruebas (`pnpm test`) y `check-architecture-map`;
-- revisor de código;
-- Mapa Visual, `ESTADO.md` y documento de sesión;
-- fusión en `main` y despliegue por tanda.
+El detalle, el porqué de cada pieza y la supervisión de Opus están en `docs/INVESTIGACION-SEO-MERCADO.md` §7-§8. El orden anterior (0 a 8) queda sustituido por este.
 
-Las decisiones no triviales pasan por el protocolo de decisión (3 puntos de vista, 3 alternativas, auditoría con Opus 5.5).
+**Decisiones de Enric (26 nov, tarde):**
+- Plan nuevo aprobado.
+- Alta de la cartera: **la IA propone y el equipo confirma**.
+- Alcance inicial: **3 a 5 clientes de prueba** antes de ampliar.
 
-### Parte 0 · Consolidar
-- Las comprobaciones de Estrategia que son SEO pasan al módulo SEO, por proyecto y como hallazgos del núcleo:
-  - vigilancia crítica (caída, noindex, robots, SSL);
-  - salud semanal;
-  - velocidad (CrUX);
-  - detectores (al alcance, CTR bajo, páginas en caída, consultas nuevas, canibalización).
+**Principios:**
+- Determinista por defecto; la IA, para juicio y síntesis, marcada «para verificar».
+- El tope de gasto se comprueba antes de gastar; se usa la cola asíncrona de DataForSEO.
+- Filas compactas: el bruto, comprimido, con retención corta.
+- Cada encargo dice cómo y cuándo se verifica.
+- Medición honesta: si los datos no bastan, «no concluyente».
 
-  Estrategia deja de calcularlas y las **lee** del núcleo.
-- Auditoría programada por proyecto, con cadencia editable (panel propio y por proyecto).
-- Tarjeta **PageSpeed / CrUX** en Agentes → Integraciones (clave cifrada y probada al guardar). El código lee primero la integración y usa el `.env` como reserva.
-- Contador de gasto de datos de pago por proyecto (tope de 5 $ y ajuste editable).
-- Retirar de la interfaz el asistente de agosto (con backup previo y sin borrar tablas).
+| # | Parte | Qué incluye |
+|---|---|---|
+| ✅ | 0 · Consolidar | Hecho (§6.44) |
+| ✅ | 1 · Técnico, tanda 1 | Hecho (§6.45) y velocidad visible (§6.46) |
+| 1 | **Técnico 2a + verificación** | `fetchPublic` blindado, columna `facts`, robots contra Googlebot (recursos, sitemap, rastreadores de IA), enlaces externos rotos; «cómo y cuándo se verifica» en la hipótesis de cada encargo |
+| 2 | **Alta de la cartera (3-5 proyectos de prueba)** | Lista de comprobación y semáforo «proyecto incompleto». La IA propone web, servicios, zona, coordenadas y competencia, y el equipo confirma |
+| 3 | **Informe mensual v1** | GSC, GA4 (con contactos) y trabajo del mes, en borrador. Solo se envía con aprobación (línea roja 2) |
+| 4 | **Posiciones (semilla mínima)** | Semilla: temas de GSC + servicio × zona + marca, 50 como máximo y editable. Orgánico, paquete local y AI Overview por coordenadas e idioma. Filas compactas y volumen de lo que se sigue |
+| 5 | **Local** | Geo-grid mensual, reseñas propias y de la competencia, vigilancia de la ficha de Google, spam en Maps, conseguir reseñas, citas, páginas de zona con la regla anti-páginas puerta |
+| 6 | **Técnico 2b + 2c** | Reglas WordPress (metas duplicadas, soft 404, staging, nofollow, sitemap frente a canonical, datos incoherentes, rastreadores de IA, tecnología, web hackeada) + registro de cambios (tabla propia y protocolo) + páginas de dinero (campos estructurados) |
+| 7 | **Demanda** | Volumen, intención y grupos validados con la SERP; valor por tema |
+| 8 | **Medir y explicar** | «¿Funcionó?» con la comprobación tras el encargo y la fecha real, diagnóstico de caídas en capas, atribución y previsión |
+| 9 | **Contenido → WordPress** | Brief, nota, enlazado interno, contenido que pierde tráfico; publicar con aprobación |
+| 10 | **Autoridad** | Tras verificar el precio y la cobertura en 3 webs reales y con el OK de Enric (contratar es línea roja) |
+| 11 | **Orquestar, panel de IA mensual y tendencias entre clientes** | Cuando haya unas 50 intervenciones por técnica |
+| — | **Migraciones de web** | En cualquier momento después de la parte 6 |
 
-### Parte 1 · Técnico completo
-- Comparación entre rastreos.
-- Cadenas de redirección y bucles.
-- Enlaces rotos hacia fuera.
-- Anchors del enlazado interno.
-- hreflang y lang.
-- Móvil y viewport.
-- Contenido mixto.
-- robots.txt que bloquea recursos.
-- Imágenes.
-- CrUX por plantilla.
-- Inspección de URL en una muestra.
-- Render de JavaScript solo en las páginas sospechosas, si la CPU del servidor lo permite (se mide antes).
+**No se hace:**
+- llms.txt;
+- reescritura «para GEO»;
+- enjambres de agentes;
+- redes neuronales de grafos;
+- tests A/B en pymes;
+- registros del servidor;
+- notas GEO de 0 a 100;
+- copias completas de la web.
 
-### Parte 2 · Demanda y palabras
-- Volumen y estacionalidad en el mapa.
-- Palabras nuevas a partir de los servicios y de la competencia.
-- Intención según la SERP real.
-- Dificultad.
-- Valor de negocio por tema.
-
-### Parte 3 · Contenido
-- Inventario y calidad del contenido.
-- Contenido que pierde tráfico → propuesta de actualizarlo.
-- Brief según lo que posiciona.
-- Optimizar una página frente a las que ganan.
-- Enlazado interno sugerido.
-- Comprobar lo publicado.
-
-### Parte 3b · Publicar en WordPress
-- Contraseña de aplicación por web, guardada cifrada.
-- Borrador en WordPress y publicación solo tras la aprobación de Enric.
-- Primera web: cm-iberica.
-
-### Parte 4 · Local completo
-- Con Places: nota, reseñas y categorías del cliente y de la competencia.
-- Geo-grid bajo demanda.
-- Citas en directorios.
-- Páginas de zona.
-- Business Profile cuando Google lo apruebe.
-
-### Parte 5 · Posiciones y visibilidad
-- Seguimiento real de las palabras del plan: SERP, paquete local y AI Overviews.
-- Cuota de visibilidad.
-- Panel de preguntas fijas a asistentes de IA.
-- Bing, cuando haya clave.
-
-### Parte 6 · Autoridad
-- Perfil de enlaces, huecos frente a la competencia, prospección y enlaces rotos hacia el cliente.
-- Bajo demanda, y supeditado al proveedor que elija Enric.
-
-### Parte 7 · Medir y explicar
-- ¿Funcionó?: hipótesis frente a resultado.
-- Diagnóstico de caídas.
-- Atribución.
-- Previsión.
-- Informe mensual al cliente. Se envía solo con aprobación (línea roja 2).
-
-### Parte 8 · Orquestar y aprender
-- Jefe de SEO (agente).
-- Cadencias por proyecto.
-- Cerebro de I+D, fases B y C.
-- Un plan que propone también contenido, local y enlaces.
-
-### Transversal · Migraciones de web
-- Rastreo antes y después.
-- Mapa de redirecciones.
-- Vigilancia de las semanas siguientes.
+Chromium queda para el futuro departamento de mantenimiento y rendimiento web.
 
 ## Registro de avance
 
