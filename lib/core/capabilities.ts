@@ -648,6 +648,8 @@ export type SpeedLab = {
   unsizedImages: number;
   imageSavingsKb: number;
   totalKb: number | null;
+  /** false = Lighthouse no trajo ninguna auditoría de imágenes conocida: no se juzgan (ni se resuelven) las imágenes. */
+  imagesKnown: boolean;
 };
 const GSPEED = globalThis as unknown as { __kijuSpeedSource?: SpeedSource | null };
 export function registerSpeedSource(s: SpeedSource): void {

@@ -16,7 +16,7 @@ import { db } from '@/lib/db/drizzle';
 import { projects } from '@/lib/db/schema';
 import { disableSchedule, enqueueJob, ensureScheduleIfMissing, listSchedulesForScope, pauseSchedule, registerJobKind, registerProcess, stableOffsetMinutes } from '@/lib/core/jobs';
 import { emitProjectAlert, metricSources, registerScheduled, speedSource, telegramOutbound } from '@/lib/core/capabilities';
-import { findingKind, syncFindings } from '@/lib/core/findings';
+import { findingKind, listFindings, syncFindings } from '@/lib/core/findings';
 import { fetchPublic, resolvesPublic } from '@/lib/core/net';
 import { extractPage } from '@/lib/core/crawl-extract';
 import { gscPropertiesForProject } from '@/lib/core/gsc';
@@ -31,6 +31,7 @@ import {
   LAB_KINDS,
   addDays,
   labFindings,
+  labSyncSet,
   representativeUrls,
   pageDropFindings,
   shouldAlert,
@@ -209,8 +210,11 @@ export async function runVelocidad(tenantId: string, projectId: string, heartbea
   // mixto e imágenes. Si una página no se deja medir, se omite; si no se pudo medir ninguna, sus hallazgos no se tocan.
   const labRows: LabRow[] = [];
   let labTried = 0;
+  let labOpen: Parameters<typeof labSyncSet>[2] = [];
   if (src.lab) {
-    for (const url of representativeUrls(home, top, 5)) {
+    const openLab = await listFindings(tenantId, projectId, { status: ['abierto'] }).then((fs) => fs.filter((f) => f.source === VELOCIDAD_SOURCE && LAB_KINDS.includes(f.kind)));
+    labOpen = openLab.map((f) => ({ kind: f.kind, dedupeKey: f.dedupeKey, url: f.url, value: f.value, evidence: (f.evidence ?? {}) as Record<string, unknown> }));
+    for (const url of representativeUrls(home, top, 5, [...new Set(openLab.map((f) => f.url).filter((u): u is string => Boolean(u)))])) {
       labTried++;
       await heartbeat();
       const r = await src.lab(tenantId, url).catch((e) => {
@@ -221,8 +225,14 @@ export async function runVelocidad(tenantId: string, projectId: string, heartbea
     }
   }
   const lab = labFindings(labRows);
-  await syncFindings(tenantId, projectId, VELOCIDAD_SOURCE, [...found, ...lab], ['seo.cwv_slow', 'seo.cwv_average', ...(labRows.length ? LAB_KINDS : [])]);
-  const labText = labTried ? ` Laboratorio: ${labRows.length} de ${labTried} página(s) medida(s)${lab.length ? `, ${lab.length} problema(s)` : ''}.` : '';
+  // Solo se resuelve lo de las páginas medidas; lo de las que fallaron (o no se midieron) se conserva tal cual.
+  // Si Lighthouse no trajo auditorías de imágenes, los hallazgos de imágenes tampoco se tocan.
+  const imagesKnown = labRows.some((r) => r.imagesKnown);
+  const measured = new Set(labRows.map((r) => r.url));
+  const labKinds = labRows.length ? LAB_KINDS.filter((k) => imagesKnown || !k.startsWith('seo.images_')) : [];
+  const labSet = labSyncSet(lab, measured, labOpen.filter((f) => labKinds.includes(f.kind)));
+  await syncFindings(tenantId, projectId, VELOCIDAD_SOURCE, [...found, ...labSet], ['seo.cwv_slow', 'seo.cwv_average', ...labKinds]);
+  const labText = labTried ? ` Laboratorio: ${labRows.length} de ${labTried} página(s) medida(s)${lab.length ? `, ${lab.length} problema(s)` : ''}${labRows.length && !imagesKnown ? '; Lighthouse no trajo las auditorías de imágenes (no se juzgan)' : ''}.` : '';
   if (!rows.length) return { status: lab.length ? 'aviso' : 'ok', summary: `Google aún no tiene datos reales de velocidad de esta web (poco tráfico de Chrome).${labText}` };
   return { status: found.some((f) => f.kind === 'seo.cwv_slow') || lab.length ? 'aviso' : 'ok', summary: `${rows.length} página(s) medida(s) con datos reales: ${found.length ? `${found.length} con velocidad mejorable o lenta` : 'velocidad correcta'}.${labText}` };
 }

@@ -113,7 +113,8 @@ export function hreflangIssues(pages: TecnicoPage[]): FindingInput[] {
         broken.push(a.url);
         continue;
       }
-      if (!(other.hreflang ?? []).some((b) => sameUrl(b.url, p.url))) notBack.push(a.url);
+      // Si la otra versión no declara ningún hreflang en el HTML, puede que vayan por cabecera o sitemap (no se leen): no se juzga.
+      if ((other.hreflang ?? []).length && !(other.hreflang ?? []).some((b) => sameUrl(b.url, p.url))) notBack.push(a.url);
     }
     if (notBack.length) out.push(mk('seo.hreflang_not_reciprocal', short(p.url), { url: p.url, metric: 'versiones', value: notBack.length, evidence: { alternates: notBack.slice(0, 10) } }));
     if (broken.length) out.push(mk('seo.hreflang_broken', short(p.url), { url: p.url, metric: 'versiones', value: broken.length, evidence: { alternates: broken.slice(0, 10) } }));
@@ -138,12 +139,14 @@ export type PrevPage = Pick<AuditPage, 'url' | 'statusCode' | 'contentType' | 'r
  */
 export function pageRegressions(current: TecnicoPage[], previous: PrevPage[]): FindingInput[] {
   if (!previous.length || !current.length) return [];
-  const fetchErrors = current.filter((p) => !p.statusCode).length;
-  if (fetchErrors / current.length > 0.2) return [];
+  // Fallos de conexión o bloqueos de un cortafuegos o límite de ritmo (401/403/429/503): no dicen nada de la página.
+  const BLOCKED = new Set([401, 403, 429, 503]);
+  const unreliable = current.filter((p) => !p.statusCode || BLOCKED.has(p.statusCode)).length;
+  if (unreliable / current.length > 0.2) return [];
   const prevByUrl = new Map(previous.map((p) => [p.url, p]));
   const out: FindingInput[] = [];
   for (const p of current) {
-    if (!p.statusCode) continue;
+    if (!p.statusCode || BLOCKED.has(p.statusCode)) continue;
     const before = prevByUrl.get(p.url) ?? previous.find((x) => sameUrl(x.url, p.url));
     if (!before || !isIndexable(before as AuditPage)) continue;
     const nowNoindex = /noindex|none/i.test(`${p.robotsMeta ?? ''} ${p.xRobots ?? ''}`);

@@ -1,9 +1,9 @@
 // SEO parte 1 · técnico completo (26 nov 2026; docs/DISENO-SEO-PARTE1.md): reglas puras nuevas de la auditoría.
 import { describe, expect, it } from 'vitest';
 import { genericAnchors, hreflangIssues, isGenericAnchor, langMissing, pageRegressions, redirectLoops, type TecnicoPage } from '@/lib/seo/salud/audit-rules-tecnico';
-import { labFindings, representativeUrls } from '@/lib/seo/vigilancia/rules';
+import { labFindings, labSyncSet, representativeUrls } from '@/lib/seo/vigilancia/rules';
 import { summarizeLighthouse } from '@/lib/agentes/integrations';
-import { SEO_KINDS } from '@/lib/seo/salud/kinds';
+import { SALUD_KINDS, SEO_KINDS } from '@/lib/seo/salud/kinds';
 import { KIND_TECHNIQUE } from '@/lib/seo/plan/rules';
 
 const page = (url: string, extra: Partial<TecnicoPage> = {}): TecnicoPage => ({
@@ -96,11 +96,41 @@ describe('parte 1: reglas técnicas', () => {
         'total-byte-weight': { score: 0, numericValue: 3 * 1024 * 1024 }
       }
     });
-    expect(lab).toMatchObject({ score: 42, viewportOk: false, httpsOk: false, unsizedImages: 4, imageSavingsKb: 300, totalKb: 3072 });
+    expect(lab).toMatchObject({ score: 42, viewportOk: false, httpsOk: false, unsizedImages: 4, imageSavingsKb: 300, totalKb: 3072, imagesKnown: true });
     const f = labFindings([{ url: 'https://w.com/', ...lab }]);
     expect(f.map((x) => x.kind).sort()).toEqual(['seo.images_heavy', 'seo.images_unsized', 'seo.mixed_content', 'seo.viewport_missing']);
     expect(labFindings([{ url: 'https://w.com/', ...summarizeLighthouse({ audits: { viewport: { score: 1 }, 'is-on-https': { score: 1 } } }) }])).toEqual([]);
     expect(representativeUrls('https://w.com/', ['https://w.com/blog/a', 'https://w.com/blog/b', 'https://w.com/servicios/x'], 3)).toEqual(['https://w.com/', 'https://w.com/blog/a', 'https://w.com/servicios/x']);
+  });
+
+  it('los tipos de la auditoría están en SALUD_KINDS (si no, la auditoría nunca los resolvería)', () => {
+    const salud = new Set(SALUD_KINDS.map((k) => k.kind));
+    for (const k of ['seo.page_regressed', 'seo.redirect_loop', 'seo.anchor_generic', 'seo.hreflang_invalid', 'seo.hreflang_not_reciprocal', 'seo.hreflang_broken', 'seo.lang_missing']) expect(salud.has(k), k).toBe(true);
+  });
+
+  it('regresiones: un 403/429/503 (cortafuegos) no es una página rota', () => {
+    const prev = [page('/a'), page('/b'), page('/c'), page('/d'), page('/e'), page('/f')];
+    expect(pageRegressions([page('/a', { statusCode: 403 }), page('/b'), page('/c'), page('/d'), page('/e'), page('/f')], prev)).toEqual([]);
+    expect(pageRegressions(prev.map((p) => ({ ...p, statusCode: 429 })), prev)).toEqual([]);
+  });
+
+  it('Lighthouse nuevo (insights) y sin auditorías de imágenes', () => {
+    const nuevo = summarizeLighthouse({ audits: { 'image-delivery-insight': { score: 0, details: { items: [{ wastedBytes: 100 * 1024 }, { wastedBytes: 80 * 1024 }] } } } });
+    expect(nuevo).toMatchObject({ imageSavingsKb: 180, imagesKnown: true });
+    const sin = summarizeLighthouse({ audits: { viewport: { score: 1 } } });
+    expect(sin.imagesKnown).toBe(false);
+    expect(labFindings([{ url: 'https://w.com/', ...sin, imageSavingsKb: 999, unsizedImages: 9 }])).toEqual([]);
+  });
+
+  it('laboratorio: solo se resuelve lo de las páginas medidas', () => {
+    const open = [
+      { kind: 'seo.viewport_missing', dedupeKey: 'seo.viewport_missing:https://w.com/a', url: 'https://w.com/a', value: null, evidence: {} },
+      { kind: 'seo.viewport_missing', dedupeKey: 'seo.viewport_missing:https://w.com/b', url: 'https://w.com/b', value: null, evidence: {} }
+    ];
+    // «a» se midió y ya está bien (no viene en lo nuevo): se resuelve; «b» falló: se conserva.
+    const set = labSyncSet([], new Set(['https://w.com/a']), open);
+    expect(set.map((f) => f.url)).toEqual(['https://w.com/b']);
+    expect(representativeUrls('https://w.com/', ['https://w.com/x'], 3, ['https://w.com/b'])).toEqual(['https://w.com/b', 'https://w.com/', 'https://w.com/x']);
   });
 
   it('cada tipo de SEO tiene técnica en el plan', () => {

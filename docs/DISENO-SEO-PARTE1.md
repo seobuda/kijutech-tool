@@ -83,4 +83,36 @@ La alternativa **A**, más reglas puras en `lib/seo/salud/audit-rules-tecnico.ts
 - **Render de JavaScript:** añadir Chromium (`playwright-core` + paquete del sistema en el `Dockerfile`), unos 300 MB de imagen y la CPU por medir. Solo se renderizarían las páginas sospechosas (≤ 20 por auditoría). Se pregunta; mientras, no se construye.
 
 ## Auditoría independiente
-*(se rellena con el resultado)*
+La hizo un subagente Opus 5.5 con esfuerzo alto el 26 nov. **Veredicto:** la alternativa A (`facts`) es válida para guardar los hechos, pero **no hay que construir todavía** la comparación entre rastreos ni los enlaces rotos tal como estaban.
+
+**Graves:**
+1. **La comparación era un evento y `syncFindings` trabaja con estados.** Una «página desaparecida» se resolvería sola en el siguiente rastreo sin que nadie la arreglara.
+2. **Falsos «desaparecida».** Una página puede faltar por muchas razones:
+   - el tope de páginas, que cuenta redirecciones y errores;
+   - la página que la enlaza tardó demasiado;
+   - el sitemap falló;
+   - robots.txt bloquea a nuestro robot;
+   - cambió la raíz de la web.
+3. **Los enlaces externos se resolverían y reabrirían en cada auditoría** si comparten tipos con Salud. Además, la clave de deduplicación no lleva la fuente, y el muestreo resuelve lo que no se mira.
+
+**Medios:**
+- `fetchPublic` resuelve el DNS dos veces, así que queda abierto al DNS rebinding (SSRF ciego con enlaces de terceros).
+- El DNS no distingue NXDOMAIN de un fallo transitorio.
+- 300 URLs no caben en 300 s.
+- robots.txt está analizado para nuestro robot y no para Googlebot.
+- CrUX cae al origen, así que no sirve «por plantilla».
+
+**Alternativa que propuso:** PageSpeed Insights (Lighthouse en Google, con la misma clave) en 6 páginas o menos, para el viewport, el contenido mixto y las imágenes. Así no hay peticiones a terceros y hay menos falsos positivos.
+
+**Decisión final, con los cambios aplicados:**
+- **Tanda 1 (hecha):**
+  - Reglas sobre datos que ya existían: bucles de redirección, anchors genéricos, hreflang (inválido, sin vuelta y roto; solo se juzga si la otra versión está en el rastreo) y lang.
+  - **Regresiones como estado** (`seo.page_regressed`): solo páginas que este rastreo ha vuelto a pedir, que antes eran indexables y ahora dan error o noindex. Nunca se dan por desaparecidas por ausencia. Si más del 20 % del rastreo falló por conexión, no se juzga.
+  - **Laboratorio de PageSpeed** dentro de `seo.velocidad`: 5 páginas representativas como mucho (la portada y las más visitadas de secciones distintas), con los hallazgos viewport, contenido mixto, imágenes sin tamaño (info) e imágenes pesadas. No se usan HEAD a terceros ni la columna `facts` para esto.
+  - CrUX «por plantilla» se descarta: casi siempre cae al origen. Lo sustituye el laboratorio por página representativa.
+- **Tanda 2 (pendiente):**
+  - blindar `fetchPublic` (lookup validado al conectar);
+  - columna `facts` (recursos CSS/JS del mismo origen y enlaces externos, deduplicados por rastreo);
+  - robots.txt contra Googlebot;
+  - enlaces rotos hacia fuera con fuente propia `seo.salud:externos` y lista de tipos aparte, en un trabajo por tramos que vuelve a comprobar primero las ya abiertas; un error de DNS solo cuenta tras dos comprobaciones;
+  - el título cambiado se descarta (es un evento).

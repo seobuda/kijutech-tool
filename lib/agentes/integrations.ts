@@ -290,13 +290,20 @@ export async function cruxField(tenantId: string, url: string): Promise<import('
   return null;
 }
 
-type LhAudit = { score?: number | null; numericValue?: number; details?: { items?: { url?: string }[]; overallSavingsBytes?: number } };
+type LhAudit = { score?: number | null; numericValue?: number; details?: { items?: { url?: string; wastedBytes?: number }[]; overallSavingsBytes?: number } };
 
 /** Resume las auditorías de Lighthouse que usa SEO (puro: se prueba con una respuesta guardada). */
 export function summarizeLighthouse(lh: { categories?: { performance?: { score?: number | null } }; audits?: Record<string, LhAudit> } | undefined): import('@/lib/core/capabilities').SpeedLab {
   const a = lh?.audits ?? {};
   const pass = (id: string) => (a[id] && typeof a[id].score === 'number' ? a[id].score! >= 0.9 : null);
-  const savings = ['uses-optimized-images', 'modern-image-formats', 'uses-responsive-images'].reduce((t, id) => t + (a[id]?.details?.overallSavingsBytes ?? 0), 0);
+  // Lighthouse cambió las auditorías de imágenes por «insights» (image-delivery-insight); se leen las dos versiones.
+  const legacyImg = ['uses-optimized-images', 'modern-image-formats', 'uses-responsive-images'].filter((id) => a[id]);
+  const insight = a['image-delivery-insight'];
+  const savings = legacyImg.length
+    ? legacyImg.reduce((t, id) => t + (a[id]?.details?.overallSavingsBytes ?? 0), 0)
+    : insight
+      ? (insight.details?.overallSavingsBytes ?? (insight.details?.items ?? []).reduce((t, i) => t + (i.wastedBytes ?? 0), 0))
+      : 0;
   const score = lh?.categories?.performance?.score;
   return {
     score: typeof score === 'number' ? Math.round(score * 100) : null,
@@ -305,7 +312,8 @@ export function summarizeLighthouse(lh: { categories?: { performance?: { score?:
     insecureRequests: (a['is-on-https']?.details?.items ?? []).map((i) => String(i.url ?? '')).filter(Boolean).slice(0, 20),
     unsizedImages: a['unsized-images']?.details?.items?.length ?? 0,
     imageSavingsKb: Math.round(savings / 1024),
-    totalKb: typeof a['total-byte-weight']?.numericValue === 'number' ? Math.round(a['total-byte-weight'].numericValue / 1024) : null
+    totalKb: typeof a['total-byte-weight']?.numericValue === 'number' ? Math.round(a['total-byte-weight'].numericValue / 1024) : null,
+    imagesKnown: legacyImg.length > 0 || Boolean(insight)
   };
 }
 

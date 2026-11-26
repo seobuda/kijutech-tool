@@ -128,7 +128,7 @@ export function addDays(date: string, n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-export type LabRow = { url: string; viewportOk: boolean | null; httpsOk: boolean | null; insecureRequests: string[]; unsizedImages: number; imageSavingsKb: number; totalKb: number | null; score: number | null };
+export type LabRow = { url: string; viewportOk: boolean | null; httpsOk: boolean | null; insecureRequests: string[]; unsizedImages: number; imageSavingsKb: number; totalKb: number | null; score: number | null; imagesKnown: boolean };
 
 /** Tipos que salen de la prueba de laboratorio (se sincronizan con la fuente de velocidad). */
 export const LAB_KINDS = ['seo.viewport_missing', 'seo.mixed_content', 'seo.images_unsized', 'seo.images_heavy'];
@@ -145,15 +145,16 @@ export function labFindings(rows: LabRow[]): FindingInput[] {
     if (r.viewportOk === false) out.push({ kind: 'seo.viewport_missing', dedupeKey: `seo.viewport_missing:${k}`, url: r.url });
     const isHttps = r.url.startsWith('https://');
     if (isHttps && (r.insecureRequests.length || r.httpsOk === false)) out.push({ kind: 'seo.mixed_content', dedupeKey: `seo.mixed_content:${k}`, url: r.url, metric: 'recursos', value: r.insecureRequests.length, evidence: { samples: r.insecureRequests.slice(0, 10) } });
-    if (r.unsizedImages >= 3) out.push({ kind: 'seo.images_unsized', dedupeKey: `seo.images_unsized:${k}`, url: r.url, metric: 'imagenes', value: r.unsizedImages });
-    if (r.imageSavingsKb >= 150) out.push({ kind: 'seo.images_heavy', dedupeKey: `seo.images_heavy:${k}`, url: r.url, metric: 'ahorro_kb', value: r.imageSavingsKb, evidence: { totalKb: r.totalKb, score: r.score } });
+    if (r.imagesKnown && r.unsizedImages >= 3) out.push({ kind: 'seo.images_unsized', dedupeKey: `seo.images_unsized:${k}`, url: r.url, metric: 'imagenes', value: r.unsizedImages });
+    if (r.imagesKnown && r.imageSavingsKb >= 150) out.push({ kind: 'seo.images_heavy', dedupeKey: `seo.images_heavy:${k}`, url: r.url, metric: 'ahorro_kb', value: r.imageSavingsKb, evidence: { totalKb: r.totalKb, score: r.score } });
   }
   return out;
 }
 
 /** Páginas representativas para la prueba de laboratorio: la portada y las más visitadas de secciones distintas. */
-export function representativeUrls(home: string, topByClicks: string[], max = 5): string[] {
-  const out = [home];
+export function representativeUrls(home: string, topByClicks: string[], max = 5, keep: string[] = []): string[] {
+  // Primero las que ya tienen hallazgos abiertos (para poder resolverlos al arreglarse), luego la portada.
+  const out = [...new Set([...keep, home])].slice(0, max);
   const seen = new Set<string>(['/']);
   for (const u of topByClicks) {
     if (out.length >= max) break;
@@ -174,4 +175,13 @@ export function representativeUrls(home: string, topByClicks: string[], max = 5)
     if (!out.includes(u)) out.push(u);
   }
   return out;
+}
+
+/**
+ * Qué hallazgos del laboratorio se pueden resolver en esta pasada: solo los de las URLs medidas (si una falló, lo suyo
+ * no se toca). Devuelve, además de lo nuevo, los abiertos de las URLs no medidas para que syncFindings los conserve.
+ */
+export function labSyncSet(found: FindingInput[], measured: Set<string>, openLab: { kind: string; dedupeKey: string; url: string | null; value: number | null; evidence: Record<string, unknown> }[]): FindingInput[] {
+  const keep = openLab.filter((f) => !f.url || !measured.has(f.url)).map((f) => ({ kind: f.kind, dedupeKey: f.dedupeKey, url: f.url, value: f.value, evidence: f.evidence }));
+  return [...found, ...keep];
 }
