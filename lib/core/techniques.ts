@@ -26,6 +26,7 @@ export const TECHNIQUES: Technique[] = [
   { key: 'idiomas_corregidos', domain: 'seo', label: 'Corregir idiomas y hreflang', metric: 'impresiones', windowDays: 56 },
   { key: 'adaptar_movil', domain: 'seo', label: 'Adaptar la página al móvil', metric: 'impresiones', windowDays: 56 },
   { key: 'imagenes_optimizadas', domain: 'seo', label: 'Optimizar imágenes', metric: 'clics', windowDays: 56 },
+  { key: 'enlaces_externos_corregidos', domain: 'seo', label: 'Arreglar enlaces rotos hacia otras webs', metric: 'impresiones', windowDays: 42 },
   { key: 'recuperar_pagina', domain: 'seo', label: 'Recuperar una página que pierde clics', metric: 'clics', windowDays: 56 },
   { key: 'canibalizacion_resuelta', domain: 'seo', label: 'Resolver una canibalización (una página por búsqueda)', metric: 'posicion', windowDays: 42 },
   { key: 'contenido_duplicado', domain: 'seo', label: 'Quitar o unificar contenido duplicado', metric: 'clics', windowDays: 56 },
@@ -89,4 +90,20 @@ export function techniqueFromCategory(category: string | null | undefined): stri
     default:
       return 'otra';
   }
+}
+
+/**
+ * Cómo se comprueba cada técnica (SEO parte 1, 26 nov 2026). Las que corrigen algo técnico se comprueban primero con una
+ * nueva auditoría (el hallazgo debe desaparecer); las de velocidad, con la medición de velocidad; las de contenido y
+ * posiciones, solo con el resultado en Search Console. Después, siempre, el efecto en la métrica de la hipótesis.
+ */
+const GSC_ONLY = new Set(['optimizar_al_alcance', 'reforzar_pagina_tema', 'nueva_pagina_tema', 'nueva_landing_servicio', 'canibalizacion_resuelta', 'contenido_ampliado', 'recuperar_pagina', 'enlazado_interno', 'titulo_reescrito', 'meta_descripcion']);
+const SPEED = new Set(['velocidad', 'imagenes_optimizadas']);
+const METRIC_LABEL: Record<string, string> = { clics: 'los clics', impresiones: 'las impresiones', ctr: 'el CTR', posicion: 'la posición media' };
+
+export function verifyPlan(technique: string, metric: string, windowDays: number): { check: 'reauditoria' | 'velocidad' | 'gsc'; checkAfterDays: number; how: string } {
+  const effect = `y a las ${Math.round(windowDays / 7)} semanas se compara ${METRIC_LABEL[metric] ?? metric} de esas páginas en Search Console con el periodo anterior y con páginas parecidas que no se han tocado (si hay pocos datos, el resultado será «no concluyente»)`;
+  if (SPEED.has(technique)) return { check: 'velocidad', checkAfterDays: 7, how: `A la semana se vuelve a medir la velocidad (laboratorio y, al mes, usuarios reales) ${effect}.` };
+  if (GSC_ONLY.has(technique)) return { check: 'gsc', checkAfterDays: windowDays, how: `Se comprueba que el cambio está publicado ${effect}.` };
+  return { check: 'reauditoria', checkAfterDays: 14, how: `A las 2 semanas, una nueva auditoría debe dejar de encontrar el problema (o pulsa «Comprobar ahora» en Salud) ${effect}.` };
 }

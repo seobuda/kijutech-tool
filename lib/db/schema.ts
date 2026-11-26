@@ -3821,6 +3821,8 @@ export const crawlPages = pgTable(
     jsonld: jsonb('jsonld'),
     schemaTypes: text('schema_types').array(),
     imagesWithoutAlt: integer('images_without_alt'),
+    // Hechos acotados (0067): { ext: enlaces a otras webs (≤ 100), res: CSS y JS que carga (≤ 40) }.
+    facts: jsonb('facts').$type<{ ext?: string[]; res?: string[] }>(),
     bytes: integer('bytes'),
     fetchMs: integer('fetch_ms'),
     error: text('error'),
@@ -3894,7 +3896,14 @@ export type Finding = typeof findings.$inferSelect;
 // dirección, en cuánto tiempo), escrito al aprobarlo: es el dato que no se puede recuperar después. Lo escriben SEO
 // (plan de mejora), Estrategia (propuestas aprobadas) y, después, Ads; la fecha de «hecho» la pone el núcleo
 // preguntando a la fuente de trabajo. Sirve para medir qué técnicas funcionan, por tipo de negocio.
-export type InterventionHypothesis = { metric?: string; direction?: 'sube' | 'baja'; magnitudePct?: number; windowDays?: number };
+export type InterventionHypothesis = {
+  metric?: string;
+  direction?: 'sube' | 'baja';
+  magnitudePct?: number;
+  windowDays?: number;
+  /** Cómo y cuándo se comprobará (SEO parte 1, 26 nov 2026): primero que está hecho (nueva auditoría o velocidad) y luego el efecto en Search Console. */
+  verify?: { check: 'reauditoria' | 'velocidad' | 'gsc'; checkAfterDays: number; how: string };
+};
 export const interventions = pgTable(
   'interventions',
   {

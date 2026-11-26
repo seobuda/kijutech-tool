@@ -49,6 +49,9 @@ export const SALUD_KINDS: SaludKind[] = [
   { kind: 'seo.schema_self_reviews', group: 'datos_estructurados', title: 'Reseñas del propio negocio marcadas', explain: 'Google no muestra estrellas de reseñas que un negocio pone sobre sí mismo y puede considerarlo marcado engañoso.', severityDefault: 'aviso', ruleVersion: 1 },
   { kind: 'seo.gsc_page_not_crawled', group: 'search_console', title: 'Página con impresiones que el rastreo no encontró', explain: 'Google la muestra en resultados pero no se llega a ella navegando por la web: puede estar huérfana, fuera del sitemap o ser antigua.', severityDefault: 'aviso', ruleVersion: 1 },
   // Parte 1, técnico completo (26 nov 2026): sobre datos que el rastreo ya guardaba.
+  { kind: 'seo.robots_blocks_resources', group: 'rastreo', title: 'robots.txt bloquea a Google estilos o scripts de la web', explain: 'Google no puede descargar algunos CSS o JavaScript de la web porque robots.txt se lo prohíbe: no ve la página como un usuario y puede pensar que no está adaptada al móvil o que le falta contenido.', severityDefault: 'importante', ruleVersion: 1 },
+  { kind: 'seo.sitemap_blocked', group: 'indexacion', title: 'Páginas del sitemap bloqueadas por robots.txt', explain: 'El sitemap pide a Google que rastree páginas que robots.txt le prohíbe visitar: o sobran en el sitemap o el bloqueo es un error.', severityDefault: 'aviso', ruleVersion: 1 },
+  { kind: 'seo.ai_crawlers_blocked', group: 'rastreo', title: 'robots.txt bloquea a rastreadores de IA', explain: 'Algunos asistentes de IA no pueden leer la web. Si son los de búsqueda (ChatGPT, Perplexity, Claude, Copilot), la web no podrá salir citada en sus respuestas. Bloquear los de entrenamiento (GPTBot, Google-Extended) es una decisión del cliente.', severityDefault: 'aviso', ruleVersion: 1 },
   { kind: 'seo.page_regressed', group: 'indexacion', title: 'Página que funcionaba y ahora no', explain: 'En el rastreo anterior esta página respondía bien y se podía indexar; ahora da error o tiene noindex. Suele pasar tras un cambio en la web (plugin, migración, tema nuevo). Si no es a propósito, hay que corregirlo antes de que Google la quite.', severityDefault: 'importante', ruleVersion: 1 },
   { kind: 'seo.redirect_loop', group: 'rastreo', title: 'Bucle de redirecciones', explain: 'Unas URLs se redirigen entre sí y nunca llegan a una página: el navegador muestra un error y Google abandona. Hay que dejar una sola redirección al destino final.', severityDefault: 'importante', ruleVersion: 1 },
   { kind: 'seo.anchor_generic', group: 'enlazado', title: 'Página enlazada casi siempre con textos genéricos', explain: 'Casi todos los enlaces internos a esta página dicen «leer más», «aquí» o nada. Google usa el texto del enlace para entender de qué trata la página: mejor describir el destino («reformas de cocinas en Sabadell»).', severityDefault: 'info', ruleVersion: 1 },
@@ -98,5 +101,10 @@ export const VIGILANCIA_KINDS: SaludKind[] = [
   { kind: 'seo.page_drop', group: 'search_console', title: 'Página que pierde clics', explain: 'Esta página ha perdido una parte importante de sus clics de Google en las últimas 4 semanas frente a las 4 anteriores. Si el año pasado no pasó lo mismo, no es temporada: revisar si cambió la página, si un competidor la adelantó o si hubo una actualización de Google.', severityDefault: 'aviso', ruleVersion: 1 }
 ];
 
-export const SEO_KINDS: SaludKind[] = [...SALUD_KINDS, ...LOCAL_KINDS, ...MAPA_KINDS, ...VIGILANCIA_KINDS];
+/** Enlaces a otras webs (fuente «seo.salud:externos»): trabajo aparte, con su propia lista para que la auditoría no los resuelva. */
+export const EXTERNOS_KINDS: SaludKind[] = [
+  { kind: 'seo.external_broken', group: 'enlazado', title: 'Enlace roto hacia otra web', explain: 'La web enlaza a una página de otra web que ya no existe (404/410) o a un dominio que ha dejado de existir. Al visitante le sale un error y transmite descuido: hay que quitar el enlace o cambiarlo por uno que funcione.', severityDefault: 'aviso', ruleVersion: 1 }
+];
+
+export const SEO_KINDS: SaludKind[] = [...SALUD_KINDS, ...LOCAL_KINDS, ...MAPA_KINDS, ...VIGILANCIA_KINDS, ...EXTERNOS_KINDS];
 export const SALUD_KIND_BY_KEY = new Map(SEO_KINDS.map((k) => [k.kind, k]));

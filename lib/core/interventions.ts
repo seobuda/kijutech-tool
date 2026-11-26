@@ -10,7 +10,7 @@ import { db } from '@/lib/db/drizzle';
 import { clients, interventions, type Intervention, type InterventionHypothesis } from '@/lib/db/schema';
 import { workSource } from '@/lib/core/capabilities';
 import { ensureSchedule, registerJobKind, registerProcess } from '@/lib/core/jobs';
-import { normalizeTechnique, TAXONOMY_VERSION, TECHNIQUE_BY_KEY, type TechniqueDomain } from '@/lib/core/techniques';
+import { normalizeTechnique, TAXONOMY_VERSION, TECHNIQUE_BY_KEY, verifyPlan, type TechniqueDomain } from '@/lib/core/techniques';
 
 export const INTERVENTIONS_SYNC = 'core.interventions.sync';
 
@@ -36,6 +36,7 @@ export function completeHypothesis(technique: string, h: InterventionHypothesis 
   const out: InterventionHypothesis = { metric: h?.metric || t?.metric || 'clics', direction, windowDays: clampInt(h?.windowDays, 7, 365) ?? t?.windowDays ?? 56 };
   const mag = Number(h?.magnitudePct);
   if (Number.isFinite(mag) && mag > 0) out.magnitudePct = Math.min(1000, Math.round(mag));
+  out.verify = h?.verify ?? verifyPlan(technique, out.metric!, out.windowDays!);
   return out;
 }
 function clampInt(v: unknown, min: number, max: number): number | null {
