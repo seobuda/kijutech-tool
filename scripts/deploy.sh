@@ -4,8 +4,8 @@
 #   bash scripts/deploy.sh             sube `main`, reconstruye y verifica
 #   bash scripts/deploy.sh --migrate   además: backup con pg_dump ANTES y migraciones de Drizzle después
 #
-# Protocolo de autonomía (19 nov 2026, aprobado por Enric): Claude puede lanzar `bash scripts/deploy.sh` sin preguntar;
-# `--migrate` SIEMPRE necesita el OK de Enric (el permiso de Claude Code no lo incluye). Por eso el script:
+# Protocolo de autonomía (19 nov 2026, ampliado el 26 nov; ver CLAUDE.md «Reglas de autonomía»): Claude puede lanzar
+# `bash scripts/deploy.sh` y, con migraciones solo aditivas, `--migrate` sin preguntar. Por eso el script:
 #   1. se niega si no estás en main, hay cambios sin commit o main no está subida;
 #   2. pasa las pruebas y la comprobación del Mapa Visual sobre el commit EXACTO que se sube (copia en el contenedor local);
 #   3. se niega si hay migraciones pendientes y no se pidió --migrate;
@@ -61,7 +61,7 @@ grep -E 'Mapa Visual OK|Tests ' "$TMP/tests.log" | sed 's/^/  /'
 EXPECTED="$(git show main:lib/db/migrations/meta/_journal.json | grep -c '"tag"')"
 APPLIED="$("${SSH[@]}" "docker exec kijutech_db psql -U kijutech -d kijutech_db -tAc 'select count(*) from drizzle.__drizzle_migrations'" | tr -d '[:space:]')"
 if [[ $MIGRATE -eq 0 && "$APPLIED" -lt "$EXPECTED" ]]; then
-  echo "✗ Hay $((EXPECTED - APPLIED)) migración(es) pendiente(s) en producción: hace falta --migrate, con el OK de Enric. NO se despliega." >&2
+  echo "✗ Hay $((EXPECTED - APPLIED)) migración(es) pendiente(s) en producción: hace falta --migrate (solo migraciones aditivas sin preguntar; ver CLAUDE.md). NO se despliega." >&2
   exit 1
 fi
 if [[ "$APPLIED" -gt "$EXPECTED" ]]; then
@@ -131,7 +131,7 @@ if [[ "$WEB" != "200" || "$JSERR" != "0" ]]; then
     echo "→ La versión nueva no está bien: volviendo sola a la anterior" >&2
     bash scripts/rollback.sh || echo "✗ La vuelta atrás también falló: hay que mirarlo YA (bash scripts/server-status.sh --logs)." >&2
   else
-    echo "✗ Con migración NO se vuelve atrás sola (la base ya cambió). Opciones: bash scripts/rollback.sh (solo código) o restaurar backups/backup_pre_deploy_${STAMP}.sql.gz. Lo decide Enric." >&2
+    echo "✗ Con migración NO se vuelve atrás sola (la base ya cambió). Opciones: bash scripts/rollback.sh (solo código) o restaurar backups/backup_pre_deploy_${STAMP}.sql.gz (la base, solo con el OK de Enric)." >&2
   fi
   exit 1
 fi
