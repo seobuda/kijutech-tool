@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { jobSchedules, projects, seoDataSpend, tenants, users } from '@/lib/db/schema';
-import { ensureSchedule, ensureScheduleIfMissing, pauseSchedule, setScheduleEvery, stableOffsetMinutes } from '@/lib/core/jobs';
+import { activeScheduleKeys, ensureSchedule, ensureScheduleIfMissing, pauseSchedule, setScheduleEvery, stableOffsetMinutes } from '@/lib/core/jobs';
 import {
   everyLabel,
   pageDropFindings,
@@ -36,6 +36,9 @@ describe('vigilancia: reglas puras', () => {
     expect(vigilanciaFindings(home, { status: 200, finalUrl: home, noindex: true }, 'User-agent: *\nDisallow: /', 5).map((f) => f.kind)).toEqual(['seo.home_noindex', 'seo.robots_block_all', 'seo.ssl_expiring']);
     expect(vigilanciaFindings(home, { status: 200, finalUrl: home, noindex: false }, null, -2)[0].severity).toBe('critico');
     expect(vigilanciaFindings(home, { status: 200, finalUrl: home, noindex: false }, null, 30)).toEqual([]);
+    // Un cortafuegos que bloquea al robot (403/429) no es una web rota: aviso, no crítico.
+    expect(vigilanciaFindings(home, { status: 403, finalUrl: home, noindex: false }, null, null)[0].severity).toBe('aviso');
+    expect(vigilanciaFindings(home, { status: 404, finalUrl: home, noindex: false }, null, null)[0].severity).toBe('critico');
   });
 
   it('solo avisa en la pasada de confirmación y si sigue habiendo algo crítico', () => {
@@ -129,6 +132,10 @@ describe('vigilancia: programación y gasto (base de datos)', () => {
     const r = await row('seo.vigilancia');
     expect(r.everyMinutes).toBe(360);
     expect(r.pausedUntil?.getTime()).toBe(until.getTime());
+    // En pausa no cuenta como activo: Estrategia no debe dejar de vigilar a ese cliente.
+    expect((await activeScheduleKeys(tenantId, ['seo.vigilancia'], [projectId])).size).toBe(0);
+    await pauseSchedule(tenantId, 'seo.vigilancia', projectId, { pausedUntil: null });
+    expect((await activeScheduleKeys(tenantId, ['seo.vigilancia'], [projectId])).has('seo.vigilancia')).toBe(true);
     await ensureSchedule(tenantId, 'seo.vigilancia', projectId, 60);
     expect((await row('seo.vigilancia')).everyMinutes).toBe(60);
   });

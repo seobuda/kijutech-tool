@@ -14,7 +14,7 @@ import tls from 'node:tls';
 import { and, eq, isNotNull, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { projects } from '@/lib/db/schema';
-import { disableSchedule, enqueueJob, ensureScheduleIfMissing, pauseSchedule, registerJobKind, registerProcess, stableOffsetMinutes } from '@/lib/core/jobs';
+import { disableSchedule, enqueueJob, ensureScheduleIfMissing, listSchedulesForScope, pauseSchedule, registerJobKind, registerProcess, stableOffsetMinutes } from '@/lib/core/jobs';
 import { emitProjectAlert, metricSources, registerScheduled, speedSource, telegramOutbound } from '@/lib/core/capabilities';
 import { findingKind, syncFindings } from '@/lib/core/findings';
 import { fetchPublic, resolvesPublic } from '@/lib/core/net';
@@ -79,7 +79,7 @@ async function readLimited(res: Response): Promise<string> {
 async function checkHome(url: string): Promise<HomeCheck> {
   try {
     const r = await fetchPublic(url, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(20_000) });
-    if ('error' in r) return { error: r.error };
+    if ('error' in r) return { error: /no permitida/i.test(r.error) ? 'el dominio no resuelve (DNS) o no apunta a una dirección pública' : r.error };
     const xRobots = r.res.headers.get('x-robots-tag') ?? '';
     const type = r.res.headers.get('content-type') ?? '';
     let noindex = /noindex/i.test(xRobots);
@@ -148,7 +148,8 @@ export async function runVigilancia(tenantId: string, projectId: string, confirm
   if (shouldAlert(confirmPass, found, sev)) {
     const lines = critical.map((f) => `• ${esc(findingKind(f.kind)?.title ?? f.kind)}${'error' in check ? ` (${esc(check.error)})` : ''}`);
     const link = BASE_URL() ? `\n<a href="${BASE_URL()}/dashboard/projects/${projectId}/salud">Abrir la Salud del proyecto</a>` : '';
-    const day = new Date().toISOString().slice(0, 10);
+    // Día de Madrid: una caída que cruza la medianoche UTC no repite el aviso a la 1:00.
+    const day = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' });
     await telegramOutbound()?.notifyOwner(tenantId, `seo.vigilancia:${projectId}:${day}:${critical.map((f) => f.kind).sort().join('|')}`, `🚨 <b>${esc(p.name)}</b>: problema en la web (confirmado)\n${lines.join('\n')}${link}`);
     if (p.clientId) await emitProjectAlert({ tenantId, clientId: p.clientId, projectId, title: `Web con problema crítico: ${critical.map((f) => findingKind(f.kind)?.title ?? f.kind).join(', ')}`.slice(0, 300), source: 'seo.vigilancia' });
   }
@@ -250,18 +251,20 @@ export async function runDetectores(tenantId: string, projectId: string): Promis
  */
 export async function ensureProjectSchedules(tenantId: string, project: { id: string; status: string }): Promise<boolean> {
   const web = project.status !== 'archived' ? await projectWebUrl(tenantId, project.id) : null;
+  const existing = new Map((await listSchedulesForScope(tenantId, project.id)).map((r) => [r.processKey, r]));
   for (const key of SEO_PROCESS_KEYS) {
+    const row = existing.get(key);
     if (!web) {
-      await disableSchedule(tenantId, key, project.id);
+      if (row?.enabled) await disableSchedule(tenantId, key, project.id, true);
       continue;
     }
     const every = SEO_PROCESSES[key].every;
     // Primera ejecución repartida dentro de su frecuencia (como mucho un día de espera).
     const offset = stableOffsetMinutes(`${key}:${project.id}`, Math.min(every, 1440));
-    const created = await ensureScheduleIfMissing(tenantId, key, project.id, every, new Date(Date.now() + offset * 60_000));
-    // Si estaba apagado por el sistema (proyecto archivado o sin web) y vuelve a tener web, se enciende. La pausa
-    // de una persona va en paused_until y no se toca.
-    if (!created) await pauseSchedule(tenantId, key, project.id, { enabled: true });
+    if (!row) await ensureScheduleIfMissing(tenantId, key, project.id, every, new Date(Date.now() + offset * 60_000));
+    // Solo se vuelve a encender lo que apagó el propio sistema (proyecto archivado o sin web). Lo que apagó o pausó
+    // una persona no se toca.
+    else if (!row.enabled && row.lastStatus === 'apagado') await pauseSchedule(tenantId, key, project.id, { enabled: true });
   }
   return Boolean(web);
 }

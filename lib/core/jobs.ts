@@ -224,7 +224,8 @@ export async function ensureScheduleIfMissing(tenantId: string, processKey: stri
   return rows.length > 0;
 }
 
-/** Cambia la frecuencia de un proceso ya dado de alta (la siguiente ejecución se recoloca desde la última). */
+/** Cambia la frecuencia de un proceso ya dado de alta. Si la nueva es más corta, la siguiente ejecución se adelanta
+ *  (última + nueva frecuencia); si es más larga, la ya prevista se mantiene una vez y después rige la nueva. */
 export async function setScheduleEvery(tenantId: string, processKey: string, scopeId: string, everyMinutes: number): Promise<boolean> {
   const every = Math.max(1, Math.round(everyMinutes));
   const rows = await db
@@ -250,15 +251,22 @@ export async function listSchedulesForScope(tenantId: string, scopeId: string): 
   return db.select().from(jobSchedules).where(and(eq(jobSchedules.tenantId, tenantId), eq(jobSchedules.scopeId, scopeId)));
 }
 
-/** ¿Tiene este ámbito el proceso dado de alta y encendido? */
-export async function hasActiveSchedule(tenantId: string, processKey: string, scopeIds: string[]): Promise<boolean> {
-  if (!scopeIds.length) return false;
+/** Procesos (de `keys`) encendidos y sin pausa en alguno de estos ámbitos. */
+export async function activeScheduleKeys(tenantId: string, keys: string[], scopeIds: string[]): Promise<Set<string>> {
+  if (!scopeIds.length || !keys.length) return new Set();
   const rows = await db
     .select({ k: jobSchedules.processKey })
     .from(jobSchedules)
-    .where(and(eq(jobSchedules.tenantId, tenantId), eq(jobSchedules.processKey, processKey), eq(jobSchedules.enabled, true), inArray(jobSchedules.scopeId, scopeIds)))
-    .limit(1);
-  return rows.length > 0;
+    .where(
+      and(
+        eq(jobSchedules.tenantId, tenantId),
+        inArray(jobSchedules.processKey, keys),
+        eq(jobSchedules.enabled, true),
+        inArray(jobSchedules.scopeId, scopeIds),
+        sql`(${jobSchedules.pausedUntil} IS NULL OR ${jobSchedules.pausedUntil} <= now())`
+      )
+    );
+  return new Set(rows.map((r) => r.k));
 }
 
 /** Desfase estable (0..every-1 minutos) por ámbito: reparte las primeras ejecuciones para que no coincidan todas. */
@@ -268,10 +276,12 @@ export function stableOffsetMinutes(seed: string, everyMinutes: number): number 
   return everyMinutes > 1 ? h % everyMinutes : 0;
 }
 
-export async function disableSchedule(tenantId: string, processKey: string, scopeId: string): Promise<void> {
+/** Apaga un proceso. `bySystem` lo marca (last_status «apagado») para que el sistema pueda volver a encenderlo solo
+ *  cuando desaparezca el motivo, sin reactivar lo que apagó una persona. */
+export async function disableSchedule(tenantId: string, processKey: string, scopeId: string, bySystem = false): Promise<void> {
   await db
     .update(jobSchedules)
-    .set({ enabled: false, updatedAt: new Date() })
+    .set({ enabled: false, ...(bySystem ? { lastStatus: 'apagado' } : {}), updatedAt: new Date() })
     .where(and(eq(jobSchedules.tenantId, tenantId), eq(jobSchedules.processKey, processKey), eq(jobSchedules.scopeId, scopeId)));
 }
 

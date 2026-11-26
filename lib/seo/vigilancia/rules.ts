@@ -42,7 +42,11 @@ export function vigilanciaFindings(home: string, check: HomeCheck, robotsTxt: st
   const out: FindingInput[] = [];
   if ('error' in check) out.push({ kind: 'seo.site_down', dedupeKey: `seo.site_down:${home}`, url: home, evidence: { error: check.error } });
   else if (check.status >= 500) out.push({ kind: 'seo.site_down', dedupeKey: `seo.site_down:${home}`, url: home, metric: 'status', value: check.status, evidence: { status: check.status } });
-  else if (check.status >= 400) out.push({ kind: 'seo.home_error', dedupeKey: `seo.home_error:${home}`, url: home, metric: 'status', value: check.status, evidence: { status: check.status } });
+  else if (check.status >= 400) {
+    // 401/403/429 suelen ser un cortafuegos que bloquea a nuestro robot, no la web rota: aviso, sin despertar a nadie.
+    const blocked = [401, 403, 429].includes(check.status);
+    out.push({ kind: 'seo.home_error', dedupeKey: `seo.home_error:${home}`, url: home, severity: blocked ? 'aviso' : 'critico', metric: 'status', value: check.status, evidence: { status: check.status, maybeFirewall: blocked } });
+  }
   else if (check.noindex) out.push({ kind: 'seo.home_noindex', dedupeKey: `seo.home_noindex:${home}`, url: check.finalUrl, evidence: {} });
   if (robotsTxt && robotsBlocksAll(robotsTxt)) out.push({ kind: 'seo.robots_block_all', dedupeKey: `seo.robots_block_all:${home}`, url: new URL('/robots.txt', home).toString(), evidence: {} });
   if (sslDays !== null && sslDays < 14) {
