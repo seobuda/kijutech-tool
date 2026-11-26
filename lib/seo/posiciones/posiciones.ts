@@ -116,10 +116,10 @@ async function refreshVolumes(tenantId: string, projectId: string, location: str
     if (!(await canSpend(projectId, 0.08)).ok) break;
     const r = await src.volumes(tenantId, group.map((g) => g.keyword), location, lang);
     cost += r.costUsd;
+    if (r.costUsd > 0) await recordDataSpend(tenantId, projectId, 'serp', 'posiciones: volumen de búsqueda', r.costUsd);
     for (const g of group) await db.update(seoRankKeywords).set({ volume: r.volumes.get(g.keyword.toLowerCase()) ?? 0, volumeAt: new Date(), updatedAt: new Date() }).where(eq(seoRankKeywords.id, g.id));
   }
-  if (cost > 0) await recordDataSpend(tenantId, projectId, 'serp', 'posiciones: volumen de búsqueda', cost);
-  return stale.length;
+  return cost > 0 ? stale.length : 0;
 }
 
 /** Consulta semanal: semilla, volumen, filas pendientes, tope y envío. */
@@ -128,6 +128,12 @@ export async function runPositions(tenantId: string, projectId: string, heartbea
   if (!src?.postTasks || !(await src.isConnected(tenantId).catch(() => false))) return { status: 'omitido', summary: 'DataForSEO no está conectado (Agentes → Integraciones).' };
   const basics = await projectBasics(tenantId, projectId);
   if (!basics?.domain) return { status: 'omitido', summary: 'El proyecto no tiene web en su alcance.' };
+  // Filas que se quedaron «pendiente» sin llegar a enviarse (el proceso cayó a mitad) hace más de 1 h: se cierran, para
+  // que no bloqueen el proyecto para siempre.
+  await db
+    .update(seoRankChecks)
+    .set({ status: 'fallida', error: 'no se llegó a enviar' })
+    .where(and(eq(seoRankChecks.projectId, projectId), eq(seoRankChecks.status, 'pendiente'), isNull(seoRankChecks.taskId), lt(seoRankChecks.createdAt, new Date(Date.now() - 3_600_000))));
   // Si hay una consulta en curso (enviada hace menos de 48 h), no se envía otra.
   const [open] = await db.select({ n: sql<number>`count(*)::int` }).from(seoRankChecks).where(and(eq(seoRankChecks.projectId, projectId), inArray(seoRankChecks.status, ['pendiente', 'enviada'])));
   if (Number(open?.n ?? 0) > 0) {
@@ -165,16 +171,27 @@ async function postPending(tenantId: string, projectId: string, runId: string): 
     .innerJoin(seoRankKeywords, eq(seoRankKeywords.id, seoRankChecks.keywordId))
     .where(and(eq(seoRankChecks.runId, runId), eq(seoRankChecks.status, 'pendiente'), isNull(seoRankChecks.taskId)));
   if (!rows.length) return { sent: 0, errors: 0 };
-  const res = await src.postTasks!(
-    tenantId,
-    rows.map((r) => ({ keyword: r.keyword, location: r.location ?? 'Spain', language: r.language ?? 'es', device: (r.device as 'mobile' | 'desktop') ?? 'mobile', depth: DEPTH, tag: `${tenantId.slice(0, 8)}:${projectId.slice(0, 8)}:${r.id}` }))
-  );
+  let res: Awaited<ReturnType<NonNullable<typeof src.postTasks>>>;
+  try {
+    res = await src.postTasks!(
+      tenantId,
+      rows.map((r) => ({ keyword: r.keyword, location: r.location ?? 'Spain', language: r.language ?? 'es', device: (r.device as 'mobile' | 'desktop') ?? 'mobile', depth: DEPTH, tag: `${tenantId.slice(0, 8)}:${projectId.slice(0, 8)}:${r.id}` }))
+    );
+  } catch (e) {
+    // No se sabe si DataForSEO llegó a aceptar (y cobrar) el lote: se marca fallido y se apunta el coste estimado,
+    // para que el tope no se quede corto. La próxima ejecución lo vuelve a intentar.
+    await db.update(seoRankChecks).set({ status: 'fallida', error: `error al enviar: ${e instanceof Error ? e.message.slice(0, 200) : 'desconocido'}` }).where(and(eq(seoRankChecks.runId, runId), eq(seoRankChecks.status, 'pendiente')));
+    await recordDataSpend(tenantId, projectId, 'serp', 'posiciones: envío sin confirmar (estimado)', rows.length * COST_PER_TASK);
+    return { sent: 0, errors: rows.length };
+  }
   let cost = 0;
   let errors = 0;
   for (const p of res) {
     const id = p.tag.split(':')[2];
-    cost += p.costUsd;
-    if (p.id) await db.update(seoRankChecks).set({ taskId: p.id, status: 'enviada', costUsd: p.costUsd.toFixed(5), postedAt: new Date() }).where(eq(seoRankChecks.id, id));
+    // Si el proveedor no dice el coste de una tarea aceptada, se apunta el estimado (mejor de más que de menos).
+    const c = p.id ? (p.costUsd > 0 ? p.costUsd : COST_PER_TASK) : p.costUsd;
+    cost += c;
+    if (p.id) await db.update(seoRankChecks).set({ taskId: p.id, status: 'enviada', costUsd: c.toFixed(5), postedAt: new Date() }).where(eq(seoRankChecks.id, id));
     else {
       errors++;
       await db.update(seoRankChecks).set({ status: 'fallida', error: p.error ?? 'error', postedAt: new Date() }).where(eq(seoRankChecks.id, id));

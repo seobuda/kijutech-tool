@@ -192,9 +192,9 @@ export async function dataForSeoPostTasks(tenantId: string, tasks: import('@/lib
       batch.map((t) => ({ keyword: t.keyword.slice(0, 200), location_name: t.location, language_code: t.language, device: t.device, depth: Math.min(t.depth, 100), tag: t.tag.slice(0, 255), priority: 1, load_async_ai_overview: true }))
     );
     const got = r.tasks ?? [];
-    batch.forEach((t, k) => {
-      // Se busca por la etiqueta; si no viene, por el orden del lote.
-      const task = got.find((x) => x.data?.tag === t.tag) ?? got[k];
+    batch.forEach((t) => {
+      // Solo por la etiqueta: emparejar por orden podría guardar la posición de otra búsqueda.
+      const task = got.find((x) => x.data?.tag === t.tag);
       const ok = task && task.status_code === 20100 && task.id;
       out.push({ tag: t.tag, id: ok ? task!.id! : null, costUsd: typeof task?.cost === 'number' ? task.cost : 0, error: ok ? null : `${task?.status_code ?? '?'}: ${task?.status_message ?? 'sin respuesta'}`.slice(0, 300) });
     });

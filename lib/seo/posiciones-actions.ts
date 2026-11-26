@@ -66,9 +66,10 @@ export async function checkPositionsNowAction(projectId: string): Promise<Ok> {
     const user = await requirePermission('edit');
     if (!(await ownProject(user.tenantId, projectId))) return { ok: false, error: 'Proyecto no encontrado' };
     if (await recentOrOpenCheck(projectId)) return { ok: false, error: 'Ya hay una consulta en curso o de hace menos de 12 horas.' };
-    await enqueueJob({ tenantId: user.tenantId, kind: 'seo.posiciones', payload: { projectId }, scopeType: 'proyecto', scopeId: projectId, priority: 4, dedupeKey: `manual:seo.posiciones:${projectId}` });
+    // Misma clave que el proceso programado: nunca corren dos a la vez para el mismo proyecto (no se paga dos veces).
+    const r = await enqueueJob({ tenantId: user.tenantId, kind: 'seo.posiciones', payload: { projectId }, scopeType: 'proyecto', scopeId: projectId, priority: 4, dedupeKey: `sched:seo.posiciones:${projectId}` });
     revalidatePath(PATH(projectId));
-    return { ok: true, message: 'Enviada: los resultados llegan en unos minutos (la pantalla se refresca sola).' };
+    return { ok: true, message: r.created ? 'Enviada: los resultados llegan en unos minutos (la pantalla se refresca sola).' : 'Ya había una consulta en marcha.' };
   } catch (e) {
     return { ok: false, error: publicError(e, 'No se pudo consultar') };
   }
