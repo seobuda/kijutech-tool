@@ -62,7 +62,7 @@ Esta regla cuesta horas de debugging si se rompe. El motivo: en una sesión ante
 
 \- Toda tabla de un módulo lleva su prefijo (`seo\_keywords`, `seo\_audit\_findings`...)
 
-\- \*\*Si para resolver algo de un módulo parece necesario tocar el núcleo, para y pregunta\*\* — es señal de que el módulo está mal diseñado, no un atajo válido
+\- \*\*Si para resolver algo de un módulo parece necesario tocar el núcleo, aplica el protocolo de decisión\*\* (sección «Decisiones de diseño») antes de hacerlo: puede ser señal de que el módulo está mal diseñado, no un atajo válido. Si la auditoría no lo avala, pregunta a Enric.
 
 
 
@@ -72,7 +72,7 @@ Esta regla cuesta horas de debugging si se rompe. El motivo: en una sesión ante
 
 \## Estado actual
 
-El estado vivo del proyecto (qué existe, qué está en producción, qué falta y la hoja de ruta) está en `docs/ESTADO.md`. La Fase A (Docker, auth, esquema núcleo, tenant Kijutech con sus 4 roles y la lista de proyectos) está terminada desde agosto de 2026. Antes de empezar un bloque nuevo, confírmalo con Enric.
+El estado vivo del proyecto (qué existe, qué está en producción, qué falta y la hoja de ruta) está en `docs/ESTADO.md`. La Fase A (Docker, auth, esquema núcleo, tenant Kijutech con sus 4 roles y la lista de proyectos) está terminada desde agosto de 2026. Antes de empezar un bloque nuevo (un módulo o una lista de trabajo), confírmalo con Enric; dentro del bloque confirmado, Claude avanza solo (ver «Reglas de autonomía»).
 
 
 
@@ -92,54 +92,52 @@ No construyas nada fuera de lo que se confirme explícitamente — es fácil der
 
 
 
-\## Reglas de autonomía (cuándo pedir aprobación y cuándo no)
+## Reglas de autonomía (modelo del 26 nov 2026, aprobado por Enric)
 
+Enric quiere que Claude termine los módulos acordados **sin pararse a pedir permiso**. La frontera no es «local frente a
+producción», sino **código frente a efectos hacia fuera**: el código siempre se puede revertir (git, `rollback.sh`); un correo
+a un cliente, un cambio en Google Ads o datos reales borrados, no.
 
+**Claude trabaja sin preguntar** (dentro del trabajo acordado con Enric, p. ej. la lista cerrada de un módulo):
+- Código, pantallas, rutas, ramas, commits, pruebas, Mapa Visual, `docs/ESTADO.md` y documentos de sesión.
+- **Migraciones aditivas**: tablas nuevas, columnas nuevas (con valor por defecto o anulables), índices, datos de semilla y
+  prompts nuevos. No rompen el código anterior, así que la vuelta atrás del código sigue funcionando.
+- Fusionar en `main`, subir y desplegar con `bash scripts/deploy.sh` o `bash scripts/deploy.sh --migrate`. Se despliega
+  **por tandas**, al cerrar cada sección, no tras cada cambio pequeño. Sin migración, si la verificación falla el script vuelve
+  solo a la versión anterior. **Con `--migrate` no vuelve solo** (la base ya cambió): como las migraciones son aditivas, Claude
+  ejecuta `bash scripts/rollback.sh` (vuelve el código; las tablas o columnas nuevas no molestan al código anterior) y avisa a
+  Enric; la base solo se restaura desde `backups/backup_pre_deploy_*.sql.gz` con su OK.
+- Antes de migrar **en local** las tablas de un módulo nuevo, sigue valiendo «Backup obligatorio» (`pg_dump` y rama propia).
+- Probar con efectos reales solo en lo nuestro: ClickUp en la lista «Pruebas Kiju», correo solo a direcciones de Kijutech,
+  el usuario de pruebas de desarrollo.
+- Decisiones de producto e integraciones: con el **protocolo de decisión** (sección «Decisiones de diseño» más abajo),
+  sin esperar a Enric. Cada decisión queda apuntada en el documento de sesión («Decisiones tomadas») para que Enric la
+  revise cuando quiera; si no le gusta, se cambia.
 
-A partir de la migración del esquema del núcleo (2026-08-16), el flujo de trabajo se relaja para tareas de bajo riesgo. La regla:
+**Líneas rojas: aquí Claude SIEMPRE para y pregunta** (y mientras espera, sigue con otra parte del trabajo):
+1. **Migraciones destructivas**: borrar o renombrar tablas o columnas, cambiar tipos, `DROP`, `TRUNCATE`, `DELETE` de datos
+   reales. Se evitan por diseño (añadir y dejar de usar, en vez de borrar).
+2. **Efectos hacia fuera con clientes o dinero**: enviar un correo o mensaje a un cliente real, cambiar pujas, presupuestos o
+   anuncios en cuentas reales de Google Ads, publicar en la web de un cliente, contratar o activar un servicio de pago nuevo,
+   o subir un límite de gasto.
+3. **Login y sesión**: `app/(login)/` y `lib/auth/` (salvo añadir un guard o un permiso nuevo en `permissions.ts`).
+4. **Borrar datos, tablas o archivos existentes** con contenido real.
+5. `docker-compose*.yml`, `Dockerfile*` y dependencias nuevas (`pnpm add`): se preguntan, salvo que estén dentro de un
+   plan ya aprobado que las nombre.
 
+**Controles que sustituyen la revisión manual** (obligatorios antes de cada fusión en `main`):
+- Pruebas (`pnpm test` en el contenedor) y `node scripts/check-architecture-map.js`; `deploy.sh` además los repite sobre el
+  commit exacto, pasa las pruebas simuladas en producción y vuelve atrás si algo falla.
+- **Revisor de código** (`.claude/agents/revisor-codigo.md`) sobre el diff de la rama. Un hallazgo grave se arregla antes de
+  fusionar; si no se puede, se apunta en el documento de sesión y se avisa a Enric.
+- Después de cada despliegue, Claude le cuenta a Enric qué ha cambiado, el resultado de la verificación y cómo deshacerlo
+  (`bash scripts/rollback.sh`; producción en solo lectura con `bash scripts/server-status.sh`). No hay SSH libre al servidor:
+  si hace falta otro comando allí, se pide a Enric o se añade a un script revisado.
 
+El arnés (`.claude/settings.json`) todavía pregunta al editar `lib/db/schema.ts` y `lib/db/migrations/**`: mientras Enric no
+quite esas dos entradas, esa pregunta es la única parada en las migraciones aditivas.
 
-\*\*Puede trabajar en modo automático (auto mode), sin pedir aprobación paso a paso:\*\*
-
-\- Crear componentes React, rutas nuevas, formularios
-
-\- Estilos, maquetación, ajustes visuales
-
-\- Cualquier cosa que no toque una tabla existente ni datos ya guardados en producción
-
-
-
-\*\*Debe pedir aprobación explícita SIEMPRE, sin excepción, antes de:\*\*
-
-\- Tocar `lib/db/schema.ts` o generar/aplicar cualquier migración de Drizzle
-
-\- Modificar cualquier archivo dentro de `app/(login)/` o `lib/auth/` (todo lo relacionado con login y sesión)
-
-\- Desplegar con migración (`bash scripts/deploy.sh --migrate`): el permiso de Claude Code lo pregunta siempre
-
-\- Modificar `docker-compose.yml` o `Dockerfile.dev`
-
-\- Borrar cualquier dato, tabla o archivo existente
-
-\- Instalar una dependencia nueva (`pnpm add`)
-
-
-
-\*\*Protocolo de despliegue autónomo (aprobado por Enric el 19 nov 2026).\*\* Claude puede, sin preguntar, fusionar en `main`
-una rama terminada (`git checkout main`, `git merge --no-ff`), subirla (`git push origin main`) y desplegarla con
-`bash scripts/deploy.sh`, siempre que:
-
-\- El trabajo esté terminado según este archivo: pruebas, Mapa Visual, `docs/ESTADO.md` y documento de sesión. `deploy.sh` además
-  se niega si fallan las pruebas o el mapa sobre el commit exacto, si hay cambios sin commit o si hay migraciones pendientes.
-\- No incluya nada de la lista de arriba sin su aprobación: esquema y migraciones, login y sesión, docker-compose, dependencias nuevas
-  o borrar datos.
-\- Después de cada despliegue, Claude le cuenta a Enric qué ha cambiado, el resultado de la verificación y cómo deshacerlo.
-\- Si la verificación falla, `deploy.sh` vuelve solo a la versión anterior. A mano: `bash scripts/rollback.sh`. Para mirar
-  producción: `bash scripts/server-status.sh` (solo lectura). No hay SSH libre al servidor: si hace falta otro comando en el
-  servidor, se pide a Enric o se añade a un script revisado.
-
-Si tienes dudas sobre si una tarea entra en la segunda lista, pregunta antes de actuar — es preferible una pregunta de más que un cambio no revisado en algo crítico.
+Si una tarea roza una línea roja y hay duda, se trata como línea roja: pregunta y sigue con otra cosa mientras tanto.
 
 
 
@@ -418,7 +416,9 @@ La seguridad es parte de "terminado", igual que el Mapa Visual y ESTADO.md. Deta
 - **El arnés también pregunta:** `.claude/settings.json` (versionado) obliga a pedir permiso antes de editar
   el esquema, las migraciones, `lib/auth/`, `app/(login)/`, `docker-compose*.yml`, `Dockerfile*` y `.env`, y
   antes de `pnpm`/`npm`/`npx` en el host, `docker run`, borrar (`rm`, `git rm`, `git clean`, `git reset --hard`,
-  `DROP`, `TRUNCATE`, `DELETE FROM`), forzar un push o migrar. No sustituye a las reglas de arriba: las respalda.
+  `DROP`, `TRUNCATE`, `DELETE FROM`) o forzar un push; y **prohíbe** (`deny`) leer claves SSH, AWS y `.pem`,
+  `curl|wget … | sh`, `ssh`/`scp`/`nc` directos y tocar `ANTHROPIC_BASE_URL`. No sustituye a las reglas de arriba: las respalda.
+  Ampliar los permisos de Claude (este archivo o el `autoMode` del usuario) lo hace siempre Enric, nunca Claude.
 - **Cambiar un prompt de IA:** antes de dejarlo activo, pasar su examen si lo tiene: desde el panel (IA → Prompts →
   el prompt → «Examinar el borrador sin guardarlo» o «Pasar examen»; queda en el historial) o con
   `RUN_REAL_EVALS=true ./node_modules/.bin/vitest run tests/ia-prompts-evals.test.ts` dentro del contenedor (~0,20 $
@@ -432,20 +432,27 @@ La seguridad es parte de "terminado", igual que el Mapa Visual y ESTADO.md. Deta
   (los backticks se ejecutan como comandos). Los archivos y scripts se escriben con la herramienta de
   archivos, no con la shell.
 
-## Decisiones de diseño: cuestionarse tres veces y comparar alternativas — regla permanente
+## Decisiones de diseño: protocolo de decisión — regla permanente (ampliada el 26 nov 2026)
 
-Ante cualquier decisión no trivial (servicio externo, arquitectura, proveedor, modelo de datos, flujo
-nuevo), Claude Code no da por buena la primera conclusión. Antes de recomendar:
+Ante cualquier decisión no trivial (duda de producto, integración o servicio externo nuevo, arquitectura, proveedor,
+modelo de datos, flujo nuevo, tocar el núcleo), Claude Code **no ejecuta ni crea nada** hasta completar estos pasos. Con
+ellos decide solo, sin esperar a Enric (salvo las líneas rojas de «Reglas de autonomía»):
 
-1. **Razona una primera conclusión** y escríbela como hipótesis, no como hecho.
-2. **Cuestiónala tres veces**, cada una desde un ángulo distinto (p. ej.: ¿cumple el objetivo final o solo
-   el de hoy?; ¿qué coste o riesgo oculto tiene a semanas vista?; ¿hay una opción que ya tenemos y no
-   estamos usando?). Si alguna pasada cambia la conclusión, repite.
-3. **Compara en paralelo al menos 3 alternativas reales** (incluida «no hacer nada» o «usar lo que ya
-   hay») con coste, riesgo, esfuerzo y qué se pierde con cada una.
-4. **Presenta la recomendación con las alternativas descartadas y el motivo**, y marca lo que no está
-   verificado (precios, límites, documentación) en vez de afirmarlo.
-5. Parte siempre del **objetivo final** (visión: Operaciones sustituye a un humano, con supervisión), no
-   solo de la tarea inmediata; una solución que sirve para probar pero no para el objetivo se presenta como
-   provisional, no como la solución.
+1. **Planifica desde 3 puntos de vista expertos distintos**, elegidos según el tema (p. ej. arquitecto de software,
+   especialista del dominio —SEO, Google Ads, operaciones de agencia—, seguridad y costes, producto y UX, quien usa la
+   pantalla). Cada uno propone su solución y sus riesgos.
+2. **Compara al menos 3 alternativas reales** (incluida «no hacer nada» o «usar lo que ya hay») con coste, riesgo, esfuerzo
+   y qué se pierde con cada una. Parte siempre del **objetivo final** (visión: Operaciones sustituye a un humano, con
+   supervisión); una solución que solo sirve para probar se marca como provisional.
+3. **Escribe la decisión como hipótesis** y cuestiónala tres veces desde ángulos distintos (¿cumple el objetivo final?;
+   ¿qué coste o riesgo oculto tiene a semanas vista?; ¿hay algo que ya tenemos y no usamos?).
+4. **Auditoría independiente con Opus 5.5 en esfuerzo alto**: lanza un subagente (herramienta Agent, `model: opus`,
+   `effort: high`) al que se le da el problema, las alternativas y los ficheros relevantes, y se le pide que busque fallos
+   en la decisión, no que la confirme. Si encuentra un fallo serio, vuelve al paso 1. Cuando la decisión se traduce en
+   código, pasa además el revisor de código (`.claude/agents/revisor-codigo.md`) sobre el diff.
+5. **Deja constancia** en el documento de diseño o de sesión: los 3 puntos de vista, las alternativas descartadas con su
+   motivo, lo que dijo la auditoría y lo que no está verificado (precios, límites, documentación), sin afirmarlo como hecho.
 6. No descartes una opción sin un motivo comprobable; si no hay motivo, dilo.
+
+Para decisiones pequeñas y reversibles (un texto, un estilo, el orden de una lista) basta con el criterio de siempre; el
+protocolo es para lo que cuesta deshacer.
