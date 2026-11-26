@@ -19,6 +19,8 @@ import {
   dataForSeoSerp,
   dataForSeoSerpResult,
   dataForSeoPostTasks,
+  dataForSeoPostMapsTasks,
+  dataForSeoGetMapsTask,
   dataForSeoGetTask,
   dataForSeoLocations,
   dataForSeoVolumes,
@@ -245,7 +247,7 @@ export function registerAgentesCapabilities(): void {
   // Histórico diario para el módulo Rendimiento (lib/rendimiento/sync.ts), sin que Rendimiento sepa de Google.
   registerMetricSource(GOOGLE_METRIC_SOURCE);
   // Resultados de Google por búsqueda (DataForSEO) para la competencia de SEO (Hito 2), sin que SEO sepa del proveedor.
-  registerSerpSource({ isConnected: (t) => isConnected(t, 'dataforseo'), search: dataForSeoSerpResult, postTasks: dataForSeoPostTasks, getTask: dataForSeoGetTask, locations: dataForSeoLocations, volumes: dataForSeoVolumes });
+  registerSerpSource({ isConnected: (t) => isConnected(t, 'dataforseo'), search: dataForSeoSerpResult, postTasks: dataForSeoPostTasks, getTask: dataForSeoGetTask, postMapsTasks: dataForSeoPostMapsTasks, getMapsTask: dataForSeoGetMapsTask, locations: dataForSeoLocations, volumes: dataForSeoVolumes });
   // Core Web Vitals reales (Chrome UX Report) para la Salud técnica de SEO (parte 0), con la clave de Integraciones.
   // Ficha de Google de un negocio (SEO local, parte 5) con DataForSEO: sus datos se pueden guardar (Places no).
   registerBusinessSource({ isConnected: (t) => isConnected(t, 'dataforseo'), info: dataForSeoBusinessInfo });

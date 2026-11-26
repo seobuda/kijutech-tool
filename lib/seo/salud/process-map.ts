@@ -114,6 +114,18 @@ export const SEO_SALUD_PROCESS_MAP: ProcessStep[] = [
     tables: ['seo_local_places', 'seo_local_snapshots', 'seo_data_spend', 'findings', 'client_competitors', 'client_locations', 'seo_dossier_facts']
   },
   {
+    id: 'local-geogrid',
+    lane: 'Vigilancia continua',
+    name: 'Mapa por zonas (geo-grid de Google Maps)',
+    description: 'Cuadrícula 5×5 alrededor de la ficha confirmada del cliente (paso 0,5 km si atiende en su local, 1,5 km a domicilio), hasta 3 búsquedas (sus servicios sin la población o la categoría de su ficha): su puesto en el mapa desde cada punto, los 3 primeros de cada zona, comparación con la medición anterior y competidores con nombre sospechoso. Pestaña Local → Mapa por zonas.',
+    status: 'built',
+    file: 'lib/seo/local/geogrid.ts',
+    when: 'Cada 30 días por defecto (proceso «seo.geogrid», editable: 14, 30 o 60) o «Medir ahora»; solo en días laborables de 10 a 12 (Madrid), si no se aplaza a la siguiente franja. Recogida «seo.geogrid.recoger» cada 10 min mientras quedan puntos enviados.',
+    ai: 'Nada.',
+    code: 'DataForSEO Maps en cola por el núcleo (serpSource.postMapsTasks/getMapsTask): location_coordinate con zoom fijo y guardado, search_this_area: false, depth 100 (mismo precio, unos 0,0006 $ por punto). Cliente identificado solo por cid o place_id (fuera = 21 en la media); los anuncios no cuentan. Filas pendientes, tope antes, gasto al enviar, recogida por id, caducidad 48 h. Hallazgos: débil (top 3 < 30 % en la búsqueda principal), caída (media 3+ peor y 8+ puntos que bajan, solo con los mismos parámetros) y nombre sospechoso (2 señales; lo descartado no vuelve). Fuente «seo.local:geogrid».',
+    tables: ['seo_geogrid_runs', 'seo_geogrid_points', 'seo_local_places', 'seo_local_snapshots', 'seo_data_spend', 'findings', 'seo_dossier_facts']
+  },
+  {
     id: 'gasto-datos',
     lane: 'Vigilancia continua',
     name: 'Gasto en datos de pago por proyecto',

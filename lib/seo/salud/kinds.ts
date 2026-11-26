@@ -120,5 +120,12 @@ export const FICHA_KINDS: SaludKind[] = [
   { kind: 'seo.reviews_stalled', group: 'local', title: 'No entran reseñas nuevas', explain: 'En los últimos 60 días no ha subido el número de reseñas. Google valora que lleguen reseñas de forma constante: conviene pedirlas a los clientes con el enlace directo.', severityDefault: 'aviso', ruleVersion: 1 }
 ];
 
-export const SEO_KINDS: SaludKind[] = [...SALUD_KINDS, ...LOCAL_KINDS, ...MAPA_KINDS, ...VIGILANCIA_KINDS, ...EXTERNOS_KINDS, ...POSICIONES_KINDS, ...FICHA_KINDS];
+/** Mapa por zonas (fuente «seo.local:geogrid», parte 5b). */
+export const GEOGRID_KINDS: SaludKind[] = [
+  { kind: 'seo.geogrid_weak', group: 'local', title: 'Sale poco en el mapa de su zona', explain: 'En menos del 30 % de los puntos de la cuadrícula alrededor del negocio sale entre los 3 primeros del mapa para su búsqueda principal. El top 3 del mapa es donde se llevan casi todas las llamadas.', severityDefault: 'aviso', ruleVersion: 1 },
+  { kind: 'seo.geogrid_drop', group: 'local', title: 'Ha bajado en el mapa por zonas', explain: 'Frente a la medición anterior (mismos puntos y búsqueda), la media de puesto ha empeorado 3 o más y al menos 8 puntos han bajado 3 puestos o más.', severityDefault: 'importante', ruleVersion: 1 },
+  { kind: 'seo.maps_spam', group: 'local', title: 'Competidor con nombre sospechoso en el mapa', explain: 'Un competidor que sale en el top 3 en muchos puntos tiene un nombre que parece relleno de palabras clave (Google lo prohíbe: el nombre debe ser el real del negocio). Se puede sugerir la edición a Google; si su rótulo real es así, descártalo.', severityDefault: 'info', ruleVersion: 1 }
+];
+
+export const SEO_KINDS: SaludKind[] = [...SALUD_KINDS, ...LOCAL_KINDS, ...MAPA_KINDS, ...VIGILANCIA_KINDS, ...EXTERNOS_KINDS, ...POSICIONES_KINDS, ...FICHA_KINDS, ...GEOGRID_KINDS];
 export const SALUD_KIND_BY_KEY = new Map(SEO_KINDS.map((k) => [k.kind, k]));

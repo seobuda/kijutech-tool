@@ -623,9 +623,14 @@ export type SerpSource = {
   getTask?: (tenantId: string, id: string) => Promise<SerpTaskResult>;
   /** Nombres de ubicación válidos de un país (p. ej. «Sabadell,Catalonia,Spain»), con su tipo. */
   locations?: (tenantId: string, country: string) => Promise<{ name: string; type: string }[]>;
+  // Google Maps en cola asíncrona (SEO parte 5b, geo-grid): búsqueda desde una coordenada con zoom fijo.
+  postMapsTasks?: (tenantId: string, tasks: { keyword: string; coordinate: string; language: string; tag: string }[]) => Promise<SerpTaskPosted[]>;
+  getMapsTask?: (tenantId: string, id: string) => Promise<MapsTaskResult>;
   /** Volumen mensual medio (Google Ads) de hasta 1000 búsquedas. */
   volumes?: (tenantId: string, keywords: string[], location: string, language: string) => Promise<{ volumes: Map<string, number | null>; costUsd: number }>;
 };
+export type MapsItem = { rank: number; cid: string | null; placeId: string | null; title: string; domain: string | null; rating: number | null; votes: number | null; category: string | null };
+export type MapsTaskResult = { status: 'pendiente' } | { status: 'error'; error: string } | { status: 'hecha'; items: MapsItem[] };
 export type SerpTaskInput = { keyword: string; location: string; language: string; device: 'mobile' | 'desktop'; depth: number; tag: string };
 export type SerpTaskPosted = { tag: string; id: string | null; costUsd: number; error: string | null };
 export type SerpTaskResult =

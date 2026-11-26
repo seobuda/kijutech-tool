@@ -237,6 +237,54 @@ export async function dataForSeoGetTask(tenantId: string, id: string): Promise<i
   return summarizeSerpItems(t.result?.[0]?.items ?? []);
 }
 
+// --- Google Maps en cola (SEO parte 5b, geo-grid) -----------------------------------------------------------------------
+type MapsRaw = { type: string; rank_group?: number; cid?: string | null; place_id?: string | null; title?: string; domain?: string | null; url?: string | null; rating?: { value?: number | null; votes_count?: number | null } | null; category?: string | null };
+
+/** Resultados de Maps: solo los de búsqueda (los anuncios, «maps_paid_item», no cuentan ni llevan cid). Puro. */
+export function summarizeMapsItems(items: MapsRaw[]): import('@/lib/core/capabilities').MapsItem[] {
+  return items
+    .filter((i) => i.type === 'maps_search' && i.title)
+    .map((i) => ({
+      rank: i.rank_group ?? 0,
+      cid: i.cid ?? null,
+      placeId: i.place_id ?? null,
+      title: i.title!,
+      domain: (i.domain ?? null)?.replace(/^www\./, '').toLowerCase() ?? null,
+      rating: typeof i.rating?.value === 'number' ? i.rating.value : null,
+      votes: typeof i.rating?.votes_count === 'number' ? i.rating.votes_count : null,
+      category: i.category ?? null
+    }))
+    .sort((a, b) => a.rank - b.rank);
+}
+
+export async function dataForSeoPostMapsTasks(tenantId: string, tasks: { keyword: string; coordinate: string; language: string; tag: string }[]): Promise<import('@/lib/core/capabilities').SerpTaskPosted[]> {
+  const creds = readCredentials(await getIntegration(tenantId, 'dataforseo'));
+  const out: import('@/lib/core/capabilities').SerpTaskPosted[] = [];
+  for (let i = 0; i < tasks.length; i += 100) {
+    const batch = tasks.slice(i, i + 100);
+    // search_this_area: false y zoom fijo en la coordenada: si no, Maps limita al área visible (auditoría 5b).
+    const r = await dfs<{ tasks?: DfsTask<unknown>[] }>(creds, '/serp/google/maps/task_post', batch.map((t) => ({ keyword: t.keyword.slice(0, 200), location_coordinate: t.coordinate, language_code: t.language, depth: 100, search_this_area: false, tag: t.tag.slice(0, 255), priority: 1 })));
+    const got = r.tasks ?? [];
+    for (const t of batch) {
+      const task = got.find((x) => x.data?.tag === t.tag);
+      const ok = task && task.status_code === 20100 && task.id;
+      out.push({ tag: t.tag, id: ok ? task!.id! : null, costUsd: typeof task?.cost === 'number' ? task.cost : 0, error: ok ? null : `${task?.status_code ?? '?'}: ${task?.status_message ?? 'sin respuesta'}`.slice(0, 300) });
+    }
+  }
+  await markIntegration(tenantId, 'dataforseo', true);
+  return out;
+}
+
+export async function dataForSeoGetMapsTask(tenantId: string, id: string): Promise<import('@/lib/core/capabilities').MapsTaskResult> {
+  const creds = readCredentials(await getIntegration(tenantId, 'dataforseo'));
+  const r = await dfs<{ tasks?: DfsTask<{ items?: MapsRaw[] }>[] }>(creds, `/serp/google/maps/task_get/advanced/${encodeURIComponent(id)}`);
+  const t = r.tasks?.[0];
+  if (!t) return { status: 'error', error: 'sin respuesta' };
+  if (t.status_code === 40601 || t.status_code === 40602) return { status: 'pendiente' };
+  if (t.status_code !== 20000) return { status: 'error', error: `${t.status_code}: ${t.status_message ?? ''}`.slice(0, 300) };
+  return { status: 'hecha', items: summarizeMapsItems(t.result?.[0]?.items ?? []) };
+}
+
 const G_LOC = globalThis as unknown as { __kijuDfsLocations?: Map<string, { at: number; list: { name: string; type: string }[] }> };
 /** Ubicaciones de un país (gratis en DataForSEO), cacheadas un día en memoria. */
 export async function dataForSeoLocations(tenantId: string, country: string): Promise<{ name: string; type: string }[]> {
