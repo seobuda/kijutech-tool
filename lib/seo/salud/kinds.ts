@@ -112,5 +112,13 @@ export const POSICIONES_KINDS: SaludKind[] = [
   { kind: 'seo.lost_local_pack', group: 'local', title: 'Ya no sale en el mapa de Google para esta búsqueda', explain: 'Google sigue enseñando el mapa con negocios para esta búsqueda, pero el cliente ha dejado de aparecer dos semanas seguidas. Revisar su ficha de Google (categoría, horario, reseñas recientes, si está marcada como cerrada) y quién ha entrado.', severityDefault: 'importante', ruleVersion: 1 }
 ];
 
-export const SEO_KINDS: SaludKind[] = [...SALUD_KINDS, ...LOCAL_KINDS, ...MAPA_KINDS, ...VIGILANCIA_KINDS, ...EXTERNOS_KINDS, ...POSICIONES_KINDS];
+/** Ficha de Google (fuente «seo.local:ficha», parte 5a): datos de DataForSEO comparados con lo confirmado. */
+export const FICHA_KINDS: SaludKind[] = [
+  { kind: 'seo.gbp_closed', group: 'local', title: 'La ficha de Google aparece cerrada', explain: 'Google enseña la ficha del cliente como cerrada (temporal o definitivamente), comprobado dos veces. Si no es verdad, el negocio pierde llamadas y visitas cada día: hay que corregirlo ya en Business Profile.', severityDefault: 'critico', ruleVersion: 1 },
+  { kind: 'seo.gbp_changed', group: 'local', title: 'Ha cambiado algo de la ficha de Google', explain: 'El nombre, la categoría principal, el teléfono, la web o el horario de la ficha ya no coinciden con lo confirmado. Google y otras personas pueden editar la ficha sin avisar. Si el cambio lo hicimos nosotros, pulsa «Aceptar el cambio»; si no, revértelo en Business Profile.', severityDefault: 'importante', ruleVersion: 1 },
+  { kind: 'seo.reviews_behind', group: 'local', title: 'Menos reseñas o peor nota que la competencia', explain: 'Frente a los competidores con ficha (3 o más), tiene menos de la mitad de reseñas que lo normal o una nota claramente más baja. Las reseñas pesan mucho para salir en el mapa y para que llamen.', severityDefault: 'aviso', ruleVersion: 1 },
+  { kind: 'seo.reviews_stalled', group: 'local', title: 'No entran reseñas nuevas', explain: 'En los últimos 60 días no ha subido el número de reseñas. Google valora que lleguen reseñas de forma constante: conviene pedirlas a los clientes con el enlace directo.', severityDefault: 'aviso', ruleVersion: 1 }
+];
+
+export const SEO_KINDS: SaludKind[] = [...SALUD_KINDS, ...LOCAL_KINDS, ...MAPA_KINDS, ...VIGILANCIA_KINDS, ...EXTERNOS_KINDS, ...POSICIONES_KINDS, ...FICHA_KINDS];
 export const SALUD_KIND_BY_KEY = new Map(SEO_KINDS.map((k) => [k.kind, k]));

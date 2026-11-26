@@ -4199,6 +4199,71 @@ export const seoRankChecks = pgTable(
 );
 export type SeoRankCheck = typeof seoRankChecks.$inferSelect;
 
+// Local (SEO parte 5a, 26 nov 2026; migración 0070): fichas de Google del cliente y de sus competidores, POR CLIENTE, y
+// sus fotos periódicas (DataForSEO my_business_info: se pueden guardar; Google Places solo permite guardar el place_id).
+export const seoLocalPlaces = pgTable(
+  'seo_local_places',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    // cliente | competidor
+    role: varchar('role', { length: 12 }).notNull(),
+    clientCompetitorId: uuid('client_competitor_id').references(() => clientCompetitors.id, { onDelete: 'set null' }),
+    cid: varchar('cid', { length: 40 }).notNull(),
+    placeId: varchar('place_id', { length: 120 }),
+    title: varchar('title', { length: 255 }).notNull(),
+    // propuesta | confirmada | descartada
+    status: varchar('status', { length: 12 }).notNull().default('propuesta'),
+    // Lo confirmado (nombre, categoría, teléfono, web, horario): los cambios se comparan con esto, no con la foto anterior.
+    baseline: jsonb('baseline').$type<Record<string, unknown>>(),
+    decidedBy: varchar('decided_by', { length: 120 }),
+    decidedAt: timestamp('decided_at'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('seo_local_places_unique').on(table.clientId, table.cid),
+    check('seo_local_places_role_check', sql`${table.role} IN ('cliente', 'competidor')`),
+    check('seo_local_places_status_check', sql`${table.status} IN ('propuesta', 'confirmada', 'descartada')`),
+  ]
+);
+export type SeoLocalPlace = typeof seoLocalPlaces.$inferSelect;
+
+export const seoLocalSnapshots = pgTable(
+  'seo_local_snapshots',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    placeRowId: uuid('place_row_id')
+      .notNull()
+      .references(() => seoLocalPlaces.id, { onDelete: 'cascade' }),
+    title: varchar('title', { length: 255 }),
+    category: varchar('category', { length: 160 }),
+    additionalCategories: text('additional_categories').array(),
+    phone: varchar('phone', { length: 40 }),
+    domain: varchar('domain', { length: 255 }),
+    status: varchar('status', { length: 20 }),
+    rating: real('rating'),
+    votes: integer('votes'),
+    distribution: jsonb('distribution'),
+    hours: jsonb('hours').$type<Record<string, string>>(),
+    isClaimed: boolean('is_claimed'),
+    lat: doublePrecision('lat'),
+    lng: doublePrecision('lng'),
+    costUsd: decimal('cost_usd', { precision: 10, scale: 5 }),
+    takenAt: timestamp('taken_at').notNull().defaultNow(),
+  },
+  (table) => [index('seo_local_snapshots_place_idx').on(table.placeRowId, table.takenAt)]
+);
+export type SeoLocalSnapshot = typeof seoLocalSnapshots.$inferSelect;
+
 export const seoReviews = pgTable(
   'seo_reviews',
   {

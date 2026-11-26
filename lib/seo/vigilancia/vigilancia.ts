@@ -24,6 +24,7 @@ import { gscPropertiesForProject } from '@/lib/core/gsc';
 import { projectWebUrl, SaludError, startProjectAudit } from '@/lib/seo/salud/audit';
 import { enqueueKeywordMap } from '@/lib/seo/mapa/mapa';
 import { runPositions } from '@/lib/seo/posiciones/posiciones';
+import { runLocal } from '@/lib/seo/local/ficha';
 import {
   DETECTORES_SOURCE,
   SEO_PROCESSES,
@@ -354,6 +355,7 @@ export function registerVigilancia(): void {
   run('seo.velocidad', runVelocidad, 600);
   run('seo.detectores', runDetectores, 240);
   run('seo.posiciones', runPositions, 300);
+  run('seo.local', (t, p) => runLocal(t, p, false), 300);
   registerJobKind({ kind: CONFIRM_KIND, timeoutS: 120, maxConcurrent: 4, maxAttempts: 2, run: async (ctx, payload) => runVigilancia(ctx.tenantId, String(payload.projectId ?? ''), true) });
   // Alta de los procesos de los proyectos: como mucho una vez cada hora por cuenta.
   registerScheduled('seo: programar la vigilancia de los proyectos', async (tenantId) => {

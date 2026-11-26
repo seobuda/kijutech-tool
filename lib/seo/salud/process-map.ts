@@ -102,6 +102,18 @@ export const SEO_SALUD_PROCESS_MAP: ProcessStep[] = [
     tables: ['seo_rank_keywords', 'seo_rank_checks', 'seo_data_spend', 'findings', 'gsc_daily', 'gsc_queries', 'seo_dossier_facts', 'client_competitors', 'jobs', 'job_schedules']
   },
   {
+    id: 'local-ficha',
+    lane: 'Vigilancia continua',
+    name: 'Ficha de Google y reseñas (cliente y competencia)',
+    description: 'La ficha de Google del cliente se propone sola (nombre + población, comprobando su web o su teléfono) o se pega su enlace de Maps; una persona la confirma y lo confirmado (nombre, categoría, teléfono, web, horario) queda como referencia. Cada semana: foto de la ficha del cliente; cada 4 semanas: la de los competidores confirmados. Pestaña Local con la ficha, los cambios, las reseñas frente a la competencia y el enlace para conseguir reseñas.',
+    status: 'built',
+    file: 'lib/seo/local/ficha.ts',
+    when: 'Cada 7 días por defecto (proceso «seo.local», editable en Vigilancia automática) o «Comprobar ahora». Si sale cerrada, se vuelve a mirar a los 30 min («seo.local.confirmar») antes de avisar.',
+    ai: 'Nada.',
+    code: 'DataForSEO my_business_info en directo por el núcleo (businessSource, lo registra Agentes), unos 0,005 $ por consulta con el tope de gasto. NO se usa Google Places: sus condiciones solo permiten guardar el place_id y, en el EEE, no permiten vigilar a la competencia. Cambios frente a lo confirmado (no frente a la foto anterior), el horario por franjas; «aceptar el cambio» actualiza lo confirmado. Reseñas por detrás: 3+ competidores con ficha y mínimos; paradas: 3+ fotos que cubran 60 días. Aviso de cerrada una vez por ficha y estado. Fuente «seo.local:ficha». Fichas por cliente (no por proyecto).',
+    tables: ['seo_local_places', 'seo_local_snapshots', 'seo_data_spend', 'findings', 'client_competitors', 'client_locations', 'seo_dossier_facts']
+  },
+  {
     id: 'gasto-datos',
     lane: 'Vigilancia continua',
     name: 'Gasto en datos de pago por proyecto',

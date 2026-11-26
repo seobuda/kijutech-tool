@@ -296,6 +296,8 @@ const SEGMENT_LABELS: Record<string, string> = {
   salud: 'Salud técnica',
   expediente: 'Expediente',
   palabras: 'Palabras',
+  posiciones: 'Posiciones',
+  local: 'Local',
   plan: 'Plan de mejora',
   ai: 'IA',
   settings: 'Ajustes',

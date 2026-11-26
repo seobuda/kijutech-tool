@@ -4,7 +4,7 @@ import 'server-only';
 //   - atiende los mensajes libres de Telegram y correo del dueño (agente principal);
 //   - publica sus herramientas: trabajos de subagentes e integraciones (DataForSEO, Clarity, Google);
 //   - programa los trabajos de los subagentes en el planificador.
-import { registerAssetDirectory, registerMetricSource, registerRetention, registerSerpSource, registerSpeedSource, registerScheduled, registerTools, setAgentJobCreator, setInboundHandler, type AgentTool, type ToolContext } from '@/lib/core/capabilities';
+import { registerAssetDirectory, registerMetricSource, registerRetention, registerSerpSource, registerSpeedSource, registerBusinessSource, registerScheduled, registerTools, setAgentJobCreator, setInboundHandler, type AgentTool, type ToolContext } from '@/lib/core/capabilities';
 import { and, eq, lt } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { agtMessages } from '@/lib/db/schema';
@@ -22,6 +22,7 @@ import {
   dataForSeoGetTask,
   dataForSeoLocations,
   dataForSeoVolumes,
+  dataForSeoBusinessInfo,
   cruxField,
   pageSpeedLab,
   effectivePageSpeedKey,
@@ -246,5 +247,7 @@ export function registerAgentesCapabilities(): void {
   // Resultados de Google por búsqueda (DataForSEO) para la competencia de SEO (Hito 2), sin que SEO sepa del proveedor.
   registerSerpSource({ isConnected: (t) => isConnected(t, 'dataforseo'), search: dataForSeoSerpResult, postTasks: dataForSeoPostTasks, getTask: dataForSeoGetTask, locations: dataForSeoLocations, volumes: dataForSeoVolumes });
   // Core Web Vitals reales (Chrome UX Report) para la Salud técnica de SEO (parte 0), con la clave de Integraciones.
+  // Ficha de Google de un negocio (SEO local, parte 5) con DataForSEO: sus datos se pueden guardar (Places no).
+  registerBusinessSource({ isConnected: (t) => isConnected(t, 'dataforseo'), info: dataForSeoBusinessInfo });
   registerSpeedSource({ hasKey: async (t) => Boolean(await effectivePageSpeedKey(t)), field: cruxField, lab: pageSpeedLab });
 }

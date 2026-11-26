@@ -51,7 +51,7 @@ export const PROVIDERS: Record<ProviderKey, { title: string; what: string; field
   },
   places: {
     title: 'Google Places',
-    what: 'Nota, número de reseñas y últimas reseñas de las fichas de Google de la competencia. Google lo cobra por uso en la facturación del proyecto.',
+    what: 'Consultas puntuales a Google Maps, sin guardar los datos. Ojo: sus condiciones solo permiten guardar el identificador de la ficha y, facturando en el EEE, no permiten vigilar a la competencia; por eso la vigilancia de fichas y reseñas de SEO usa DataForSEO.',
     fields: [{ key: 'apiKey', label: 'Clave de API', secret: true }],
     howTo:
       'En console.cloud.google.com, en el mismo proyecto que la conexión de Google: activa «Places API (New)» (no la antigua «Places API»), con la facturación activada. En Credenciales → Crear credenciales → Clave de API; edítala y en «Restricciones de API» deja solo «Places API (New)». Pégala aquí: al guardar se prueba con una consulta que no lleva datos de pago.'
@@ -259,6 +259,75 @@ export async function dataForSeoVolumes(tenantId: string, keywords: string[], lo
   const t = r.tasks?.[0];
   if (t && t.status_code !== 20000) throw new Error(`DataForSEO volumen: ${t.status_code} ${t.status_message ?? ''}`);
   return { volumes: new Map((t?.result ?? []).map((x) => [x.keyword.toLowerCase(), x.search_volume])), costUsd: typeof r.cost === 'number' ? r.cost : 0 };
+}
+
+// --- DataForSEO: ficha de Google de un negocio (SEO parte 5, local, 26 nov 2026) -------------------------------------
+// my_business_info en directo (unos 0,0054 $ por consulta [NV]). A diferencia de Google Places, sus condiciones no impiden
+// guardar los datos (Places solo permite guardar el place_id y, en el EEE, no permite vigilar a la competencia).
+
+type DfsBiz = {
+  title?: string;
+  category?: string | null;
+  additional_categories?: string[] | null;
+  cid?: string | null;
+  place_id?: string | null;
+  phone?: string | null;
+  url?: string | null;
+  domain?: string | null;
+  address?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  rating?: { value?: number | null; votes_count?: number | null } | null;
+  rating_distribution?: Record<string, number> | null;
+  is_claimed?: boolean | null;
+  work_time?: { work_hours?: { timetable?: Record<string, { open?: { hour: number; minute: number }; close?: { hour: number; minute: number } }[] | null> | null; current_status?: string | null } | null } | null;
+};
+
+const hhmm = (t?: { hour: number; minute: number }) => (t ? `${String(t.hour).padStart(2, '0')}:${String(t.minute).padStart(2, '0')}` : '');
+
+/** Normaliza la respuesta de my_business_info (puro: se prueba con una respuesta guardada). */
+export function normalizeBusinessInfo(x: DfsBiz | null | undefined): import('@/lib/core/capabilities').BusinessInfo | null {
+  if (!x || !x.title) return null;
+  const tt = x.work_time?.work_hours?.timetable ?? null;
+  const hours = tt
+    ? Object.fromEntries(
+        Object.entries(tt)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([day, slots]) => [day, (slots ?? []).map((sl) => `${hhmm(sl.open)}-${hhmm(sl.close)}`).sort().join(',')])
+      )
+    : null;
+  const cs = (x.work_time?.work_hours?.current_status ?? '').toLowerCase();
+  const status = cs.includes('closed_forever') || cs.includes('permanently') ? 'cerrada_definitiva' : cs.includes('temporarily') ? 'cerrada_temporal' : cs ? 'abierta' : null;
+  const domain = (x.domain ?? (x.url ? (() => { try { return new URL(x.url!).hostname; } catch { return null; } })() : null))?.replace(/^www\./, '').toLowerCase() ?? null;
+  return {
+    cid: x.cid ?? null,
+    placeId: x.place_id ?? null,
+    title: x.title,
+    category: x.category ?? null,
+    additionalCategories: (x.additional_categories ?? []).slice(0, 10),
+    phone: x.phone ?? null,
+    domain,
+    address: x.address ?? null,
+    lat: typeof x.latitude === 'number' ? x.latitude : null,
+    lng: typeof x.longitude === 'number' ? x.longitude : null,
+    rating: typeof x.rating?.value === 'number' ? x.rating.value : null,
+    votes: typeof x.rating?.votes_count === 'number' ? x.rating.votes_count : null,
+    distribution: x.rating_distribution ?? null,
+    status,
+    isClaimed: typeof x.is_claimed === 'boolean' ? x.is_claimed : null,
+    hours
+  };
+}
+
+export async function dataForSeoBusinessInfo(tenantId: string, q: { keyword: string; location: string; language: string }): Promise<{ info: import('@/lib/core/capabilities').BusinessInfo | null; costUsd: number }> {
+  const creds = readCredentials(await getIntegration(tenantId, 'dataforseo'));
+  const r = await dfs<{ cost?: number; tasks?: DfsTask<{ items?: DfsBiz[] }>[] }>(creds, '/business_data/google/my_business_info/live', [{ keyword: q.keyword.slice(0, 200), location_name: q.location, language_code: q.language }]);
+  const t = r.tasks?.[0];
+  const cost = typeof t?.cost === 'number' ? t.cost : typeof r.cost === 'number' ? r.cost : 0.0054;
+  // 40102: sin resultados (no es un error del servicio).
+  if (t && t.status_code !== 20000 && t.status_code !== 40102) throw new Error(`DataForSEO ficha: ${t.status_code} ${t.status_message ?? ''}`.slice(0, 200));
+  await markIntegration(tenantId, 'dataforseo', true);
+  return { info: normalizeBusinessInfo(t?.result?.[0]?.items?.[0]), costUsd: cost };
 }
 
 export async function dataForSeoVolume(tenantId: string, keywords: string[], location: string, language: string): Promise<string> {
