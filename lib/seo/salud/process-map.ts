@@ -90,6 +90,18 @@ export const SEO_SALUD_PROCESS_MAP: ProcessStep[] = [
     tables: ['findings', 'gsc_daily', 'gsc_pages', 'gsc_properties', 'jobs']
   },
   {
+    id: 'posiciones',
+    lane: 'Vigilancia continua',
+    name: 'Posiciones en Google (búsquedas que se siguen, mapa e IA)',
+    description: 'Hasta 50 búsquedas por proyecto: las principales de Search Console (sin marca), servicio × población (servicios y zona confirmados), la marca y las que se añadan a mano. Cada semana: posición real (top 20), URL, paquete local (mapa, sin fichas pagadas, por dominio o por nombre), AI Overview y si cita la web, y el top 10 para la cuota de visibilidad frente a la competencia confirmada. Pestaña Posiciones del proyecto.',
+    status: 'built',
+    file: 'lib/seo/posiciones/posiciones.ts',
+    when: 'Cada 7 días por defecto (editable: 7, 14 o 30; Salud → Vigilancia automática) o «Consultar ahora» (no si hay una en curso o de hace menos de 12 h). La recogida («seo.posiciones.recoger») corre cada 10 min solo mientras quedan tareas enviadas.',
+    ai: 'Nada.',
+    code: 'Cola asíncrona de DataForSEO por el núcleo (serpSource.postTasks/getTask, lo registra Agentes): fila «pendiente» por búsqueda y ejecución (clave única: un reintento no paga dos veces), tope de gasto antes de enviar, gasto apuntado al enviar (cuando se cobra), recogida por el id guardado (gratis 30 días), caduca a las 48 h. Volumen mensual de Google Ads una vez al mes. Semilla: solo se añade; lo quitado no vuelve. Idioma por búsqueda (es/ca); ubicación: la población de la zona si está en la lista de DataForSEO, si no la región o España (avisado). Hallazgos con margen: caída del top 10 dos semanas seguidas (cierra al volver al 8) y salida del mapa dos veces seguidas. Fuente «seo.posiciones:serp».',
+    tables: ['seo_rank_keywords', 'seo_rank_checks', 'seo_data_spend', 'findings', 'gsc_daily', 'gsc_queries', 'seo_dossier_facts', 'client_competitors', 'jobs', 'job_schedules']
+  },
+  {
     id: 'gasto-datos',
     lane: 'Vigilancia continua',
     name: 'Gasto en datos de pago por proyecto',

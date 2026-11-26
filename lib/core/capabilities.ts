@@ -618,7 +618,26 @@ export type SerpResult = {
 export type SerpSource = {
   isConnected: (tenantId: string) => Promise<boolean>;
   search: (tenantId: string, q: { keyword: string; location: string; language: string; depth?: number }) => Promise<SerpResult>;
+  // Cola asíncrona (SEO parte 4, posiciones): se cobra al enviar; recoger por id es gratis durante 30 días.
+  postTasks?: (tenantId: string, tasks: SerpTaskInput[]) => Promise<SerpTaskPosted[]>;
+  getTask?: (tenantId: string, id: string) => Promise<SerpTaskResult>;
+  /** Nombres de ubicación válidos de un país (p. ej. «Sabadell,Catalonia,Spain»), con su tipo. */
+  locations?: (tenantId: string, country: string) => Promise<{ name: string; type: string }[]>;
+  /** Volumen mensual medio (Google Ads) de hasta 1000 búsquedas. */
+  volumes?: (tenantId: string, keywords: string[], location: string, language: string) => Promise<{ volumes: Map<string, number | null>; costUsd: number }>;
 };
+export type SerpTaskInput = { keyword: string; location: string; language: string; device: 'mobile' | 'desktop'; depth: number; tag: string };
+export type SerpTaskPosted = { tag: string; id: string | null; costUsd: number; error: string | null };
+export type SerpTaskResult =
+  | { status: 'pendiente' }
+  | { status: 'error'; error: string }
+  | {
+      status: 'hecha';
+      organic: { rank: number; domain: string; url: string }[];
+      localPack: { rank: number; title: string; domain: string | null; paid: boolean }[];
+      aio: { present: boolean; domains: string[] };
+      features: string[];
+    };
 const GSERP = globalThis as unknown as { __kijuSerpSource?: SerpSource | null };
 export function registerSerpSource(s: SerpSource): void {
   GSERP.__kijuSerpSource = s;

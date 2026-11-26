@@ -1,12 +1,13 @@
 // Pestañas SEO de un proyecto (Hito 1, 23 nov 2026; Palabras desde el Hito 2): Salud técnica · Expediente · Palabras · Plan de mejora.
 import Link from 'next/link';
-import { ClipboardList, IdCard, KeyRound, Stethoscope } from 'lucide-react';
+import { ClipboardList, IdCard, KeyRound, Stethoscope, TrendingUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const TABS = [
   { key: 'salud', label: 'Salud técnica', icon: Stethoscope },
   { key: 'expediente', label: 'Expediente', icon: IdCard },
   { key: 'palabras', label: 'Palabras', icon: KeyRound },
+  { key: 'posiciones', label: 'Posiciones', icon: TrendingUp },
   { key: 'plan', label: 'Plan de mejora', icon: ClipboardList }
 ] as const;
 

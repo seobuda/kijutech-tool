@@ -4121,6 +4121,84 @@ export const seoSpeedChecks = pgTable(
 );
 export type SeoSpeedCheck = typeof seoSpeedChecks.$inferSelect;
 
+// Posiciones (SEO parte 4, 26 nov 2026; migración 0069): búsquedas que se siguen y su posición real cada semana.
+export const seoRankKeywords = pgTable(
+  'seo_rank_keywords',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    keyword: varchar('keyword', { length: 150 }).notNull(),
+    keywordKey: varchar('keyword_key', { length: 150 }).notNull(),
+    // gsc | servicio_zona | marca | manual
+    origin: varchar('origin', { length: 16 }).notNull(),
+    language: varchar('language', { length: 5 }).notNull().default('es'),
+    device: varchar('device', { length: 8 }).notNull().default('mobile'),
+    // activa | pausada | quitada (quitada: no se vuelve a proponer)
+    status: varchar('status', { length: 10 }).notNull().default('activa'),
+    impressions: integer('impressions'),
+    volume: integer('volume'),
+    volumeAt: timestamp('volume_at'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('seo_rank_keywords_unique').on(table.projectId, table.keywordKey, table.device),
+    check('seo_rank_keywords_origin_check', sql`${table.origin} IN ('gsc', 'servicio_zona', 'marca', 'manual')`),
+    check('seo_rank_keywords_status_check', sql`${table.status} IN ('activa', 'pausada', 'quitada')`),
+    check('seo_rank_keywords_device_check', sql`${table.device} IN ('mobile', 'desktop')`),
+  ]
+);
+export type SeoRankKeyword = typeof seoRankKeywords.$inferSelect;
+
+export const seoRankChecks = pgTable(
+  'seo_rank_checks',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    keywordId: uuid('keyword_id')
+      .notNull()
+      .references(() => seoRankKeywords.id, { onDelete: 'cascade' }),
+    runId: uuid('run_id').notNull(),
+    taskId: varchar('task_id', { length: 64 }),
+    // pendiente (aún sin enviar) | enviada | hecha | fallida | caducada
+    status: varchar('status', { length: 10 }).notNull().default('pendiente'),
+    locationName: varchar('location_name', { length: 120 }),
+    language: varchar('language', { length: 5 }),
+    device: varchar('device', { length: 8 }),
+    position: integer('position'),
+    url: text('url'),
+    clientUrls: text('client_urls').array(),
+    localPack: boolean('local_pack'),
+    localRank: integer('local_rank'),
+    aio: boolean('aio'),
+    aioCites: boolean('aio_cites'),
+    features: text('features').array(),
+    top10: text('top10').array(),
+    costUsd: decimal('cost_usd', { precision: 10, scale: 5 }),
+    error: text('error'),
+    postedAt: timestamp('posted_at'),
+    checkedAt: timestamp('checked_at'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('seo_rank_checks_unique').on(table.keywordId, table.runId),
+    index('seo_rank_checks_project_idx').on(table.projectId, table.checkedAt),
+    index('seo_rank_checks_open_idx').on(table.status).where(sql`${table.status} IN ('pendiente', 'enviada')`),
+    check('seo_rank_checks_status_check', sql`${table.status} IN ('pendiente', 'enviada', 'hecha', 'fallida', 'caducada')`),
+  ]
+);
+export type SeoRankCheck = typeof seoRankChecks.$inferSelect;
+
 export const seoReviews = pgTable(
   'seo_reviews',
   {

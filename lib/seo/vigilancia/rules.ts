@@ -15,7 +15,8 @@ export const SEO_PROCESSES = {
   'seo.vigilancia': { label: 'Vigilancia de la web (caída, noindex, robots, SSL)', every: 60, options: [60, 360, 1440] },
   'seo.auditoria': { label: 'Auditoría completa (rastreo de hasta 500 páginas)', every: 30 * 1440, options: [7 * 1440, 14 * 1440, 30 * 1440, 90 * 1440] },
   'seo.velocidad': { label: 'Velocidad real de los usuarios (Core Web Vitals)', every: 30 * 1440, options: [7 * 1440, 14 * 1440, 30 * 1440] },
-  'seo.detectores': { label: 'Mapa de palabras, páginas en caída e indexación', every: 7 * 1440, options: [3 * 1440, 7 * 1440, 14 * 1440, 30 * 1440] }
+  'seo.detectores': { label: 'Mapa de palabras, páginas en caída e indexación', every: 7 * 1440, options: [3 * 1440, 7 * 1440, 14 * 1440, 30 * 1440] },
+  'seo.posiciones': { label: 'Posiciones en Google (búsquedas que se siguen, mapa e IA)', every: 7 * 1440, options: [7 * 1440, 14 * 1440, 30 * 1440] }
 } as const;
 export type SeoProcessKey = keyof typeof SEO_PROCESSES;
 export const SEO_PROCESS_KEYS = Object.keys(SEO_PROCESSES) as SeoProcessKey[];

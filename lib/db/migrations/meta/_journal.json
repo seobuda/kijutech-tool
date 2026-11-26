@@ -484,6 +484,13 @@
       "when": 1796400000000,
       "tag": "0068_seo_proponer_ficha_prompt",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1796500000000,
+      "tag": "0069_seo_posiciones",
+      "breakpoints": true
     }
   ]
 }
