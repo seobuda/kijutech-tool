@@ -3,9 +3,9 @@
 // SEO · Local (tanda 5a): acciones de la pestaña Local. Permiso «edit» en el servidor; el proyecto y la ficha siempre de
 // la cuenta del usuario. Cada consulta a DataForSEO comprueba el tope de gasto del proyecto.
 import { revalidatePath } from 'next/cache';
-import { and, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { projects, seoLocalPlaces } from '@/lib/db/schema';
+import { projects, seoGeogridRuns, seoLocalPlaces } from '@/lib/db/schema';
 import { requirePermission } from '@/lib/auth/permissions';
 import { publicError } from '@/lib/errors';
 import { enqueueJob } from '@/lib/core/jobs';
@@ -110,6 +110,9 @@ export async function checkGeogridNowAction(projectId: string): Promise<Ok> {
   try {
     const user = await requirePermission('edit');
     if (!(await ownProject(user.tenantId, projectId))) return { ok: false, error: 'Proyecto no encontrado' };
+    // Como mucho una medición cada 24 h a mano (el tope mensual sigue valiendo).
+    const [last] = await db.select({ at: seoGeogridRuns.createdAt }).from(seoGeogridRuns).where(eq(seoGeogridRuns.projectId, projectId)).orderBy(desc(seoGeogridRuns.createdAt)).limit(1);
+    if (last && Date.now() - last.at.getTime() < 24 * 3_600_000) return { ok: false, error: 'Ya se midió hace menos de 24 horas.' };
     // Misma clave que el proceso programado: nunca dos mediciones a la vez (fuera de horario comercial se aplaza sola).
     const r = await enqueueJob({ tenantId: user.tenantId, kind: 'seo.geogrid', payload: { projectId }, scopeType: 'proyecto', scopeId: projectId, priority: 4, dedupeKey: `sched:seo.geogrid:${projectId}` });
     revalidatePath(PATH(projectId));

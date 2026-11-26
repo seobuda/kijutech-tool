@@ -71,7 +71,7 @@ export async function runGeogrid(tenantId: string, projectId: string, _heartbeat
   // Franja de envío: días laborables de 10 a 12 en Madrid. Fuera de ella se aplaza (clave propia: la del proceso sigue abierta).
   if (!inSendWindow(now)) {
     const at = nextSendWindow(now);
-    await enqueueJob({ tenantId, kind: 'seo.geogrid', payload: { projectId }, scopeType: 'proyecto', scopeId: projectId, priority: 6, runAt: at, dedupeKey: `seo.geogrid.aplazado:${projectId}` });
+    await enqueueJob({ tenantId, kind: 'seo.geogrid', payload: { projectId }, scopeType: 'proyecto', scopeId: projectId, priority: 6, runAt: at, dedupeKey: `seo.geogrid.aplazado:${projectId}:${at.toISOString()}` });
     return { status: 'omitido', summary: `Aplazado a ${at.toLocaleString('es-ES', { timeZone: 'Europe/Madrid', dateStyle: 'short', timeStyle: 'short' })}: el mapa se mide en horario comercial.` };
   }
   // Filas que no llegaron a enviarse hace más de 1 h: se cierran (no bloquean).
@@ -135,6 +135,8 @@ export async function collectGeogrid(tenantId: string, projectId: string): Promi
   const runs = await db.select().from(seoGeogridRuns).where(eq(seoGeogridRuns.projectId, projectId)).orderBy(desc(seoGeogridRuns.createdAt)).limit(30);
   if (!runs.length) return { skipped: 'sin mediciones' };
   const ids = runs.map((r) => r.id);
+  // Filas que no llegaron a enviarse (el trabajo cayó entre guardar y enviar) hace más de 1 h: se cierran.
+  await db.update(seoGeogridPoints).set({ status: 'fallida', error: 'no se llegó a enviar' }).where(and(inArray(seoGeogridPoints.runId, ids), eq(seoGeogridPoints.status, 'pendiente'), isNull(seoGeogridPoints.taskId), lt(seoGeogridPoints.createdAt, new Date(Date.now() - 3_600_000))));
   await db.update(seoGeogridPoints).set({ status: 'caducada', error: `sin respuesta en ${EXPIRE_H} h` }).where(and(inArray(seoGeogridPoints.runId, ids), eq(seoGeogridPoints.status, 'enviada'), lt(seoGeogridPoints.postedAt, new Date(Date.now() - EXPIRE_H * 3_600_000))));
   const sent = await db.select({ id: seoGeogridPoints.id, runId: seoGeogridPoints.runId, taskId: seoGeogridPoints.taskId }).from(seoGeogridPoints).where(and(inArray(seoGeogridPoints.runId, ids), eq(seoGeogridPoints.status, 'enviada')));
   const placeOf = new Map<string, { cid: string; placeId: string | null }>();
@@ -177,12 +179,14 @@ async function finalize(tenantId: string, projectId: string, batchId: string): P
   const towns = zoneTowns(typeof zona === 'string' ? zona : null);
   const pl = (await db.select({ cid: seoLocalPlaces.cid }).from(seoLocalPlaces).where(eq(seoLocalPlaces.id, runs[0].placeRowId)).limit(1))[0];
   const found: Parameters<typeof syncFindings>[3] = [];
+  let incomplete = false;
   const spamCount = new Map<string, { t: string; d: string | null; n: number; signals: string[] }>();
   for (const [i, run] of runs.entries()) {
     const pts = await db.select().from(seoGeogridPoints).where(eq(seoGeogridPoints.runId, run.id)).orderBy(seoGeogridPoints.row, seoGeogridPoints.col);
     const ranks = pts.map((p) => (p.status === 'hecha' ? p.rank : undefined));
     const sum = summarize(ranks);
     await db.update(seoGeogridRuns).set({ summary: sum }).where(eq(seoGeogridRuns.id, run.id));
+    if (sum.measured < pts.length * 0.8) incomplete = true;
     if (i === 0 && sum.measured >= pts.length * 0.8 && sum.top3Pct < 30) found.push({ kind: 'seo.geogrid_weak', dedupeKey: `seo.geogrid_weak:${run.keyword}`, query: run.keyword, metric: 'top3_pct', value: sum.top3Pct, evidence: { avg: sum.avg } });
     // Caída frente a la ejecución anterior comparable de la misma búsqueda.
     const [prev] = await db
@@ -208,6 +212,8 @@ async function finalize(tenantId: string, projectId: string, batchId: string): P
     }
   }
   for (const [cid, v] of spamCount) if (v.n >= 5) found.push({ kind: 'seo.maps_spam', dedupeKey: `seo.maps_spam:${cid}`, url: `https://maps.google.com/?cid=${cid}`, metric: 'puntos_top3', value: v.n, evidence: { title: v.t, signals: v.signals } });
+  // Una medición incompleta (menos del 80 % de puntos) no decide nada: si se sincronizara, cerraría avisos reales.
+  if (incomplete) return;
   await syncFindings(tenantId, projectId, GEOGRID_SOURCE, found, GEOGRID_KIND_KEYS);
 }
 

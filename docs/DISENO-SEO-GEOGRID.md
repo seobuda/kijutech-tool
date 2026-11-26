@@ -116,3 +116,10 @@ La hizo un subagente Opus 5.5 con esfuerzo alto, verificando la documentación d
 **Pendiente con la cuenta real:**
 - que el zoom y `search_this_area` den resultados razonables;
 - que el `cid` de `my_business_info` coincida con el de Maps.
+
+## Revisión de código (aprobó con cambios; corregido)
+- **Aplazamiento:** la clave lleva la hora del aplazamiento. Antes, si el trabajo aplazado se recogía fuera de la franja, el nuevo aplazamiento chocaba con su propia clave y la medición del mes se perdía.
+- **Medición incompleta** (menos del 80 % de los puntos): no se sincronizan los hallazgos. Si no, cerraría avisos reales.
+- **Filas pendientes sin enviar de hace más de 1 h:** las cierra también la recogida, y la vista no las cuenta como «en curso».
+- **«Medir ahora»:** como mucho una vez cada 24 h.
+- **Pendiente (bajo):** no hay candado entre dos trabajos `seo.geogrid` que coincidan exactamente. Lo limitan la clave del proceso y el tope mensual.

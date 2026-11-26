@@ -25,7 +25,8 @@ export async function getGeogridView(tenantId: string, projectId: string): Promi
   const batch = runs[0].batchId;
   const latest = runs.filter((r) => r.batchId === batch);
   const pts = await db.select().from(seoGeogridPoints).where(inArray(seoGeogridPoints.runId, latest.map((r) => r.id)));
-  const inProgress = pts.filter((p) => p.status === 'pendiente' || p.status === 'enviada').length;
+  // En curso: enviadas, o pendientes de hace menos de 1 h (las más viejas se cierran solas al recoger).
+  const inProgress = pts.filter((p) => p.status === 'enviada' || (p.status === 'pendiente' && Date.now() - p.createdAt.getTime() < 3_600_000)).length;
   const out: GridRunView[] = [];
   for (const r of latest) {
     const mine = pts.filter((p) => p.runId === r.id).sort((a, b) => a.row - b.row || a.col - b.col);
