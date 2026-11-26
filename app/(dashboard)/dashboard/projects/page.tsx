@@ -40,7 +40,7 @@ export default async function ProjectsPage() {
       <PageHeader
         icon={FolderKanban}
         title="Proyectos SEO"
-        description="Cada proyecto recorre las etapas del método: onboarding, kickoff, radiografía y keyword research."
+        description="Cada proyecto SEO de un cliente: su salud técnica, expediente, palabras, posiciones en Google, ficha y mapa local y plan de mejora."
         actions={
           <>
             {canManage && (
