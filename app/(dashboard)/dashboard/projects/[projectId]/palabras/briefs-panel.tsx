@@ -2,14 +2,14 @@
 
 // Proyecto → Palabras → Briefs (SEO parte 9a, 27 nov 2026): briefs de contenido hechos con la SERP real. Cada brief se ve
 // plegado (búsqueda, estado y nota) y se despliega por secciones; se copia como texto para el redactor o el encargo.
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Check, ChevronDown, ChevronRight, ClipboardCopy, FileText, Loader2, Plus } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, ClipboardCopy, FileText, Loader2, Plus, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge, Section } from '@/components/ui/page';
 import type { BriefView } from '@/lib/seo/contenido/briefs';
-import { briefToTaskAction, briefToWordPressAction, markBriefUsedAction, requestBriefAction, retryBriefAction, setBriefStatusAction } from '@/lib/seo/contenido-actions';
+import { briefToTaskAction, briefToWordPressAction, requestArticleAction, markBriefUsedAction, requestBriefAction, retryBriefAction, setBriefStatusAction } from '@/lib/seo/contenido-actions';
 import { briefToText, type BriefData } from '@/lib/seo/contenido/brief-text';
 
 const STATUS: Record<string, { label: string; tone: 'neutral' | 'info' | 'success' | 'outline' | 'danger' | 'warning' }> = {
@@ -34,9 +34,42 @@ const path = (u: string) => {
 
 const briefText = (b: BriefView) => briefToText(b.keyword, b.data as BriefData);
 
+type ArticleData = { title: string; meta: string; slug: string; html: string; words: number; at: string };
+const plain = (html: string) => html.replace(/<\/(p|h2|h3|h4|li|blockquote|tr)>/g, '\n').replace(/<li>/g, '• ').replace(/<h[234]>/g, '\n').replace(/<[^>]+>/g, '').replace(/&lt;/g, '<').replace(/&amp;/g, '&').replace(/\n{3,}/g, '\n\n').trim();
+
+function ArticlePreview({ a }: { a: ArticleData }) {
+  const [open, setOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="rounded-md border bg-muted/30 p-3">
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Artículo redactado con IA · {a.words} palabras · {new Date(a.at).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' })}</p>
+      <p className="mt-1 font-medium">{a.title}</p>
+      {a.meta && <p className="text-xs text-muted-foreground">{a.meta}</p>}
+      <p className="text-xs text-muted-foreground">/{a.slug}/</p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <Button size="sm" variant="ghost" onClick={() => setOpen(!open)} aria-expanded={open}>
+          {open ? 'Ocultar el texto' : 'Leer el texto'}
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => void navigator.clipboard?.writeText(`${a.title}\n\n${plain(a.html)}`).then(() => setCopied(true))}>
+          {copied ? <Check className="size-3.5" /> : <ClipboardCopy className="size-3.5" />}
+          {copied ? 'Copiado' : 'Copiar el texto'}
+        </Button>
+      </div>
+      {open && <div className="mt-2 max-h-96 overflow-y-auto whitespace-pre-line rounded bg-background p-3 text-sm">{plain(a.html)}</div>}
+      <p className="mt-2 text-xs text-muted-foreground">Revisa los [verificar: …] antes de publicar: son datos que la IA no tenía y no ha inventado.</p>
+    </div>
+  );
+}
+
 export function BriefsPanel({ projectId, briefs, canEdit, topics }: { projectId: string; briefs: BriefView[]; canEdit: boolean; topics: { topicKey: string; name: string; url: string | null; query: string }[] }) {
   const router = useRouter();
   const [pending, start] = useTransition();
+  const writing = briefs.some((b) => (b.data as { articleStatus?: { state?: string } }).articleStatus?.state === 'redactando');
+  useEffect(() => {
+    if (!writing) return;
+    const t = setInterval(() => router.refresh(), 15_000);
+    return () => clearInterval(t);
+  }, [writing, router]);
   const [msg, setMsg] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [kw, setKw] = useState('');
@@ -160,6 +193,25 @@ export function BriefsPanel({ projectId, briefs, canEdit, topics }: { projectId:
                             </ul>
                           </details>
                         )}
+                        {(() => {
+                          const ad = b.data as { article?: ArticleData; articleStatus?: { state?: string }; previousWpEditUrl?: string | null };
+                          const state = ad.articleStatus?.state;
+                          return (
+                            <div className="flex flex-col gap-2">
+                              {ad.article && <ArticlePreview a={ad.article} />}
+                              {state === 'fallido' && <p className="text-sm text-destructive">No se pudo redactar el artículo. Vuelve a intentarlo.</p>}
+                              {ad.previousWpEditUrl && ad.article && !b.wpEditUrl && <p className="text-xs text-muted-foreground">Ya había un borrador antiguo en WordPress (el esqueleto): bórralo allí si ya no lo quieres.</p>}
+                              {canEdit && (b.status === 'borrador' || b.status === 'listo') && (
+                                <div>
+                                  <Button size="sm" disabled={pending || state === 'redactando'} onClick={() => act(() => requestArticleAction(projectId, b.id))} title="Sonnet redacta el artículo completo (título con gancho, meta, slug y texto, sin imágenes) desde este brief y la ficha del cliente. Unos 0,05-0,08 $.">
+                                    {state === 'redactando' ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
+                                    {state === 'redactando' ? 'Redactando… (2-3 min)' : ad.article ? 'Volver a redactar con IA' : 'Redactar artículo con IA'}
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
                         <div className="flex flex-wrap items-center gap-2">
                           <Button
                             size="sm"
@@ -182,7 +234,7 @@ export function BriefsPanel({ projectId, briefs, canEdit, topics }: { projectId:
                             </a>
                           )}
                           {canEdit && (b.status === 'borrador' || b.status === 'listo') && !b.wpEditUrl && (
-                            <Button size="sm" variant="outline" disabled={pending} onClick={() => act(() => briefToWordPressAction(projectId, b.id))} title="Crea una entrada NUEVA en borrador en el WordPress del cliente con este esqueleto (hace falta conectar WordPress en la ficha del cliente). Publicarla lo hace una persona.">
+                            <Button size="sm" variant="outline" disabled={pending} onClick={() => act(() => briefToWordPressAction(projectId, b.id))} title="Crea una entrada NUEVA en borrador en el WordPress del cliente: con el artículo redactado si lo hay (si no, solo el esqueleto). Hace falta conectar WordPress en la ficha del cliente. Publicarla lo hace una persona.">
                               Crear borrador en WordPress
                             </Button>
                           )}

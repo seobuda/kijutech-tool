@@ -121,7 +121,7 @@ export async function connectWordPress(tenantId: string, clientId: string, input
 }
 
 /** Crea una entrada NUEVA en borrador. Vuelve a comprobar los permisos antes. Nunca edita nada existente. */
-export async function createWordPressDraft(tenantId: string, clientId: string, draft: { title: string; html: string }): Promise<{ postId: number; editUrl: string }> {
+export async function createWordPressDraft(tenantId: string, clientId: string, draft: { title: string; html: string; slug?: string | null; excerpt?: string | null }): Promise<{ postId: number; editUrl: string }> {
   const c = await getConn(tenantId, clientId, 'wordpress');
   if (!c || !c.baseUrl || !c.username) throw new ConnectionError('Este cliente no tiene WordPress conectado (ficha → Webs y cuentas → Conexiones).');
   const auth = wpAuth(c.username, secretOf(c));
@@ -131,7 +131,7 @@ export async function createWordPressDraft(tenantId: string, clientId: string, d
     if (e instanceof ConnectionError) await markError(c.id, e.userMessage);
     throw e;
   }
-  const r = await wpJson(`${c.baseUrl}/wp-json/wp/v2/posts`, { method: 'POST', auth, body: { title: draft.title.slice(0, 200), content: draft.html.slice(0, 100_000), status: 'draft' } });
+  const r = await wpJson(`${c.baseUrl}/wp-json/wp/v2/posts`, { method: 'POST', auth, body: { title: draft.title.slice(0, 200), content: draft.html.slice(0, 100_000), status: 'draft', ...(draft.slug ? { slug: draft.slug.slice(0, 80) } : {}), ...(draft.excerpt ? { excerpt: draft.excerpt.slice(0, 300) } : {}) } });
   const post = r.json as { id?: number; status?: string } | null;
   if (r.status !== 201 || !post?.id) {
     await markError(c.id, `No se pudo crear el borrador (${r.status}).`);
