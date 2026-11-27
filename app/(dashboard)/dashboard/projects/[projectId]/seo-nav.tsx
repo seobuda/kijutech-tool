@@ -3,6 +3,7 @@
 // de cliente sin volver a la lista, manteniendo la sección) y el engranaje con el expediente y la puesta en marcha.
 // Registra la visita (fase 0: línea base del rediseño). Sustituye a las 10 pestañas en fila.
 import Link from 'next/link';
+import { unstable_cache } from 'next/cache';
 import { and, asc, eq, ne } from 'drizzle-orm';
 import { Activity, ClipboardList, LayoutDashboard, MapPin, Settings2, Stethoscope, TrendingUp } from 'lucide-react';
 import { db } from '@/lib/db/drizzle';
@@ -38,22 +39,28 @@ const SECTIONS = {
 } as const satisfies Record<string, { group: GroupKey; label: string }>;
 export type SeoSection = keyof typeof SECTIONS;
 
+/** Proyectos SEO de la cuenta para el selector, en caché 60 s por cuenta (no se consulta en cada pantalla). */
+const seoProjectsOf = (tenantId: string) =>
+  unstable_cache(
+    () =>
+      db
+        .select({ id: projects.id, name: projects.name, clientName: clients.name })
+        .from(projects)
+        .leftJoin(clients, eq(clients.id, projects.clientId))
+        .where(and(eq(projects.tenantId, tenantId), eq(projects.service, 'seo'), ne(projects.status, 'archived')))
+        .orderBy(asc(projects.name))
+        .limit(300),
+    ['seo-nav-projects', tenantId],
+    { revalidate: 60 }
+  )();
+
 const firstOf = (g: GroupKey) => (Object.keys(SECTIONS) as SeoSection[]).find((k) => SECTIONS[k].group === g)!;
 
 export async function ProjectSeoNav({ projectId, active }: { projectId: string; active: SeoSection }) {
   const user = await getUserIfAllowed('view');
   const group = SECTIONS[active].group;
   const base = `/dashboard/projects/${projectId}`;
-  const list = user
-    ? await db
-        .select({ id: projects.id, name: projects.name, clientName: clients.name })
-        .from(projects)
-        .leftJoin(clients, eq(clients.id, projects.clientId))
-        .where(and(eq(projects.tenantId, user.tenantId), eq(projects.service, 'seo'), ne(projects.status, 'archived')))
-        .orderBy(asc(projects.name))
-        .limit(300)
-        .catch(() => [])
-    : [];
+  const list = user ? await seoProjectsOf(user.tenantId).catch(() => []) : [];
   if (user) logPageView(user.tenantId, user.id, 'seo', active, projectId);
   const current = list.find((p) => p.id === projectId);
   const siblings = (Object.keys(SECTIONS) as SeoSection[]).filter((k) => SECTIONS[k].group === group);
@@ -85,13 +92,14 @@ export async function ProjectSeoNav({ projectId, active }: { projectId: string; 
         ))}
       </nav>
       {siblings.length > 1 && (
-        <nav aria-label={`Apartados de ${GROUPS.find((g) => g.key === group)?.label ?? ''}`} className="flex flex-wrap gap-1.5">
+        // Pestañas secundarias (texto subrayado), distintas de las pastillas de sub-vista de cada pantalla.
+        <nav aria-label={`Apartados de ${GROUPS.find((g) => g.key === group)?.label ?? ''}`} className="flex flex-wrap gap-4 px-1">
           {siblings.map((k) => (
             <Link
               key={k}
               href={`${base}/${k}`}
               aria-current={k === active ? 'true' : undefined}
-              className={cn('inline-flex items-center rounded-full border px-3 py-1 text-sm', k === active ? 'border-brand bg-brand-soft font-medium text-brand' : 'border-border text-muted-foreground hover:bg-accent hover:text-foreground')}
+              className={cn('border-b-2 pb-1 text-sm', k === active ? 'border-foreground font-semibold text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground')}
             >
               {SECTIONS[k].label}
             </Link>

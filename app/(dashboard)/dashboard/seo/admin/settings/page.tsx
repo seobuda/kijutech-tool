@@ -16,7 +16,7 @@ export default async function SeoAdminSettingsPage() {
     redirect('/dashboard');
   }
 
-  const [settings, usage] = await Promise.all([getAllSeoSettings(), usageByView(user.tenantId!, 'seo', 30).catch(() => [])]);
+  const [settings, usage] = await Promise.all([getAllSeoSettings(), user.tenantId ? usageByView(user.tenantId, 'seo', 30).catch(() => []) : Promise.resolve([])]);
 
   return (
     <section className="mx-auto w-full max-w-[1400px] px-4 py-6 lg:px-8 lg:py-8">

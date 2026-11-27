@@ -8,7 +8,17 @@ import { db } from '@/lib/db/drizzle';
 import { appUsageEvents } from '@/lib/db/schema';
 import { registerRetention } from '@/lib/core/capabilities';
 
+const G = globalThis as unknown as { __kijuUsageSeen?: Map<string, number> };
+const DEDUPE_MS = 10 * 60_000;
+
+/** Una visita por persona, vista y proyecto cada 10 min (un refresco o una revalidación tras una acción no cuentan). */
 export function logPageView(tenantId: string, userId: number | null, area: string, view: string, scopeId: string | null = null): void {
+  const seen = (G.__kijuUsageSeen ??= new Map());
+  const key = `${tenantId}:${userId ?? '-'}:${area}:${view}:${scopeId ?? '-'}`;
+  const now = Date.now();
+  if ((seen.get(key) ?? 0) > now - DEDUPE_MS) return;
+  seen.set(key, now);
+  if (seen.size > 5000) for (const [k, t] of seen) if (t < now - DEDUPE_MS) seen.delete(k);
   void db
     .insert(appUsageEvents)
     .values({ tenantId, userId, area: area.slice(0, 30), view: view.slice(0, 40), scopeId })
