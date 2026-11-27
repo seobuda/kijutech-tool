@@ -37,7 +37,7 @@ export function DemandaPanel({ projectId, view, canEdit }: { projectId: string; 
   return (
     <Section
       title="Demanda"
-      description="Lo que se busca en Google (volumen de Google Ads) y la intención real de cada tema según los resultados de Google. Las ideas salen de sus servicios confirmados: decide cuáles seguir."
+      description="Lo que se busca en Google (volumen de Google Ads de las 3 búsquedas principales de cada tema: el total real es mayor) y la intención real de cada tema según los resultados de Google. Las ideas salen de sus servicios confirmados: decide cuáles seguir."
       actions={
         canEdit ? (
           <div className="flex flex-wrap gap-2">

@@ -122,7 +122,7 @@ export type MapaResult = {
 };
 
 /** Lo que sabemos del cliente para el valor de cada tema: servicios en orden, lo que no quiere y lo que más le interesa. */
-async function valueContext(tenantId: string, projectId: string, clientId: string | null, offerings: string | null): Promise<ValueContext> {
+export async function valueContext(tenantId: string, projectId: string, clientId: string | null, offerings: string | null): Promise<ValueContext> {
   // Servicios: el dato del expediente (confirmado primero; si no, el de más confianza); si no hay, la ficha.
   const facts = await db
     .select({ value: seoDossierFacts.value, status: seoDossierFacts.status, confidence: seoDossierFacts.confidence, source: seoDossierFacts.source })

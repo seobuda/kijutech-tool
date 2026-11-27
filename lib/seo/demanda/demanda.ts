@@ -14,7 +14,7 @@ import { canSpend, recordDataSpend } from '@/lib/seo/gasto';
 import { projectWebUrl } from '@/lib/seo/salud/audit';
 import { projectLocation } from '@/lib/seo/posiciones/posiciones';
 import { kwKey, MAX_KEYWORDS } from '@/lib/seo/posiciones/rules';
-import { enqueueKeywordMap } from '@/lib/seo/mapa/mapa';
+import { enqueueKeywordMap, valueContext } from '@/lib/seo/mapa/mapa';
 import { closestTopic, DEMANDA_KINDS, DEMANDA_SOURCE, demandWithoutPage, filterIdeas, keywordKey, sameIntentPairs, serpIntent } from '@/lib/seo/demanda/rules';
 
 type Outcome = { status: 'ok' | 'aviso' | 'omitido'; summary: string };
@@ -70,7 +70,7 @@ export async function runDemanda(tenantId: string, projectId: string, heartbeat:
     const want = [...new Map(topics.slice(0, MAX_VOLUME_TOPICS).flatMap((t) => t.queries.slice(0, 3)).filter((q) => q.length <= 80).map((q) => [keywordKey(q), q])).values()].filter((q) => !fresh(byKey.get(keywordKey(q))?.volumeAt));
     if (want.length && (await canSpend(projectId, VOLUME_COST)).ok) {
       const r = await src.volumes(tenantId, want.slice(0, 1000), loc.name, 'es');
-      if (r.costUsd > 0) await recordDataSpend(tenantId, projectId, 'serp', 'demanda: volumen de los temas', r.costUsd);
+      await recordDataSpend(tenantId, projectId, 'serp', 'demanda: volumen de los temas', r.costUsd || VOLUME_COST);
       for (const q of want.slice(0, 1000)) await upsertDemand(tenantId, projectId, q, { volume: r.volumes.get(q.toLowerCase()) ?? 0, volumeAt: new Date() });
       parts.push(`volumen de ${Math.min(want.length, 1000)} búsquedas`);
     }
@@ -142,7 +142,9 @@ export async function generateIdeas(tenantId: string, projectId: string): Promis
   const comps = p.clientId ? await db.select({ name: clientCompetitors.name, domain: clientCompetitors.domain }).from(clientCompetitors).where(and(eq(clientCompetitors.clientId, p.clientId), eq(clientCompetitors.status, 'confirmado'))) : [];
   const competitorTokens = comps.flatMap((c) => [brandTokens([c.name]), c.domain ? [normText(c.domain.replace(/^www\./, '').split('.')[0])] : []]).filter((t) => t.length);
   const existing = await db.select({ key: seoDemand.keywordKey, origin: seoDemand.origin }).from(seoDemand).where(eq(seoDemand.projectId, projectId));
-  const kept = filterIdeas(r.ideas, { competitorTokens, avoid: [], known: new Set(existing.filter((e) => e.origin === 'idea').map((e) => e.key)) });
+  // Lo que el cliente no quiere (memoria del cliente, «restricción»), como en el mapa.
+  const ctx = await valueContext(tenantId, projectId, p.clientId, null);
+  const kept = filterIdeas(r.ideas, { competitorTokens, avoid: ctx.avoid, known: new Set(existing.map((e) => e.key)) });
   const topics = await activeTopics(projectId);
   const monthlyOf = new Map(r.ideas.map((i) => [i.keyword, i.monthly]));
   for (const i of kept) {
@@ -163,13 +165,21 @@ export async function setIdeaStatus(tenantId: string, projectId: string, id: str
   if (status === 'seguida' && !d.rankKeywordId) {
     const active = await db.select({ n: sql<number>`count(*)::int` }).from(seoRankKeywords).where(and(eq(seoRankKeywords.projectId, projectId), eq(seoRankKeywords.status, 'activa')));
     if (Number(active[0]?.n ?? 0) >= MAX_KEYWORDS) return { ok: false, error: `Ya se siguen ${MAX_KEYWORDS} búsquedas en Posiciones: quita una antes.` };
-    const [rk] = await db
+    let [rk] = await db
       .insert(seoRankKeywords)
       .values({ tenantId, projectId, keyword: d.keyword.slice(0, 150), keywordKey: kwKey(d.keyword).slice(0, 150), origin: 'manual', language: d.language, volume: d.volume, volumeAt: d.volumeAt })
       .onConflictDoNothing()
       .returning({ id: seoRankKeywords.id });
+    if (!rk) {
+      // Ya existía (quizá quitada o en pausa): se reactiva y se enlaza.
+      [rk] = await db
+        .update(seoRankKeywords)
+        .set({ status: 'activa', updatedAt: new Date() })
+        .where(and(eq(seoRankKeywords.projectId, projectId), eq(seoRankKeywords.keywordKey, kwKey(d.keyword).slice(0, 150))))
+        .returning({ id: seoRankKeywords.id });
+    }
     await db.update(seoDemand).set({ status, rankKeywordId: rk?.id ?? null, updatedAt: new Date() }).where(eq(seoDemand.id, d.id));
-    return { ok: true, message: rk ? 'Se seguirá en Posiciones desde la próxima comprobación.' : 'Ya se seguía en Posiciones.' };
+    return { ok: true, message: 'Se seguirá en Posiciones desde la próxima comprobación.' };
   }
   await db.update(seoDemand).set({ status, updatedAt: new Date() }).where(eq(seoDemand.id, d.id));
   return { ok: true };
