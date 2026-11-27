@@ -13,13 +13,15 @@ import { ProjectSeoNav } from '../seo-nav';
 import { competitorComparison } from '@/lib/seo/competencia/competencia';
 import { PalabrasPanel, type OpportunityView, type TopicView } from './palabras-panel';
 import { DemandaPanel } from './demanda-panel';
+import { pickView, SubNav } from '../sub-nav';
 import { BriefsPanel } from './briefs-panel';
 import { listBriefs } from '@/lib/seo/contenido/briefs';
 import { getDemandView } from '@/lib/seo/demanda/demanda';
 
 const OPP_KINDS = ['seo.topic_new_page', 'seo.topic_unclear_page', 'seo.striking_distance', 'seo.low_ctr'];
 
-export default async function PalabrasPage({ params }: { params: Promise<{ projectId: string }> }) {
+export default async function PalabrasPage({ params, searchParams }: { params: Promise<{ projectId: string }>; searchParams: Promise<{ vista?: string }> }) {
+  const vista = pickView((await searchParams).vista, ['temas', 'demanda', 'briefs'] as const);
   const user = await requirePagePermission('view');
   const { projectId } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(projectId)) notFound();
@@ -125,6 +127,16 @@ export default async function PalabrasPage({ params }: { params: Promise<{ proje
         }
       />
       <ProjectSeoNav projectId={projectId} active="palabras" />
+      <SubNav
+        base={`/dashboard/projects/${projectId}/palabras`}
+        active={vista}
+        items={[
+          { key: 'temas', label: 'Temas, oportunidades y competencia', count: opps.length },
+          { key: 'demanda', label: 'Demanda e ideas', count: demand.ideas.filter((i) => i.status === 'nueva').length },
+          { key: 'briefs', label: 'Briefs de contenido', count: briefs.filter((b) => b.status === 'borrador' || b.status === 'listo').length }
+        ]}
+      />
+      {vista === 'temas' && (
       <PalabrasPanel
         projectId={projectId}
         topics={view}
@@ -138,8 +150,9 @@ export default async function PalabrasPage({ params }: { params: Promise<{ proje
         compJob={compJobs[0] ? { status: compJobs[0].status, result: (compJobs[0].result ?? null) as Record<string, unknown> | null, error: compJobs[0].error } : null}
         comparison={comparison}
       />
-      <DemandaPanel projectId={projectId} view={demand} canEdit={canEdit} />
-      <BriefsPanel projectId={projectId} briefs={briefs} canEdit={canEdit} topics={briefTopics} />
+      )}
+      {vista === 'demanda' && <DemandaPanel projectId={projectId} view={demand} canEdit={canEdit} />}
+      {vista === 'briefs' && <BriefsPanel projectId={projectId} briefs={briefs} canEdit={canEdit} topics={briefTopics} />}
     </PageContainer>
   );
 }

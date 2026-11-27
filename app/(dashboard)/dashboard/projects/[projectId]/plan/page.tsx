@@ -15,10 +15,12 @@ import { techniqueLabel } from '@/lib/core/techniques';
 import { ProjectSeoNav } from '../seo-nav';
 import { PlanPanel, type PlanContext, type PlanItemView } from './plan-panel';
 import { ResultadosPanel, type ResultView, type TrendView } from './resultados-panel';
+import { pickView, SubNav } from '../sub-nav';
 import { accountTechniqueTrends } from '@/lib/core/technique-trends';
 import { listProjectInterventions } from '@/lib/core/interventions';
 
-export default async function PlanPage({ params }: { params: Promise<{ projectId: string }> }) {
+export default async function PlanPage({ params, searchParams }: { params: Promise<{ projectId: string }>; searchParams: Promise<{ vista?: string }> }) {
+  const vista = pickView((await searchParams).vista, ['propuestas', 'resultados'] as const);
   const user = await requirePagePermission('view');
   const { projectId } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(projectId)) notFound();
@@ -115,8 +117,16 @@ export default async function PlanPage({ params }: { params: Promise<{ projectId
         }
       />
       <ProjectSeoNav projectId={projectId} active="plan" />
-      <PlanPanel projectId={projectId} items={view} canEdit={canEdit} ctx={ctx} />
-      <ResultadosPanel results={results} trends={trends} />
+      <SubNav
+        base={`/dashboard/projects/${projectId}/plan`}
+        active={vista}
+        items={[
+          { key: 'propuestas', label: 'Propuestas y encargos', count: view.filter((i) => i.status === 'pendiente').length },
+          { key: 'resultados', label: 'Resultados', count: results.filter((r) => r.verdict === 'funciono').length }
+        ]}
+      />
+      {vista === 'propuestas' && <PlanPanel projectId={projectId} items={view} canEdit={canEdit} ctx={ctx} />}
+      {vista === 'resultados' && <ResultadosPanel results={results} trends={trends} />}
     </PageContainer>
   );
 }
