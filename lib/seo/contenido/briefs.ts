@@ -293,7 +293,7 @@ export async function briefToWordPress(tenantId: string, projectId: string, id: 
     throw e;
   }
   // Ya existe en WordPress: guardarlo aparte (si esto fallara, el reclamo NO se libera, para no crear un segundo borrador).
-  await db.update(seoBriefs).set({ wpPostId: created.postId, wpEditUrl: created.editUrl, status: 'listo', updatedAt: new Date() }).where(eq(seoBriefs.id, id));
+  await db.update(seoBriefs).set({ wpPostId: created.postId, wpEditUrl: created.editUrl, status: 'listo', data: sql`${seoBriefs.data} - 'previousWpEditUrl'`, updatedAt: new Date() }).where(eq(seoBriefs.id, id));
   return { editUrl: created.editUrl, created: true };
 }
 
@@ -307,17 +307,28 @@ const ARTICLE_JOB = 'seo.brief.articulo';
 const untrusted = (s: string) => `<<<DATO NO FIABLE\n${s}\nFIN>>>`;
 
 export async function requestArticle(tenantId: string, projectId: string, id: string, by: string): Promise<void> {
-  const [b] = await db.select({ status: seoBriefs.status, data: seoBriefs.data }).from(seoBriefs).where(and(eq(seoBriefs.id, id), eq(seoBriefs.projectId, projectId), eq(seoBriefs.tenantId, tenantId))).limit(1);
-  if (!b || !['borrador', 'listo'].includes(b.status)) throw new BriefError('Brief no encontrado o aún preparándose.');
-  const st = (b.data as { articleStatus?: { state?: string; at?: string } }).articleStatus;
-  if (st?.state === 'redactando' && st.at && Date.now() - new Date(st.at).getTime() < 15 * 60_000) throw new BriefError('Ya se está redactando: tarda un par de minutos.');
-  await db.update(seoBriefs).set({ data: sql`${seoBriefs.data} || ${JSON.stringify({ articleStatus: { state: 'redactando', at: new Date().toISOString(), by } })}::jsonb`, updatedAt: new Date() }).where(eq(seoBriefs.id, id));
-  await enqueueJob({ tenantId, kind: ARTICLE_JOB, payload: { briefId: id, projectId }, scopeType: 'proyecto', scopeId: projectId, priority: 3, dedupeKey: `${ARTICLE_JOB}:${id}:${Date.now()}` });
+  const at = new Date().toISOString();
+  // Reclamo atómico (revisor): solo pasa si no hay otra redacción en marcha de hace menos de 15 min. Dos clics = un pago.
+  const claimed = await db
+    .update(seoBriefs)
+    .set({ data: sql`${seoBriefs.data} || ${JSON.stringify({ articleStatus: { state: 'redactando', at, by } })}::jsonb`, updatedAt: new Date() })
+    .where(
+      and(
+        eq(seoBriefs.id, id),
+        eq(seoBriefs.projectId, projectId),
+        eq(seoBriefs.tenantId, tenantId),
+        inArray(seoBriefs.status, ['borrador', 'listo']),
+        sql`NOT (coalesce(${seoBriefs.data}->'articleStatus'->>'state', '') = 'redactando' AND (${seoBriefs.data}->'articleStatus'->>'at')::timestamptz > now() - interval '15 minutes')`
+      )
+    )
+    .returning({ id: seoBriefs.id });
+  if (!claimed.length) throw new BriefError('Ya se está redactando (tarda un par de minutos), o el brief aún no está listo.');
+  await enqueueJob({ tenantId, kind: ARTICLE_JOB, payload: { briefId: id, projectId }, scopeType: 'proyecto', scopeId: projectId, priority: 3, dedupeKey: `${ARTICLE_JOB}:${id}:${at}` });
 }
 
 async function writeArticle(tenantId: string, projectId: string, id: string): Promise<Record<string, unknown>> {
   const [b] = await db.select().from(seoBriefs).where(and(eq(seoBriefs.id, id), eq(seoBriefs.projectId, projectId), eq(seoBriefs.tenantId, tenantId))).limit(1);
-  if (!b) return { skipped: 'brief no encontrado' };
+  if (!b) throw new Error('brief no encontrado');
   const prompt = await getPrompt(ARTICLE_PROMPT);
   if (!prompt) throw new Error('Falta el prompt seo_redactar_articulo');
   const [p] = await db.select({ name: projects.name, clientId: projects.clientId }).from(projects).where(eq(projects.id, projectId)).limit(1);
@@ -332,7 +343,7 @@ async function writeArticle(tenantId: string, projectId: string, id: string): Pr
     zona: val(d.client?.zona),
     publico: val(d.client?.publico),
     busqueda: b.keyword,
-    relacionadas: (d.related ?? []).slice(0, 10).join(', ') || '—',
+    relacionadas: (d.related ?? []).length ? untrusted((d.related ?? []).slice(0, 10).join(', ')) : '—',
     intencion: d.intent ?? 'sin datos',
     tipo: d.pageType ?? 'sin datos',
     volumen: d.volume != null ? String(d.volume) : 'sin datos',
@@ -359,12 +370,19 @@ async function writeArticle(tenantId: string, projectId: string, id: string): Pr
   });
   const article = parseArticle(res.content, b.keyword);
   if (!article) throw new Error('La respuesta no trae un artículo completo');
-  // Un borrador de WordPress anterior (el esqueleto) ya no corresponde: se suelta para poder crear el bueno.
-  const patch = { article: { ...article, model: ARTICLE_MODEL, at: new Date().toISOString() }, articleStatus: { state: 'hecho', at: new Date().toISOString() }, ...(b.wpPostId ? { previousWpEditUrl: b.wpEditUrl } : {}) };
+  const now = new Date().toISOString();
   await db
     .update(seoBriefs)
-    .set({ data: sql`${seoBriefs.data} || ${JSON.stringify(patch)}::jsonb`, ...(b.wpPostId ? { wpPostId: null, wpEditUrl: null } : {}), updatedAt: new Date() })
+    .set({ data: sql`${seoBriefs.data} || ${JSON.stringify({ article: { ...article, model: ARTICLE_MODEL, at: now }, articleStatus: { state: 'hecho', at: now } })}::jsonb`, updatedAt: new Date() })
     .where(eq(seoBriefs.id, id));
+  // El borrador de WordPress que hubiera (esqueleto o artículo anterior) ya no corresponde: se suelta, leyendo el estado
+  // de AHORA (revisor: la IA tarda y alguien pudo crear uno mientras), y se avisa de su enlace para borrarlo a mano.
+  const [released] = (await db.execute(sql`
+    UPDATE seo_briefs b SET wp_post_id = NULL, wp_edit_url = NULL, updated_at = now()
+    FROM (SELECT id, wp_edit_url FROM seo_briefs WHERE id = ${id} FOR UPDATE) o
+    WHERE b.id = o.id AND b.wp_post_id > 0
+    RETURNING o.wp_edit_url AS url`)) as unknown as { url: string | null }[];
+  if (released) await db.update(seoBriefs).set({ data: sql`${seoBriefs.data} || ${JSON.stringify({ previousWpEditUrl: released.url })}::jsonb` }).where(eq(seoBriefs.id, id));
   return { words: article.words };
 }
 

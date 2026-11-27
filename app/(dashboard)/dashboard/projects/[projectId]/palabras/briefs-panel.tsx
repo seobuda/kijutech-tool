@@ -34,6 +34,11 @@ const path = (u: string) => {
 
 const briefText = (b: BriefView) => briefToText(b.keyword, b.data as BriefData);
 
+/** «Redactando» de hace menos de 15 min (más = se cortó: se puede volver a pedir). */
+const isWriting = (data: unknown) => {
+  const st = (data as { articleStatus?: { state?: string; at?: string } }).articleStatus;
+  return st?.state === 'redactando' && Boolean(st.at) && Date.now() - new Date(st.at!).getTime() < 15 * 60_000;
+};
 type ArticleData = { title: string; meta: string; slug: string; html: string; words: number; at: string };
 const plain = (html: string) => html.replace(/<\/(p|h2|h3|h4|li|blockquote|tr)>/g, '\n').replace(/<li>/g, '• ').replace(/<h[234]>/g, '\n').replace(/<[^>]+>/g, '').replace(/&lt;/g, '<').replace(/&amp;/g, '&').replace(/\n{3,}/g, '\n\n').trim();
 
@@ -64,7 +69,7 @@ function ArticlePreview({ a }: { a: ArticleData }) {
 export function BriefsPanel({ projectId, briefs, canEdit, topics }: { projectId: string; briefs: BriefView[]; canEdit: boolean; topics: { topicKey: string; name: string; url: string | null; query: string }[] }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const writing = briefs.some((b) => (b.data as { articleStatus?: { state?: string } }).articleStatus?.state === 'redactando');
+  const writing = briefs.some((b) => isWriting(b.data));
   useEffect(() => {
     if (!writing) return;
     const t = setInterval(() => router.refresh(), 15_000);
@@ -195,12 +200,12 @@ export function BriefsPanel({ projectId, briefs, canEdit, topics }: { projectId:
                         )}
                         {(() => {
                           const ad = b.data as { article?: ArticleData; articleStatus?: { state?: string }; previousWpEditUrl?: string | null };
-                          const state = ad.articleStatus?.state;
+                          const state = isWriting(b.data) ? 'redactando' : ad.articleStatus?.state === 'redactando' ? 'fallido' : ad.articleStatus?.state;
                           return (
                             <div className="flex flex-col gap-2">
                               {ad.article && <ArticlePreview a={ad.article} />}
                               {state === 'fallido' && <p className="text-sm text-destructive">No se pudo redactar el artículo. Vuelve a intentarlo.</p>}
-                              {ad.previousWpEditUrl && ad.article && !b.wpEditUrl && <p className="text-xs text-muted-foreground">Ya había un borrador antiguo en WordPress (el esqueleto): bórralo allí si ya no lo quieres.</p>}
+                              {ad.previousWpEditUrl && ad.article && !b.wpEditUrl && <p className="text-xs text-muted-foreground">Ya había un borrador anterior en WordPress: bórralo allí si ya no lo quieres.</p>}
                               {canEdit && (b.status === 'borrador' || b.status === 'listo') && (
                                 <div>
                                   <Button size="sm" disabled={pending || state === 'redactando'} onClick={() => act(() => requestArticleAction(projectId, b.id))} title="Sonnet redacta el artículo completo (título con gancho, meta, slug y texto, sin imágenes) desde este brief y la ficha del cliente. Unos 0,05-0,08 $.">
