@@ -11,6 +11,8 @@ import { seoSources, type SeoSourceRow } from '@/lib/db/schema';
 import { parseFeed, parseStatusIncidents } from '@/lib/seo/id/sources';
 import { listSeoSources, readPublic, SourceError } from '@/lib/seo/id/fuentes';
 import { feedDomain, MAX_ITEMS_PER_READ } from '@/lib/seo/id/fuentes-rules';
+import { investigate, INVESTIGATE_JOB } from '@/lib/seo/id/investigador';
+import { INVESTIGATE_EVERY_DAYS } from '@/lib/seo/id/investigador-rules';
 
 export const ID_WATCH = 'seo.id.watch';
 export const ID_DIGEST = 'seo.id.digest';
@@ -51,6 +53,8 @@ export async function watchSeoSources(tenantId: string): Promise<{ read: number;
 export async function ensureSeoWatch(tenantId: string): Promise<void> {
   await ensureScheduleIfMissing(tenantId, ID_WATCH, '', 180);
   await ensureScheduleIfMissing(tenantId, ID_DIGEST, '', 7 * 24 * 60, nextMonday9());
+  // Jefe SEO D5: el investigador, cada 3 días (solo gasta si hay novedades pertinentes).
+  await ensureScheduleIfMissing(tenantId, INVESTIGATE_JOB, '', INVESTIGATE_EVERY_DAYS * 24 * 60);
 }
 
 function nextMonday9(now = new Date()): Date {
@@ -74,5 +78,7 @@ export function registerSeoWatch(): void {
     run: async (ctx) => weeklyDigest(ctx.tenantId, 'seo', 'Novedades oficiales de Google Search. Resume qué cambia y qué debería revisar el equipo de SEO en las webs de los clientes')
   });
   registerProcess({ key: ID_WATCH, scopeType: 'cuenta', label: 'I+D SEO: vigilar las fuentes de novedades (oficiales y blogs)', defaultEveryMinutes: 180, enqueue: () => ({ kind: ID_WATCH, priority: 7 }) });
+  registerJobKind({ kind: INVESTIGATE_JOB, timeoutS: 300, maxConcurrent: 1, maxAttempts: 1, run: async (ctx) => investigate(ctx.tenantId) });
+  registerProcess({ key: INVESTIGATE_JOB, scopeType: 'cuenta', label: 'I+D SEO: investigador de novedades (Jefe SEO)', defaultEveryMinutes: INVESTIGATE_EVERY_DAYS * 24 * 60, enqueue: () => ({ kind: INVESTIGATE_JOB, priority: 8 }) });
   registerProcess({ key: ID_DIGEST, scopeType: 'cuenta', label: 'I+D SEO: resumen semanal para la base de conocimiento', defaultEveryMinutes: 7 * 24 * 60, enqueue: () => ({ kind: ID_DIGEST, priority: 8 }) });
 }

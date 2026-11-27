@@ -8,6 +8,7 @@ import { publicError } from '@/lib/errors';
 import { enqueueJob } from '@/lib/core/jobs';
 import { addSource, deleteSource, resolveSource, SourceError, updateSource } from '@/lib/seo/id/fuentes';
 import { ensureSeoWatch, ID_WATCH } from '@/lib/seo/id/watch';
+import { INVESTIGATE_JOB } from '@/lib/seo/id/investigador';
 import type { SourceLevel } from '@/lib/seo/id/fuentes-rules';
 
 type Ok = { ok: true; message?: string } | { ok: false; error: string };
@@ -69,5 +70,17 @@ export async function readSourcesNowAction(): Promise<Ok> {
     return { ok: true, message: 'Leyendo las fuentes (menos de un minuto). Recarga la página para ver el resultado.' };
   } catch (e) {
     return fail(e, 'No se pudo lanzar la lectura');
+  }
+}
+
+/** Jefe SEO D5: pasar el investigador ahora (solo gasta si hay novedades pertinentes desde la última pasada). */
+export async function investigateNowAction(): Promise<Ok> {
+  try {
+    const user = await requirePermission('admin');
+    await ensureSeoWatch(user.tenantId);
+    await enqueueJob({ tenantId: user.tenantId, kind: INVESTIGATE_JOB, priority: 4, dedupeKey: `${INVESTIGATE_JOB}:manual` });
+    return { ok: true, message: 'El investigador está leyendo (uno o dos minutos). Lo importante te llegará como propuesta en Conocimiento.' };
+  } catch (e) {
+    return fail(e, 'No se pudo lanzar el investigador');
   }
 }

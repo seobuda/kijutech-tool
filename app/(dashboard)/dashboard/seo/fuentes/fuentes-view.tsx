@@ -4,12 +4,12 @@
 // administradores, añadir (comprobando antes que se lee), renombrar, cambiar el nivel, pausar y quitar.
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { CheckCircle2, Loader2, Pause, Play, Plus, RefreshCw, Search, Trash2, TriangleAlert } from 'lucide-react';
+import { CheckCircle2, FlaskConical, Loader2, Pause, Play, Plus, RefreshCw, Search, Trash2, TriangleAlert } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge, Section } from '@/components/ui/page';
 import type { SeoSourceRow } from '@/lib/db/schema';
 import { KIND_LABEL, LEVEL_LABEL, type SourceKind, type SourceLevel } from '@/lib/seo/id/fuentes-rules';
-import { addSourceAction, deleteSourceAction, previewSourceAction, readSourcesNowAction, updateSourceAction } from '@/lib/seo/fuentes-actions';
+import { addSourceAction, deleteSourceAction, investigateNowAction, previewSourceAction, readSourcesNowAction, updateSourceAction } from '@/lib/seo/fuentes-actions';
 
 type Res = { ok: true; message?: string } | { ok: false; error: string };
 const LEVELS: SourceLevel[] = ['oficial', 'reputada', 'comunidad'];
@@ -169,10 +169,46 @@ function SourceRow({ s, canEdit }: { s: SeoSourceRow; canEdit: boolean }) {
   );
 }
 
-export function FuentesView({ sources, canEdit }: { sources: SeoSourceRow[]; canEdit: boolean }) {
+type Investigation = { at: string | null; result: Record<string, unknown> | null; error: string | null };
+
+function Investigator({ inv, canEdit }: { inv: Investigation; canEdit: boolean }) {
+  const { pending, msg, run } = useRun();
+  const r = inv.result ?? {};
+  const n = (k: string) => (typeof r[k] === 'number' ? (r[k] as number) : 0);
+  return (
+    <Section
+      title={
+        <span className="flex items-center gap-1.5">
+          <FlaskConical className="size-4" aria-hidden /> Investigador del Jefe SEO
+        </span>
+      }
+      description="Cada 3 días, y solo si hay novedades: el código aparta lo que no tiene que ver con nuestro trabajo (sin coste), Sonnet 5.5 dice qué cambia, en qué líneas y a qué clientes afecta, y lo importante (como mucho 3) te llega como propuesta de entrada en Conocimiento, con fecha, nivel (oficial, reputada o rumor) y enlaces. Una opinión nunca pasa por oficial. Gasta del tope del Jefe SEO."
+    >
+      <div className="flex flex-col gap-2 p-5 text-sm">
+        <p>
+          {inv.at ? `Última pasada: ${fmt(inv.at)}. ` : 'Aún no ha pasado. '}
+          {inv.result && `${n('leidas')} novedades nuevas, ${n('pertinentes')} pertinentes, ${n('propuestas')} propuesta(s) a la base.`}
+          {inv.result && typeof r.motivo === 'string' ? ` (${r.motivo})` : ''}
+        </p>
+        {inv.error && <p className="text-destructive">La última pasada falló: {inv.error}</p>}
+        {canEdit && (
+          <div className="flex flex-wrap items-center gap-3">
+            <Button size="sm" variant="outline" disabled={pending} onClick={() => run(() => investigateNowAction())}>
+              {pending ? <Loader2 className="size-4 animate-spin" /> : <FlaskConical className="size-4" />} Investigar ahora
+            </Button>
+            {msg && <p role="status" className={msg.ok ? 'text-sm text-success' : 'text-sm text-destructive'}>{msg.text}</p>}
+          </div>
+        )}
+      </div>
+    </Section>
+  );
+}
+
+export function FuentesView({ sources, canEdit, investigation }: { sources: SeoSourceRow[]; canEdit: boolean; investigation: Investigation }) {
   const { pending, msg, run } = useRun();
   return (
     <div className="flex flex-col gap-4">
+      <Investigator inv={investigation} canEdit={canEdit} />
       {canEdit && (
         <div className="flex flex-wrap items-center gap-3">
           <Button size="sm" variant="outline" disabled={pending} onClick={() => run(() => readSourcesNowAction())}>

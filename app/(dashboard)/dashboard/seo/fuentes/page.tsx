@@ -7,13 +7,14 @@ import { ArrowLeft, Rss } from 'lucide-react';
 import { checkPermission, requirePagePermission } from '@/lib/auth/permissions';
 import { PageContainer, PageHeader } from '@/components/ui/page';
 import { listSeoSources } from '@/lib/seo/id/fuentes';
+import { lastInvestigation } from '@/lib/seo/id/investigador';
 import { FuentesView } from './fuentes-view';
 
 export const dynamic = 'force-dynamic';
 
 export default async function FuentesPage() {
   const user = await requirePagePermission('view');
-  const [sources, admin] = await Promise.all([listSeoSources(user.tenantId), checkPermission('admin')]);
+  const [sources, admin, inv] = await Promise.all([listSeoSources(user.tenantId), checkPermission('admin'), lastInvestigation(user.tenantId)]);
   return (
     <PageContainer>
       <Link href="/dashboard/conocimiento/novedades" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
@@ -25,7 +26,7 @@ export default async function FuentesPage() {
         title="Fuentes de novedades SEO"
         description="Lo que la agencia lee cada 3 horas para estar al día, sin IA. Las oficiales (Google, Bing) avisan por Telegram de las actualizaciones y van al resumen semanal de la base de conocimiento; los blogs y canales de herramientas se guardan aparte como opinión, nunca como criterio. Puedes añadir un RSS, una web o blog (su RSS se busca solo) o un canal de YouTube."
       />
-      <FuentesView sources={JSON.parse(JSON.stringify(sources))} canEdit={admin.ok} />
+      <FuentesView sources={JSON.parse(JSON.stringify(sources))} canEdit={admin.ok} investigation={inv} />
     </PageContainer>
   );
 }
