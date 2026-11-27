@@ -6,7 +6,7 @@ import 'server-only';
 import { and, eq, gte, inArray, isNotNull, lte, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { findings, projects, seoPlanItems } from '@/lib/db/schema';
-import { dataSpentThisMonth } from '@/lib/seo/gasto';
+import { dataBudgetUsd, dataSpentThisMonth } from '@/lib/seo/gasto';
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -42,6 +42,6 @@ export async function seoWeeklyLines(tenantId: string, from: string, to: string)
   }
   const quiet = list.length - lines.length;
   if (quiet) lines.push(`${quiet} proyecto(s) sin novedades graves.`);
-  lines.push(`Gasto en datos este mes: ${spentTotal.toFixed(2)} $ (tope 5 $ por proyecto).`);
+  lines.push(`Gasto en datos este mes: ${spentTotal.toFixed(2)} $ (tope ${await dataBudgetUsd().catch(() => 5)} $ por proyecto).`);
   return lines;
 }

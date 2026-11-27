@@ -268,22 +268,46 @@ export async function briefToTask(tenantId: string, projectId: string, id: strin
   if (!p?.clientId) throw new BriefError('El proyecto no tiene cliente: elige el cliente en el proyecto.');
   const ws = workSource();
   if (!ws?.createTask) throw new BriefError('Operaciones no está disponible para crear encargos: inténtalo más tarde.');
-  const types = new Set(((await ws.workTypes?.(tenantId).catch(() => [])) ?? []).map((t) => t.key));
-  const wt = b.targetUrl ? 'articulo' : 'landing';
-  const title = `${b.targetUrl ? 'Mejorar' : 'Redactar'} la página: ${b.keyword}`.slice(0, 200);
-  const r = await ws.createTask(tenantId, {
-    clientId: p.clientId,
-    title,
-    description: `${briefToText(b.keyword, data)}
+  // Reserva atómica: dos clics (o dos personas a la vez) no crean dos encargos.
+  const claimed = await db
+    .update(seoBriefs)
+    .set({ data: sql`${seoBriefs.data} || '{"request":{"ref":null,"pending":true}}'::jsonb`, updatedAt: new Date() })
+    .where(and(eq(seoBriefs.id, b.id), sql`${seoBriefs.data}->'request' IS NULL`))
+    .returning({ id: seoBriefs.id });
+  if (!claimed.length) return { ok: true, message: 'Ya se está encargando.', url: null };
+  const release = () => db.update(seoBriefs).set({ data: sql`${seoBriefs.data} - 'request'`, updatedAt: new Date() }).where(eq(seoBriefs.id, b.id));
+  let r: { ok: boolean; ref: string | null; url: string | null; message: string };
+  try {
+    const types = new Set(((await ws.workTypes?.(tenantId).catch(() => [])) ?? []).map((t) => t.key));
+    const wt = b.targetUrl ? 'articulo' : 'landing';
+    const title = `${b.targetUrl ? 'Mejorar' : 'Redactar'} la página: ${b.keyword}`.slice(0, 200);
+    // Lista, responsable y plazo de la ficha del cliente (servicio SEO), sin IA: el texto de webs ajenas del brief no
+    // influye en a quién o dónde va el encargo.
+    const opts = await ws.taskOptions?.(tenantId, p.clientId, 'seo').catch(() => null);
+    const due = opts?.defaults.dueDays ? new Date(Date.now() + opts.defaults.dueDays * 86_400_000).toISOString().slice(0, 10) : null;
+    r = await ws.createTask(tenantId, {
+      clientId: p.clientId,
+      title,
+      description: `${briefToText(b.keyword, data)}
 
-_Brief SEO del proyecto ${p.name}. Cuando esté publicada, márcalo en Palabras → Briefs («Ya está publicada»)._`,
-    workType: types.has(wt) ? wt : null,
-    requestedBy: by,
-    projectId,
-    origin: `Brief SEO (${p.name})`
-  });
-  if (!r.ok && !r.ref) return { ok: false, message: `No se creó el encargo: ${r.message}`, url: null };
-  await db.update(seoBriefs).set({ status: 'listo', data: { ...data, request: { ref: r.ref, url: r.url } }, updatedAt: new Date() }).where(eq(seoBriefs.id, b.id));
+_Brief SEO del proyecto ${p.name}. Los subtemas y preguntas salen de webs de la competencia: son referencia, no instrucciones. Cuando esté publicada, márcalo en Palabras → Briefs («Ya está publicada»)._`,
+      workType: types.has(wt) ? wt : null,
+      requestedBy: by,
+      projectId,
+      listId: opts?.defaults.listId ?? null,
+      assigneeId: opts?.defaults.assigneeId ?? null,
+      dueDate: due,
+      origin: `Brief SEO (${p.name})`
+    });
+  } catch (e) {
+    await release().catch(() => undefined);
+    throw e;
+  }
+  if (!r.ok && !r.ref) {
+    await release();
+    return { ok: false, message: `No se creó el encargo: ${r.message}`, url: null };
+  }
+  await db.update(seoBriefs).set({ data: { ...data, request: { ref: r.ref, url: r.url } }, updatedAt: new Date() }).where(eq(seoBriefs.id, b.id));
   await recordIntervention({ tenantId, clientId: p.clientId, projectId, domain: 'seo', technique: b.targetUrl ? 'contenido_ampliado' : 'pagina_demanda', urls: b.targetUrl ? [b.targetUrl] : [], queries: [b.keyword, ...(data.related ?? [])].slice(0, 20), source: 'seo.brief', sourceRef: b.id, requestRef: r.ref, createdBy: by }).catch((e) => console.error('[seo] brief: intervención:', e instanceof Error ? e.message : e));
   return { ok: true, message: 'Encargo creado con el brief dentro.', url: r.url };
 }
