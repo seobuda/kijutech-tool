@@ -63,7 +63,7 @@ El detalle, el porqué de cada pieza y la supervisión de Opus están en `docs/I
 | 5 | **Local** (5a ficha de Google y reseñas, §6.50, y 5b mapa por zonas, §6.51, y 5c citas y páginas de zona, §6.52, hechas el 27 nov) | Geo-grid mensual, reseñas propias y de la competencia, vigilancia de la ficha de Google, spam en Maps, conseguir reseñas, citas, páginas de zona con la regla anti-páginas puerta |
 | ✅ 6 | **Técnico 2b + 2c** (6a técnico 2b, §6.53, y 6b registro de cambios y páginas de dinero, §6.54, hechas el 27 nov) | Reglas WordPress (metas duplicadas, soft 404, staging, nofollow, sitemap frente a canonical, datos incoherentes, rastreadores de IA, tecnología, web hackeada) + registro de cambios (tabla propia y protocolo) + páginas de dinero (campos estructurados) |
 | ✅ 7 | **Demanda** (hecha el 27 nov, §6.55) | Volumen, intención y grupos validados con la SERP; valor por tema |
-| 8 | **Medir y explicar** | «¿Funcionó?» con la comprobación tras el encargo y la fecha real, diagnóstico de caídas en capas, atribución y previsión |
+| ✅ 8 | **Medir y explicar** (hecha el 27 nov, §6.56; atribución y previsión pasan a la 12) | «¿Funcionó?» con la comprobación tras el encargo y la fecha real, diagnóstico de caídas en capas, atribución y previsión |
 | 9 | **Contenido → WordPress** | Brief, nota, enlazado interno, contenido que pierde tráfico; publicar con aprobación |
 | 10 | **Autoridad** | Tras verificar el precio y la cobertura en 3 webs reales y con el OK de Enric (contratar es línea roja) |
 | 11 | **Orquestar, panel de IA mensual y tendencias entre clientes** | Cuando haya unas 50 intervenciones por técnica |

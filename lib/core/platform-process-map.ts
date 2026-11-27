@@ -87,5 +87,18 @@ export const PLATAFORMA_PROCESS_MAP: ProcessStep[] = [
     ai: 'Nada: la técnica y la hipótesis vienen de la propuesta (reglas o estratega); si falta algo, se completa con lo típico de la técnica (lib/core/techniques.ts).',
     code: 'Una por origen (módulo + id de la propuesta): reaprobar actualiza, no duplica. El trabajo horario pregunta a la fuente de trabajo el estado de los encargos (workSource().requestStatus): sirve igual con ClickUp o con la herramienta que lo sustituya, sin que Operaciones tenga que avisar.',
     tables: ['interventions', 'clients']
+  },
+  {
+    id: 'plt-medir',
+    lane: 'Datos',
+    name: '¿Funcionó? Medición de las intervenciones',
+    description:
+      'Cada intervención hecha se mide a los 28, 56 y 90 días de la fecha REAL del cambio (la da el módulo por la capacidad de evidencia: en SEO, el registro de cambios; si no consta, la del encargo): sus páginas en Search Console frente al resto de la web, semana a semana. Resultado en interventions.outcome (veredicto, efecto en logaritmo con su error, clics incrementales, intervenciones solapadas). Se ve en Plan → «Resultados».',
+    status: 'built',
+    file: 'lib/core/measure.ts',
+    when: 'Cada día (proceso de cuenta «core.interventions.measure»; se da de alta al marcarse hecha la primera).',
+    ai: 'Nada.',
+    code: 'Reglas puras en lib/core/measure-rules.ts: diferencias en diferencias con log((tratadas+1)/(control+1)), prueba t, tendencias paralelas antes del cambio (si no, «no concluyente»: evita la regresión a la media de las páginas que acaban de caer), umbral simétrico de ±15 % con t ≥ 2 y mínimos por métrica (30 clics, 300 impresiones, 100 impresiones de la cesta). Posición y CTR con una cesta fija de búsquedas ponderada por las impresiones previas (posición: bajar = mejorar). Sin el intervalo dudoso + 7 días de reindexación. Técnicas de toda la web o de la ficha: «no medible» por esta vía. El núcleo no lee tablas de módulos: usa registerInterventionEvidence.',
+    tables: ['interventions', 'gsc_daily', 'gsc_pages', 'gsc_properties']
   }
 ];

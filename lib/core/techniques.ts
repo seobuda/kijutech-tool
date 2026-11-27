@@ -32,6 +32,7 @@ export const TECHNIQUES: Technique[] = [
   { key: 'campana_resenas', domain: 'seo', label: 'Campaña para conseguir reseñas', metric: 'impresiones', windowDays: 56 },
   { key: 'optimizar_ficha_zona', domain: 'seo', label: 'Mejorar la presencia en el mapa por zonas', metric: 'impresiones', windowDays: 56 },
   { key: 'denunciar_spam', domain: 'seo', label: 'Sugerir a Google la corrección de un competidor', metric: 'impresiones', windowDays: 42 },
+  { key: 'investigar_caida', domain: 'seo', label: 'Investigar y frenar una caída de visitas', metric: 'clics', windowDays: 56 },
   { key: 'unificar_o_diferenciar', domain: 'seo', label: 'Unir o diferenciar dos páginas con la misma intención', metric: 'posicion', windowDays: 56 },
   { key: 'pagina_demanda', domain: 'seo', label: 'Página nueva para una demanda que la web no cubre', metric: 'impresiones', windowDays: 84 },
   { key: 'corregir_soft_404', domain: 'seo', label: 'Corregir soft 404 (que lo que no existe dé 404)', metric: 'impresiones', windowDays: 56 },
@@ -111,7 +112,7 @@ export function techniqueFromCategory(category: string | null | undefined): stri
  * nueva auditoría (el hallazgo debe desaparecer); las de velocidad, con la medición de velocidad; las de contenido y
  * posiciones, solo con el resultado en Search Console. Después, siempre, el efecto en la métrica de la hipótesis.
  */
-const GSC_ONLY = new Set(['unificar_o_diferenciar', 'pagina_demanda', 'corregir_soft_404', 'quitar_staging', 'quitar_nofollow_interno', 'un_plugin_seo', 'limpiar_hackeo', 'pagina_zona', 'nap_antiguo_corregido', 'optimizar_ficha_zona', 'denunciar_spam', 'ficha_google_corregida', 'campana_resenas', 'recuperar_mapa', 'optimizar_al_alcance', 'reforzar_pagina_tema', 'nueva_pagina_tema', 'nueva_landing_servicio', 'canibalizacion_resuelta', 'contenido_ampliado', 'recuperar_pagina', 'enlazado_interno', 'titulo_reescrito', 'meta_descripcion']);
+const GSC_ONLY = new Set(['investigar_caida', 'unificar_o_diferenciar', 'pagina_demanda', 'corregir_soft_404', 'quitar_staging', 'quitar_nofollow_interno', 'un_plugin_seo', 'limpiar_hackeo', 'pagina_zona', 'nap_antiguo_corregido', 'optimizar_ficha_zona', 'denunciar_spam', 'ficha_google_corregida', 'campana_resenas', 'recuperar_mapa', 'optimizar_al_alcance', 'reforzar_pagina_tema', 'nueva_pagina_tema', 'nueva_landing_servicio', 'canibalizacion_resuelta', 'contenido_ampliado', 'recuperar_pagina', 'enlazado_interno', 'titulo_reescrito', 'meta_descripcion']);
 const SPEED = new Set(['velocidad', 'imagenes_optimizadas']);
 const METRIC_LABEL: Record<string, string> = { clics: 'los clics', impresiones: 'las impresiones', ctr: 'el CTR', posicion: 'la posición media' };
 

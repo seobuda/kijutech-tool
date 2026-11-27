@@ -87,7 +87,7 @@ export async function getSaludView(tenantId: string, projectId: string, override
     listFindings(tenantId, projectId, { status: ['abierto', 'descartado', 'aceptado'], limit: 3000 }),
     gscPropertiesForProject(tenantId, projectId)
   ]);
-  const mine = findingsAll.filter((f) => f.source === SALUD_SOURCE || f.source === LOCAL_SOURCE || f.source === 'seo.mapa:gsc' || VIGILANCIA_SOURCES.includes(f.source) || f.source === 'seo.salud:externos' || f.source === 'seo.posiciones:serp' || f.source === 'seo.local:ficha' || f.source === 'seo.local:geogrid' || f.source === 'seo.local:nap_antiguo' || f.source === 'seo.salud:puertas' || f.source === 'seo.vigilancia:hackeo' || f.source === 'seo.vigilancia:dinero' || f.source === 'seo.demanda:serp');
+  const mine = findingsAll.filter((f) => f.source === SALUD_SOURCE || f.source === LOCAL_SOURCE || f.source === 'seo.mapa:gsc' || VIGILANCIA_SOURCES.includes(f.source) || f.source === 'seo.salud:externos' || f.source === 'seo.posiciones:serp' || f.source === 'seo.local:ficha' || f.source === 'seo.local:geogrid' || f.source === 'seo.local:nap_antiguo' || f.source === 'seo.salud:puertas' || f.source === 'seo.vigilancia:hackeo' || f.source === 'seo.vigilancia:dinero' || f.source === 'seo.demanda:serp' || f.source === 'seo.vigilancia:diagnostico');
   // Estado real de la auditoría en la cola (antes se suponían 4 minutos tras el rastreo).
   const queue = await db
     .select({ kind: jobs.kind, status: jobs.status, error: jobs.lastError, payload: jobs.payload })

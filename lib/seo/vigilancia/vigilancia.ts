@@ -31,6 +31,7 @@ import { runHackeo } from '@/lib/seo/vigilancia/hackeo';
 import { registerDineroConfirm, runDinero } from '@/lib/seo/cambios/dinero';
 import { purgeChangeLog } from '@/lib/seo/cambios/registro';
 import { runDemanda } from '@/lib/seo/demanda/demanda';
+import { runDiagnostico } from '@/lib/seo/medir/diagnostico';
 import {
   DETECTORES_SOURCE,
   SEO_PROCESSES,
@@ -313,6 +314,12 @@ export async function runDetectores(tenantId: string, projectId: string): Promis
     });
     if (h) parts.push(h.text);
     hackFound = h?.found ?? 0;
+    // Parte 8: diagnóstico de caídas en capas, al final (usa lo que acaban de decidir los demás detectores).
+    const d = await runDiagnostico(tenantId, projectId, prop).catch((e) => {
+      console.error('[seo] detectores: diagnóstico:', e instanceof Error ? e.message : e);
+      return null;
+    });
+    if (d) parts.push(d);
   } else parts.push('sin Search Console asignado o sin datos descargados');
   return { status: found.length || hackFound ? 'aviso' : 'ok', summary: parts.join(' · ') };
 }
