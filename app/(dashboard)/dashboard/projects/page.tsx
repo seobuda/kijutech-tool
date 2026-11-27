@@ -9,6 +9,7 @@ import { requirePagePermission } from '@/lib/auth/permissions';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { findings, seoPlanItems } from '@/lib/db/schema';
+import { reportError } from '@/lib/core/errors';
 
 const MANAGE_ROLES = ['admin', 'super_admin'];
 
@@ -41,7 +42,10 @@ export default async function ProjectsPage() {
           .from(seoPlanItems)
           .where(and(eq(seoPlanItems.tenantId, me.tenantId), inArray(seoPlanItems.projectId, ids), eq(seoPlanItems.status, 'pendiente')))
           .groupBy(seoPlanItems.projectId)
-      ]).catch(() => [[], []] as const)
+      ]).catch((error) => {
+        reportError({ error, source: 'seo', area: 'semáforos de proyectos' });
+        return [[], []] as const;
+      })
     : [[], []];
   const countOf = (id: string, s: string) => Number(sev.find((x) => x.projectId === id && x.severity === s)?.n ?? 0);
   const pendingOf = (id: string) => Number(pend.find((x) => x.projectId === id)?.n ?? 0);

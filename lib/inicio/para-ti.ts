@@ -105,21 +105,15 @@ export async function getParaTi(tenantId: string): Promise<ParaTi> {
       .from(seoPlanItems)
       .innerJoin(projects, eq(projects.id, seoPlanItems.projectId))
       .leftJoin(clients, eq(clients.id, projects.clientId))
-      .where(and(eq(seoPlanItems.tenantId, tenantId), eq(seoPlanItems.status, 'pendiente')))
+      .where(and(eq(seoPlanItems.tenantId, tenantId), eq(seoPlanItems.status, 'pendiente'), sql`${projects.status} <> 'archived'`))
       .groupBy(seoPlanItems.projectId, projects.name, clients.name)
       .limit(LIMIT),
     // Simulación SEO del 27 nov (atasco 7): eventos, no solo propuestas. Críticos recientes y caída de visitas abiertos.
+    // Una fila por proyecto (sin archivados), con caché de 60 s por cuenta: Para ti se pide en cada carga de la barra.
+    seoEventsCached(tenantId),
+    // Ficha de Google del cliente propuesta y sin confirmar (con su proyecto SEO, para enlazar a Local).
     db
-      .select({ projectId: findings.projectId, project: projects.name, client: clients.name, kind: findings.kind, n: sql<number>`count(*)::int`, since: sql<Date>`min(${findings.firstSeen})` })
-      .from(findings)
-      .innerJoin(projects, eq(projects.id, findings.projectId))
-      .leftJoin(clients, eq(clients.id, projects.clientId))
-      .where(and(eq(findings.tenantId, tenantId), eq(findings.status, 'abierto'), sql`((${findings.severity} = 'critico' AND ${findings.firstSeen} > now() - interval '14 days') OR ${findings.kind} = 'seo.traffic_drop_diagnosed')`))
-      .groupBy(findings.projectId, projects.name, clients.name, findings.kind)
-      .limit(LIMIT),
-    // Ficha de Google del cliente propuesta y sin confirmar.
-    db
-      .select({ clientId: seoLocalPlaces.clientId, client: clients.name, title: seoLocalPlaces.title, since: seoLocalPlaces.createdAt })
+      .select({ clientId: seoLocalPlaces.clientId, client: clients.name, title: seoLocalPlaces.title, since: seoLocalPlaces.createdAt, projectId: sql<string | null>`(SELECT p.id FROM projects p WHERE p.client_id = ${seoLocalPlaces.clientId} AND p.service = 'seo' AND p.status <> 'archived' LIMIT 1)` })
       .from(seoLocalPlaces)
       .innerJoin(clients, eq(clients.id, seoLocalPlaces.clientId))
       .where(and(eq(seoLocalPlaces.tenantId, tenantId), eq(seoLocalPlaces.role, 'cliente'), eq(seoLocalPlaces.status, 'propuesta')))
@@ -146,17 +140,10 @@ export async function getParaTi(tenantId: string): Promise<ParaTi> {
   for (const s of suggestions) push({ key: `s-${s.id}`, kind: 'estratega', title: s.title, detail: null, clientName: s.client, since: s.createdAt, href: `/dashboard/clientes/${s.clientId}?tab=estrategia` });
   for (const p of seoPlans) push({ key: `p-${p.projectId}`, kind: 'seo', title: `${Number(p.n)} propuesta(s) para ${p.project}`, detail: `${Number(p.hours).toLocaleString('es-ES', { maximumFractionDigits: 1 })} h estimadas`, clientName: p.client, since: new Date(p.since), href: `/dashboard/projects/${p.projectId}/plan` });
   for (const e of seoEvents) {
-    if (!e.projectId) continue;
-    const drop = e.kind === 'seo.traffic_drop_diagnosed';
-    const key = `se-${e.projectId}-${drop ? 'caida' : 'critico'}`;
-    const prev = entries.find((x) => x.key === key);
-    if (prev && !drop) {
-      prev.title = prev.title.replace(/^\d+/, (m) => String(Number(m) + Number(e.n)));
-      continue;
-    }
-    push({ key, kind: 'seo', title: drop ? `Caída de visitas en ${e.project}` : `${Number(e.n)} problema(s) crítico(s) en ${e.project}`, detail: drop ? 'Diagnóstico por capas en Salud' : 'Mira el Resumen del proyecto', clientName: e.client, since: new Date(e.since), href: `/dashboard/projects/${e.projectId}/${drop ? 'salud' : 'resumen'}`, urgent: true });
+    if (Number(e.drop) > 0) push({ key: `se-${e.projectId}-caida`, kind: 'seo', title: `Caída de visitas en ${e.project}`, detail: 'Diagnóstico por capas en Salud', clientName: e.client, since: new Date(e.since), href: `/dashboard/projects/${e.projectId}/salud`, urgent: true });
+    if (Number(e.crit) > 0) push({ key: `se-${e.projectId}-critico`, kind: 'seo', title: `${Number(e.crit)} problema(s) crítico(s) en ${e.project}`, detail: 'Mira el Resumen del proyecto', clientName: e.client, since: new Date(e.since), href: `/dashboard/projects/${e.projectId}/resumen`, urgent: true });
   }
-  for (const pl of seoPlaces) push({ key: `sf-${pl.clientId}`, kind: 'seo', title: `Confirmar su ficha de Google: ${pl.title}`, detail: 'Sin confirmar no se vigila la ficha ni se mide el mapa', clientName: pl.client, since: pl.since, href: '/dashboard/projects' });
+  for (const pl of seoPlaces) push({ key: `sf-${pl.clientId}`, kind: 'seo', title: `Confirmar su ficha de Google: ${pl.title}`, detail: 'Sin confirmar no se vigila la ficha ni se mide el mapa', clientName: pl.client, since: pl.since, href: pl.projectId ? `/dashboard/projects/${pl.projectId}/local` : '/dashboard/projects' });
   for (const m of memory) push({ key: `m-${m.id}`, kind: 'fichas', title: clip(m.text, 140) ?? '', detail: m.kind, clientName: m.client, since: m.createdAt, href: `/dashboard/clientes/${m.clientId}?tab=memoria` });
   for (const g of errors) push({ key: `e-${g.id}`, kind: 'errores', title: g.title, detail: `${g.source}${g.area ? ` · ${g.area}` : ''} · ${g.occurrences} vez/veces`, clientName: null, since: g.firstSeen, href: `/dashboard/errores?id=${g.id}` });
 
@@ -165,6 +152,33 @@ export async function getParaTi(tenantId: string): Promise<ParaTi> {
   const names = new Map(deptRows.map((d) => [d.key, d.name]));
   const depts = (Object.keys(DEPT_FALLBACK) as DeptKey[]).map((key) => ({ key, label: names.get(key) ?? DEPT_FALLBACK[key] }));
   return { entries, inbox, emails, depts };
+}
+
+type SeoEventRow = { projectId: string; project: string; client: string | null; crit: number; drop: number; since: Date };
+const GSE = globalThis as unknown as { __kijuParaTiSeo?: Map<string, { at: number; v: SeoEventRow[] }> };
+/** Eventos SEO por proyecto (críticos de 14 días y caída abierta), sin archivados; caché de 60 s por cuenta. */
+async function seoEventsCached(tenantId: string): Promise<SeoEventRow[]> {
+  const cache = (GSE.__kijuParaTiSeo ??= new Map());
+  const hit = cache.get(tenantId);
+  if (hit && Date.now() - hit.at < 60_000) return hit.v;
+  const v = (await db
+    .select({
+      projectId: projects.id,
+      project: projects.name,
+      client: clients.name,
+      crit: sql<number>`count(*) FILTER (WHERE ${findings.severity} = 'critico' AND ${findings.firstSeen} > now() - interval '14 days')::int`,
+      drop: sql<number>`count(*) FILTER (WHERE ${findings.kind} = 'seo.traffic_drop_diagnosed')::int`,
+      since: sql<Date>`min(${findings.firstSeen})`
+    })
+    .from(findings)
+    .innerJoin(projects, eq(projects.id, findings.projectId))
+    .leftJoin(clients, eq(clients.id, projects.clientId))
+    .where(and(eq(findings.tenantId, tenantId), eq(findings.status, 'abierto'), sql`${projects.status} <> 'archived'`, sql`((${findings.severity} = 'critico' AND ${findings.firstSeen} > now() - interval '14 days') OR ${findings.kind} = 'seo.traffic_drop_diagnosed')`))
+    .groupBy(projects.id, projects.name, clients.name)
+    .orderBy(sql`min(${findings.firstSeen})`)
+    .limit(LIMIT)) as SeoEventRow[];
+  cache.set(tenantId, { at: Date.now(), v });
+  return v;
 }
 
 /** Recuento por tipo (Inicio y barra lateral). */
