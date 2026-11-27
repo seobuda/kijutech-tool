@@ -45,7 +45,7 @@ export function AnalisisInicial({ projectId, view, canEdit, isAdmin }: { project
   const skipBox = (key: string) =>
     skipping === key && (
       <div className="mt-1 flex flex-wrap gap-2">
-        <Input value={why} onChange={(e) => setWhy(e.target.value)} placeholder="Por qué se continúa sin esto" className="h-8 max-w-xs" />
+        <Input value={why} onChange={(e) => setWhy(e.target.value)} placeholder="Por qué se continúa sin esto" aria-label={`Por qué se continúa sin ${key}`} className="h-8 max-w-xs" />
         <Button size="sm" variant="outline" disabled={pending} onClick={() => act(() => skipSetupItemAction(projectId, key, why))}>
           Continuar sin esto
         </Button>
@@ -111,8 +111,8 @@ export function AnalisisInicial({ projectId, view, canEdit, isAdmin }: { project
                 <strong>{STAGE_LABEL[s.key]}:</strong> {s.note}
                 {s.who && <span className="text-muted-foreground"> ({s.who === 'admin' ? 'lo hace un administrador' : 'lo puede hacer el equipo'})</span>}
               </p>
-              {isAdmin && s.key !== 'conexiones' && skipping !== `stage:${s.key}` && (
-                <button type="button" className="mt-1 text-xs text-muted-foreground underline" onClick={() => setSkipping(`stage:${s.key}`)}>
+              {isAdmin && ['web', 'negocio', 'datos', 'mapa', 'mercado'].includes(s.key) && skipping !== `stage:${s.key}` && (
+                <button type="button" className="mt-1 text-xs text-muted-foreground underline" aria-label={`Continuar sin la etapa ${STAGE_LABEL[s.key]}`} onClick={() => setSkipping(`stage:${s.key}`)}>
                   Continuar sin esta etapa…
                 </button>
               )}
@@ -122,7 +122,7 @@ export function AnalisisInicial({ projectId, view, canEdit, isAdmin }: { project
         </ul>
       )}
 
-      <details className="mt-4" open={view.connections.some((c) => c.blocking && (c.status === 'falta' || c.status === 'error') && !c.skipped)}>
+      <details className="mt-4" key={view.connections.some((c) => c.blocking && (c.status === 'falta' || c.status === 'error') && !c.skipped) ? 'abierto' : 'cerrado'} open={view.connections.some((c) => c.blocking && (c.status === 'falta' || c.status === 'error') && !c.skipped) || undefined}>
         <summary className="cursor-pointer text-sm font-medium">Conexiones</summary>
         <ul className="mt-2 grid gap-2 sm:grid-cols-2">
           {view.connections.map((c) => (
@@ -134,7 +134,7 @@ export function AnalisisInicial({ projectId, view, canEdit, isAdmin }: { project
               </div>
               <p className="text-xs text-muted-foreground">{c.note}</p>
               {isAdmin && c.blocking && !c.skipped && (c.status === 'falta' || c.status === 'error') && skipping !== `conn:${c.key}` && (
-                <button type="button" className="mt-1 text-xs text-muted-foreground underline" onClick={() => setSkipping(`conn:${c.key}`)}>
+                <button type="button" className="mt-1 text-xs text-muted-foreground underline" aria-label={`Continuar sin ${CONN_LABEL[c.key]}`} onClick={() => setSkipping(`conn:${c.key}`)}>
                   Continuar sin esto…
                 </button>
               )}

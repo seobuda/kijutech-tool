@@ -74,6 +74,7 @@ export const CONN_LABEL: Record<ConnKey, string> = {
   gohighlevel: 'GoHighLevel (leads)'
 };
 export const BLOCKING: ConnKey[] = ['web', 'search_console', 'horas'];
+export const SKIPPABLE = new Set<string>([...BLOCKING.map((k) => `conn:${k}`), 'stage:web', 'stage:negocio', 'stage:datos', 'stage:mapa', 'stage:mercado']);
 
 export type Facts = {
   web: { url: string | null };
@@ -97,7 +98,11 @@ export type Facts = {
   planMaestro: 'ninguno' | 'en_curso' | 'hecho';
   /** Lo que un administrador decidió saltar (conexiones o etapas), con quién y por qué. */
   skipped: string[];
+  /** Acciones que ya se intentaron 3 veces sin resultado (revisor: los reintentos de pago tienen tope). */
+  exhausted?: string[];
 };
+export const MAX_ATTEMPTS = 3;
+const STAGE_ACTIONS: Partial<Record<StageKey, string[]>> = { web: ['rastreo'], negocio: ['propuesta_negocio'], mapa: ['mapa'], mercado: ['competencia', 'demanda', 'posiciones'] };
 
 export type ConnRow = { key: ConnKey; status: ConnStatus; blocking: boolean; skipped: boolean; note: string };
 
@@ -177,6 +182,12 @@ export function evaluate(f: Facts): StageRow[] {
   // Plan (fase D2)
   if (!ready('plan')) set(wait('plan'));
   else set(f.planMaestro === 'hecho' ? { key: 'plan', status: 'hecho', note: 'Plan de servicio propuesto.' } : { key: 'plan', status: f.planMaestro === 'en_curso' ? 'en_curso' : 'pendiente', note: 'El plan de servicio del Jefe SEO llega en la fase D2 (en preparación).' });
+  // Lo que sigue «en curso» pero ya agotó sus intentos pasa a esperar a una persona (que puede continuar sin la etapa).
+  for (const [k, acts] of Object.entries(STAGE_ACTIONS) as [StageKey, string[]][]) {
+    const r = res.get(k);
+    if (r?.status === 'en_curso' && acts.some((a) => f.exhausted?.includes(a)))
+      res.set(k, { key: k, status: 'esperando_persona', note: `${r.note} Se ha intentado ${MAX_ATTEMPTS} veces sin resultado: revísalo o, si no aplica a este cliente, un administrador puede continuar sin esta etapa.`, who: 'admin' });
+  }
   return STAGE_KEYS.map((k) => res.get(k)!);
 }
 
@@ -194,7 +205,7 @@ export function actionsFor(rows: StageRow[], f: Facts): ('rastreo' | 'propuesta_
   const st = new Map(rows.map((r) => [r.key, r.status]));
   const out: ('rastreo' | 'propuesta_negocio' | 'mapa' | 'competencia' | 'demanda' | 'posiciones')[] = [];
   if (st.get('web') === 'en_curso' && (f.crawl === 'nunca' || f.crawl === 'antiguo')) out.push('rastreo');
-  if (st.get('negocio') === 'en_curso' && !f.negocio.propuesto && f.crawl === 'reciente') out.push('propuesta_negocio');
+  if (st.get('negocio') === 'en_curso' && !f.negocio.propuesto && (f.crawl === 'reciente' || st.get('web') === 'omitido')) out.push('propuesta_negocio');
   if (st.get('mapa') === 'en_curso') out.push('mapa');
   if (st.get('mercado') === 'en_curso') {
     if (f.competidores.propuestos + f.competidores.confirmados < 3) out.push('competencia');

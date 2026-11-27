@@ -19,7 +19,7 @@ import { enqueueProposal } from '@/lib/seo/alta/alta';
 import { enqueueKeywordMap } from '@/lib/seo/mapa/mapa';
 import { enqueueCompetitors } from '@/lib/seo/competencia/competencia';
 import { canSpend } from '@/lib/seo/gasto';
-import { actionsFor, connections, evaluate, gscClass, progress, SETTLED, type Facts } from '@/lib/seo/arranque/rules';
+import { actionsFor, connections, evaluate, gscClass, MAX_ATTEMPTS, progress, SETTLED, SKIPPABLE, type Facts } from '@/lib/seo/arranque/rules';
 
 export class SetupError extends Error {
   constructor(public userMessage: string) {
@@ -81,7 +81,7 @@ export async function gatherFacts(tenantId: string, projectId: string, skipped: 
     gohighlevel: conn('gohighlevel') ? (conn('gohighlevel')!.status === 'ok' ? 'ok' : 'error') : 'falta',
     crawl: !crawl ? 'nunca' : crawl.status === 'pendiente' || crawl.status === 'en_curso' ? 'en_curso' : crawl.status === 'error' ? 'error' : fresh ? 'reciente' : 'antiguo',
     crawlError: crawl?.status === 'error' ? (crawl.error ?? null) : null,
-    negocio: { propuesto: proposed('servicios'), confirmado: confirmed('servicios') && (!isLocal || confirmed('zona')) },
+    negocio: { propuesto: proposed('servicios'), confirmado: confirmed('servicios') && (!proposed('zona') || confirmed('zona')) },
     competidores: { confirmados: cnt('confirmado'), propuestos: cnt('propuesto') },
     volumenes: Number(demand[0]?.n ?? 0) + Number(rank[0]?.n ?? 0),
     temas: Number(topics[0]?.n ?? 0),
@@ -99,7 +99,7 @@ export async function startAnalysis(tenantId: string, projectId: string, by: str
 
 /** Continuar sin una conexión o etapa (solo admin, lo comprueba la acción): queda apuntado con quién y por qué. */
 export async function skipItem(tenantId: string, projectId: string, key: string, by: string, reason: string): Promise<void> {
-  if (!/^(conn|stage):[a-z_]{2,20}$/.test(key)) throw new SetupError('Elemento no válido.');
+  if (!SKIPPABLE.has(key)) throw new SetupError('Eso no se puede saltar.');
   await db.insert(seoSetupRuns).values({ tenantId, projectId, startedBy: by.slice(0, 120) }).onConflictDoNothing();
   const item = { key, by: by.slice(0, 120), at: new Date().toISOString(), reason: reason.slice(0, 300) };
   await db
@@ -117,15 +117,17 @@ export async function advance(tenantId: string, projectId: string): Promise<stri
     if (!lock?.ok) return [];
     const [run] = await tx.select().from(seoSetupRuns).where(and(eq(seoSetupRuns.projectId, projectId), eq(seoSetupRuns.tenantId, tenantId), eq(seoSetupRuns.status, 'abierta'))).limit(1);
     if (!run) return [];
-    const f = await gatherFacts(tenantId, projectId, run.skipped.map((s) => s.key));
-    const rows = evaluate(f);
     const last = { ...(run.lastActions ?? {}) };
+    const tries = (a: string) => Number(last[`${a}#n`] ?? 0);
+    const f = await gatherFacts(tenantId, projectId, run.skipped.map((s) => s.key));
+    f.exhausted = Object.keys(COOLDOWN_H).filter((a) => tries(a) >= MAX_ATTEMPTS);
+    const rows = evaluate(f);
     const now = Date.now();
     const pushed: string[] = [];
     let error: string | null = null;
     for (const a of actionsFor(rows, f)) {
       const prev = last[a] ? new Date(last[a]).getTime() : 0;
-      if (now - prev < (COOLDOWN_H[a] ?? 6) * 3_600_000) continue;
+      if (now - prev < (COOLDOWN_H[a] ?? 6) * 3_600_000 || tries(a) >= MAX_ATTEMPTS) continue;
       try {
         if (a === 'rastreo') await startProjectAudit(tenantId, projectId);
         else if (a === 'propuesta_negocio') await enqueueProposal(tenantId, projectId);
@@ -136,6 +138,7 @@ export async function advance(tenantId: string, projectId: string): Promise<stri
           await enqueueJob({ tenantId, kind, payload: { projectId }, scopeType: 'proyecto', scopeId: projectId, priority: 5, dedupeKey: `sched:${kind}:${projectId}` });
         }
         last[a] = new Date().toISOString();
+        last[`${a}#n`] = String(tries(a) + 1);
         pushed.push(a);
       } catch (e) {
         error = `${a}: ${e instanceof Error ? e.message.slice(0, 200) : 'error'}`;
@@ -166,7 +169,11 @@ export type SetupView = {
 
 export async function getSetupView(tenantId: string, projectId: string): Promise<SetupView> {
   const [run] = await db.select().from(seoSetupRuns).where(and(eq(seoSetupRuns.projectId, projectId), eq(seoSetupRuns.tenantId, tenantId))).orderBy(desc(seoSetupRuns.startedAt)).limit(1);
+  // 4. Con el análisis completado, vista barata (el Resumen no recalcula todo en cada carga).
+  if (run?.status === 'completada')
+    return { run: { status: run.status, startedAt: run.startedAt.toISOString(), startedBy: run.startedBy, lastError: run.lastError, skipped: run.skipped }, stages: [], connections: [], progress: { done: 0, total: 0, current: null, needsPerson: [] } };
   const f = await gatherFacts(tenantId, projectId, run?.skipped.map((s) => s.key) ?? []);
+  f.exhausted = Object.keys(COOLDOWN_H).filter((a) => Number((run?.lastActions ?? {})[`${a}#n`] ?? 0) >= MAX_ATTEMPTS);
   const stages = evaluate(f);
   return {
     run: run ? { status: run.status, startedAt: run.startedAt.toISOString(), startedBy: run.startedBy, lastError: run.lastError, skipped: run.skipped } : null,

@@ -87,6 +87,19 @@ describe('arranque: error y espera (auditoría, grave 2)', () => {
   });
 });
 
+describe('arranque: revisor', () => {
+  it('3 intentos sin resultado → espera a una persona', () => {
+    const f = { ...base, competidores: { confirmados: 0, propuestos: 0 }, volumenes: 0, exhausted: ['competencia'] };
+    const r = evaluate(f).find((x) => x.key === 'mercado')!;
+    expect(r.status).toBe('esperando_persona');
+    expect(r.note).toMatch(/3 veces/);
+  });
+  it('con la web omitida, la propuesta del negocio no espera al rastreo', () => {
+    const f = { ...base, crawl: 'error' as const, negocio: { propuesto: false, confirmado: false }, skipped: ['stage:web'] };
+    expect(actionsFor(evaluate(f), f)).toContain('propuesta_negocio');
+  });
+});
+
 describe('arranque: acciones y progreso', () => {
   it('no se vuelve a rastrear con un rastreo reciente; se empuja lo que toca', () => {
     expect(actionsFor(evaluate({ ...base }), base)).toEqual([]);
