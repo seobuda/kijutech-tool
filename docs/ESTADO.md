@@ -1723,7 +1723,7 @@ Cada uno con su nodo en el nivel 1 del Mapa Visual:
 - **19 nov, pruebas simuladas** (rama `feature/pruebas-simuladas`, migración **0054**, esquema aprobado por Enric): entorno de pruebas aislado (otra cuenta, bot y ClickUp centinela, IA bloqueada), 10 escenarios de punta a punta, Telegram simulado en Sistema → Pruebas y `scripts/run-scenarios.sh`. La primera tanda encontró un fallo real: «Empezar» no guardaba quién vio el aviso. Ver §6.27 y `docs/sessions/2026-11-19-13-pruebas-simuladas.md`.
 - **27 nov, SEO parte 7: demanda** (rama `feature/seo-demanda`, migración **0073**): ver §6.55 y `docs/sessions/2026-11-27-08-seo-demanda.md`.
 - **27 nov, SEO parte 6 tanda 6b: registro de cambios y páginas de dinero** (rama `feature/seo-tecnico-2c`, migración **0072**): ver §6.54 y `docs/sessions/2026-11-27-03-seo-cambios-dinero.md`.
-- **27 nov, SEO parte 6 tanda 6a: técnico 2b** (rama `feature/seo-tecnico-2b`, sin migración): ver §6.53 y `docs/sessions/2026-11-27-03-seo-tecnico-2b.md`.
+- **27 nov, SEO parte 6 tanda 6a: técnico 2b** (rama `feature/seo-tecnico-2b`, sin migración): ver §6.53 y `docs/sessions/2026-11-27-02-seo-tecnico-2b.md`.
 - **27 nov, SEO parte 5c: citas y páginas de zona** (rama `feature/seo-local-5c`, sin migración): ver §6.52 y `docs/sessions/2026-11-27-01-seo-local-5c.md`.
 - **27 nov, SEO parte 5b: mapa por zonas** (rama `feature/seo-local-5b`, migración **0071**): ver §6.51 y `docs/sessions/2026-11-27-02-seo-geogrid.md`.
 - **27 nov, SEO parte 5a: ficha de Google y reseñas** (rama `feature/seo-local-5a`, migración **0070**): ver §6.50 y `docs/sessions/2026-11-27-00-seo-local-5a.md`.
