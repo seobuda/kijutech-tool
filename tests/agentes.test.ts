@@ -384,7 +384,7 @@ describe('agentes con la base de datos', () => {
     _resetUpgradeCache();
     await ensureDefaultAgents(tenantId);
     const [after] = await db.select().from(agtAgents).where(eq(agtAgents.id, p.id));
-    expect(after.tools).toEqual(['estado_equipo', 'crear_cliente', 'actualizar_cliente', 'anotar_memoria_cliente', 'web_fetch', 'gsc_rendimiento', 'ga4_informe', 'gbp_rendimiento', 'rendimiento_cliente', 'anotar_hito', 'estrategia_cliente', 'errores_lista', 'buscar_conocimiento', 'guardar_conocimiento']);
+    expect(after.tools).toEqual(['estado_equipo', 'crear_cliente', 'actualizar_cliente', 'anotar_memoria_cliente', 'web_fetch', 'gsc_rendimiento', 'ga4_informe', 'gbp_rendimiento', 'rendimiento_cliente', 'anotar_hito', 'estrategia_cliente', 'errores_lista', 'buscar_conocimiento', 'guardar_conocimiento', 'seo_proyecto']);
     expect(after.instructions).toBe('Mis instrucciones');
     // Si Enric quita una herramienta después, no vuelve a aparecer.
     await db.update(agtAgents).set({ tools: ['estado_equipo'] }).where(eq(agtAgents.id, p.id));

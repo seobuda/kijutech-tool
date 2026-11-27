@@ -21,6 +21,7 @@ import { seoProjectDossier } from '@/lib/seo/dossier-provider';
 import { registerSeoEvidence } from '@/lib/seo/medir/evidence';
 import { registerBriefJobs } from '@/lib/seo/contenido/briefs';
 import { seoWeeklyLines } from '@/lib/seo/informe-semanal';
+import { registerSeoAgentTools } from '@/lib/seo/agente-tool';
 import { registerReportSection } from '@/lib/core/capabilities';
 
 export function registerSeoCapabilities(): void {
@@ -34,6 +35,7 @@ export function registerSeoCapabilities(): void {
   registerPuertasJob(); // parte 5c: páginas puerta (texto propio comparado), tras cada auditoría
   // Simulación del 27 nov: apartado SEO del informe semanal (lo grave de cada proyecto, sin abrirlos uno a uno).
   registerReportSection('seo', { title: '🔎 SEO de los proyectos', order: 22, weekly: (t, from, to) => seoWeeklyLines(t, from, to) });
+  registerSeoAgentTools(); // simulación del 27 nov: «seo_proyecto» para el jefe de Operaciones y el principal
   registerBriefJobs(); // parte 9a: briefs de contenido (SERP real y competencia)
   registerSeoEvidence(); // parte 8: fecha real de las intervenciones (registro de cambios) para medir si funcionaron
   registerGeogridJobs(); // parte 5b: recogida del mapa por zonas

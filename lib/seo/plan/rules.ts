@@ -111,6 +111,11 @@ export function techniqueWorkType(technique: string): string {
   return 'cambio_web';
 }
 
+/** La receta («cómo») de una técnica, para quien hace el encargo (p. ej. el jefe de Operaciones). */
+export function techniqueRecipe(technique: string): string | null {
+  return RECIPES[technique]?.how ?? null;
+}
+
 export const KIND_TECHNIQUE: Record<string, string> = {
   'seo.http_5xx': 'error_servidor_corregido',
   'seo.http_4xx': 'error_servidor_corregido',

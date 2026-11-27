@@ -60,7 +60,7 @@ Encargo de Enric: simular un cliente real con todos sus datos y ver cómo trabaj
 | 7 | **Para ti hace ruido y las tarjetas de proyecto no avisan.** | `lib/inicio/para-ti.ts:131` | Entradas por evento; semáforos en Proyectos | S-M | Pendiente |
 | 8 | **Dos cerebros:** el plan por reglas (proyecto) y el estratega Opus (cliente). | Estrategia y plan | Que el estratega ordene dentro del plan SEO (protocolo de decisión) | M-L | Pendiente (decisión) |
 | 9 | **El cliente queda fuera del bucle:** reseñas, accesos y explicaciones van por WhatsApp; no hay informe. | SEO no usa `createClientMessage` | «Preparar correo al cliente» con aprobación; parte 12 | S-M / L | Pendiente (parte 12 necesita GoHighLevel) |
-| 10 | **El jefe de operaciones no ve SEO.** | `agentes/store.ts:85` | Herramienta `seo_proyecto` por capacidad | S-M | Pendiente |
+| 10 | **El jefe de operaciones no ve SEO.** (`seo_proyecto`: **hecho, 27 nov**.) | `agentes/store.ts:85` | Herramienta `seo_proyecto` por capacidad | S-M | Pendiente |
 | 11 | **El on-page es 100 % manual:** «reescribir 40 títulos» sin borrador. | Plan | Agente redactor on-page (abajo) | M | Pendiente |
 | 12 | **Intervenciones huérfanas:** `requestStatus` nunca dice «cancelada». | `operaciones/work-source.ts:321` | Detectar tareas borradas | S | Pendiente |
 | 13 | **Medición poco concluyente en una pyme** [NV]: pocos clics por URL. | — | Apoyarse en posiciones, geo-grid y contactos (GoHighLevel) | — | Aceptado |
