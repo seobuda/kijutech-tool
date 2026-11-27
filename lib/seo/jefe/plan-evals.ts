@@ -15,9 +15,9 @@ const LINEAS = Object.values(PLAYBOOKS)
 
 export const PLAN_EVAL_SUITE: PromptEvalSuite = {
   promptKey: PLAN_PROMPT,
-  summary: 'Tres expedientes inventados (web rota, cerca del top 3, sin Search Console): comprueba que no inventa datos, usa líneas que se pueden hacer, el primer trimestre cabe, dice lo que no sabe y sigue el orden de la agencia.',
+  summary: 'Siete expedientes inventados (web rota, cerca del top 3, sin Search Console, clínica con ficha floja, tienda online, ficha fuerte, reformas sin ficha): comprueba que no inventa datos, usa líneas que se pueden hacer, el primer trimestre cabe, dice lo que no sabe y sigue el orden de la agencia según cómo atiende el negocio.',
   minScore: 0.85,
-  costHint: 'unos 1,5-2 $ (3 llamadas a Opus 5.5 con esfuerzo alto; el coste exacto queda en el historial)',
+  costHint: 'unos 2-3 $ (7 llamadas a Opus 5.5 con esfuerzo alto; el coste exacto queda en el historial)',
   run: async (tenantId, prompt) => {
     const results: EvalCaseResult[] = [];
     for (const c of planEvalCases()) {

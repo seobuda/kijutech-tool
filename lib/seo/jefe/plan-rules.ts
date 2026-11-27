@@ -6,6 +6,8 @@
 // y muestra las divergencias: no veta, avisa a quien aprueba.
 import { availableHours, lineHours, PLAYBOOKS, MAX_LINES, cleanParams, type PlaybookKey } from '@/lib/seo/estrategia/playbooks';
 import { validateEvidence, type Evidence } from '@/lib/seo/jefe/evidence';
+import { isLocal, localSignal, type LocalProfile } from '@/lib/seo/jefe/local-profile';
+import { SALUD_KIND_BY_KEY } from '@/lib/seo/salud/kinds';
 
 export const FRENTE_KINDS = ['rendimiento', 'existente', 'servicio_zona', 'contenido', 'local', 'autoridad', 'visibilidad_ia'] as const;
 export type FrenteKind = (typeof FRENTE_KINDS)[number];
@@ -24,7 +26,8 @@ export const KIND_PLAYBOOKS: Record<FrenteKind, (PlaybookKey | null)[]> = {
   existente: ['refuerzo_al_alcance', 'recuperacion_contenido'],
   servicio_zona: ['paginas_servicio_zona'],
   contenido: ['contenido_cadencia'],
-  local: ['local_ficha_resenas'],
+  // null = lo básico de la ficha (identificarla, reclamarla, categoría, horario): una vez y sin línea continua.
+  local: [null, 'local_ficha_resenas'],
   autoridad: ['autoridad_enlaces'],
   visibilidad_ia: [null]
 };
@@ -230,49 +233,82 @@ export function validatePlan(
   return errors.length ? { ok: false, errors, rejectedEvidence: [...rejected] } : { ok: true, plan, warnings, rejectedEvidence: [...rejected], q1Hours, q1Available };
 }
 
-/** Señales del expediente que piden cada tipo de frente (sin IA). */
+/** Señales del expediente que piden cada tipo de frente (sin IA). Lo local sale del grupo «local» de los tipos de hallazgo
+ * y de las evidencias L: de la ficha (antes un patrón sobre el id que casi nunca casaba; análisis de Fable 5.2). */
 export function signals(evidence: Map<string, Evidence>): Record<FrenteKind, number> {
   const s: Record<FrenteKind, number> = { rendimiento: 0, existente: 0, servicio_zona: 0, contenido: 0, local: 0, autoridad: 0, visibilidad_ia: 0 };
   for (const e of evidence.values()) {
     if (e.type === 'H') {
+      const kind = e.id.slice(2);
+      const group = SALUD_KIND_BY_KEY.get(kind)?.group;
       const sev = String(e.data.gravedad ?? '');
-      if (sev === 'critico') s.rendimiento += 3;
+      if (kind === 'seo.zone_page_missing' || kind === 'seo.service_page_missing') s.servicio_zona += 2;
+      else if (group === 'local') s.local += sev === 'critico' ? 3 : sev === 'importante' ? 2 : 1;
+      else if (sev === 'critico') s.rendimiento += 3;
       else if (sev === 'importante') s.rendimiento += 1;
-      if (/local|ficha|gbp|resen/i.test(e.id)) s.local += 1;
-      if (/zona|servicio/i.test(e.id)) s.servicio_zona += 1;
     } else if (e.type === 'Q' && e.data.impresiones90 != null) s.existente += 1;
     else if (e.type === 'U') s.existente += 1;
     else if (e.type === 'Q' && e.data.volumen != null) s.contenido += 1;
     else if (e.type === 'T' && e.data.url === 'sin página') s.contenido += 1;
     else if (e.type === 'C') s.autoridad += 0.5;
   }
+  s.local += localSignal(evidence.values()).signal;
   return s;
 }
 
-/** Puntuador por reglas: el orden de la agencia (arreglar lo roto → exprimir lo que ya posiciona → páginas de servicio y
- * zona → contenido nuevo → local → autoridad → IA). Divergencias = un tipo que el expediente pide con fuerza y que el plan
- * deja fuera del primer trimestre mientras pone por delante uno posterior. No veta: lo enseña a quien aprueba. */
-export function scorePlan(plan: ParsedPlan, evidence: Map<string, Evidence>): { score: number; divergences: string[]; signals: Record<FrenteKind, number> } {
+/** Nivel de cada tipo de frente según el perfil (menor = antes; mismo nivel = no se penalizan entre sí). Decisión de Enric
+ * (27 nov 2026): en negocio local, lo básico de la ficha va con los arreglos, en el primer trimestre. */
+export const TIERS: Record<LocalProfile, Record<FrenteKind, number>> = {
+  local_fisico: { rendimiento: 0, local: 0, existente: 1, servicio_zona: 2, contenido: 3, autoridad: 4, visibilidad_ia: 5 },
+  area_servicio: { rendimiento: 0, local: 1, existente: 1, servicio_zona: 1, contenido: 2, autoridad: 3, visibilidad_ia: 4 },
+  online: { rendimiento: 0, existente: 1, servicio_zona: 2, contenido: 3, autoridad: 4, visibilidad_ia: 5, local: 6 },
+  sin_publico: { rendimiento: 0, existente: 1, servicio_zona: 2, contenido: 3, autoridad: 4, visibilidad_ia: 5, local: 6 },
+  desconocido: { rendimiento: 0, existente: 1, servicio_zona: 2, contenido: 3, local: 4, autoridad: 5, visibilidad_ia: 6 }
+};
+
+/** Puntuador por reglas con el orden de la agencia SEGÚN EL PERFIL (lib/seo/jefe/local-profile.ts). Divergencias = un tipo
+ * que el expediente pide con fuerza y que el plan deja fuera del T1 mientras pone delante uno de nivel posterior; además,
+ * las reglas locales de Enric. No veta: lo enseña a quien aprueba. */
+export function scorePlan(plan: ParsedPlan, evidence: Map<string, Evidence>, profile: LocalProfile = 'desconocido'): { score: number; divergences: string[]; signals: Record<FrenteKind, number> } {
   const sig = signals(evidence);
+  const tier = TIERS[profile];
   const divergences: string[] = [];
-  const order = FRENTE_KINDS;
-  const q1Kinds = new Set(plan.frentes.filter((f) => f.fromQuarter === 1).map((f) => f.kind));
-  const strong = (k: FrenteKind) => sig[k] >= 3;
+  const q1 = plan.frentes.filter((f) => f.fromQuarter === 1);
+  const q1Kinds = new Set(q1.map((f) => f.kind));
   let penalty = 0;
-  for (let i = 0; i < order.length; i++) {
-    const k = order[i];
-    if (!strong(k) || q1Kinds.has(k)) continue;
-    const later = order.slice(i + 1).filter((x) => q1Kinds.has(x));
+  for (const k of FRENTE_KINDS) {
+    if (sig[k] < 3 || q1Kinds.has(k)) continue;
+    // Lo local de un negocio local lo cubre su regla propia (abajo): sin doble penalización.
+    if (k === 'local') continue;
+    const later = FRENTE_KINDS.filter((x) => q1Kinds.has(x) && tier[x] > tier[k]);
     if (later.length) {
       divergences.push(`El expediente pide «${KIND_LABEL[k]}» (señal ${sig[k]}) y el plan empieza por ${later.map((x) => `«${KIND_LABEL[x]}»`).join(', ')}.`);
       penalty += k === 'rendimiento' ? 25 : 15;
     }
   }
   const all = new Set(plan.frentes.map((f) => f.kind));
-  for (const k of order) if (sig[k] >= 5 && !all.has(k)) {
-    divergences.push(`«${KIND_LABEL[k]}» tiene mucha señal (${sig[k]}) y no aparece en ningún trimestre.`);
+  for (const k of FRENTE_KINDS)
+    if (sig[k] >= 5 && !all.has(k) && (k !== 'local' || isLocal(profile))) {
+      divergences.push(`«${KIND_LABEL[k]}» tiene mucha señal (${sig[k]}) y no aparece en ningún trimestre.`);
+      penalty += 10;
+    }
+  // Decisión de Enric: en un local físico lo básico de la ficha va siempre en el T1; a domicilio, solo si le falta lo básico
+  // (ficha sin identificar o sin reclamar); si no, la ficha está al mismo nivel que exprimir y servicio y zona.
+  const local = localSignal(evidence.values());
+  const needsQ1 = profile === 'local_fisico' || (profile === 'area_servicio' && local.basicsMissing);
+  if (needsQ1 && !q1Kinds.has('local')) {
+    divergences.push('Negocio local sin la ficha de Google en el primer trimestre (criterio de la agencia: lo básico de la ficha va siempre al principio).');
+    penalty += 20;
+  }
+  if (!isLocal(profile) && q1.some((f) => f.kind === 'local' && f.priority === 1)) {
+    divergences.push(`El negocio ${profile === 'desconocido' ? 'no tiene confirmado cómo atiende' : 'no atiende en local'} y el plan pone la ficha de Google como prioridad 1.`);
+    penalty += profile === 'desconocido' ? 5 : 15;
+  }
+  if (plan.frentes.some((f) => f.playbook === 'local_ficha_resenas') && !local.reviewsNeedWork) {
+    divergences.push('Incluye la línea continua de reseñas sin datos de que vaya por detrás de la competencia o parada (criterio: solo si los datos lo piden).');
     penalty += 10;
   }
+  if (profile === 'desconocido') divergences.push('Falta confirmar cómo atiende el negocio (local, a domicilio u online): cambia el orden del plan.');
   if (!plan.unknowns.length) penalty += 5;
   if (plan.frentes.some((f) => f.evidence.length < 2 && f.priority === 1)) {
     divergences.push('Hay frentes de prioridad 1 con una sola evidencia.');

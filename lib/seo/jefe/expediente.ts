@@ -6,7 +6,7 @@ import 'server-only';
 // ciclo (D4). Solo tablas propias: 0 $ de IA. Lo ajeno (títulos, búsquedas, novedades) va delimitado como dato no fiable.
 import { and, desc, eq, gte, inArray, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { clientCompetitors, clientMemory, clients, findings, kbFeedItems, projects, seoCycleLines, seoCycles, seoDemand, seoRankKeywords, seoTopics } from '@/lib/db/schema';
+import { clientCompetitors, clientMemory, clients, findings, kbFeedItems, projects, seoCycleLines, seoCycles, seoDemand, seoDossierFacts, seoRankKeywords, seoTopics } from '@/lib/db/schema';
 import { gscPropertiesForProject } from '@/lib/core/gsc';
 import { accountTechniqueTrends } from '@/lib/core/technique-trends';
 import { SEO_KINDS } from '@/lib/seo/salud/kinds';
@@ -17,6 +17,10 @@ import { availableHours, eligibility, PLAYBOOKS } from '@/lib/seo/estrategia/pla
 import { confirmedFacts } from '@/lib/seo/posiciones/posiciones';
 import { evidenceId, evidenceLine, type Evidence } from '@/lib/seo/jefe/evidence';
 import { forecastNewContent, forecastStriking, forecastText, projectCurve, type CtrPoint } from '@/lib/seo/jefe/forecast';
+import { localEvidence, localProfile, PROFILE_LABEL, type LocalProfile } from '@/lib/seo/jefe/local-profile';
+import { reviewsBehind } from '@/lib/seo/local/ficha-rules';
+import { getLocalView } from '@/lib/seo/local/view';
+import { getGeogridView } from '@/lib/seo/local/geogrid-view';
 
 const KIND = new Map(SEO_KINDS.map((k) => [k.kind, k]));
 const SEV: Record<string, number> = { critico: 0, importante: 1, aviso: 2, info: 3 };
@@ -28,7 +32,7 @@ export type StrategicDossier = {
   evidence: Map<string, Evidence>;
   /** Texto para el prompt, por secciones, con los identificadores entre corchetes. */
   text: string;
-  summary: { client: string; gsc: string; monthlyHours: number | null; dataGaps: string[]; eligible: string[] };
+  summary: { client: string; gsc: string; monthlyHours: number | null; dataGaps: string[]; eligible: string[]; profile: LocalProfile };
 };
 
 export async function buildStrategicDossier(tenantId: string, projectId: string): Promise<StrategicDossier> {
@@ -128,6 +132,32 @@ export async function buildStrategicDossier(tenantId: string, projectId: string)
       ? `## Qué ha funcionado en la agencia (tendencias por técnica; con «pocos casos» es anecdótico)\n${tr.map((t) => evidenceLine(ev.get(evidenceId('X', `${t.technique}:${t.metric}`))!)).join('\n')}`
       : '## Qué ha funcionado en la agencia\nAún no hay casos medidos: no hay aprendizaje entre clientes (dilo, no lo inventes).'
   );
+  // Ficha de Google y mapa por zonas (evidencias L:). Solo datos ya descargados: 0 $ de DataForSEO.
+  const [atencionRow] = await db
+    .select({ value: seoDossierFacts.value })
+    .from(seoDossierFacts)
+    .where(and(eq(seoDossierFacts.projectId, projectId), eq(seoDossierFacts.field, 'atencion'), eq(seoDossierFacts.status, 'confirmado')))
+    .limit(1);
+  const [lv, gv] = await Promise.all([getLocalView(tenantId, projectId).catch(() => null), getGeogridView(tenantId, projectId).catch(() => null)]);
+  const profile = localProfile({ atencion: typeof atencionRow?.value === 'string' ? atencionRow.value : null, businessType: client?.businessType ?? null, hasGoogleProfile: Boolean(lv?.client) });
+  const cs = lv?.client?.snap ?? null;
+  const pt = (x: { rating: number | null; votes: number | null; takenAt: string }) => ({ rating: x.rating, votes: x.votes, takenAt: x.takenAt });
+  const behind = cs ? reviewsBehind(pt(cs), (lv?.competitors ?? []).flatMap((c) => (c.snap ? [pt(c.snap)] : []))) : null;
+  const napOpen = open.filter((f) => f.kind.startsWith('seo.nap_') || f.kind === 'seo.old_nap_found').length;
+  const local = localEvidence({
+    profile,
+    snapshot: cs && lv?.client ? { cid: lv.client.cid, title: lv.client.title, category: cs.category, additional: cs.additionalCategories.length, hasHours: Boolean(cs.hours && Object.keys(cs.hours).length), status: cs.status, isClaimed: cs.isClaimed, rating: cs.rating, votes: cs.votes, takenAt: cs.takenAt } : null,
+    reviews: cs
+      ? { behind: Boolean(behind?.behind), medianVotes: behind?.medianVotes ?? null, medianRating: behind?.medianRating ?? null, stalled: open.some((f) => f.kind === 'seo.reviews_stalled'), newVotes90: lv?.client?.votesMonth != null ? lv.client.votesMonth * 3 : null }
+      : null,
+    grids: (gv?.runs ?? []).map((r) => ({ keyword: r.keyword, avg: r.avg, top3Pct: r.top3Pct, measured: r.cells.filter((c) => c.rank != null).length, at: r.createdAt, prevAvg: r.prevAvg })),
+    napOpen: lv?.client ? napOpen : null
+  });
+  for (const e of local) add(e);
+  sections.push(
+    `## Ficha de Google y mapa (cómo atiende: ${PROFILE_LABEL[profile]})\n${local.length ? local.map((e) => evidenceLine(e, e.id.startsWith('L:mapa:') || e.id.startsWith('L:ficha:'))).join('\n') : 'Sin datos de ficha ni de mapa.'}`
+  );
+
   if (cycles.length) {
     const lines = await db.select({ cycleId: seoCycleLines.cycleId, playbook: seoCycleLines.playbook }).from(seoCycleLines).where(inArray(seoCycleLines.cycleId, cycles.map((c) => c.id)));
     for (const c of cycles) add({ id: evidenceId('S', `ciclo:${c.id}`), type: 'S', label: c.name, data: { estado: c.status, desde: c.startsOn, hasta: c.endsOn, lineas: lines.filter((l) => l.cycleId === c.id).map((l) => l.playbook).join('+') } });
@@ -139,6 +169,6 @@ export async function buildStrategicDossier(tenantId: string, projectId: string)
     generatedAt: new Date().toISOString(),
     evidence: ev,
     text: sections.join('\n\n'),
-    summary: { client: client?.name ?? p.name, gsc: gscLabel, monthlyHours: p.monthlyHours != null ? Number(p.monthlyHours) : null, dataGaps, eligible: el.eligible }
+    summary: { client: client?.name ?? p.name, gsc: gscLabel, monthlyHours: p.monthlyHours != null ? Number(p.monthlyHours) : null, dataGaps, eligible: el.eligible, profile }
   };
 }
