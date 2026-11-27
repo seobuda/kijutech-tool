@@ -94,8 +94,11 @@ export async function regeneratePlan(tenantId: string, projectId: string): Promi
 
   let created = 0;
   const keep = new Set<string>();
+  // Solo la cola por reglas se rehace aquí (plan de ciclos, 27 nov 2026): lo que viene de una estrategia (origin «ia»)
+  // o de una persona no se empareja, no se sobrescribe y no caduca.
+  const ruleItems = items.filter((i) => i.origin === 'reglas');
   for (const d of drafts) {
-    const same = items.filter((i) => i.technique === d.technique);
+    const same = ruleItems.filter((i) => i.technique === d.technique);
     const pending = same.find((i) => i.status === 'pendiente');
     const values = {
       title: d.title,
@@ -124,7 +127,7 @@ export async function regeneratePlan(tenantId: string, projectId: string): Promi
     }
   }
   // Pendientes que ya no tienen hallazgos detrás (se arreglaron o se descartaron): caducan.
-  const stale = items.filter((i) => i.status === 'pendiente' && !keep.has(i.id)).map((i) => i.id);
+  const stale = ruleItems.filter((i) => i.status === 'pendiente' && !keep.has(i.id)).map((i) => i.id);
   if (stale.length) await db.update(seoPlanItems).set({ status: 'caducada', updatedAt: new Date() }).where(inArray(seoPlanItems.id, stale));
   return { pending: keep.size, created, expired: stale.length };
 }
