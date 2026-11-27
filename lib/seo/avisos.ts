@@ -12,6 +12,15 @@ const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replac
 const BASE_URL = () => (process.env.BASE_URL || '').replace(/\/$/, '');
 
 export async function alertSeo(tenantId: string, projectId: string, key: string, title: string, lines: string[], tab = 'salud'): Promise<void> {
+  try {
+    await send(tenantId, projectId, key, title, lines, tab);
+  } catch (e) {
+    // Un fallo del aviso nunca tumba el proceso que lo pide (el hallazgo ya está guardado).
+    console.error('[seo] aviso:', e instanceof Error ? e.message : e);
+  }
+}
+
+async function send(tenantId: string, projectId: string, key: string, title: string, lines: string[], tab: string): Promise<void> {
   const [p] = await db.select({ name: projects.name, clientId: projects.clientId }).from(projects).where(eq(projects.id, projectId)).limit(1);
   if (!p) return;
   const link = BASE_URL() ? `\n<a href="${BASE_URL()}/dashboard/projects/${projectId}/${tab}">Abrir el proyecto</a>` : '';
