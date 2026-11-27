@@ -156,4 +156,15 @@ describe('Jefe SEO D4: propuesta, aprobación y pasada diaria', () => {
     await db.update(seoMasterPlans).set({ status: 'sustituido' }).where(eq(seoMasterPlans.id, PLAN));
     await expect(decideCycleProposal(T, P, id2, true, 'Prueba', null)).rejects.toThrow(/ha cambiado/);
   });
+
+  it('revisor: una aprobada en espera no se crea si mientras tanto se aprobó otro plan (caduca)', async () => {
+    const [v2] = await db.insert(seoMasterPlans).values({ tenantId: T, projectId: P, version: 2, startsOn: new Date().toISOString().slice(0, 10), thesis: 'v2', status: 'aprobado', horizonMonths: 12 }).returning();
+    await db.insert(seoJefeProposals).values({ tenantId: T, projectId: P, kind: 'ciclo', basePlanId: PLAN, baseVersion: 1, status: 'aprobada', payload: { quarter: 1, lines: [{ playbook: 'refuerzo_al_alcance', params: {}, masterItemId: PLAN, frente: 'x', title: 'x' }], skipped: [], hours: 1, available: 1, startsOn: '2026-11-30', months: 3, name: 'vieja', thesis: 'x', planVersion: 1, pendingCreate: true } });
+    const n = h.created.length;
+    await jefeCyclePass(T);
+    expect(h.created.length).toBe(n);
+    const rows = await db.select({ status: seoJefeProposals.status, payload: seoJefeProposals.payload }).from(seoJefeProposals).where(eq(seoJefeProposals.projectId, P));
+    expect(rows.find((r) => (r.payload as { name?: string }).name === 'vieja')?.status).toBe('caducada');
+    await db.delete(seoMasterPlans).where(eq(seoMasterPlans.id, v2.id));
+  });
 });

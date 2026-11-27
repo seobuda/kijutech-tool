@@ -76,13 +76,22 @@ export function CycleProposal({ projectId, proposals, hasApprovedPlan }: { proje
               <details className="text-xs">
                 <summary className="cursor-pointer text-muted-foreground">Frentes del trimestre que no entran ({open.payload.skipped.length})</summary>
                 <ul className="mt-1 flex flex-col gap-0.5 pl-3">
-                  {open.payload.skipped.map((s) => (
-                    <li key={s.frente}>
+                  {open.payload.skipped.map((s, i) => (
+                    <li key={`${s.frente}-${i}`}>
                       {s.title}: <span className="text-muted-foreground">{s.reason}</span>
                     </li>
                   ))}
                 </ul>
               </details>
+            )}
+            {open.payload.createError && <p className="text-sm text-destructive">No se ha podido crear: {open.payload.createError}. Arréglalo (p. ej. las horas del proyecto) o cancélala.</p>}
+            {open.status === 'aprobada' && (
+              <div className="flex flex-wrap items-center gap-2">
+                <input value={reason} onChange={(e) => setReason(e.target.value)} maxLength={2000} className="h-9 rounded-md border bg-background px-2 text-sm" placeholder="Motivo para cancelarla" aria-label="Motivo para cancelar la estrategia aprobada" />
+                <Button size="sm" variant="outline" disabled={pending || reason.trim().length < 5} onClick={() => run(() => decideCycleAction(projectId, open.id, false, reason))}>
+                  <X className="size-4" /> Cancelar
+                </Button>
+              </div>
             )}
             {open.status === 'pendiente' && (
               <>

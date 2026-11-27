@@ -13,7 +13,7 @@ import { eligibility, DEFAULT_RESERVE_PCT, type PlaybookKey } from '@/lib/seo/es
 import { CYCLE_MONTHS, deriveCycle, nextCycleStart, quarterAt, shouldProposeNext, type DerivedCycle } from '@/lib/seo/jefe/ciclo-rules';
 import { PlanError } from '@/lib/seo/jefe/errors';
 
-export type CyclePayload = DerivedCycle & { startsOn: string; months: number; name: string; thesis: string; planVersion: number; pendingCreate?: boolean; cycleId?: string; auto?: boolean };
+export type CyclePayload = DerivedCycle & { startsOn: string; months: number; name: string; thesis: string; planVersion: number; pendingCreate?: boolean; cycleId?: string; auto?: boolean; createError?: string };
 export type CycleProposalView = Pick<SeoJefeProposal, 'id' | 'status' | 'baseVersion' | 'decidedBy' | 'decisionReason' | 'createdAt'> & { payload: CyclePayload };
 
 const ymd = (d: Date) => d.toISOString().slice(0, 10);
@@ -83,6 +83,15 @@ export async function proposeCycleFromPlan(tenantId: string, projectId: string, 
 /** Crea la estrategia de una propuesta aprobada. Devuelve el ciclo o null si aún hay una activa (se intenta en la pasada). */
 async function createFromProposal(tenantId: string, projectId: string, p: SeoJefeProposal, by: string): Promise<string | null> {
   const pay = p.payload as CyclePayload;
+  // Revisor D4: si mientras esperaba se aprobó otra versión del plan, esta estrategia ya no vale: caduca.
+  const plan = await approved(tenantId, projectId);
+  if (plan?.id !== p.basePlanId) {
+    await db
+      .update(seoJefeProposals)
+      .set({ status: 'caducada', decisionReason: 'Se aprobó otra versión del plan antes de crearla.', payload: { ...pay, pendingCreate: false } })
+      .where(and(eq(seoJefeProposals.id, p.id), eq(seoJefeProposals.status, 'aprobada')));
+    return null;
+  }
   if (await activeCycle(projectId)) return null;
   // Si la fecha de inicio ya pasó (se aprobó tarde o esperaba a que cerrara la anterior), empieza esta semana.
   const startsOn = pay.startsOn < ymd(new Date()) ? ymd(nextCycleStart(new Date(), null)) : pay.startsOn;
@@ -103,6 +112,16 @@ export async function decideCycleProposal(tenantId: string, projectId: string, i
   const why = reason?.trim() ?? '';
   if (!accept && why.length < 5) throw new PlanError('Escribe por qué no se hace: el Jefe lo tendrá en cuenta.');
   const [p] = await db.select().from(seoJefeProposals).where(and(eq(seoJefeProposals.id, id), eq(seoJefeProposals.tenantId, tenantId), eq(seoJefeProposals.projectId, projectId), eq(seoJefeProposals.kind, 'ciclo'))).limit(1);
+  // Cancelar una aprobada que aún espera a crearse (p. ej. no se puede crear): pasa a descartada.
+  if (!accept && p?.status === 'aprobada' && (p.payload as CyclePayload).pendingCreate) {
+    const c = await db
+      .update(seoJefeProposals)
+      .set({ status: 'rechazada', decidedBy: by.slice(0, 120), decisionReason: why.slice(0, 2000), decidedAt: new Date(), payload: { ...(p.payload as CyclePayload), pendingCreate: false } })
+      .where(and(eq(seoJefeProposals.id, id), eq(seoJefeProposals.status, 'aprobada'), sql`${seoJefeProposals.payload}->>'cycleId' IS NULL`))
+      .returning({ id: seoJefeProposals.id });
+    if (!c.length) throw new PlanError('Esa estrategia ya se ha creado: recarga la página.');
+    return { cycleId: null };
+  }
   if (!p || p.status !== 'pendiente') throw new PlanError('Esa propuesta ya no está pendiente: recarga la página.');
   const plan = await approved(tenantId, projectId);
   if (accept && plan?.id !== p.basePlanId) throw new PlanError('El plan aprobado ha cambiado desde esta propuesta: pide una nueva.');
@@ -116,8 +135,13 @@ export async function decideCycleProposal(tenantId: string, projectId: string, i
   try {
     return { cycleId: await createFromProposal(tenantId, projectId, r[0], by) };
   } catch (e) {
+    // Revisor D4: si la pasada diaria la creó a la vez (ya hay estrategia activa), no se revierte: queda como está.
+    if (await activeCycle(projectId)) return { cycleId: null };
     // No se pudo crear (p. ej. faltan las horas del proyecto): vuelve a pendiente con el motivo, nada a medias.
-    await db.update(seoJefeProposals).set({ status: 'pendiente', decidedBy: null, decidedAt: null, payload: p.payload }).where(eq(seoJefeProposals.id, id));
+    await db
+      .update(seoJefeProposals)
+      .set({ status: 'pendiente', decidedBy: null, decidedAt: null, payload: p.payload })
+      .where(and(eq(seoJefeProposals.id, id), eq(seoJefeProposals.status, 'aprobada'), sql`${seoJefeProposals.payload}->>'cycleId' IS NULL`));
     if (e instanceof CycleError) throw new PlanError(e.userMessage);
     throw e;
   }
@@ -149,7 +173,14 @@ export async function jefeCyclePass(tenantId: string, now = new Date()): Promise
     try {
       const open = await openCycleProposal(projectId);
       if (open?.status === 'aprobada') {
-        if (await createFromProposal(tenantId, projectId, open, open.decidedBy ?? 'Jefe SEO')) creadas++;
+        try {
+          if (await createFromProposal(tenantId, projectId, open, open.decidedBy ?? 'Jefe SEO')) creadas++;
+        } catch (e) {
+          // Revisor D4: que no se quede esperando en silencio: el motivo se guarda y se ve en la pantalla.
+          const msg = e instanceof CycleError ? e.userMessage : e instanceof Error ? e.message.slice(0, 300) : 'error';
+          console.error('[seo] jefe: no se pudo crear la estrategia aprobada', projectId, msg);
+          await db.update(seoJefeProposals).set({ payload: { ...(open.payload as CyclePayload), createError: msg } }).where(and(eq(seoJefeProposals.id, open.id), eq(seoJefeProposals.status, 'aprobada')));
+        }
         continue;
       }
       if (open) continue;
