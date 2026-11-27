@@ -215,6 +215,7 @@ export const NAV: NavGroup[] = [
       { href: '/dashboard/ai/brain', label: 'Cerebro', icon: Brain, keywords: 'aprendizaje costes', show: (r) => r.isSuperAdmin },
       { href: '/dashboard/architecture', label: 'Mapa del sistema', icon: Network, keywords: 'arquitectura procesos', show: (r) => r.isSuperAdmin },
       { href: '/dashboard/seo/admin/settings', label: 'Configuración SEO', icon: SlidersHorizontal, show: (r) => r.isSuperAdmin },
+      { href: '/dashboard/seo/jefe', label: 'Rendimiento del Jefe SEO', icon: Gauge, keywords: 'jefe seo métricas coste aprobados tendencias sector autonomía aprendizaje', show: adminOnly },
       { href: '/dashboard/seo/fuentes', label: 'Fuentes de novedades SEO', icon: Rss, keywords: 'fuentes rss blogs youtube novedades google ahrefs semrush investigador', show: adminOnly }
     ]
   },
@@ -311,6 +312,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   seo: 'SEO',
   admin: 'Administración',
   fuentes: 'Fuentes de novedades',
+  jefe: 'Rendimiento del Jefe SEO',
   cards: 'Fichas SEO',
   general: 'Mi cuenta',
   'mis-tareas': 'Mis tareas',

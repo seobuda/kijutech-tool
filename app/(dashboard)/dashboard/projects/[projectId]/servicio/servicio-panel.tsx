@@ -17,6 +17,8 @@ import type { ChangeView } from '@/lib/seo/jefe/cambios';
 import { JefeChat, PlanChanges } from './jefe-chat';
 import type { CycleProposalView } from '@/lib/seo/jefe/ciclos';
 import { CycleProposal } from './ciclo-propuesta';
+import type { RevisionView } from '@/lib/seo/jefe/revision';
+import { RevisionProposal } from './revision-propuesta';
 
 type Res = { ok: true; message?: string } | { ok: false; error: string };
 const STATUS: Record<string, { label: string; tone: 'neutral' | 'info' | 'warning' | 'success' | 'danger' }> = {
@@ -108,7 +110,7 @@ function Decide({ projectId, planId, status, score }: { projectId: string; planI
   );
 }
 
-export function ServicioPanel({ projectId, view, isAdmin, changes, cycles }: { projectId: string; view: PlanView; isAdmin: boolean; changes: ChangeView[]; cycles: CycleProposalView[] }) {
+export function ServicioPanel({ projectId, view, isAdmin, changes, cycles, revision, canDecideCycles }: { projectId: string; view: PlanView; isAdmin: boolean; changes: ChangeView[]; cycles: CycleProposalView[]; revision: RevisionView | null; canDecideCycles: boolean }) {
   const plan = view.current;
   const base = `/dashboard/projects/${projectId}/servicio`;
   if (!plan)
@@ -143,6 +145,7 @@ export function ServicioPanel({ projectId, view, isAdmin, changes, cycles }: { p
   return (
     <div className="flex flex-col gap-4">
       {isAdmin && <Generate projectId={projectId} view={view} />}
+      {isAdmin && revision && <RevisionProposal projectId={projectId} revision={revision} />}
       {view.versions.length > 1 && (
         <nav aria-label="Versiones del plan" className="flex flex-wrap gap-2 text-sm">
           {view.versions.map((v) => (
@@ -273,7 +276,7 @@ export function ServicioPanel({ projectId, view, isAdmin, changes, cycles }: { p
       </div>
 
       {isAdmin && plan.status !== 'borrador' && <Decide projectId={projectId} planId={plan.id} status={plan.status} score={plan.shadowScore} />}
-      {isAdmin && <CycleProposal projectId={projectId} proposals={cycles} hasApprovedPlan={view.versions.some((v) => v.status === 'aprobado')} />}
+      {canDecideCycles && <CycleProposal projectId={projectId} proposals={cycles} hasApprovedPlan={view.versions.some((v) => v.status === 'aprobado')} canPropose={isAdmin} />}
       {isAdmin && <PlanChanges projectId={projectId} changes={changes} />}
       {isAdmin && <JefeChat projectId={projectId} />}
     </div>

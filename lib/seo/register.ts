@@ -26,6 +26,7 @@ import { advanceAll } from '@/lib/seo/arranque/arranque';
 import { registerJefeTools } from '@/lib/seo/jefe/tools';
 import { registerJefePlanJobs } from '@/lib/seo/jefe/plan';
 import { jefeCyclePass } from '@/lib/seo/jefe/ciclos';
+import { jefeRevisionPass } from '@/lib/seo/jefe/revision';
 import { registerScheduled } from '@/lib/core/capabilities';
 import { seoWeeklyLines } from '@/lib/seo/informe-semanal';
 import { registerSeoAgentTools } from '@/lib/seo/agente-tool';
@@ -57,6 +58,8 @@ export function registerSeoCapabilities(): void {
     seen.set(tenantId, day);
     // Jefe SEO D4: antes, crea la estrategia aprobada que esperaba y propone la siguiente desde el plan (0 $, sin aprobar nada).
     await jefeCyclePass(tenantId).catch((e) => console.error('[seo] jefe: ciclos desde el plan:', e instanceof Error ? e.message : e));
+    // Jefe SEO D6: propone revisar el plan cuando hay motivo (0 $; la versión nueva solo si un admin la pide).
+    await jefeRevisionPass(tenantId).catch((e) => console.error('[seo] jefe: revisión del plan:', e instanceof Error ? e.message : e));
     await materializeAll(tenantId);
   });
   // Análisis inicial (docs/PLAN-SEO-JEFE.md, D0): un solo proceso por cuenta, cada 10 min, avanza las ejecuciones abiertas.
