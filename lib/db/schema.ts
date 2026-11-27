@@ -4326,6 +4326,74 @@ export const seoGeogridPoints = pgTable(
 );
 export type SeoGeogridPoint = typeof seoGeogridPoints.$inferSelect;
 
+// SEO parte 6, tanda 6b (0072): registro de cambios de la web y páginas de dinero (docs/DISENO-SEO-TECNICO-2BC.md).
+/** Foto estructurada de una página (vigilancia de dinero). */
+export type MoneySnap = { status: number; title: string | null; h1: string | null; canonical: string | null; indexable: boolean; words: number; simhash: string | null; at: string };
+export const seoChangeLog = pgTable(
+  'seo_change_log',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    url: text('url').notNull(),
+    urlHash: varchar('url_hash', { length: 40 }).notNull(),
+    // title | meta_description | h1 | canonical | indexable | status | content | schema | url_new | url_gone | host | tech
+    field: varchar('field', { length: 30 }).notNull(),
+    before: text('before'),
+    after: text('after'),
+    extra: jsonb('extra').$type<Record<string, unknown>>(),
+    // rastreo | dinero
+    source: varchar('source', { length: 10 }).notNull(),
+    // id del rastreo o «dinero:<id del trabajo>»: un reintento no duplica.
+    batch: varchar('batch', { length: 64 }).notNull(),
+    prevObservedAt: timestamp('prev_observed_at'),
+    detectedAt: timestamp('detected_at').notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('seo_change_log_unique').on(table.projectId, table.batch, table.urlHash, table.field),
+    index('seo_change_log_project_idx').on(table.projectId, table.detectedAt.desc()),
+    index('seo_change_log_url_idx').on(table.projectId, table.urlHash, table.detectedAt),
+    check('seo_change_log_source_check', sql`${table.source} IN ('rastreo', 'dinero')`),
+  ]
+);
+export type SeoChangeLog = typeof seoChangeLog.$inferSelect;
+
+export const seoMoneyPages = pgTable(
+  'seo_money_pages',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    url: text('url').notNull(),
+    urlHash: varchar('url_hash', { length: 40 }).notNull(),
+    // home | top | pinned | encargo (varios a la vez)
+    reasons: text('reasons').array().notNull().default(sql`'{}'::text[]`),
+    expiresAt: timestamp('expires_at'),
+    outSince: timestamp('out_since'),
+    active: boolean('active').notNull().default(true),
+    baseline: jsonb('baseline').$type<MoneySnap>(),
+    baselineVersion: integer('baseline_version').notNull().default(1),
+    last: jsonb('last').$type<MoneySnap>(),
+    stable: jsonb('stable').$type<MoneySnap>(),
+    lastCheckedAt: timestamp('last_checked_at'),
+    pendingKind: varchar('pending_kind', { length: 40 }),
+    pendingSince: timestamp('pending_since'),
+    failStreak: integer('fail_streak').notNull().default(0),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex('seo_money_pages_unique').on(table.projectId, table.urlHash), index('seo_money_pages_active_idx').on(table.projectId, table.active)]
+);
+export type SeoMoneyPage = typeof seoMoneyPages.$inferSelect;
+
 export const seoReviews = pgTable(
   'seo_reviews',
   {

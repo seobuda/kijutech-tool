@@ -149,6 +149,8 @@ export const KIND_TECHNIQUE: Record<string, string> = {
   'seo.seo_plugins_conflict': 'un_plugin_seo',
   'seo.hacked_queries': 'limpiar_hackeo',
   'seo.hacked_pages': 'limpiar_hackeo',
+  'seo.money_page_changed': 'indexacion_corregida',
+  'seo.money_pages_unreadable': 'indexacion_corregida',
   'seo.old_nap_found': 'nap_antiguo_corregido',
   'seo.doorway_pages': 'contenido_duplicado',
   'seo.geogrid_weak': 'optimizar_ficha_zona',

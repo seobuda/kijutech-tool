@@ -135,6 +135,12 @@ export const GEOGRID_KINDS: SaludKind[] = [
   { kind: 'seo.maps_spam', group: 'local', title: 'Competidor con nombre sospechoso en el mapa', explain: 'Un competidor que sale en el top 3 en muchos puntos tiene un nombre que parece relleno de palabras clave (Google lo prohíbe: el nombre debe ser el real del negocio). Se puede sugerir la edición a Google; si su rótulo real es así, descártalo.', severityDefault: 'info', ruleVersion: 1 }
 ];
 
+/** Parte 6 (6b): páginas de dinero («seo.vigilancia:dinero»). */
+export const DINERO_FINDING_KINDS: SaludKind[] = [
+  { kind: 'seo.money_page_changed', group: 'vigilancia', title: 'Una página importante ha cambiado a peor', explain: 'Una de las páginas que más importan (portada, las de más clics, las fijadas o las de un encargo en curso) estaba bien y ahora no: dejó de responder, tiene noindex, su canonical apunta a otra, se quedó sin título o H1, o perdió más de la mitad del texto. Se ha confirmado dos veces (30 min). Si el cambio es a propósito, «Dejar así» lo acepta como la nueva referencia.', severityDefault: 'importante', ruleVersion: 1 },
+  { kind: 'seo.money_pages_unreadable', group: 'vigilancia', title: 'No podemos leer las páginas importantes', explain: 'Llevamos varias pasadas sin poder leer ninguna de las páginas vigiladas (la web nos bloquea o tarda demasiado). Mientras dure, no podemos avisar si cambian. Suele ser un cortafuegos o un plugin de seguridad: hay que permitir nuestro robot.', severityDefault: 'info', ruleVersion: 1 }
+];
+
 /** Parte 6: señales de web hackeada («seo.vigilancia:hackeo», en los detectores semanales). */
 export const HACKEO_FINDING_KINDS: SaludKind[] = [
   { kind: 'seo.hacked_queries', group: 'search_console', title: 'Búsquedas basura nuevas en Search Console (posible hackeo)', explain: 'Han empezado a salir búsquedas de fármacos, réplicas, apuestas o en japonés o chino que nada tienen que ver con el negocio. Es la señal típica de una web hackeada que publica páginas basura (a veces solo visibles para Google). Si sus páginas no son de la web, es urgente: limpiar, cambiar contraseñas, actualizar y pedir la revisión en Search Console.', severityDefault: 'critico', ruleVersion: 1 },
@@ -149,5 +155,5 @@ export const PUERTAS_KINDS: SaludKind[] = [
   { kind: 'seo.doorway_pages', group: 'contenido', title: 'Páginas puerta: la misma página cambiando la población', explain: 'Hay 3 o más páginas casi idénticas que solo cambian el nombre de la población. Google las considera páginas puerta y puede penalizar la web entera. Mejor una sola página bien hecha, o páginas de zona con contenido propio y útil de cada sitio.', severityDefault: 'importante', ruleVersion: 1 }
 ];
 
-export const SEO_KINDS: SaludKind[] = [...SALUD_KINDS, ...LOCAL_KINDS, ...MAPA_KINDS, ...VIGILANCIA_KINDS, ...EXTERNOS_KINDS, ...POSICIONES_KINDS, ...FICHA_KINDS, ...GEOGRID_KINDS, ...NAP_ANTIGUO_KINDS, ...PUERTAS_KINDS, ...HACKEO_FINDING_KINDS];
+export const SEO_KINDS: SaludKind[] = [...SALUD_KINDS, ...LOCAL_KINDS, ...MAPA_KINDS, ...VIGILANCIA_KINDS, ...EXTERNOS_KINDS, ...POSICIONES_KINDS, ...FICHA_KINDS, ...GEOGRID_KINDS, ...NAP_ANTIGUO_KINDS, ...PUERTAS_KINDS, ...HACKEO_FINDING_KINDS, ...DINERO_FINDING_KINDS];
 export const SALUD_KIND_BY_KEY = new Map(SEO_KINDS.map((k) => [k.kind, k]));

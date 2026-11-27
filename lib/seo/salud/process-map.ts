@@ -150,6 +150,30 @@ export const SEO_SALUD_PROCESS_MAP: ProcessStep[] = [
     tables: ['crawl_runs', 'crawl_pages', 'seo_dossier_facts', 'findings']
   },
   {
+    id: 'dinero',
+    lane: 'Vigilancia continua',
+    name: 'Páginas de dinero (vigiladas cada pocas horas)',
+    description: 'La portada, las 5 con más clics de Search Console, las fijadas por el equipo (como mucho 5) y las URLs de los encargos SEO desde que se aprueban hasta 30 días después de hechos. Foto estructurada (respuesta, título, H1, canonical, indexable, palabras y huella del texto); si algo empeora frente a la referencia, se confirma a los 30 min y avisa (crítico: por Telegram). Salud → «Páginas de dinero».',
+    status: 'built',
+    file: 'lib/seo/cambios/dinero.ts',
+    when: 'Cada 6 h por defecto (proceso «seo.dinero», editable: 3, 6, 12 o 24 h) y la confirmación «seo.dinero.confirmar» a los 30 min.',
+    ai: 'Nada.',
+    code: 'Lectura con safeFetcher del núcleo (2 MB, sin redirecciones, solo webs públicas) y extractPage. Solo páginas de la web del proyecto. Todas las condiciones son relativas a la referencia (antes bien, ahora no); 401/403/429/5xx y errores = no concluyente (no decide, conserva lo abierto). «Dejar así» acepta la foto como referencia nueva (versión en la clave del aviso). No repite estado/noindex si ya hay «página que funcionaba y ahora no», ni avisa de la portada (lo hace la vigilancia horaria). Una página con aviso abierto no sale de la lista; las del top se quitan tras 4 semanas fuera. Fuente «seo.vigilancia:dinero».',
+    tables: ['seo_money_pages', 'seo_change_log', 'findings', 'interventions', 'gsc_daily', 'jobs']
+  },
+  {
+    id: 'registro-cambios',
+    lane: 'Auditoría',
+    name: 'Registro de cambios de la web',
+    description: 'Al terminar cada auditoría, compara con el rastreo anterior del proyecto (emparejando por ruta, sirve en un cambio de dominio) y apunta qué cambió: título, descripción, H1, canonical, indexable, respuesta, texto (cambio grande), datos del negocio en el schema, páginas nuevas y páginas que ya no aparecen. Un cambio de plantilla en toda la web es una sola fila con la lista de páginas. Salud → «Cambios en la web». Base de la fecha real de cada encargo (parte 8) y del asistente de migraciones.',
+    status: 'built',
+    file: 'lib/seo/cambios/registro.ts',
+    when: 'Tras cada auditoría (dentro de «seo.salud.audit»); purga diaria de lo que tiene más de 18 meses («seo: purgar el registro de cambios»).',
+    ai: 'Nada.',
+    code: 'Reglas puras en lib/seo/cambios/rules.ts. Con más del 20 % de páginas bloqueadas en cualquiera de los dos rastreos no compara; una página bloqueada en uno de los dos se salta. Altas y bajas solo sin parámetros y con los dos rastreos completos. Como mucho 500 filas por rastreo (primero las vigiladas, de encargos y con más clics). Clave única por rastreo: un reintento no duplica. No son hallazgos.',
+    tables: ['seo_change_log', 'crawl_pages', 'crawl_runs', 'seo_money_pages', 'interventions']
+  },
+  {
     id: 'gasto-datos',
     lane: 'Vigilancia continua',
     name: 'Gasto en datos de pago por proyecto',
