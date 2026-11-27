@@ -182,7 +182,7 @@ export async function generateMasterPlan(tenantId: string, planId: string): Prom
     await db.update(seoMasterPlans).set({ aiJobId: res.jobId, costUsd: job?.cost ?? null }).where(eq(seoMasterPlans.id, planId));
     return { ok: false, errors: v.errors };
   }
-  const score = scorePlan(v.plan, dossier.evidence);
+  const score = scorePlan(v.plan, dossier.evidence, dossier.summary.profile);
   await db.transaction(async (tx) => {
     const done = await tx
       .update(seoMasterPlans)
@@ -196,7 +196,7 @@ export async function generateMasterPlan(tenantId: string, planId: string): Prom
         confidence: v.plan.confidence,
         dataGaps: dossier.summary.dataGaps.slice(0, 20),
         rejectedEvidence: v.rejectedEvidence.slice(0, 40),
-        scorer: { score: score.score, divergences: score.divergences, signals: score.signals, warnings: v.warnings, q1Hours: v.q1Hours, q1Available: v.q1Available },
+        scorer: { score: score.score, profile: dossier.summary.profile, divergences: score.divergences, signals: score.signals, warnings: v.warnings, q1Hours: v.q1Hours, q1Available: v.q1Available },
         aiJobId: res.jobId,
         costUsd: job?.cost ?? null,
         model: res.model,

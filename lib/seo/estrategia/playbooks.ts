@@ -142,7 +142,9 @@ export const PLAYBOOKS: Record<PlaybookKey, Playbook> = {
     key: 'local_ficha_resenas',
     version: 1,
     label: 'Ficha de Google y reseñas',
-    description: 'Cuidar la ficha de Google (categorías, servicios, publicaciones) y pedir reseñas de forma constante.',
+    // Decisión de Enric (27 nov 2026): las reseñas las pide el cliente con el enlace y la plantilla de la agencia; las
+    // publicaciones de la ficha bajan de prioridad (solo si sobran horas).
+    description: 'Conseguir reseñas de forma constante (las pide el cliente con el enlace y la plantilla que prepara la agencia) y cuidar la ficha (categorías, servicios, fotos); publicaciones solo si sobran horas.',
     role: 'tecnico',
     technique: 'campana_resenas',
     unitLabel: 'acción',

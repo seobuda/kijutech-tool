@@ -94,7 +94,7 @@ describe('Jefe SEO D2: puntuador y examen', () => {
     expect(gradePlan(null, rota)[0].pass).toBe(false);
   });
   it('los casos del examen son coherentes (cada caso tiene expediente y líneas)', () => {
-    expect(cases.length).toBe(3);
+    expect(cases.length).toBe(7);
     for (const c of cases) {
       expect(c.evidence.size).toBeGreaterThan(2);
       expect(c.text).toContain('[');
