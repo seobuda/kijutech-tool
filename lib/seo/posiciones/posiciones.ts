@@ -93,7 +93,7 @@ export async function syncSeed(tenantId: string, projectId: string): Promise<{ a
   return { added: fresh.length, hasLocal: Boolean(facts.zona && facts.services.length) };
 }
 
-async function projectLocation(tenantId: string, zona: string | null): Promise<{ name: string; approx: boolean }> {
+export async function projectLocation(tenantId: string, zona: string | null): Promise<{ name: string; approx: boolean }> {
   const src = serpSource();
   const towns = zoneTowns(zona);
   if (!src?.locations || !towns.length) return { name: 'Spain', approx: true };
@@ -233,7 +233,7 @@ export async function collectPositions(tenantId: string, projectId: string): Pro
     const row = readSerp(r, domain, tokens);
     await db
       .update(seoRankChecks)
-      .set({ status: 'hecha', position: row.position, url: row.url, clientUrls: row.clientUrls, localPack: row.localPack, localRank: row.localRank, aio: row.aio, aioCites: row.aioCites, features: row.features, top10: row.top10, checkedAt: new Date() })
+      .set({ status: 'hecha', position: row.position, url: row.url, clientUrls: row.clientUrls, localPack: row.localPack, localRank: row.localRank, aio: row.aio, aioCites: row.aioCites, features: row.features, top10: row.top10, top10Urls: row.top10Urls, checkedAt: new Date() })
       .where(eq(seoRankChecks.id, c.id));
     done++;
   }

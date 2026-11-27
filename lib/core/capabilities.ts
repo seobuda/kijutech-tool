@@ -628,7 +628,10 @@ export type SerpSource = {
   getMapsTask?: (tenantId: string, id: string) => Promise<MapsTaskResult>;
   /** Volumen mensual medio (Google Ads) de hasta 1000 búsquedas. */
   volumes?: (tenantId: string, keywords: string[], location: string, language: string) => Promise<{ volumes: Map<string, number | null>; costUsd: number }>;
+  /** Ideas de búsquedas a partir de unas semillas (Google Ads), con volumen, CPC, competencia y meses (SEO parte 7). */
+  keywordIdeas?: (tenantId: string, seeds: string[], location: string, language: string) => Promise<{ ideas: KeywordIdea[]; costUsd: number }>;
 };
+export type KeywordIdea = { keyword: string; volume: number | null; cpc: number | null; competition: string | null; monthly: { month: string; volume: number }[] };
 export type MapsItem = { rank: number; cid: string | null; placeId: string | null; title: string; domain: string | null; rating: number | null; votes: number | null; category: string | null };
 export type MapsTaskResult = { status: 'pendiente' } | { status: 'error'; error: string } | { status: 'hecha'; items: MapsItem[] };
 export type SerpTaskInput = { keyword: string; location: string; language: string; device: 'mobile' | 'desktop'; depth: number; tag: string };

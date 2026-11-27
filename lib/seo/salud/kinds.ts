@@ -135,6 +135,12 @@ export const GEOGRID_KINDS: SaludKind[] = [
   { kind: 'seo.maps_spam', group: 'local', title: 'Competidor con nombre sospechoso en el mapa', explain: 'Un competidor que sale en el top 3 en muchos puntos tiene un nombre que parece relleno de palabras clave (Google lo prohíbe: el nombre debe ser el real del negocio). Se puede sugerir la edición a Google; si su rótulo real es así, descártalo.', severityDefault: 'info', ruleVersion: 1 }
 ];
 
+/** Parte 7: demanda («seo.demanda:serp»). */
+export const DEMANDA_FINDING_KINDS: SaludKind[] = [
+  { kind: 'seo.serp_same_intent', group: 'search_console', title: 'Dos páginas para lo que Google ve como una sola búsqueda', explain: 'Dos temas que la web trabaja con páginas distintas dan en Google casi los mismos resultados (4 o más páginas del top 10 en común): para Google es la misma intención. Las dos páginas se reparten la fuerza. Mejor unirlas en una (y redirigir la otra) o diferenciarlas de verdad para dos necesidades distintas.', severityDefault: 'aviso', ruleVersion: 1 },
+  { kind: 'seo.demand_no_page', group: 'search_console', title: 'Búsqueda con demanda sin página en la web', explain: 'Hay gente buscando esto en Google (según Google Ads) y la web no tiene ninguna página que lo trabaje, así que no puede salir. Si encaja con lo que ofrece el cliente, una página útil para esa búsqueda puede traer visitas nuevas.', severityDefault: 'info', ruleVersion: 1 }
+];
+
 /** Parte 6 (6b): páginas de dinero («seo.vigilancia:dinero»). */
 export const DINERO_FINDING_KINDS: SaludKind[] = [
   { kind: 'seo.money_page_changed', group: 'vigilancia', title: 'Una página importante ha cambiado a peor', explain: 'Una de las páginas que más importan (portada, las de más clics, las fijadas o las de un encargo en curso) estaba bien y ahora no: dejó de responder, tiene noindex, su canonical apunta a otra, se quedó sin título o H1, o perdió más de la mitad del texto. Se ha confirmado dos veces (30 min). Si el cambio es a propósito, «Dejar así» lo acepta como la nueva referencia.', severityDefault: 'importante', ruleVersion: 1 },
@@ -155,5 +161,5 @@ export const PUERTAS_KINDS: SaludKind[] = [
   { kind: 'seo.doorway_pages', group: 'contenido', title: 'Páginas puerta: la misma página cambiando la población', explain: 'Hay 3 o más páginas casi idénticas que solo cambian el nombre de la población. Google las considera páginas puerta y puede penalizar la web entera. Mejor una sola página bien hecha, o páginas de zona con contenido propio y útil de cada sitio.', severityDefault: 'importante', ruleVersion: 1 }
 ];
 
-export const SEO_KINDS: SaludKind[] = [...SALUD_KINDS, ...LOCAL_KINDS, ...MAPA_KINDS, ...VIGILANCIA_KINDS, ...EXTERNOS_KINDS, ...POSICIONES_KINDS, ...FICHA_KINDS, ...GEOGRID_KINDS, ...NAP_ANTIGUO_KINDS, ...PUERTAS_KINDS, ...HACKEO_FINDING_KINDS, ...DINERO_FINDING_KINDS];
+export const SEO_KINDS: SaludKind[] = [...SALUD_KINDS, ...LOCAL_KINDS, ...MAPA_KINDS, ...VIGILANCIA_KINDS, ...EXTERNOS_KINDS, ...POSICIONES_KINDS, ...FICHA_KINDS, ...GEOGRID_KINDS, ...NAP_ANTIGUO_KINDS, ...PUERTAS_KINDS, ...HACKEO_FINDING_KINDS, ...DINERO_FINDING_KINDS, ...DEMANDA_FINDING_KINDS];
 export const SALUD_KIND_BY_KEY = new Map(SEO_KINDS.map((k) => [k.kind, k]));

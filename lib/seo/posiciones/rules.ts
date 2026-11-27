@@ -123,7 +123,7 @@ export type SerpForClient = {
   aio: { present: boolean; domains: string[] };
   features: string[];
 };
-export type CheckRow = { position: number | null; url: string | null; clientUrls: string[]; localPack: boolean; localRank: number | null; aio: boolean; aioCites: boolean; features: string[]; top10: string[] };
+export type CheckRow = { position: number | null; url: string | null; clientUrls: string[]; localPack: boolean; localRank: number | null; aio: boolean; aioCites: boolean; features: string[]; top10: string[]; top10Urls: string[] };
 
 const sameDomain = (a: string | null | undefined, b: string) => Boolean(a) && (a === b || a!.endsWith(`.${b}`));
 
@@ -145,7 +145,8 @@ export function readSerp(serp: SerpForClient, clientDomain: string, brandTokens:
     aio: serp.aio.present,
     aioCites: serp.aio.domains.some((d) => sameDomain(d, clientDomain)),
     features: serp.features,
-    top10: serp.organic.filter((o) => o.rank <= 10).sort((a, b) => a.rank - b.rank).map((o) => o.domain)
+    top10: serp.organic.filter((o) => o.rank <= 10).sort((a, b) => a.rank - b.rank).map((o) => o.domain),
+    top10Urls: serp.organic.filter((o) => o.rank <= 10).sort((a, b) => a.rank - b.rank).map((o) => o.url)
   };
 }
 

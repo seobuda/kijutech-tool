@@ -174,6 +174,18 @@ export const SEO_SALUD_PROCESS_MAP: ProcessStep[] = [
     tables: ['seo_change_log', 'crawl_pages', 'crawl_runs', 'seo_money_pages', 'interventions']
   },
   {
+    id: 'demanda',
+    lane: 'Vigilancia continua',
+    name: 'Demanda: volumen, intención real e ideas',
+    description: 'Cada mes: volumen de Google Ads de las búsquedas principales de los 300 temas con más valor (el del tema no se infla con variantes) y la SERP real de los 40 con más valor: intención (local, contratar, informarse o mixta) y tipo de página que gana (servicio, artículo, directorio). Con eso: «dos páginas para una misma búsqueda» (4+ URLs del top 10 en común) y «demanda sin página» (ideas con volumen y sin tema con página). Ideas a mano desde sus servicios confirmados («Buscar ideas»), para seguir o descartar. Palabras → «Demanda».',
+    status: 'built',
+    file: 'lib/seo/demanda/demanda.ts',
+    when: 'Cada 30 días por defecto (proceso «seo.demanda», editable: 30, 60 o 90) o «Volumen e intención»; ideas, a mano.',
+    ai: 'Nada.',
+    code: 'DataForSEO por el núcleo (serpSource.volumes, search y keywordIdeas, que registra Agentes): volumen 0,09 $ por llamada, SERP unos 0,002 $ cada una, ideas 0,09 $ (keywords_for_keywords de Google Ads, sin socios de búsqueda), todo con el tope de gasto. Directorios, redes y la web del cliente no cuentan al comparar SERP. No avisa si ya hay canibalización o tema sin página clara en esas URLs, ni si las dos están en el top 3. Las ideas sin volumen, largas, con marcas de la competencia o ya conocidas se descartan solas. El mapa de palabras lee el volumen y la intención de seo_demand. Fuente «seo.demanda:serp».',
+    tables: ['seo_demand', 'seo_topics', 'seo_topic_queries', 'seo_rank_keywords', 'seo_data_spend', 'findings', 'client_competitors']
+  },
+  {
     id: 'gasto-datos',
     lane: 'Vigilancia continua',
     name: 'Gasto en datos de pago por proyecto',
