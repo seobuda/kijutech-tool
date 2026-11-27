@@ -128,6 +128,9 @@ export type ReadyState = {
   atencion: boolean;
   idiomas: boolean;
   competencia: number;
+  /** Simulación del 27 nov: lo que bloquea el trabajo si falta (opcionales: sin dato, no se piden). */
+  ficha?: boolean;
+  accesoWeb?: boolean;
 };
 
 /**
@@ -146,7 +149,9 @@ export function readiness(s: ReadyState): { items: ReadyItem[]; done: number; to
     { key: 'atencion', label: 'Cómo atiende (local, a domicilio u online)', ok: s.atencion, auto: false, hint: 'Elige abajo: cambia el sentido de la zona y del mapa de Google.' },
     { key: 'idiomas', label: 'Idiomas en los que le buscan', ok: s.idiomas, auto: false, hint: 'Se deducen de la web: confírmalos abajo.' },
     { key: 'competencia', label: 'Competencia confirmada (3 o más)', ok: s.competencia >= 3, auto: false, hint: 'En Palabras → Competencia: buscar en Google y confirmar los competidores reales.' },
-    { key: 'contacto', label: 'Contacto con correo para el informe', ok: s.contacto, auto: false, hint: 'En la ficha del cliente → Contactos: marca quién recibe los informes.' }
+    { key: 'contacto', label: 'Contacto con correo para el informe', ok: s.contacto, auto: false, hint: 'En la ficha del cliente → Contactos: marca quién recibe los informes.' },
+    ...(s.ficha === undefined ? [] : [{ key: 'ficha', label: 'Ficha de Google confirmada', ok: s.ficha, auto: false, hint: 'En la pestaña Local: «Buscar su ficha» y confirmarla (o pegar su enlace de Maps).' }]),
+    ...(s.accesoWeb === undefined ? [] : [{ key: 'acceso', label: 'Acceso a la web (para hacer los encargos)', ok: s.accesoWeb, auto: false, hint: 'En la ficha del cliente → Activos: marca la web con acceso «sí» (y apunta dónde están los accesos).' }])
   ];
   return { items, done: items.filter((i) => i.ok).length, total: items.length };
 }

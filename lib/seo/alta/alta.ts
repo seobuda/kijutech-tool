@@ -9,7 +9,7 @@ import 'server-only';
 // - Puesta en marcha: qué le falta al proyecto (readiness) para el informe, las posiciones, el local y la medición.
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { clientCompetitors, clientContactSubscriptions, clientContacts, crawlPages, crawlRuns, jobs, projects, seoDossierFacts, seoTopics, clients } from '@/lib/db/schema';
+import { clientCompetitors, clientContactSubscriptions, clientContacts, crawlPages, crawlRuns, jobs, projects, seoDossierFacts, seoTopics, clients, clientAssets, seoLocalPlaces } from '@/lib/db/schema';
 import { enqueueJob, registerJobKind } from '@/lib/core/jobs';
 import { callAI, getPrompt } from '@/lib/ai/gateway';
 import { extractJsonFromLLMResponse } from '@/lib/ai/parsers/json-extractor';
@@ -209,7 +209,9 @@ export async function projectReadiness(tenantId: string, projectId: string) {
     atencion: confirmed('atencion'),
     idiomas: confirmed('idiomas'),
     contacto: Number(subs[0]?.n ?? 0) > 0,
-    competencia: Number(comps[0]?.n ?? 0)
+    competencia: Number(comps[0]?.n ?? 0),
+    ficha: p.clientId ? (await db.select({ id: seoLocalPlaces.id }).from(seoLocalPlaces).where(and(eq(seoLocalPlaces.clientId, p.clientId), eq(seoLocalPlaces.role, 'cliente'), eq(seoLocalPlaces.status, 'confirmada'))).limit(1)).length > 0 : false,
+    accesoWeb: p.clientId ? (await db.select({ id: clientAssets.id }).from(clientAssets).where(and(eq(clientAssets.clientId, p.clientId), eq(clientAssets.kind, 'web'), eq(clientAssets.access, 'si'))).limit(1)).length > 0 : false
   });
 }
 

@@ -7,6 +7,7 @@ import { and, eq, gte, inArray, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { findings, seoChangeLog } from '@/lib/db/schema';
 import { syncFindings } from '@/lib/core/findings';
+import { alertSeo } from '@/lib/seo/avisos';
 import { DIAG_KIND, DIAG_SOURCE, diagnoseLayers, dropState, weekKey, type Totals } from '@/lib/seo/medir/diagnostico-rules';
 
 const addDays = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
@@ -45,5 +46,8 @@ export async function runDiagnostico(tenantId: string, projectId: string, prop: 
   await syncFindings(tenantId, projectId, DIAG_SOURCE, [
     { kind: DIAG_KIND, dedupeKey: key, metric: 'clics_28d', value: cur.clicks, severity: 'importante', evidence: { base: base ?? prev.clicks, caidaPct: Math.round(st.pct * 100), interanualPct: st.yoyPct === null ? null : Math.round(st.yoyPct * 100), actual: cur, anterior: prev, anioAnterior: yoy, capas: layers, hasta: end } }
   ], [DIAG_KIND]);
+  if (!open) {
+    await alertSeo(tenantId, projectId, `seo.caida:${projectId}:${key}`, `caída de visitas desde Google (${Math.round(st.pct * 100)} %)`, layers.length ? layers.slice(0, 3).map((l) => l.texto) : ['Sin causa clara en los datos: revisar el aviso en Salud.']);
+  }
   return `caída de clics ${Math.round(st.pct * 100)} %: ${layers.length ? layers.map((l) => l.capa).join(', ') : 'sin causa clara'}`;
 }

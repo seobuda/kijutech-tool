@@ -9,9 +9,9 @@ import 'server-only';
 //   Desde el 26 nov 2026 (Plan A+B): al aprobar se puede elegir lista, responsable, fecha, título, horas y quitar páginas
 //   (sin IA si se elige la lista); descartar lleva motivo y actúa (el cliente no lo quiere → a su memoria; ya está hecho
 //   → se vuelve a auditar); el plan se reparte por meses (planSchedule) y a principios de mes se avisa por Telegram.
-import { and, asc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { clients, findings, projects, seoPlanItems, type SeoPlanItem } from '@/lib/db/schema';
+import { clients, crawlRuns, findings, projects, seoPlanItems, type SeoPlanItem } from '@/lib/db/schema';
 import { registerScheduled, telegramOutbound, workSource, type RequestStatus, type TaskOptions } from '@/lib/core/capabilities';
 import { addMemory } from '@/lib/core/clients';
 import { registerJobKind } from '@/lib/core/jobs';
@@ -72,7 +72,12 @@ export async function regeneratePlan(tenantId: string, projectId: string): Promi
     impressionsByUrl(tenantId, projectId)
   ]);
   // Lo que ya está en una propuesta decidida (aprobada, hecha o descartada) no se vuelve a proponer.
-  const covered = new Set(items.filter((i) => i.status !== 'pendiente' && i.status !== 'caducada').flatMap((i) => i.findingIds));
+  // Simulación del 27 nov: una propuesta «hecha» cuyos hallazgos siguen abiertos NO los cubre si, tras hacerse, ya pasó al
+  // menos una auditoría completa (que los habría cerrado de estar arreglados) y 14 días: se vuelven a proponer.
+  const VERIFY_MS = 14 * 86_400_000;
+  const [lastAudit] = await db.select({ at: crawlRuns.finishedAt }).from(crawlRuns).where(and(eq(crawlRuns.projectId, projectId), eq(crawlRuns.target, 'propio'), eq(crawlRuns.status, 'hecho'))).orderBy(desc(crawlRuns.finishedAt)).limit(1);
+  const unverified = (i: (typeof items)[number]) => i.status === 'hecha' && Date.now() - i.updatedAt.getTime() > VERIFY_MS && Boolean(lastAudit?.at && lastAudit.at > i.updatedAt);
+  const covered = new Set(items.filter((i) => i.status !== 'pendiente' && i.status !== 'caducada' && !unverified(i)).flatMap((i) => i.findingIds));
   // Las búsquedas y temas del mapa traen sus impresiones y su valor de negocio en la evidencia.
   const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
   // Las URLs de un grupo de páginas puerta no se proponen además como duplicadas (misma técnica, tarea doble).
