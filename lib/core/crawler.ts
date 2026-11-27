@@ -183,7 +183,7 @@ export async function crawlSlice(ctx: Pick<JobContext, 'heartbeat' | 'signal'>, 
         schemaTypes: page?.schemaTypes.length ? page.schemaTypes : null,
         imagesWithoutAlt: page?.imagesWithoutAlt ?? null,
         // Hechos acotados (parte 1 SEO): enlaces a otras webs y recursos CSS/JS (para robots y enlaces rotos).
-        facts: page ? { ext: [...new Set(page.links.filter((l) => !l.internal && /^https?:/i.test(l.url)).map((l) => l.url.split('#')[0]))].slice(0, 100), res: page.resources } : null,
+        facts: page ? { ext: [...new Set(page.links.filter((l) => !l.internal && /^https?:/i.test(l.url)).map((l) => l.url.split('#')[0]))].slice(0, 100), res: page.resources, ...(page.generator ? { gen: page.generator } : {}), ...(page.signatures.length ? { sig: page.signatures } : {}) } : null,
         bytes: r.bytes,
         fetchMs: r.ms,
         error: r.error?.slice(0, 500) ?? (page?.maybeJsRendered ? 'posible web pintada con JavaScript' : null)

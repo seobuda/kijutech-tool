@@ -27,6 +27,7 @@ import { runPositions } from '@/lib/seo/posiciones/posiciones';
 import { runLocal } from '@/lib/seo/local/ficha';
 import { runGeogrid } from '@/lib/seo/local/geogrid';
 import { runNap } from '@/lib/seo/local/nap';
+import { runHackeo } from '@/lib/seo/vigilancia/hackeo';
 import {
   DETECTORES_SOURCE,
   SEO_PROCESSES,
@@ -301,6 +302,12 @@ export async function runDetectores(tenantId: string, projectId: string): Promis
       parts.push(`${inspected} página(s) inspeccionada(s) en Search Console`);
     }
     await syncFindings(tenantId, projectId, DETECTORES_SOURCE, found, ['seo.page_drop', 'seo.not_indexed']);
+    // Parte 6: señales de web hackeada (fuente propia; un fallo aquí no tumba el resto de detectores).
+    const h = await runHackeo(tenantId, projectId, prop).catch((e) => {
+      console.error('[seo] detectores: hackeo:', e instanceof Error ? e.message : e);
+      return 'señales de hackeo: no se pudo mirar';
+    });
+    if (h) parts.push(h);
   } else parts.push('sin Search Console asignado o sin datos descargados');
   return { status: found.length ? 'aviso' : 'ok', summary: parts.join(' · ') };
 }

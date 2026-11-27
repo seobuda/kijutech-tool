@@ -56,7 +56,7 @@ export async function decideSaludFindingAction(projectId: string, findingId: str
     const [f] = await db
       .select({ id: findings.id })
       .from(findings)
-      .where(and(eq(findings.id, findingId), eq(findings.projectId, projectId), eq(findings.tenantId, user.tenantId), inArray(findings.source, [SALUD_SOURCE, LOCAL_SOURCE, 'seo.mapa:gsc', 'seo.salud:externos', 'seo.posiciones:serp', 'seo.local:ficha', 'seo.local:geogrid', 'seo.local:nap_antiguo', 'seo.salud:puertas', ...VIGILANCIA_SOURCES])))
+      .where(and(eq(findings.id, findingId), eq(findings.projectId, projectId), eq(findings.tenantId, user.tenantId), inArray(findings.source, [SALUD_SOURCE, LOCAL_SOURCE, 'seo.mapa:gsc', 'seo.salud:externos', 'seo.posiciones:serp', 'seo.local:ficha', 'seo.local:geogrid', 'seo.local:nap_antiguo', 'seo.salud:puertas', 'seo.vigilancia:hackeo', ...VIGILANCIA_SOURCES])))
       .limit(1);
     if (!f) return { ok: false, error: 'Hallazgo no encontrado' };
     await decideFinding(user.tenantId, findingId, status, user.name || user.email, reason);

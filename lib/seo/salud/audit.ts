@@ -8,7 +8,9 @@ import 'server-only';
 // No usa IA: la IA llega después, para el juicio (prioridades y plan de mejora).
 import { and, desc, eq, inArray, lt, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { clientAssets, crawlPages, crawlRuns, projectAssets, projects, type CrawlRun } from '@/lib/db/schema';
+import { clientAssets, clientLocations, crawlPages, crawlRuns, projectAssets, projects, type CrawlRun } from '@/lib/db/schema';
+import { randomBytes } from 'node:crypto';
+import { publicFetch, resolvesPublic } from '@/lib/core/net';
 import { enqueueJob, ensureScheduleIfMissing, registerJobKind } from '@/lib/core/jobs';
 import { inlinkCounts, startCrawl } from '@/lib/core/crawler';
 import { registerFindingKind, syncFindings } from '@/lib/core/findings';
@@ -16,6 +18,8 @@ import { gscPropertiesForProject } from '@/lib/core/gsc';
 import { auditCrawl, type AuditPage } from '@/lib/seo/salud/audit-rules';
 import { aiCrawlerIssues, genericAnchors, hreflangIssues, langMissing, pageRegressions, redirectLoops, robotsGoogleIssues, type PrevPage, type TecnicoPage } from '@/lib/seo/salud/audit-rules-tecnico';
 import { SALUD_KINDS, SEO_KINDS } from '@/lib/seo/salud/kinds';
+import { isIndexable } from '@/lib/seo/salud/audit-rules';
+import { detectTech, internalNofollow, schemaPhoneInconsistent, seoPluginsConflict, soft404Pages, soft404Site, stagingLeftovers, type ProbeResult } from '@/lib/seo/salud/audit-rules-2b';
 
 export const SALUD_SOURCE = 'seo.salud:rastreo';
 const WAIT_MINUTES = 2;
@@ -105,6 +109,32 @@ async function previousCrawlPages(projectId: string, run: CrawlRun): Promise<Pre
     .where(eq(crawlPages.runId, prev.id));
 }
 
+/**
+ * Parte 6 (técnico 2b): dos URLs que no existen (ruta neutra, sin nuestro nombre). Una sola petición cada una, sin seguir
+ * redirecciones; cualquier error queda como «no se sabe».
+ */
+async function probeMissing(rootUrl: string): Promise<ProbeResult[]> {
+  const rnd = () => randomBytes(6).toString('hex');
+  const urls = [new URL(`/${rnd()}-${rnd()}`, rootUrl).toString(), new URL(`/${rnd()}/${rnd()}/`, rootUrl).toString()];
+  const out: ProbeResult[] = [];
+  for (const url of urls) {
+    try {
+      // publicFetch no sigue redirecciones (queremos ver si manda a la portada) y comprueba la IP al conectar.
+      if (!(await resolvesPublic(url))) {
+        out.push({ url, status: 0, location: null, error: 'no pública' });
+        continue;
+      }
+      const res = await publicFetch(url, { method: 'GET', headers: { 'User-Agent': 'Mozilla/5.0 (compatible; KijutechBot/1.0)', Accept: 'text/html' }, signal: AbortSignal.timeout(10_000) });
+      void res.body?.cancel().catch(() => undefined);
+      const loc = res.headers.get('location');
+      out.push({ url, status: res.status, location: loc ? new URL(loc, url).toString() : null, error: null });
+    } catch (e) {
+      out.push({ url, status: 0, location: null, error: e instanceof Error ? e.message : 'error' });
+    }
+  }
+  return out;
+}
+
 /** Aplica las reglas a un rastreo terminado y pone al día los hallazgos del proyecto. */
 export async function auditFinishedCrawl(tenantId: string, projectId: string, run: CrawlRun) {
   const pages = (await db.select().from(crawlPages).where(eq(crawlPages.runId, run.id))) as unknown as AuditPage[];
@@ -125,8 +155,23 @@ export async function auditFinishedCrawl(tenantId: string, projectId: string, ru
     ...robotsGoogleIssues(run.rootUrl, run.robotsTxt, tp),
     ...aiCrawlerIssues(run.rootUrl, run.robotsTxt)
   );
-  // Todos los tipos de Salud: lo que ya no aparece se resuelve solo.
-  const r = await syncFindings(tenantId, projectId, SALUD_SOURCE, found, SALUD_KINDS.map((k) => k.kind));
+  // Parte 6 (técnico 2b): soft 404, staging, nofollow interno, teléfonos del schema y plugins de SEO.
+  const nofollowRows = (await db.execute(sql`
+    SELECT to_hash, count(*)::int AS n FROM crawl_links WHERE run_id = ${run.id} AND nofollow AND from_hash <> to_hash GROUP BY to_hash`)) as unknown as { to_hash: string; n: number }[];
+  const [proj] = await db.select({ clientId: projects.clientId }).from(projects).where(eq(projects.id, projectId)).limit(1);
+  const locs = proj?.clientId ? await db.select({ id: clientLocations.id }).from(clientLocations).where(eq(clientLocations.clientId, proj.clientId)).limit(2) : [];
+  const probe = soft404Site(run.rootUrl, await probeMissing(run.rootUrl).catch(() => []));
+  found.push(
+    ...soft404Pages(pages),
+    ...(probe ?? []),
+    ...stagingLeftovers(run.rootUrl, tp),
+    ...internalNofollow(pages, new Map([...nofollowRows].map((r) => [r.to_hash, Number(r.n)])), isIndexable),
+    ...schemaPhoneInconsistent(pages, locs.length > 1),
+    ...seoPluginsConflict(run.rootUrl, detectTech(tp))
+  );
+  // Todos los tipos de Salud: lo que ya no aparece se resuelve solo. Si la sonda no fue concluyente, su aviso se deja como está.
+  const kinds = SALUD_KINDS.map((k) => k.kind).filter((k) => probe !== null || k !== 'seo.soft_404_site');
+  const r = await syncFindings(tenantId, projectId, SALUD_SOURCE, found, kinds);
   return { pages: pages.length, gscPages: gscPages.length, ...r };
 }
 

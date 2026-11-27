@@ -5,7 +5,7 @@ import { isAllowed, parseRobots } from '@/lib/core/robots';
 import type { FindingInput } from '@/lib/core/findings-rules';
 import { isIndexable, sameUrl, type AuditPage } from '@/lib/seo/salud/audit-rules';
 
-export type TecnicoPage = AuditPage & { lang?: string | null; hreflang?: { lang: string; url: string }[] | null; facts?: { ext?: string[]; res?: string[] } | null };
+export type TecnicoPage = AuditPage & { lang?: string | null; hreflang?: { lang: string; url: string }[] | null; facts?: { ext?: string[]; res?: string[]; gen?: string; sig?: string[] } | null };
 /** Enlaces internos agrupados por destino y texto (n = cuántos enlaces iguales). */
 export type TecnicoLink = { toHash: string; anchor: string | null; n: number };
 

@@ -7,6 +7,7 @@ import { parse } from 'parse5';
 type Node = {
   nodeName: string;
   tagName?: string;
+  data?: string; // #comment
   attrs?: { name: string; value: string }[];
   childNodes?: Node[];
   value?: string;
@@ -35,7 +36,21 @@ export type ExtractedPage = {
   maybeJsRendered: boolean;
   /** Hojas de estilo y scripts que carga la página (URLs absolutas, como mucho 40): para ver si robots.txt los bloquea. */
   resources: string[];
+  /** <meta name="generator"> (CMS y versión, si la web lo dice). */
+  generator: string | null;
+  /** Firmas de herramientas en comentarios HTML y clases de script (p. ej. plugins de SEO que no cargan CSS ni JS). */
+  signatures: string[];
 };
+
+/** Firmas conocidas (comentario HTML o clase del script JSON-LD) → clave genérica de la herramienta. */
+const SIGNATURES: { key: string; re: RegExp }[] = [
+  { key: 'yoast', re: /yoast seo|yoast-schema-graph/i },
+  { key: 'rankmath', re: /rank math|rank-math-schema/i },
+  { key: 'aioseo', re: /all in one seo|aioseo-schema/i },
+  { key: 'seopress', re: /seopress/i },
+  { key: 'tsf', re: /the seo framework/i }
+];
+const sigsOf = (text: string) => SIGNATURES.filter((x) => x.re.test(text)).map((x) => x.key);
 
 const attr = (n: Node, name: string) => n.attrs?.find((a) => a.name === name)?.value ?? null;
 const clean = (s: string) => s.replace(/\s+/g, ' ').trim();
@@ -150,11 +165,14 @@ export function extractPage(html: string, pageUrl: string): ExtractedPage {
   const jsonld: unknown[] = [];
   const resources: string[] = [];
   let jsonldErrors = 0;
+  let generator: string | null = null;
+  const signatures = new Set<string>();
   let imagesWithoutAlt = 0;
   let scripts = 0;
   let body: Node | null = null;
 
   walk(doc, (n) => {
+    if (n.nodeName === '#comment' && n.data && signatures.size < 10) for (const k of sigsOf(n.data.slice(0, 500))) signatures.add(k);
     const tag = n.tagName;
     if (!tag) return;
     if (tag === 'html') lang = attr(n, 'lang');
@@ -163,6 +181,7 @@ export function extractPage(html: string, pageUrl: string): ExtractedPage {
     else if (tag === 'meta') {
       const name = (attr(n, 'name') ?? '').toLowerCase();
       if (name === 'description' && metaDescription === null) metaDescription = clean(attr(n, 'content') ?? '') || null;
+      if (name === 'generator' && generator === null) generator = clean(attr(n, 'content') ?? '').slice(0, 100) || null;
       if ((name === 'robots' || name === 'googlebot') && robotsMeta === null) robotsMeta = clean(attr(n, 'content') ?? '').toLowerCase() || null;
     } else if (tag === 'link') {
       const rel = (attr(n, 'rel') ?? '').toLowerCase().split(/\s+/);
@@ -190,6 +209,7 @@ export function extractPage(html: string, pageUrl: string): ExtractedPage {
       if (attr(n, 'alt') === null) imagesWithoutAlt++;
     } else if (tag === 'script') {
       scripts++;
+      for (const k of sigsOf(attr(n, 'class') ?? '')) signatures.add(k);
       const src = attr(n, 'src');
       if (src && resources.length < 40) {
         const r = normalizeUrl(src, pageUrl);
@@ -228,6 +248,8 @@ export function extractPage(html: string, pageUrl: string): ExtractedPage {
     schemaTypes,
     imagesWithoutAlt,
     maybeJsRendered: words < 50 && scripts >= 5,
-    resources: [...new Set(resources)]
+    resources: [...new Set(resources)],
+    generator,
+    signatures: [...signatures]
   };
 }

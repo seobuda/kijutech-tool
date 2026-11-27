@@ -4,7 +4,8 @@ import 'server-only';
 // lo que pinta sale de la base (rastreo, hallazgos, propiedades de Search Console y ficha del cliente).
 import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { clientAssets, clientLocations, clients, jobs, projectAssets, projects, seoPlanItems } from '@/lib/db/schema';
+import { clientAssets, clientLocations, clients, crawlPages, jobs, projectAssets, projects, seoPlanItems } from '@/lib/db/schema';
+import { detectTech, SEO_PLUGIN_LABEL, type Tech } from '@/lib/seo/salud/audit-rules-2b';
 import { KIND_TECHNIQUE } from '@/lib/seo/plan/rules';
 import { listFindings, openFindingCounts, type Severity } from '@/lib/core/findings';
 import { gscPropertiesForProject } from '@/lib/core/gsc';
@@ -49,6 +50,8 @@ export type SaludView = {
   decided: SaludFinding[];
   gsc: { siteUrl: string; status: string; firstDate: string | null; lastDate: string | null; lastError: string | null }[];
   jsonld: JsonLdOutput;
+  /** Tecnología detectada en el último rastreo (indicio: solo lo que deja huella en el HTML, CSS o JS). */
+  tech: (Tech & { seoPluginLabels: string[] }) | null;
 };
 
 type PlanRef = SaludFinding['plan'];
@@ -84,7 +87,7 @@ export async function getSaludView(tenantId: string, projectId: string, override
     listFindings(tenantId, projectId, { status: ['abierto', 'descartado', 'aceptado'], limit: 3000 }),
     gscPropertiesForProject(tenantId, projectId)
   ]);
-  const mine = findingsAll.filter((f) => f.source === SALUD_SOURCE || f.source === LOCAL_SOURCE || f.source === 'seo.mapa:gsc' || VIGILANCIA_SOURCES.includes(f.source) || f.source === 'seo.salud:externos' || f.source === 'seo.posiciones:serp' || f.source === 'seo.local:ficha' || f.source === 'seo.local:geogrid' || f.source === 'seo.local:nap_antiguo' || f.source === 'seo.salud:puertas');
+  const mine = findingsAll.filter((f) => f.source === SALUD_SOURCE || f.source === LOCAL_SOURCE || f.source === 'seo.mapa:gsc' || VIGILANCIA_SOURCES.includes(f.source) || f.source === 'seo.salud:externos' || f.source === 'seo.posiciones:serp' || f.source === 'seo.local:ficha' || f.source === 'seo.local:geogrid' || f.source === 'seo.local:nap_antiguo' || f.source === 'seo.salud:puertas' || f.source === 'seo.vigilancia:hackeo');
   // Estado real de la auditoría en la cola (antes se suponían 4 minutos tras el rastreo).
   const queue = await db
     .select({ kind: jobs.kind, status: jobs.status, error: jobs.lastError, payload: jobs.payload })
@@ -131,7 +134,15 @@ export async function getSaludView(tenantId: string, projectId: string, override
     }
   }
 
+  let tech: SaludView['tech'] = null;
+  if (crawl?.status === 'hecho') {
+    const rows = await db.select({ facts: crawlPages.facts }).from(crawlPages).where(eq(crawlPages.runId, crawl.id)).limit(500);
+    const t = detectTech(rows);
+    if (t.cms || t.seoPlugins.length) tech = { ...t, seoPluginLabels: t.seoPlugins.map((s) => SEO_PLUGIN_LABEL[s] ?? s) };
+  }
+
   return {
+    tech,
     project: { id: p.id, name: p.name, clientId: p.clientId, clientName: p.clientName },
     businessType,
     savedBusinessType,
