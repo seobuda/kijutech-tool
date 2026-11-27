@@ -1,7 +1,7 @@
 # Plan: «Jefe SEO» con IA desde el día 1 (fase D replanteada)
 
 **Fecha:** 2026-11-27 · **Análisis y plan:** Fable 5.2, en solo lectura sobre `main` (0d601d98). **Ejecuta:** Claude Opus 5.5.
-**Estado:** propuesta; pendiente de las decisiones de Enric (§8).
+**Estado:** APROBADO por Enric el 27 nov con las recomendaciones del §8: bloquea solo lo imprescindible (web, Search Console asignado, horas); una semana en modo sombra; el plan maestro lo aprueba siempre un admin y los ciclos se gradúan (>70 % de 10 sin editar → responsable SEO humano); tope propio de 30-40 $/mes. Por defecto: la lista de fuentes no oficiales del investigador la aprueba Enric; el bot de Telegram del departamento, después de D3.
 **Origen:** Enric rechaza que el agente espere a 2-3 estrategias hechas a mano («nos convierte en el cuello de botella»). Quiere apoyarse al 100 % en la IA (Opus 5.5 en esfuerzo alto) desde el alta. El flujo que pide:
 1. «Empezar análisis» recorre de forma secuencial todas las etapas y no arranca sin las conexiones.
 2. Se genera un plan de servicio a 1-2 años con estrategias (ciclos) dentro.
