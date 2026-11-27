@@ -23,6 +23,12 @@ export type ToolContext = {
    * aunque estén en «autónomo», se proponen para aprobar (I13: un texto de una web podría pedir un cambio).
    */
   untrustedInput?: boolean;
+  /**
+   * Hilo de una conversación abierta desde la pantalla de un módulo (capacidad agentChat, 27 nov 2026), p. ej.
+   * «seo:<projectId>». Lo fija el servidor, no el modelo: las herramientas del módulo lo usan para saber de qué proyecto
+   * se habla y no aceptar otro aunque el modelo lo pida.
+   */
+  thread?: string;
 };
 
 export type ToolResult = {
@@ -556,6 +562,37 @@ export function setAgentJobCreator(fn: AgentJobCreator): void {
 }
 export function agentJobCreator(): AgentJobCreator | null {
   return GJ.__kijuAgentJobCreator ?? null;
+}
+
+// --- Conversación con un agente desde la pantalla de un módulo (Jefe SEO, D3, 27 nov 2026) -----------------------------
+// Un módulo (SEO) abre un hilo con un agente (jefe_seo) sin importar el módulo Agentes: Agentes registra aquí cómo enviar
+// un mensaje y leer el hilo. El envío NO espera a la IA: guarda el mensaje y encola la respuesta (un trabajo por hilo a la
+// vez, así dos personas no se pisan); la pantalla lee el hilo hasta que llega. La puerta de permisos es la acción del
+// módulo que llama (el hilo lo construye su servidor a partir de un proyecto ya validado).
+export const AGENT_THREAD_RE = /^(?!web:)[a-z]{2,12}:[A-Za-z0-9:_-]{1,150}$/;
+export type AgentChatSend = {
+  tenantId: string;
+  agentKey: string;
+  /** «<módulo>:<id>», nunca «web:» (es el chat de prueba de Agentes). */
+  thread: string;
+  threadName: string;
+  actor: { name: string; isOwner: boolean };
+  text: string;
+  /** Contexto mínimo y estable del hilo (proyecto, versión): lo vivo se lee con las herramientas. */
+  context?: string;
+  maxTokens?: number;
+};
+export type AgentChatMessage = { id: string; role: 'user' | 'assistant'; content: string; createdAt: string; costUsd: number | null; tools: string[] };
+export type AgentChat = {
+  send: (r: AgentChatSend) => Promise<{ ok: true } | { ok: false; error: string }>;
+  history: (tenantId: string, agentKey: string, thread: string, limit?: number) => Promise<{ messages: AgentChatMessage[]; busy: boolean }>;
+};
+const GAC = globalThis as unknown as { __kijuAgentChat?: AgentChat };
+export function setAgentChat(c: AgentChat): void {
+  GAC.__kijuAgentChat = c;
+}
+export function agentChat(): AgentChat | null {
+  return GAC.__kijuAgentChat ?? null;
 }
 
 // --- Comunicaciones con clientes (cimientos, 23 nov 2026) -------------------------------------------------------------

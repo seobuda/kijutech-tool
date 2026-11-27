@@ -104,7 +104,7 @@ describe('organigrama y bot de Sistema', () => {
 
   it('crea los departamentos y el jefe de sistema; los agentes que ya existían pasan a su departamento', async () => {
     const depts = await listDepartments(tenant);
-    expect(depts.map((d) => d.key)).toEqual(['gabinete', 'operaciones', 'cuentas', 'sistema', 'seguridad']);
+    expect(depts.map((d) => d.key)).toEqual(['gabinete', 'operaciones', 'cuentas', 'seo', 'sistema', 'seguridad']);
     expect(depts.find((d) => d.key === 'sistema')).toMatchObject({ headAgentKey: SYSTEM_HEAD_KEY, botKey: SYSTEM_BOT, reportsTo: 'direccion' });
     const head = await getAgent(tenant, SYSTEM_HEAD_KEY);
     expect(head).toMatchObject({ kind: 'jefe', departmentKey: 'sistema' });

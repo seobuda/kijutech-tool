@@ -10,6 +10,7 @@ import { clients, projects } from '@/lib/db/schema';
 import { checkPermission, requirePagePermission } from '@/lib/auth/permissions';
 import { PageContainer, PageHeader } from '@/components/ui/page';
 import { getPlanView } from '@/lib/seo/jefe/plan';
+import { listPlanChanges } from '@/lib/seo/jefe/cambios';
 import { ProjectSeoNav } from '../seo-nav';
 import { ServicioPanel } from './servicio-panel';
 
@@ -29,6 +30,8 @@ export default async function ServicioPage({ params, searchParams }: { params: P
   if (!p) notFound();
   const isAdmin = (await checkPermission('admin')).ok;
   const view = await getPlanView(user.tenantId, projectId, isAdmin, v && UUID.test(v) ? v : null);
+  // Cambios propuestos y conversación con el Jefe: solo administradores (la página se abre con permiso de lectura).
+  const changes = isAdmin ? await listPlanChanges(user.tenantId, projectId) : [];
   return (
     <PageContainer>
       <Link href="/dashboard/projects" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
@@ -41,7 +44,7 @@ export default async function ServicioPage({ params, searchParams }: { params: P
         description="El rumbo del proyecto a 12-24 meses: qué se trabaja en cada trimestre y por qué, con los datos que lo respaldan. Lo propone el Jefe SEO y lo aprueba un administrador; las estrategias trimestrales salen de aquí."
       />
       <ProjectSeoNav projectId={projectId} active="servicio" />
-      <ServicioPanel projectId={projectId} view={JSON.parse(JSON.stringify(view))} isAdmin={isAdmin} />
+      <ServicioPanel projectId={projectId} view={JSON.parse(JSON.stringify(view))} isAdmin={isAdmin} changes={JSON.parse(JSON.stringify(changes))} />
     </PageContainer>
   );
 }
