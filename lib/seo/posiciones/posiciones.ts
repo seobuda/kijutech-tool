@@ -261,18 +261,20 @@ async function evaluateFindings(tenantId: string, projectId: string): Promise<vo
     const packKey = `seo.lost_local_pack:${k.id}`;
     if (lostLocalPackState(h, open.has(packKey))) out.push({ kind: 'seo.lost_local_pack', dedupeKey: packKey, query: k.keyword, evidence: { history: h.filter((x) => x.ok).map((x) => x.localRank) } });
   }
-  out.push(...(await zoneFindings(tenantId, projectId, kws).catch((e) => {
+  // Páginas de zona: null = no se pudo decidir (error o sin rastreo) → sus avisos abiertos se quedan como están.
+  const zone = await zoneFindings(tenantId, projectId, kws).catch((e) => {
     console.error('[seo] posiciones: páginas de zona:', e instanceof Error ? e.message : e);
-    return [];
-  })));
-  await syncFindings(tenantId, projectId, POSICIONES_SOURCE, out, ['seo.rank_drop', 'seo.lost_local_pack', 'seo.zone_page_missing']);
+    return null;
+  });
+  if (zone) out.push(...zone);
+  await syncFindings(tenantId, projectId, POSICIONES_SOURCE, out, zone ? ['seo.rank_drop', 'seo.lost_local_pack', 'seo.zone_page_missing'] : ['seo.rank_drop', 'seo.lost_local_pack']);
 }
 
 /**
  * Páginas de zona con demanda (parte 5c): búsquedas «servicio + población» con volumen o impresiones, fuera del top 10,
  * cuya población (validada en la lista de ubicaciones) no tiene página propia. Solo si el negocio va a domicilio.
  */
-async function zoneFindings(tenantId: string, projectId: string, kws: (typeof seoRankKeywords.$inferSelect)[]): Promise<Parameters<typeof syncFindings>[3]> {
+async function zoneFindings(tenantId: string, projectId: string, kws: (typeof seoRankKeywords.$inferSelect)[]): Promise<Parameters<typeof syncFindings>[3] | null> {
   const facts = await db.select({ field: seoDossierFacts.field, value: seoDossierFacts.value, status: seoDossierFacts.status }).from(seoDossierFacts).where(eq(seoDossierFacts.projectId, projectId));
   const atencion = facts.find((f) => f.field === 'atencion' && f.status === 'confirmado')?.value;
   if (atencion !== 'domicilio' && atencion !== 'ambos') return [];
@@ -295,7 +297,7 @@ async function zoneFindings(tenantId: string, projectId: string, kws: (typeof se
   const posOf = new Map<string, number | null>();
   for (const l of latest) if (!posOf.has(l.keywordId)) posOf.set(l.keywordId, l.position);
   const [run] = await db.select({ id: crawlRuns.id }).from(crawlRuns).where(and(eq(crawlRuns.projectId, projectId), eq(crawlRuns.target, 'propio'), eq(crawlRuns.status, 'hecho'))).orderBy(desc(crawlRuns.createdAt)).limit(1);
-  if (!run) return [];
+  if (!run) return null;
   const pages = (await db.select({ url: crawlPages.url, title: crawlPages.title, h1: crawlPages.h1, statusCode: crawlPages.statusCode, robotsMeta: crawlPages.robotsMeta }).from(crawlPages).where(eq(crawlPages.runId, run.id))).filter((p) => p.statusCode === 200 && !/noindex/i.test(p.robotsMeta ?? ''));
   const missing = missingZonePages(sz.filter((k) => posOf.has(k.id)).map((k) => ({ keyword: k.keyword, volume: k.volume, impressions: k.impressions, position: posOf.get(k.id) ?? null })), towns, pages.map((p) => ({ url: p.url, title: p.title, h1: p.h1 ?? [] })));
   return missing.map((m) => ({ kind: 'seo.zone_page_missing', dedupeKey: `seo.zone_page_missing:${normText(m.town)}`, query: m.keyword, evidence: { town: m.town, keyword: m.keyword } }));

@@ -101,6 +101,10 @@ describe('páginas puerta', () => {
     expect(c.urls).not.toContain('https://w.es/contacto');
     expect(c.slugTowns).toContain('mataro');
   });
+  it('una URL con un % suelto no rompe nada', () => {
+    expect(() => doorwayCandidates([{ url: 'https://w.es/ofertas-50%/', title: 'Ofertas' }], ['Sabadell'])).not.toThrow();
+    expect(missingZonePages([{ keyword: 'fontanero sabadell', volume: 5, impressions: 0, position: null }], ['Sabadell'], [{ url: 'https://w.es/x-50%', title: null, h1: [] }])).toHaveLength(1);
+  });
   it('jaccard básico', () => {
     expect(jaccard(shingles('a b c d'), shingles('a b c d'))).toBe(1);
     expect(jaccard(new Set(), new Set(['x']))).toBe(0);

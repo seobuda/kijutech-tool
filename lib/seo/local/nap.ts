@@ -31,17 +31,29 @@ export async function runNap(tenantId: string, projectId: string): Promise<Outco
   if (!phone9(current)) return { status: 'omitido', summary: 'No sabemos su teléfono actual: confirma su ficha de Google o el teléfono del expediente.' };
   const known: string[] = [
     ...snaps.map((s) => s.phone ?? ''),
-    ...facts.filter((f) => f.field === 'telefono' && typeof f.value === 'string').map((f) => f.value as string),
-    ...facts.filter((f) => f.field === 'telefonos_antiguos' && Array.isArray(f.value)).flatMap((f) => (f.value as unknown[]).map(String))
+    // Del expediente solo lo confirmado (un teléfono secundario provisional o uno descartado no es «antiguo»).
+    ...facts.filter((f) => f.field === 'telefono' && f.status === 'confirmado' && typeof f.value === 'string').map((f) => f.value as string),
+    ...facts.filter((f) => f.field === 'telefonos_antiguos' && f.status !== 'descartado' && Array.isArray(f.value)).flatMap((f) => (f.value as unknown[]).map(String))
   ];
   const old = oldPhones(known, current);
-  if (!old.length) return { status: 'ok', summary: 'No conocemos teléfonos antiguos que buscar (puedes añadirlos en el Expediente → «Teléfonos antiguos»).' };
+  if (!old.length) {
+    await syncFindings(tenantId, projectId, NAP_SOURCE, [], ['seo.old_nap_found']);
+    return { status: 'ok', summary: 'No conocemos teléfonos antiguos que buscar (puedes añadirlos en el Expediente → «Teléfonos antiguos»).' };
+  }
   const clientDomain = host(await projectWebUrl(tenantId, projectId));
   const found: Parameters<typeof syncFindings>[3] = [];
   let searched = 0;
   for (const p9 of old) {
     if (!(await canSpend(projectId, SEARCH_COST)).ok) break;
-    const r = await src.search(tenantId, { keyword: phoneQuery(p9), location: 'Spain', language: 'es', depth: 20 });
+    // Un fallo en un teléfono no relanza el trabajo (se volverían a pagar los ya buscados): se sigue con el siguiente.
+    let r: Awaited<ReturnType<typeof src.search>>;
+    try {
+      r = await src.search(tenantId, { keyword: phoneQuery(p9), location: 'Spain', language: 'es', depth: 20 });
+    } catch (e) {
+      console.error('[seo] nap: búsqueda fallida:', e instanceof Error ? e.message : e);
+      await recordDataSpend(tenantId, projectId, 'serp', 'local: teléfono antiguo publicado (fallida)', SEARCH_COST);
+      continue;
+    }
     await recordDataSpend(tenantId, projectId, 'serp', 'local: teléfono antiguo publicado', r.costUsd ?? SEARCH_COST);
     searched++;
     const hits = phoneHits(r.organic, p9, clientDomain);
@@ -49,5 +61,6 @@ export async function runNap(tenantId: string, projectId: string): Promise<Outco
   }
   // Solo se decide si se buscaron todos (si el tope cortó, no se resuelve lo que no se miró).
   if (searched === old.length) await syncFindings(tenantId, projectId, NAP_SOURCE, found, ['seo.old_nap_found']);
+  if (searched < old.length && !found.length) return { status: 'aviso', summary: `Solo se pudieron buscar ${searched} de ${old.length} teléfonos antiguos (tope de gasto o fallo): se reintentará en la próxima pasada.` };
   return { status: found.length ? 'aviso' : 'ok', summary: found.length ? `${found.length} teléfono(s) antiguo(s) siguen publicados en otras webs.` : `${searched} teléfono(s) antiguo(s) buscados: no aparecen publicados.` };
 }

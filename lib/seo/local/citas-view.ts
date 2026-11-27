@@ -17,12 +17,14 @@ export async function getCitasView(tenantId: string, projectId: string): Promise
     .select({ evidence: findings.evidence })
     .from(findings)
     .where(and(eq(findings.tenantId, tenantId), eq(findings.projectId, projectId), eq(findings.source, NAP_SOURCE), eq(findings.status, 'abierto')));
-  const [last] = await db
-    .select({ at: jobs.finishedAt })
+  const recent = await db
+    .select({ at: jobs.finishedAt, result: jobs.result })
     .from(jobs)
     .where(and(eq(jobs.tenantId, tenantId), eq(jobs.kind, 'seo.nap'), eq(jobs.scopeId, projectId), eq(jobs.status, 'hecho')))
     .orderBy(desc(jobs.finishedAt))
-    .limit(1);
+    .limit(5);
+  // Un trabajo «omitido» (sin DataForSEO o sin teléfono actual) no es una búsqueda.
+  const last = recent.find((j) => (j.result as { status?: string } | null)?.status !== 'omitido');
   return {
     oldNap: open.map((f) => {
       const e = (f.evidence ?? {}) as { phone?: string; urls?: string[] };

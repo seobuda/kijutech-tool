@@ -69,6 +69,21 @@ export function hasTown(text: string | null | undefined, town: string): boolean 
   return ` ${normText(text ?? '').replace(/-/g, ' ')} `.includes(` ${t} `);
 }
 
+/** La ruta de una URL, decodificada si se puede (un «%» suelto no rompe nada). */
+export function safePath(u: string): string {
+  let path: string;
+  try {
+    path = new URL(u).pathname;
+  } catch {
+    return '';
+  }
+  try {
+    return decodeURIComponent(path);
+  } catch {
+    return path;
+  }
+}
+
 const isBlog = (u: string) => /\/(blog|noticias|news|articulos?|tag|category|categoria)\//i.test(u);
 
 /**
@@ -84,7 +99,7 @@ export function missingZonePages(keywords: { keyword: string; volume: number | n
     if (k.position !== null && k.position <= 10) continue;
     const town = towns.find((t) => hasTown(k.keyword, t));
     if (!town || seen.has(normText(town))) continue;
-    const covered = own.some((p) => hasTown(p.title, town) || p.h1.some((h) => hasTown(h, town)) || hasTown(decodeURIComponent(new URL(p.url).pathname).replace(/[/_]/g, ' '), town));
+    const covered = own.some((p) => hasTown(p.title, town) || p.h1.some((h) => hasTown(h, town)) || hasTown(safePath(p.url).replace(/[/_]/g, ' '), town));
     if (covered) continue;
     seen.add(normText(town));
     out.push({ town, keyword: k.keyword });
@@ -143,10 +158,10 @@ export function doorwayGroups(pages: { url: string; text: string }[], threshold 
 
 /** Candidatas: páginas con una población en el título o la URL, o de un patrón de URL repetido (prefijo común, 3+). */
 export function doorwayCandidates(pages: { url: string; title: string | null }[], towns: string[], max = 20): { urls: string[]; slugTowns: string[] } {
-  const byTown = pages.filter((p) => towns.some((t) => hasTown(p.title, t) || hasTown(decodeURIComponent(new URL(p.url).pathname).replace(/[/_]/g, ' '), t)));
+  const byTown = pages.filter((p) => towns.some((t) => hasTown(p.title, t) || hasTown(safePath(p.url).replace(/[/_]/g, ' '), t)));
   const groups = new Map<string, { url: string; tail: string }[]>();
   for (const p of pages) {
-    const path = new URL(p.url).pathname.replace(/\/+$/, '');
+    const path = safePath(p.url).replace(/\/+$/, '');
     const m = path.match(/^(.*\/[a-z0-9-]+?)-([a-z0-9]+(?:-[a-z0-9]+)?)$/i);
     if (!m) continue;
     groups.set(m[1], [...(groups.get(m[1]) ?? []), { url: p.url, tail: m[2] }]);
