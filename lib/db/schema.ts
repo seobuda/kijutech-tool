@@ -4902,3 +4902,35 @@ export const seoCycleSlots = pgTable(
   ]
 );
 export type SeoCycleSlot = typeof seoCycleSlots.$inferSelect;
+
+
+// SEO · Análisis inicial (docs/PLAN-SEO-JEFE.md, D0, con la auditoría Opus; migración 0079, aditiva). El estado de cada
+// etapa se calcula siempre con los datos actuales: aquí solo la ejecución abierta (una por proyecto), lo que un
+// administrador decidió saltar (con quién y por qué) y el último empujón de cada acción (para no repetirla).
+export const seoSetupRuns = pgTable(
+  'seo_setup_runs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    // abierta | completada | cancelada
+    status: varchar('status', { length: 12 }).notNull().default('abierta'),
+    startedBy: varchar('started_by', { length: 120 }),
+    skipped: jsonb('skipped').$type<{ key: string; by: string; at: string; reason: string }[]>().notNull().default([]),
+    lastActions: jsonb('last_actions').$type<Record<string, string>>().notNull().default({}),
+    lastError: text('last_error'),
+    startedAt: timestamp('started_at').notNull().defaultNow(),
+    finishedAt: timestamp('finished_at'),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('seo_setup_runs_one_open').on(table.projectId).where(sql`${table.status} = 'abierta'`),
+    index('seo_setup_runs_project_idx').on(table.projectId, table.startedAt),
+    check('seo_setup_runs_status_check', sql`${table.status} IN ('abierta', 'completada', 'cancelada')`),
+  ]
+);
+export type SeoSetupRun = typeof seoSetupRuns.$inferSelect;

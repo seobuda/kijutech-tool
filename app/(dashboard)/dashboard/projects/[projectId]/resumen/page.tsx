@@ -7,7 +7,9 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { AlertTriangle, ArrowLeft, ArrowRight, CalendarCheck, Eye, LayoutDashboard, MapPin, Rocket, TrendingUp, Trophy } from 'lucide-react';
 import { db } from '@/lib/db/drizzle';
 import { clients, findings, interventions, projects } from '@/lib/db/schema';
-import { requirePagePermission } from '@/lib/auth/permissions';
+import { checkPermission, requirePagePermission } from '@/lib/auth/permissions';
+import { getSetupView } from '@/lib/seo/arranque/arranque';
+import { AnalisisInicial } from '../analisis-inicial';
 import { Badge, PageContainer, PageHeader } from '@/components/ui/page';
 import { ProjectSeoNav } from '../seo-nav';
 import { SeverityBadge } from '@/components/ui/severity';
@@ -67,6 +69,14 @@ export default async function ResumenPage({ params }: { params: Promise<{ projec
     safe(db.select({ kind: findings.kind, severity: findings.severity }).from(findings).where(and(eq(findings.projectId, projectId), eq(findings.tenantId, user.tenantId), eq(findings.status, 'abierto'), inArray(findings.severity, ['critico', 'importante']))), [], 'hallazgos'),
     safe(listPlanItems(user.tenantId, projectId), [])
   ]);
+  const [setup, canEdit, isAdmin] = await Promise.all([
+    getSetupView(user.tenantId, projectId).catch((e) => {
+      console.error('[seo] resumen: análisis inicial', e instanceof Error ? e.message : e);
+      return null;
+    }),
+    checkPermission('edit').then((r) => r.ok),
+    checkPermission('admin').then((r) => r.ok)
+  ]);
   const base = `/dashboard/projects/${projectId}`;
   // Urgente: tipos de hallazgo grave, agrupados.
   const byKind = new Map<string, { n: number; sev: string }>();
@@ -95,6 +105,7 @@ export default async function ResumenPage({ params }: { params: Promise<{ projec
       </Link>
       <PageHeader icon={LayoutDashboard} title={`Resumen · ${p.name}`} description={`${p.clientName ? `Cliente: ${p.clientName}. ` : ''}Lo importante del proyecto en una pantalla. Cada bloque lleva a su pestaña con el detalle.`} />
       <ProjectSeoNav projectId={projectId} active="resumen" />
+      {setup && (setup.run?.status !== 'completada' || setup.progress.needsPerson.length > 0) && <AnalisisInicial projectId={projectId} view={JSON.parse(JSON.stringify(setup))} canEdit={canEdit} isAdmin={isAdmin} />}
 
       {ready && ready.done < ready.total && (
         <Link href={`${base}/expediente`} className="flex flex-wrap items-center gap-3 rounded-xl border border-warning/40 bg-warning-soft px-4 py-3 text-sm hover:underline">

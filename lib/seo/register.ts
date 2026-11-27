@@ -22,6 +22,7 @@ import { registerSeoEvidence } from '@/lib/seo/medir/evidence';
 import { registerBriefJobs } from '@/lib/seo/contenido/briefs';
 import { registerAiPanelJobs } from '@/lib/seo/panel-ia/panel';
 import { materializeAll } from '@/lib/seo/estrategia/ciclos';
+import { advanceAll } from '@/lib/seo/arranque/arranque';
 import { registerScheduled } from '@/lib/core/capabilities';
 import { seoWeeklyLines } from '@/lib/seo/informe-semanal';
 import { registerSeoAgentTools } from '@/lib/seo/agente-tool';
@@ -50,6 +51,15 @@ export function registerSeoCapabilities(): void {
     if (seen.get(tenantId) === day) return;
     seen.set(tenantId, day);
     await materializeAll(tenantId);
+  });
+  // Análisis inicial (docs/PLAN-SEO-JEFE.md, D0): un solo proceso por cuenta, cada 10 min, avanza las ejecuciones abiertas.
+  const G2 = globalThis as unknown as { __kijuSetupTick?: Map<string, number> };
+  registerScheduled('seo: avanzar el análisis inicial de los proyectos', async (tenantId) => {
+    const tick = Math.floor(Date.now() / 600_000);
+    const seen = (G2.__kijuSetupTick ??= new Map());
+    if (seen.get(tenantId) === tick) return;
+    seen.set(tenantId, tick);
+    await advanceAll(tenantId);
   });
   registerSeoEvidence(); // parte 8: fecha real de las intervenciones (registro de cambios) para medir si funcionaron
   registerGeogridJobs(); // parte 5b: recogida del mapa por zonas

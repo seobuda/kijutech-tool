@@ -412,6 +412,18 @@ export const SEO_SALUD_PROCESS_MAP: ProcessStep[] = [
     tables: ['findings', 'seo_plan_items', 'seo_topics', 'client_competitors']
   },
   {
+    id: 'analisis-inicial',
+    lane: 'Puesta en marcha',
+    name: 'Análisis inicial con etapas y puertas',
+    description: 'Arriba del Resumen. «Empezar análisis» recorre: conexiones → web → negocio → datos propios → mapa de palabras → mercado → diagnóstico → plan de servicio (Jefe SEO, fase D2). Cada etapa dice si está hecha, en curso, sin datos, esperando a una persona (y quién), con error, bloqueada u omitida. Bloquean solo la web, Search Console y las horas (decisión de Enric); lo demás avisa y un administrador puede continuar sin ello, y queda apuntado.',
+    status: 'built',
+    file: 'lib/seo/arranque/arranque.ts',
+    when: 'A mano («Empezar análisis», «Avanzar ahora») y una pasada cada 10 min por cuenta (tarea del planificador «seo: avanzar el análisis inicial de los proyectos») mientras haya ejecuciones abiertas.',
+    ai: 'Nada en esta fase (la propuesta de la ficha con Haiku ya existía). El plan de servicio de Opus llegará en D2.',
+    code: 'El estado se calcula siempre con los datos de ahora (lib/seo/arranque/rules.ts), por dependencias: el mapa necesita Search Console con historial (si no, «sin datos»); el mercado, el negocio confirmado y DataForSEO. Search Console se clasifica con la descarga del histórico terminada y el primer día con impresiones. Candado de PostgreSQL por proyecto; los trabajos se empujan con la misma clave que el planificador (sin duplicados) y como mucho cada 6-24 h; no se vuelve a rastrear con un rastreo de menos de 30 días. Auditoría Opus: docs/PLAN-SEO-JEFE.md.',
+    tables: ['seo_setup_runs', 'gsc_properties', 'gsc_daily_totals', 'crawl_runs', 'seo_dossier_facts', 'client_competitors', 'seo_demand', 'seo_rank_keywords', 'seo_topics', 'seo_local_places', 'client_assets', 'client_connections', 'jobs']
+  },
+  {
     id: 'estrategia-ciclos',
     lane: 'Plan de mejora',
     name: 'Estrategia por ciclos (trabajo planificado)',
