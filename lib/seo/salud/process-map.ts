@@ -340,8 +340,8 @@ export const SEO_SALUD_PROCESS_MAP: ProcessStep[] = [
     status: 'built',
     file: 'lib/seo/id/investigador.ts',
     when: 'Cada 3 días (trabajo «seo.id.investigate», proceso de la cuenta) y a mano. Lee lo guardado desde la última pasada terminada (la primera vez, 7 días).',
-    ai: 'Sonnet 5.5, una llamada por pasada y SOLO si hay novedades pertinentes. Cuenta en el tope del Jefe SEO («seo_jefe_investigador»); sin margen, espera a la siguiente pasada sin perder lo pendiente.',
-    code: 'lib/seo/id/investigador-rules.ts (puro): filtro de pertinencia por código (lo oficial siempre; lo demás solo si toca Google, local, IA, técnico, datos estructurados, contenido o enlaces), como mucho 40 a la IA. Validación: enlaces solo de lo leído (sin ninguno, fuera), el nivel nunca por encima de la mejor fuente citada, líneas del catálogo. Los clientes afectados salen por código de los planes aprobados y las estrategias activas que usan esas líneas. Texto de fuera delimitado como dato no fiable.',
+    ai: 'Sonnet 5.5, una llamada por pasada y SOLO si hay novedades pertinentes. La lectura cuenta en el tope del Jefe SEO («seo_jefe_investigador»); sin margen, espera a la siguiente pasada sin perder lo pendiente. La redacción de cada propuesta la hace después la IA de la base (su propia función, fuera del tope del Jefe).',
+    code: 'lib/seo/id/investigador-rules.ts (puro): filtro de pertinencia por código (lo oficial siempre; lo demás solo si toca Google, local, IA, técnico, datos estructurados, contenido o enlaces), como mucho 40 a la IA. Validación: enlaces solo de lo leído (sin ninguno, fuera), el nivel nunca por encima de la mejor fuente citada, líneas del catálogo. Los clientes afectados salen por código de los planes aprobados y las estrategias activas que usan esas líneas. Texto de fuera (títulos, resúmenes y enlaces) delimitado como dato no fiable. No repite: recibe lo propuesto en los últimos 30 días y el código quita lo que solo cita enlaces ya propuestos. Una propuesta que falla no tumba la pasada.',
     tables: ['kb_feed_items', 'seo_sources', 'kb_articles', 'jobs', 'ai_jobs'],
     prompts: ['seo_investigador']
   },

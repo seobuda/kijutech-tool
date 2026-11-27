@@ -182,7 +182,7 @@ function Investigator({ inv, canEdit }: { inv: Investigation; canEdit: boolean }
           <FlaskConical className="size-4" aria-hidden /> Investigador del Jefe SEO
         </span>
       }
-      description="Cada 3 días, y solo si hay novedades: el código aparta lo que no tiene que ver con nuestro trabajo (sin coste), Sonnet 5.5 dice qué cambia, en qué líneas y a qué clientes afecta, y lo importante (como mucho 3) te llega como propuesta de entrada en Conocimiento, con fecha, nivel (oficial, reputada o rumor) y enlaces. Una opinión nunca pasa por oficial. Gasta del tope del Jefe SEO."
+      description="Cada 3 días, y solo si hay novedades: el código aparta lo que no tiene que ver con nuestro trabajo (sin coste), Sonnet 5.5 dice qué cambia, en qué líneas y a qué clientes afecta, y lo importante (como mucho 3) te llega como propuesta de entrada en Conocimiento, con fecha, nivel (oficial, reputada o rumor) y enlaces. Una opinión nunca pasa por oficial. La lectura gasta del tope del Jefe SEO; la redacción de cada propuesta, de la IA de la base."
     >
       <div className="flex flex-col gap-2 p-5 text-sm">
         <p>

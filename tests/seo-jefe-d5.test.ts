@@ -3,7 +3,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { eq } from 'drizzle-orm';
 
-const h = vi.hoisted(() => ({ calls: 0, reply: '', submitted: [] as string[] }));
+const h = vi.hoisted(() => ({ calls: 0, reply: '', submitted: [] as string[], fail: false }));
 vi.mock('@/lib/ai/gateway', async (orig) => {
   const m = await orig<typeof import('@/lib/ai/gateway')>();
   return {
@@ -17,11 +17,15 @@ vi.mock('@/lib/ai/gateway', async (orig) => {
 });
 vi.mock('@/lib/core/knowledge', async (orig) => {
   const m = await orig<typeof import('@/lib/core/knowledge')>();
-  return { ...m, submitRequest: async (_t: string, input: { text: string }) => (h.submitted.push(input.text), { id: `art-${h.submitted.length}`, drafted: true }) };
+  return { ...m, submitRequest: async (_t: string, input: { text: string }) => {
+      if (h.fail) throw new Error('fallo simulado');
+      h.submitted.push(input.text);
+      return { id: `art-${h.submitted.length}`, drafted: true };
+    } };
 });
 
 import { db } from '@/lib/db/drizzle';
-import { kbFeedItems, tenants } from '@/lib/db/schema';
+import { kbArticles, kbFeedItems, tenants } from '@/lib/db/schema';
 import { prefilter, relevance, toPropose, validateFindings, type NewsItem } from '@/lib/seo/id/investigador-rules';
 import { investigate } from '@/lib/seo/id/investigador';
 import { _resetSeeded } from '@/lib/seo/id/fuentes';
@@ -106,5 +110,19 @@ describe('Jefe SEO D5: pasada del investigador', () => {
     // Lo dijo un blog: aunque la IA diga «oficial», queda como reputada.
     expect(h.submitted[1]).toMatch(/Nivel: REPUTADA/);
     expect(h.submitted[1]).toMatch(/https:\/\/ahrefs\.com\/blog\/ai-overviews/);
+  });
+
+  it('revisor: no repite lo ya propuesto y una propuesta que falla no tumba la pasada', async () => {
+    await db.insert(kbArticles).values({ tenantId: T, title: 'Novedad SEO: core update', solution: '', status: 'propuesta', sourceType: 'agente', requestedByName: 'Investigador SEO', links: [{ title: 'x', url: 'https://status.search.google.com/x' }] });
+    await db.insert(kbFeedItems).values({ tenantId: T, domain: 'seo', sourceKey: 'search_status', hash: 'h4', url: 'https://status.search.google.com/y', title: 'Spam update rolling out', kind: 'core_update', publishedAt: new Date() });
+    h.reply = JSON.stringify({ hallazgos: [
+      { titulo: 'Otra vez la core update', que_cambia: 'x', nivel: 'oficial', fuentes: ['https://status.search.google.com/x'], importancia: 'alta' },
+      { titulo: 'Spam update de diciembre', que_cambia: 'x', nivel: 'oficial', fuentes: ['https://status.search.google.com/y'], importancia: 'alta' }
+    ] });
+    h.fail = true;
+    const r = await investigate(T, new Date(Date.now() + 1000));
+    h.fail = false;
+    expect(r).toMatchObject({ repetidos: 1, propuestas: 0 });
+    expect((r.errores as string[]).length).toBe(1);
   });
 });

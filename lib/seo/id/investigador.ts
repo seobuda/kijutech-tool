@@ -8,7 +8,7 @@ import 'server-only';
 // Su gasto cuenta en el tope del Jefe SEO (función «seo_jefe_investigador»).
 import { and, desc, eq, gt, inArray } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { jobs, kbFeedItems, projects, seoCycleLines, seoCycles, seoMasterPlanItems, seoMasterPlans } from '@/lib/db/schema';
+import { jobs, kbArticles, kbFeedItems, projects, seoCycleLines, seoCycles, seoMasterPlanItems, seoMasterPlans } from '@/lib/db/schema';
 import { callAI, getPrompt } from '@/lib/ai/gateway';
 import { submitRequest } from '@/lib/core/knowledge';
 import { PLAYBOOKS } from '@/lib/seo/estrategia/playbooks';
@@ -20,6 +20,7 @@ import { FIRST_WINDOW_DAYS, levelFromSource, prefilter, proposalText, toPropose,
 export const INVESTIGATE_JOB = 'seo.id.investigate';
 export const INVESTIGATOR_PROMPT = 'seo_investigador';
 export const INVESTIGATOR_MODEL = 'claude-sonnet-5-5';
+const INVESTIGATOR_NAME = 'Investigador SEO';
 /** Reserva para una pasada (estimada, sin medir): si el tope del Jefe no la deja, no se llama a la IA. */
 const RUN_ESTIMATE_USD = 0.3;
 
@@ -56,6 +57,19 @@ async function affectedClients(tenantId: string, lines: string[]): Promise<strin
   return [...new Set([...fromPlans, ...fromCycles].map((r) => r.name))].sort().slice(0, 20);
 }
 
+/** Lo que el investigador ya propuso en los últimos 30 días: títulos (para que la IA no lo repita) y enlaces citados. */
+async function recentProposals(tenantId: string, now: Date): Promise<{ titles: string[]; urls: Set<string> }> {
+  const rows = await db
+    .select({ title: kbArticles.title, links: kbArticles.links })
+    .from(kbArticles)
+    .where(and(eq(kbArticles.tenantId, tenantId), eq(kbArticles.requestedByName, INVESTIGATOR_NAME), gt(kbArticles.createdAt, new Date(now.getTime() - 30 * 86_400_000))))
+    .orderBy(desc(kbArticles.createdAt))
+    .limit(30);
+  const urls = new Set<string>();
+  for (const r of rows) for (const l of (Array.isArray(r.links) ? r.links : []) as { url?: string }[]) if (l?.url) urls.add(l.url);
+  return { titles: rows.map((r) => r.title), urls };
+}
+
 export async function investigate(tenantId: string, now = new Date()): Promise<Record<string, unknown>> {
   const since = await windowStart(tenantId, now);
   const until = now.toISOString();
@@ -78,9 +92,14 @@ export async function investigate(tenantId: string, now = new Date()): Promise<R
   if (spent + RUN_ESTIMATE_USD > budget) throw new Error(`Tope del Jefe SEO alcanzado (${spent.toFixed(2)} $ de ${budget} $): el investigador espera.`);
   const prompt = await getPrompt(INVESTIGATOR_PROMPT);
   if (!prompt) throw new Error(`Falta el prompt ${INVESTIGATOR_PROMPT}`);
-  const novedades = picked
-    .map((i) => `- [${i.level.toUpperCase()} · ${i.sourceLabel.replace(/[<>]/g, '')}] ${i.publishedAt?.slice(0, 10) ?? 'sin fecha'} · ${i.url ?? 'sin enlace'}\n  <<<DATO NO FIABLE ${`${i.title}. ${(i.summary ?? '').slice(0, 500)}`.replace(/<<<|>>>/g, '')} FIN>>>`)
-    .join('\n');
+  const prev = await recentProposals(tenantId, now);
+  // Revisor: el enlace también va dentro del bloque delimitado (todo lo que viene del feed es dato).
+  const novedades = [
+    picked
+      .map((i) => `- [${i.level.toUpperCase()} · ${i.sourceLabel.replace(/[<>]/g, '')}] ${i.publishedAt?.slice(0, 10) ?? 'sin fecha'}\n  <<<DATO NO FIABLE enlace: ${i.url ?? 'sin enlace'} · ${`${i.title}. ${(i.summary ?? '').slice(0, 500)}`.replace(/<<<|>>>/g, '')} FIN>>>`)
+      .join('\n'),
+    prev.titles.length ? `\nYA PROPUESTO EN LOS ÚLTIMOS 30 DÍAS (no lo repitas salvo que haya un dato nuevo importante):\n${prev.titles.map((t) => `- ${t.replace(/[<>]/g, '')}`).join('\n')}` : ''
+  ].join('\n');
   const lineas = Object.values(PLAYBOOKS)
     .filter((p) => p.key !== 'cimientos')
     .map((p) => `- ${p.key}: ${p.label}`)
@@ -100,14 +119,23 @@ export async function investigate(tenantId: string, now = new Date()): Promise<R
     ]
   });
   const v = validateFindings(extractJson(res.content), picked);
-  const chosen = toPropose(v.ok);
+  // Sin repetir: fuera lo que solo cita enlaces ya propuestos en los últimos 30 días (0 $).
+  const fresh = v.ok.filter((f) => f.fuentes.some((u) => !prev.urls.has(u)));
+  const chosen = toPropose(fresh);
   const ids: string[] = [];
+  const errores: string[] = [];
   for (const f of chosen) {
-    const affected = await affectedClients(tenantId, f.lineas);
-    const r = await submitRequest(tenantId, { text: proposalText(f, affected), source: 'agente', byName: 'Investigador SEO', byUserId: null, links: f.fuentes.map((u) => ({ title: f.titulo.slice(0, 200), url: u })) });
-    ids.push(r.id);
+    // Revisor: una propuesta que falla no tumba la pasada (si no, se repetiría la llamada a la IA y lo ya creado).
+    try {
+      const affected = await affectedClients(tenantId, f.lineas);
+      const r = await submitRequest(tenantId, { text: proposalText(f, affected), source: 'agente', byName: INVESTIGATOR_NAME, byUserId: null, links: f.fuentes.map((u) => ({ title: f.titulo.slice(0, 200), url: u })) });
+      ids.push(r.id);
+    } catch (e) {
+      errores.push(`${f.titulo.slice(0, 80)}: ${e instanceof Error ? e.message.slice(0, 200) : 'error'}`);
+    }
   }
-  return { until, leidas: rows.length, pertinentes: picked.length, hallazgos: v.ok.length, descartados: v.rejected.length, propuestas: ids.length, articulos: ids, aiJobId: res.jobId };
+  if (errores.length) console.error('[seo] investigador: propuestas que no se pudieron crear', errores.join(' | '));
+  return { until, leidas: rows.length, pertinentes: picked.length, hallazgos: v.ok.length, repetidos: v.ok.length - fresh.length, descartados: v.rejected.length, propuestas: ids.length, articulos: ids, errores, aiJobId: res.jobId };
 }
 
 /** Para la pantalla de fuentes: cuándo pasó el investigador por última vez y qué dejó. */
