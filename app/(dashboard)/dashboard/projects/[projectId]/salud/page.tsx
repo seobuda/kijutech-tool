@@ -15,11 +15,13 @@ import { getVigilanciaView } from '@/lib/seo/vigilancia/view';
 import { listMoneyPages } from '@/lib/seo/cambios/dinero';
 import { listChanges } from '@/lib/seo/cambios/registro';
 import { CambiosPanel } from './cambios-panel';
+import { pickView, SubNav } from '../sub-nav';
 
-export default async function SaludPage({ params, searchParams }: { params: Promise<{ projectId: string }>; searchParams: Promise<{ tipo?: string }> }) {
+export default async function SaludPage({ params, searchParams }: { params: Promise<{ projectId: string }>; searchParams: Promise<{ tipo?: string; vista?: string }> }) {
   const user = await requirePagePermission('view');
   const { projectId } = await params;
-  const { tipo } = await searchParams;
+  const { tipo, vista: rawVista } = await searchParams;
+  const vista = pickView(rawVista, ['problemas', 'vigilancia', 'cambios'] as const);
   if (!/^[0-9a-f-]{36}$/i.test(projectId)) notFound();
   const [view, canEdit, vigilancia, money, changes] = await Promise.all([getSaludView(user.tenantId, projectId, tipo ?? null), checkPermission('edit').then((r) => r.ok), getVigilanciaView(user.tenantId, projectId), listMoneyPages(user.tenantId, projectId), listChanges(user.tenantId, projectId)]);
   if (!view) notFound();
@@ -41,10 +43,19 @@ export default async function SaludPage({ params, searchParams }: { params: Prom
         }
       />
       <ProjectSeoNav projectId={projectId} active="salud" />
-      {vigilancia && <VigilanciaPanel projectId={projectId} view={vigilancia} canEdit={canEdit} />}
-      {vigilancia && <VelocidadPanel speed={vigilancia.speed} />}
-      <CambiosPanel projectId={projectId} money={money} changes={changes} canEdit={canEdit} />
-      <SaludPanel view={view} canEdit={canEdit} businessType={view.businessType} businessTypes={BUSINESS_TYPES} />
+      <SubNav
+        base={`/dashboard/projects/${projectId}/salud`}
+        active={vista}
+        items={[
+          { key: 'problemas', label: 'Problemas', count: view.open.length, alert: view.counts.critico > 0 },
+          { key: 'vigilancia', label: 'Vigilancia y velocidad', count: vigilancia?.processes.filter((x) => x.lastStatus === 'aviso' || x.lastStatus === 'error').length ?? 0, alert: true },
+          { key: 'cambios', label: 'Páginas de dinero y cambios', count: money.filter((m) => m.pending).length, alert: true }
+        ]}
+      />
+      {vista === 'vigilancia' && vigilancia && <VigilanciaPanel projectId={projectId} view={vigilancia} canEdit={canEdit} />}
+      {vista === 'vigilancia' && vigilancia && <VelocidadPanel speed={vigilancia.speed} />}
+      {vista === 'cambios' && <CambiosPanel projectId={projectId} money={money} changes={changes} canEdit={canEdit} />}
+      {vista === 'problemas' && <SaludPanel view={view} canEdit={canEdit} businessType={view.businessType} businessTypes={BUSINESS_TYPES} />}
     </PageContainer>
   );
 }

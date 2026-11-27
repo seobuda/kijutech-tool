@@ -89,7 +89,7 @@ export default async function ProjectsPage() {
                 )}
                 <div className="mt-5 flex items-center gap-2 border-t pt-4">
                   <Button asChild size="sm" className="bg-brand text-white hover:bg-brand/90">
-                    <Link href={`/dashboard/projects/${project.id}/expediente`}>
+                    <Link href={`/dashboard/projects/${project.id}/resumen`}>
                       Abrir SEO
                       <ArrowUpRight className="size-3.5" />
                     </Link>

@@ -350,7 +350,23 @@ function ItemCard({
             </p>
           )}
           <p className="text-xs text-muted-foreground">Técnica: {item.techniqueLabel} (sirve para medir después si funcionó).</p>
-          <MarkdownLite text={item.description} className="text-muted-foreground" />
+          {(() => {
+            // La lista de páginas, plegada: el «qué hacer» primero, las URLs al desplegar.
+            const i = item.description.indexOf('**Páginas (');
+            if (i < 0) return <MarkdownLite text={item.description} className="text-muted-foreground" />;
+            const end = item.description.indexOf('\n\n', i);
+            const pages = item.description.slice(i, end < 0 ? undefined : end);
+            const rest = item.description.slice(0, i) + (end < 0 ? '' : item.description.slice(end));
+            return (
+              <>
+                <MarkdownLite text={rest} className="text-muted-foreground" />
+                <details className="text-sm">
+                  <summary className="cursor-pointer text-muted-foreground">Ver las páginas ({item.urls.length})</summary>
+                  <MarkdownLite text={pages} className="mt-1 text-muted-foreground" />
+                </details>
+              </>
+            );
+          })()}
         </div>
       )}
     </li>

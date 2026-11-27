@@ -215,6 +215,7 @@ function FindingGroups({ items, projectId, canEdit }: { items: SaludFinding[]; p
 
 function KindRow({ kind, items, projectId, canEdit }: { kind: string; items: SaludFinding[]; projectId: string; canEdit: boolean }) {
   const [open, setOpen] = useState(false);
+  const [shown, setShown] = useState(20);
   const meta = SALUD_KIND_BY_KEY.get(kind);
   const sev = SEV[items[0].severity] ?? SEV.info;
   return (
@@ -233,10 +234,16 @@ function KindRow({ kind, items, projectId, canEdit }: { kind: string; items: Sal
       </button>
       {open && (
         <ul className="divide-y border-t">
-          {items.slice(0, 200).map((f) => (
+          {items.slice(0, shown).map((f) => (
             <FindingItem key={f.id} f={f} projectId={projectId} canEdit={canEdit} />
           ))}
-          {items.length > 200 && <li className="px-3 py-2 text-sm text-muted-foreground">… y {items.length - 200} más.</li>}
+          {items.length > shown && (
+            <li className="px-3 py-2">
+              <button type="button" className="text-sm text-primary hover:underline" onClick={() => setShown((n) => n + 20)}>
+                Ver {Math.min(20, items.length - shown)} más (quedan {items.length - shown})
+              </button>
+            </li>
+          )}
         </ul>
       )}
     </li>
