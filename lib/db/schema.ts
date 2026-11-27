@@ -4810,6 +4810,8 @@ export const seoCycles = pgTable(
     closeReport: jsonb('close_report').$type<Record<string, unknown>>(),
     readDueOn: date('read_due_on', { mode: 'string' }),
     readReport: jsonb('read_report').$type<Record<string, unknown>>(),
+    // Jefe SEO D2: plan de servicio del que sale este ciclo.
+    masterPlanId: uuid('master_plan_id'),
     createdAt: timestamp('created_at').notNull().defaultNow(),
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
   },
@@ -4846,6 +4848,8 @@ export const seoCycleLines = pgTable(
     status: varchar('status', { length: 12 }).notNull().default('activa'),
     sort: smallint('sort').notNull().default(0),
     scorecard: jsonb('scorecard').$type<Record<string, unknown>>().notNull().default({}),
+    // Jefe SEO D2: frente del plan de servicio que desarrolla esta línea.
+    masterItemId: uuid('master_item_id'),
     createdAt: timestamp('created_at').notNull().defaultNow(),
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
   },
@@ -4934,3 +4938,119 @@ export const seoSetupRuns = pgTable(
   ]
 );
 export type SeoSetupRun = typeof seoSetupRuns.$inferSelect;
+
+
+// SEO · Jefe SEO, D2 (docs/PLAN-SEO-JEFE.md §4, con la auditoría Opus; migración 0080, aditiva). Plan de servicio a 12-24
+// meses por versiones (una aprobada por proyecto), sus frentes con evidencias de CLAVE ESTABLE (con la copia de su valor) y
+// las propuestas del Jefe que una persona decide (con lo que cambió y por qué: el «criterio de Enric»).
+export const seoMasterPlans = pgTable(
+  'seo_master_plans',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    version: integer('version').notNull(),
+    // borrador | sombra | propuesto | aprobado | sustituido | rechazado
+    status: varchar('status', { length: 12 }).notNull().default('sombra'),
+    horizonMonths: smallint('horizon_months').notNull().default(12),
+    startsOn: date('starts_on', { mode: 'string' }).notNull(),
+    thesis: text('thesis').notNull(),
+    diagnosis: jsonb('diagnosis').$type<unknown[]>().notNull().default([]),
+    risks: jsonb('risks').$type<unknown[]>().notNull().default([]),
+    unknowns: jsonb('unknowns').$type<unknown[]>().notNull().default([]),
+    discarded: jsonb('discarded').$type<unknown[]>().notNull().default([]),
+    confidence: varchar('confidence', { length: 10 }),
+    dataGaps: jsonb('data_gaps').$type<string[]>().notNull().default([]),
+    rejectedEvidence: jsonb('rejected_evidence').$type<string[]>().notNull().default([]),
+    scorer: jsonb('scorer').$type<Record<string, unknown>>().notNull().default({}),
+    promptVersion: varchar('prompt_version', { length: 40 }),
+    model: varchar('model', { length: 60 }),
+    aiJobId: uuid('ai_job_id'),
+    costUsd: decimal('cost_usd', { precision: 8, scale: 4 }),
+    shadowScore: smallint('shadow_score'),
+    reviewNote: text('review_note'),
+    decidedBy: varchar('decided_by', { length: 120 }),
+    decidedAt: timestamp('decided_at'),
+    createdBy: varchar('created_by', { length: 120 }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    unique('seo_master_plans_version_unique').on(table.projectId, table.version),
+    uniqueIndex('seo_master_plans_one_approved').on(table.projectId).where(sql`${table.status} = 'aprobado'`),
+    check('seo_master_plans_status_check', sql`${table.status} IN ('borrador', 'sombra', 'propuesto', 'aprobado', 'sustituido', 'rechazado')`),
+  ]
+);
+export type SeoMasterPlan = typeof seoMasterPlans.$inferSelect;
+
+export const seoMasterPlanItems = pgTable(
+  'seo_master_plan_items',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    planId: uuid('plan_id')
+      .notNull()
+      .references(() => seoMasterPlans.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    // Clave estable del frente entre versiones (p. ej. «contenido:servicios»).
+    frenteKey: varchar('frente_key', { length: 80 }).notNull(),
+    // rendimiento | existente | servicio_zona | contenido | local | autoridad | visibilidad_ia
+    kind: varchar('kind', { length: 16 }).notNull(),
+    playbook: varchar('playbook', { length: 40 }),
+    params: jsonb('params').$type<Record<string, unknown>>().notNull().default({}),
+    title: varchar('title', { length: 200 }).notNull(),
+    rationale: text('rationale').notNull(),
+    evidence: jsonb('evidence').$type<{ id: string; label: string; data: Record<string, unknown> }[]>().notNull().default([]),
+    fromQuarter: smallint('from_quarter').notNull().default(1),
+    toQuarter: smallint('to_quarter').notNull().default(1),
+    priority: smallint('priority').notNull().default(2),
+    forecast: text('forecast'),
+    sort: smallint('sort').notNull().default(0),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [index('seo_master_plan_items_plan_idx').on(table.planId)]
+);
+export type SeoMasterPlanItem = typeof seoMasterPlanItems.$inferSelect;
+
+export const seoJefeProposals = pgTable(
+  'seo_jefe_proposals',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    // plan | ciclo | revision | cambio
+    kind: varchar('kind', { length: 10 }).notNull(),
+    basePlanId: uuid('base_plan_id'),
+    baseVersion: integer('base_version'),
+    payload: jsonb('payload').$type<Record<string, unknown>>().notNull().default({}),
+    scorer: jsonb('scorer').$type<Record<string, unknown>>().notNull().default({}),
+    // pendiente | aprobada | ajustada | rechazada | caducada
+    status: varchar('status', { length: 12 }).notNull().default('pendiente'),
+    decidedBy: varchar('decided_by', { length: 120 }),
+    decisionReason: text('decision_reason'),
+    edits: jsonb('edits').$type<Record<string, unknown>>(),
+    threadPeer: varchar('thread_peer', { length: 200 }),
+    aiJobId: uuid('ai_job_id'),
+    promptVersion: varchar('prompt_version', { length: 40 }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    decidedAt: timestamp('decided_at'),
+  },
+  (table) => [
+    index('seo_jefe_proposals_project_idx').on(table.projectId, table.status),
+    check('seo_jefe_proposals_kind_check', sql`${table.kind} IN ('plan', 'ciclo', 'revision', 'cambio')`),
+    check('seo_jefe_proposals_status_check', sql`${table.status} IN ('pendiente', 'aprobada', 'ajustada', 'rechazada', 'caducada')`),
+  ]
+);
+export type SeoJefeProposal = typeof seoJefeProposals.$inferSelect;

@@ -11,6 +11,7 @@ import { registerEstrategiaCapabilities } from '@/lib/estrategia/register';
 import { registerErrorCapabilities } from '@/lib/core/errors';
 import { registerKnowledgeCapabilities } from '@/lib/core/knowledge';
 import { registerOperacionesPromptEvals } from '@/lib/operaciones/prompt-evals';
+import { registerSeoJefePromptEvals } from '@/lib/seo/jefe/plan-evals';
 import { registerPlatformCapabilities } from '@/lib/core/platform';
 import { registerSeoCapabilities } from '@/lib/seo/register';
 
@@ -27,4 +28,5 @@ export function wireApp(): void {
   registerErrorCapabilities(); // registro de errores del núcleo: herramientas del Técnico de mantenimiento, botones y limpieza
   registerKnowledgeCapabilities(); // base de conocimiento del núcleo: herramientas, botones de revisión y embeddings
   registerOperacionesPromptEvals(); // examen del prompt «Convertir nota en encargos» (IA → Prompts)
+  registerSeoJefePromptEvals(); // examen del plan de servicio del Jefe SEO (IA → Prompts)
 }

@@ -419,9 +419,34 @@ export const SEO_SALUD_PROCESS_MAP: ProcessStep[] = [
     status: 'built',
     file: 'lib/seo/arranque/arranque.ts',
     when: 'A mano («Empezar análisis», «Avanzar ahora») y una pasada cada 10 min por cuenta (tarea del planificador «seo: avanzar el análisis inicial de los proyectos») mientras haya ejecuciones abiertas.',
-    ai: 'Nada en esta fase (la propuesta de la ficha con Haiku ya existía). El plan de servicio de Opus llegará en D2.',
+    ai: 'Nada en esta fase (la propuesta de la ficha con Haiku ya existía). El plan de servicio lo hace el Jefe SEO con Opus (paso «Jefe SEO: plan de servicio»).',
     code: 'El estado se calcula siempre con los datos de ahora (lib/seo/arranque/rules.ts), por dependencias: el mapa necesita Search Console con historial (si no, «sin datos»); el mercado, el negocio confirmado y DataForSEO. Search Console se clasifica con la descarga del histórico terminada y el primer día con impresiones. Candado de PostgreSQL por proyecto; los trabajos se empujan con la misma clave que el planificador (sin duplicados) y como mucho cada 6-24 h; no se vuelve a rastrear con un rastreo de menos de 30 días. Auditoría Opus: docs/PLAN-SEO-JEFE.md.',
     tables: ['seo_setup_runs', 'gsc_properties', 'gsc_daily_totals', 'crawl_runs', 'seo_dossier_facts', 'client_competitors', 'seo_demand', 'seo_rank_keywords', 'seo_topics', 'seo_local_places', 'client_assets', 'client_connections', 'jobs']
+  },
+  {
+    id: 'jefe-expediente',
+    lane: 'Plan de mejora',
+    name: 'Jefe SEO: expediente estratégico y pronóstico',
+    description: 'Todo lo que se sabe de un proyecto para decidir la estrategia, con un identificador estable por dato ([T:tema], [Q:búsqueda], [H:tipo de problema]…) que la IA debe citar. Los agentes lo leen con las herramientas «SEO: expediente estratégico» y «SEO: pronóstico de una búsqueda» (solo lectura, publicadas por la capacidad registerTools del núcleo).',
+    status: 'built',
+    file: 'lib/seo/jefe/expediente.ts',
+    when: 'Cada vez que se genera un plan de servicio o un agente pide el expediente.',
+    ai: 'Ninguna: el expediente y los pronósticos (rango bajo-medio-alto con supuestos, o «sin base») los calcula el código (lib/seo/jefe/forecast.ts).',
+    code: 'Claves estables que sobreviven a rehacer el mapa (lib/seo/jefe/evidence.ts); lo que viene de webs va delimitado como dato no fiable. Curva de CTR propia del proyecto solo con 5.000 impresiones o más.',
+    tables: ['gsc_daily_totals', 'findings', 'seo_topics', 'seo_demand', 'seo_rank_keywords', 'client_competitors', 'seo_dossier_facts', 'seo_cycles', 'seo_cycle_lines']
+  },
+  {
+    id: 'jefe-plan-servicio',
+    lane: 'Plan de mejora',
+    name: 'Jefe SEO: plan de servicio a 12-24 meses',
+    description: 'Trabajo → Plan de servicio. El Jefe SEO lee el expediente y propone tesis, diagnóstico, frentes por trimestre (con la línea del catálogo, evidencias y pronóstico), riesgos, lo que no sabe y lo que descartó. Queda en sombra (solo admin) hasta que un administrador lo aprueba o lo rechaza con motivo; la nota de 1 a 5 mide si lo habría hecho igual. Aprobarlo todavía no apaga al estratega del módulo Estrategia: eso pasa con un ciclo activo, y en D4 los ciclos saldrán del plan.',
+    status: 'built',
+    file: 'lib/seo/jefe/plan.ts',
+    when: 'A mano («Generar el plan», admin). Trabajo «seo.jefe.plan» en la cola, un intento, 7 min como máximo.',
+    ai: 'Opus 5.5 con esfuerzo alto y SIN IA de reserva (si Anthropic falla, no lo hace otro modelo). Unos 0,6 $ por versión.',
+    code: 'Una generación a la vez y 2 al día por proyecto (candado de PostgreSQL); tope mensual del Jefe (ajuste «jefe_budget_usd», 35 $ por defecto) sumando todas sus llamadas. Validación (lib/seo/jefe/plan-rules.ts): evidencias que existen y del tipo que sostiene cada frente (lo inventado se descarta y se apunta; más del 30 % inventado = plan no aceptado), claves de frente reutilizadas de la versión anterior, línea del tipo y elegible (la bloqueada pasa al T2 condicionada), trimestres dentro del horizonte, como mucho 10 frentes y horas del T1. Puntuador por reglas con el orden de la agencia: avisa, no veta. Cada decisión queda en seo_jefe_proposals con su motivo. Examen del prompt con 3 expedientes inventados (IA → Prompts). Auditoría Opus: docs/PLAN-SEO-JEFE.md.',
+    tables: ['seo_master_plans', 'seo_master_plan_items', 'seo_jefe_proposals', 'ai_jobs', 'jobs'],
+    prompts: ['seo_jefe_plan_maestro']
   },
   {
     id: 'estrategia-ciclos',

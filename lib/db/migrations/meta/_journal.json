@@ -561,6 +561,13 @@
       "when": 1796780000000,
       "tag": "0079_seo_arranque",
       "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "7",
+      "when": 1796790000000,
+      "tag": "0080_seo_jefe_plan",
+      "breakpoints": true
     }
   ]
 }
