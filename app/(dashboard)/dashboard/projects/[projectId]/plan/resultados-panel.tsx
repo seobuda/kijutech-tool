@@ -40,7 +40,9 @@ const path = (u: string) => {
   }
 };
 
-export function ResultadosPanel({ results }: { results: ResultView[] }) {
+export type TrendView = { technique: string; label: string; metric: string; n: number; clients: number; funciono: number; effectPct: number | null; lowPct: number | null; highPct: number | null; tag: string };
+
+export function ResultadosPanel({ results, trends = [] }: { results: ResultView[]; trends?: TrendView[] }) {
   const [open, setOpen] = useState<string | null>(null);
   const byTech = new Map<string, ResultView[]>();
   for (const r of results) byTech.set(r.technique, [...(byTech.get(r.technique) ?? []), r]);
@@ -121,6 +123,28 @@ export function ResultadosPanel({ results }: { results: ResultView[] }) {
       ) : (
         <p className="text-sm text-muted-foreground">Aún no hay encargos aprobados desde el plan. Cuando se hagan, aquí verás si funcionaron (a partir de 4 semanas).</p>
       )}
+      <details className="mt-4 rounded-md border px-3 py-2 text-sm">
+        <summary className="cursor-pointer font-medium">Tendencias por técnica en todos los clientes ({trends.length})</summary>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Efecto medio de cada técnica en los clientes de la agencia (cada cliente cuenta una vez; con su intervalo). «Pocos casos» o «tendencia» no son reglas: con 50 casos y 10 clientes pasa a «aprendizaje» y entonces ordena el plan. Ojo: solo se mide lo que se hace, y donde se hace.
+        </p>
+        {trends.length ? (
+          <ul className="mt-2 divide-y">
+            {trends.map((t) => (
+              <li key={`${t.technique}-${t.metric}`} className="flex flex-wrap items-center gap-2 py-1.5">
+                <span className="font-medium">{t.label}</span>
+                <Badge tone={t.tag === 'aprendizaje' ? 'success' : t.tag === 'tendencia' ? 'info' : 'outline'}>{t.tag}</Badge>
+                <span className="text-muted-foreground">
+                  {t.n} caso{t.n === 1 ? '' : 's'} en {t.clients} cliente{t.clients === 1 ? '' : 's'} · {t.funciono} funcionaron
+                  {t.effectPct != null ? ` · ${t.effectPct > 0 ? '+' : ''}${t.effectPct} % en ${METRIC[t.metric] ?? t.metric} (de ${t.lowPct} a ${t.highPct} %)` : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-2 text-muted-foreground">Aún no hay intervenciones medidas.</p>
+        )}
+      </details>
     </Section>
   );
 }

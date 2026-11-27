@@ -66,7 +66,7 @@ El detalle, el porqué de cada pieza y la supervisión de Opus están en `docs/I
 | ✅ 8 | **Medir y explicar** (hecha el 27 nov, §6.56; atribución y previsión pasan a la 12) | «¿Funcionó?» con la comprobación tras el encargo y la fecha real, diagnóstico de caídas en capas, atribución y previsión |
 | 9 | **Contenido → WordPress** (9a brief, nota, enlazado y contenido que pierde tráfico, hecha el 27 nov, §6.57; 9b WordPress pendiente de decisión de Enric) | Brief, nota, enlazado interno, contenido que pierde tráfico; publicar con aprobación |
 | 10 | **Autoridad** | Tras verificar el precio y la cobertura en 3 webs reales y con el OK de Enric (contratar es línea roja) |
-| 11 | **Orquestar, panel de IA mensual y tendencias entre clientes** | Cuando haya unas 50 intervenciones por técnica |
+| 11 | **Orquestar, panel de IA mensual y tendencias entre clientes** (tendencias y orquestar hechos el 27 nov, §6.58; el panel de IA, pendiente de Enric) | Cuando haya unas 50 intervenciones por técnica |
 | 10b | **Integración GoHighLevel** (pedida por Enric el 26 nov) | Leer por API (solo lectura) los leads de la subcuenta de cada cliente y de sus formularios incrustados en la web: cuántos, cuándo, desde qué página y, si se puede, desde qué búsqueda. Necesita el token de Enric |
 | 12 | **Informe y panel en vivo** (movido al final por Enric el 26 nov) | Panel en vivo por cliente (leads de GoHighLevel + Search Console + GA4 + trabajo hecho; búsquedas y páginas que traen leads, horas…) y después el informe mensual, en borrador y enviado solo con aprobación tras muchas pruebas |
 | — | **Migraciones de web** | En cualquier momento después de la parte 6 |

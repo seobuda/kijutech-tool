@@ -24,6 +24,8 @@ import { SEO_KINDS } from '@/lib/seo/salud/kinds';
 import { LOCAL_SOURCE } from '@/lib/seo/local/rules';
 import { VIGILANCIA_SOURCES } from '@/lib/seo/vigilancia/rules';
 import { buildPlan, scheduleMonths, type PlanFinding, type PlanSeverity } from '@/lib/seo/plan/rules';
+import { accountTechniqueTrends } from '@/lib/core/technique-trends';
+import { planFactors } from '@/lib/core/technique-trends-rules';
 
 export const PLAN_SOURCE = 'seo.plan';
 const LABELS = Object.fromEntries(SEO_KINDS.map((k) => [k.kind, k.title]));
@@ -82,7 +84,8 @@ export async function regeneratePlan(tenantId: string, projectId: string): Promi
       const e = (f.evidence ?? {}) as Record<string, unknown>;
       return { id: f.id, kind: f.kind, url: f.url, query: f.query, severity: f.severity as PlanSeverity, impressions: num(e.impresiones), valor: num(e.valor), gain: num(e.clicsMes) };
     });
-  const drafts = buildPlan(free, impressions, project.monthlyHours != null ? Number(project.monthlyHours) : null, LABELS);
+  const factors = planFactors(await accountTechniqueTrends(tenantId).catch(() => []));
+  const drafts = buildPlan(free, impressions, project.monthlyHours != null ? Number(project.monthlyHours) : null, LABELS, factors);
 
   let created = 0;
   const keep = new Set<string>();
