@@ -33,7 +33,8 @@ export const anthropicAdapter: AIAdapter = {
     model: string,
     apiKey: string,
     maxTokens?: number,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    opts?: { effort?: string }
   ): Promise<AIResponse> {
     const resolvedModel = model || DEFAULT_MODEL;
 
@@ -51,6 +52,7 @@ export const anthropicAdapter: AIAdapter = {
       body: JSON.stringify({
         model: resolvedModel,
         max_tokens: maxTokens ?? DEFAULT_MAX_TOKENS,
+        ...(opts?.effort && /^(low|medium|high|xhigh|max)$/.test(opts.effort) ? { output_config: { effort: opts.effort } } : {}),
         system: systemMessages.map((m) => m.content).join('\n\n') || undefined,
         messages: conversationMessages.map((m) => ({
           role: m.role,

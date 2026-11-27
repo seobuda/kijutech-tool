@@ -18,7 +18,9 @@ export type AIAdapter = {
     apiKey: string,
     maxTokens?: number,
     /** Cancela la petición HTTP (tiempo máximo del gateway): sin esto, la llamada seguía viva y se cobraba igual. */
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    /** Opciones que no todos los proveedores entienden (los demás las ignoran). */
+    opts?: { effort?: string }
   ): Promise<AIResponse>;
 };
 

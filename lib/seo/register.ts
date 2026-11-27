@@ -24,6 +24,7 @@ import { registerAiPanelJobs } from '@/lib/seo/panel-ia/panel';
 import { materializeAll } from '@/lib/seo/estrategia/ciclos';
 import { advanceAll } from '@/lib/seo/arranque/arranque';
 import { registerJefeTools } from '@/lib/seo/jefe/tools';
+import { registerJefePlanJobs } from '@/lib/seo/jefe/plan';
 import { registerScheduled } from '@/lib/core/capabilities';
 import { seoWeeklyLines } from '@/lib/seo/informe-semanal';
 import { registerSeoAgentTools } from '@/lib/seo/agente-tool';
@@ -44,6 +45,7 @@ export function registerSeoCapabilities(): void {
   registerBriefJobs(); // parte 9a: briefs de contenido (SERP real y competencia)
   registerAiPanelJobs(); // parte 11: panel de IA (un trabajo por pregunta)
   registerJefeTools(); // Jefe SEO D1: expediente estratégico y pronóstico para los agentes (solo lectura)
+  registerJefePlanJobs(); // Jefe SEO D2: plan de servicio a 12-24 meses (Opus, en sombra hasta que un admin lo aprueba)
   // Estrategias por ciclos (docs/PLAN-SEO-CICLOS.md): una pasada al día por cuenta encarga lo aprobado a 2 semanas vista,
   // salta lo no aprobado a tiempo y marca hecho lo terminado.
   const G = globalThis as unknown as { __kijuCyclesDay?: Map<string, string> };

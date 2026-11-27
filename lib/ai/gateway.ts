@@ -25,6 +25,12 @@ export function getAdapter(provider: string): AIAdapter | null {
 export const CALL_TIMEOUT_MS = 180_000;
 
 type CallAIParams = {
+  /** Jefe SEO (27 nov 2026, auditoría Opus): sin IA de reserva (el plan nunca se hace en silencio con otro modelo). */
+  noFallback?: boolean;
+  /** Solo con este proveedor (si el activo es otro, falla en vez de usar otro modelo). */
+  requireProvider?: string;
+  /** Esfuerzo de razonamiento (Anthropic: output_config.effort). */
+  effort?: 'low' | 'medium' | 'high' | 'xhigh';
   tenantId: string;
   projectId?: string;
   function: string;
@@ -163,11 +169,11 @@ export const FALLBACK_PRICING: Record<string, [string, string]> = {
  * Llama al adaptador con tiempo máximo y CANCELA la petición al vencer (17 nov 2026: antes solo se dejaba de esperar,
  * la petición seguía viva y el proveedor la cobraba sin quedar registrada).
  */
-export async function sendWithTimeout(adapter: AIAdapter, messages: AIMessage[], model: string, apiKey: string, maxTokens: number | undefined, ms: number): Promise<AIResponse> {
+export async function sendWithTimeout(adapter: AIAdapter, messages: AIMessage[], model: string, apiKey: string, maxTokens: number | undefined, ms: number, opts?: { effort?: string }): Promise<AIResponse> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), ms);
   try {
-    return await adapter.sendMessage(messages, model, apiKey, maxTokens, ctrl.signal);
+    return await adapter.sendMessage(messages, model, apiKey, maxTokens, ctrl.signal, opts);
   } catch (e) {
     if (ctrl.signal.aborted) throw new Error(`Llamada a la IA superó el timeout de ${ms / 1000}s`);
     throw e;
@@ -362,8 +368,9 @@ export async function callAI(
     if (!adapter) {
       throw new Error(`Proveedor de IA desconocido: ${setting.provider}`);
     }
+    if (params.requireProvider && setting.provider !== params.requireProvider) throw new Error(`Esta función necesita ${params.requireProvider} y el proveedor activo es ${setting.provider}`);
 
-    const response = await sendWithTimeout(adapter, messages, setting.model, setting.apiKey, maxTokens, timeoutMs);
+    const response = await sendWithTimeout(adapter, messages, setting.model, setting.apiKey, maxTokens, timeoutMs, { effort: params.effort });
     return await finish(response, setting.keyMode, null);
   } catch (error) {
     let message = error instanceof Error ? error.message : 'Error desconocido';
@@ -372,7 +379,7 @@ export async function callAI(
     // IA de reserva (13 nov 2026): si el fallo es del proveedor (caído, saturado, sin saldo, clave rechazada,
     // modelo retirado, tiempo agotado) y hay otra clave activa de OTRO proveedor, se reintenta una vez con ella.
     // Queda anotado en el job (output.fallback) para que el vigía de gasto lo cuente y avise.
-    if (primary && shouldFallback(message)) {
+    if (primary && !params.noFallback && !params.requireProvider && shouldFallback(message)) {
       try {
         const alt = await resolveFallbackProvider(tenantId, primary.provider);
         if (alt) {
