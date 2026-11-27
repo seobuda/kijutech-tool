@@ -132,11 +132,21 @@ export async function generateMasterPlan(tenantId: string, planId: string): Prom
     .orderBy(desc(seoJefeProposals.decidedAt))
     .limit(5);
   // D3: cambios aceptados desde la conversación con el Jefe sobre la versión aprobada vigente: esta versión los incorpora.
+  // Cambios al plan que la agencia rechazó (con su motivo): que la versión nueva no los vuelva a meter.
+  const rejectedChanges = await db
+    .select({ payload: seoJefeProposals.payload, reason: seoJefeProposals.decisionReason })
+    .from(seoJefeProposals)
+    .where(and(eq(seoJefeProposals.projectId, plan.projectId), eq(seoJefeProposals.kind, 'cambio'), eq(seoJefeProposals.status, 'rechazada')))
+    .orderBy(desc(seoJefeProposals.decidedAt))
+    .limit(5);
   const accepted = await acceptedChangesForNextPlan(tenantId, plan.projectId, prevApproved?.status === 'aprobado' ? prevApproved.version : null);
   const prevText = [
     prev ? `Versión ${prev.version} (${prev.status}): ${untrusted(prev.thesis.slice(0, 1200))}` : 'Ninguno: es el primer plan del proyecto.',
     prevItems.length ? `Frentes de la versión de referencia (REUTILIZA su clave si es el mismo frente):\n${prevItems.map((i) => `- clave ${i.frenteKey} · ${i.kind}${i.playbook ? ` · ${i.playbook}` : ''} · T${i.fromQuarter}-T${i.toQuarter} · ${untrusted(i.title)}`).join('\n')}` : '',
     decisions.length ? `Decisiones de la agencia sobre planes anteriores (criterio a respetar):\n${decisions.map((d) => `- v${d.version ?? '?'} ${d.status}: ${untrusted(String(d.reason).slice(0, 600))}`).join('\n')}` : '',
+    rejectedChanges.length
+      ? `Cambios al plan que la agencia RECHAZÓ (no los vuelvas a proponer sin datos nuevos):\n${rejectedChanges.map((c) => `- ${untrusted(String((c.payload as { titulo?: string }).titulo ?? ''))}: ${untrusted(String(c.reason ?? '').slice(0, 400))}`).join('\n')}`
+      : '',
     accepted.length
       ? `Cambios que la agencia ACEPTÓ incorporar en esta versión (hazlos salvo que los datos lo impidan; si no, explícalo en «riesgos»):\n${accepted.map((c) => `- ${c.tipo}${c.frente ? ` (frente ${c.frente})` : ''}: ${untrusted(`${c.titulo}. ${c.detalle} Motivo: ${c.motivo}`.slice(0, 700))}${c.evidencias.length ? ` · evidencias ${c.evidencias.slice(0, 6).join(', ')}` : ''}`).join('\n')}`
       : ''

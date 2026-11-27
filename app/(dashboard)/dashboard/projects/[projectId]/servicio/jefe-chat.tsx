@@ -106,6 +106,9 @@ export function JefeChat({ projectId }: { projectId: string }) {
               </div>
             );
           })}
+          {loaded && !busy && messages.at(-1)?.role === 'user' && (
+            <p role="status" className="text-sm text-warning-strong">No llegó la respuesta del Jefe (quizá se reinició el servidor o tardó demasiado). Vuelve a enviar el mensaje.</p>
+          )}
           {busy && (
             <p className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="size-4 animate-spin" aria-hidden /> El Jefe SEO está pensando (mira el plan y los datos; puede tardar un minuto)…

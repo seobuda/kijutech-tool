@@ -191,7 +191,7 @@ export const DEFAULT_AGENTS: Omit<typeof agtAgents.$inferInsert, 'tenantId'>[] =
     instructions: SEO_HEAD_INSTRUCTIONS,
     tools: ['seo_plan_maestro', 'seo_expediente_estrategico', 'seo_pronostico', 'seo_proyecto', 'seo_proponer_cambio_plan', 'buscar_conocimiento'],
     model: HEAD_MODEL,
-    monthlyBudgetUsd: '15',
+    // Sin tope propio: manda el del Jefe SEO (jefe_budget_usd), que comprueba la acción antes de enviar (un solo tope).
     departmentKey: 'seo'
   }
 ];

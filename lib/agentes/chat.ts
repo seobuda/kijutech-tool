@@ -32,7 +32,14 @@ async function send(r: AgentChatSend): Promise<{ ok: true } | { ok: false; error
   // Hilo compartido: cada mensaje lleva quién lo escribe.
   const msg = await addMessage({ tenantId: r.tenantId, conversationId: conv.id, role: 'user', content: `${r.actor.name}: ${text}` });
   const payload: ChatPayload = { conversationId: conv.id, agentKey: agent.key, userMessageId: msg.id, text: `${r.actor.name}: ${text}`, actor: r.actor, thread: r.thread, context: r.context?.slice(0, 2000) ?? null, maxTokens: Math.min(32_000, Math.max(4096, r.maxTokens ?? 4096)) };
-  const job = await enqueueJob({ tenantId: r.tenantId, kind: CHAT_JOB, payload, dedupeKey: dedupe(conv.id), scopeType: 'cuenta', priority: 2 });
+  let job: { created: boolean };
+  try {
+    job = await enqueueJob({ tenantId: r.tenantId, kind: CHAT_JOB, payload, dedupeKey: dedupe(conv.id), scopeType: 'cuenta', priority: 2 });
+  } catch (e) {
+    // Sin trabajo detrás, el mensaje se quedaría sin respuesta: fuera, y que lo reenvíe.
+    await db.delete(agtMessages).where(eq(agtMessages.id, msg.id)).catch(() => undefined);
+    throw e;
+  }
   if (!job.created) {
     // Otra persona envió a la vez y ganó el candado: se quita este mensaje (recién creado, nadie lo ha respondido).
     await db.delete(agtMessages).where(eq(agtMessages.id, msg.id));
@@ -73,7 +80,7 @@ async function history(tenantId: string, agentKey: string, thread: string, limit
 }
 
 /** El trabajo: responde al mensaje guardado con el historial del hilo (sin repetir ese mensaje) y resume si es largo. */
-export async function answerChat(tenantId: string, p: ChatPayload): Promise<Record<string, unknown>> {
+export async function answerChat(tenantId: string, p: ChatPayload, signal?: AbortSignal): Promise<Record<string, unknown>> {
   const agent = await getAgent(tenantId, p.agentKey);
   const [conv] = await db.select().from(agtConversations).where(and(eq(agtConversations.id, p.conversationId), eq(agtConversations.tenantId, tenantId))).limit(1);
   if (!agent || !conv) return { error: 'agente o conversación no encontrados' };
@@ -95,6 +102,8 @@ export async function answerChat(tenantId: string, p: ChatPayload): Promise<Reco
     reportError({ error: e, source: 'agentes', area: `chat del agente ${agent.key}`, tenantId, actor: p.actor.name, channel: 'web' });
     run = { text: 'No he podido responder (ha fallado algo por dentro). Prueba otra vez en un momento.', toolCalls: [], costUsd: 0, inputTokens: 0, outputTokens: 0, error: 'fallo', cards: [] };
   }
+  // Pasado el tiempo máximo el trabajo ya figura como fallido (y el hilo libre): una respuesta tardía no se escribe.
+  if (signal?.aborted) return { costUsd: run.costUsd, error: 'fuera de tiempo' };
   await addMessage({ tenantId, conversationId: conv.id, role: 'assistant', content: run.text, toolCalls: run.toolCalls.length ? run.toolCalls : null, costUsd: run.costUsd });
   // Igual que por Telegram: cada 20 mensajes, lo anterior a los últimos 16 queda resumido.
   const total = await countMessages(conv.id);
@@ -115,9 +124,10 @@ export function registerAgentChatJobs(): void {
   registerJobKind({
     kind: CHAT_JOB,
     // Hasta 8 vueltas con la IA (120 s cada una como mucho): de sobra, y un solo intento (reintentar cobraría dos veces).
+    // Con 3 huecos en la cola, si los ocupan trabajos largos de otros tipos la respuesta espera a que se libere uno.
     timeoutS: 900,
     maxConcurrent: 2,
     maxAttempts: 1,
-    run: async (ctx, payload) => answerChat(ctx.tenantId, payload as unknown as ChatPayload)
+    run: async (ctx, payload) => answerChat(ctx.tenantId, payload as unknown as ChatPayload, ctx.signal)
   });
 }
