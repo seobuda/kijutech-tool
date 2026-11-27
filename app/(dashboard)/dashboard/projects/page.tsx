@@ -6,6 +6,10 @@ import { getProjectsForUser, getUser, getUserTenantRoleNames } from '@/lib/db/qu
 import { Badge, EmptyState, PageContainer, PageHeader } from '@/components/ui/page';
 import { ArchiveProjectButton } from './archive-project-button';
 import { requirePagePermission } from '@/lib/auth/permissions';
+import { and, eq, inArray, sql } from 'drizzle-orm';
+import { db } from '@/lib/db/drizzle';
+import { findings, seoPlanItems } from '@/lib/db/schema';
+import { reportError } from '@/lib/core/errors';
 
 const MANAGE_ROLES = ['admin', 'super_admin'];
 
@@ -17,13 +21,34 @@ const STATUS: Record<string, { label: string; tone: 'success' | 'warning' | 'neu
 
 export default async function ProjectsPage() {
   // Sin rol no se ve nada (regla de seguridad): la lista de proyectos es de lector o más.
-  await requirePagePermission('view');
+  const me = await requirePagePermission('view');
   const user = await getUser();
   const [projects, roleNames] = await Promise.all([
     getProjectsForUser(),
     user ? getUserTenantRoleNames(user.id) : Promise.resolve([])
   ]);
   const canManage = roleNames.some((r) => MANAGE_ROLES.includes(r));
+  // Semáforo de cada tarjeta (simulación SEO del 27 nov, atasco 7): problemas graves abiertos y propuestas por aprobar.
+  const ids = projects.map((p) => p.id);
+  const [sev, pend] = ids.length
+    ? await Promise.all([
+        db
+          .select({ projectId: findings.projectId, severity: findings.severity, n: sql<number>`count(*)::int` })
+          .from(findings)
+          .where(and(eq(findings.tenantId, me.tenantId), inArray(findings.projectId, ids), eq(findings.status, 'abierto'), inArray(findings.severity, ['critico', 'importante'])))
+          .groupBy(findings.projectId, findings.severity),
+        db
+          .select({ projectId: seoPlanItems.projectId, n: sql<number>`count(*)::int` })
+          .from(seoPlanItems)
+          .where(and(eq(seoPlanItems.tenantId, me.tenantId), inArray(seoPlanItems.projectId, ids), eq(seoPlanItems.status, 'pendiente')))
+          .groupBy(seoPlanItems.projectId)
+      ]).catch((error) => {
+        reportError({ error, source: 'seo', area: 'semáforos de proyectos' });
+        return [[], []] as const;
+      })
+    : [[], []];
+  const countOf = (id: string, s: string) => Number(sev.find((x) => x.projectId === id && x.severity === s)?.n ?? 0);
+  const pendingOf = (id: string) => Number(pend.find((x) => x.projectId === id)?.n ?? 0);
 
   const newButton = (
     <Button asChild className="bg-brand text-white hover:bg-brand/90">
@@ -81,6 +106,13 @@ export default async function ProjectsPage() {
                     {st.label}
                   </Badge>
                 </div>
+                {(countOf(project.id, 'critico') > 0 || countOf(project.id, 'importante') > 0 || pendingOf(project.id) > 0) && (
+                  <p className="mt-3 flex flex-wrap gap-1.5">
+                    {countOf(project.id, 'critico') > 0 && <Badge tone="danger">{countOf(project.id, 'critico')} crítico(s)</Badge>}
+                    {countOf(project.id, 'importante') > 0 && <Badge tone="warning">{countOf(project.id, 'importante')} importante(s)</Badge>}
+                    {pendingOf(project.id) > 0 && <Badge tone="info">{pendingOf(project.id)} propuesta(s) por aprobar</Badge>}
+                  </p>
+                )}
                 {project.domain && (
                   <p className="mt-3 flex items-center gap-1.5 truncate text-sm text-muted-foreground">
                     <Globe className="size-3.5 shrink-0" />
