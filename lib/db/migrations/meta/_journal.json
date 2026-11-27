@@ -582,6 +582,13 @@
       "when": 1796900000000,
       "tag": "0082_seo_fuentes",
       "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1797000000000,
+      "tag": "0083_seo_investigador",
+      "breakpoints": true
     }
   ]
 }
