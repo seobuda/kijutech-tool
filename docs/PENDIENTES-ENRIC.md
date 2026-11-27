@@ -3,33 +3,17 @@
 Lista viva de lo que solo puede hacer Enric (accesos, decisiones, el equipo). Claude la actualiza al terminar cada bloque.
 Detalle paso a paso de la activación en `docs/PRUEBAS-EN-VIVO.md`.
 
-**Última actualización:** 27 nov 2026 (SEO partes 5c a 9a en producción). En producción: `main` (Hito 2 del SEO casi completo, Google Places conectado), 64 migraciones.
+**Última actualización:** 27 nov 2026, tarde (cierre del módulo SEO: partes 9b, 10, 10b, 11 y 12). En producción: `main` (Hito 2 del SEO casi completo, Google Places conectado), 64 migraciones.
 
-## Módulo SEO: decisiones del 27 nov (encargo de la noche)
-- [ ] **WordPress (parte 9b): ¿se construye y cómo?** La auditoría Opus lo frenó por tres motivos:
-  1. **Contraseñas:** `client_assets` dice «NUNCA contraseñas» y una *application password* lo es. ¿Se permite guardarla cifrada, solo para esto?
-  2. **Escribir en la web del cliente** (aunque sea un borrador) roza la línea roja 2: algunos plugins reaccionan también a los borradores.
-  3. **Dónde:** debería ir en el núcleo (Webs y Ads también publicarán), no en SEO.
-
-  Condiciones si se hace:
-  - usuario propio de WordPress con rol **Colaborador** (nunca administrador; se rechaza si puede publicar);
-  - solo **entradas nuevas** en borrador, nunca tocar páginas publicadas (en WordPress se cambiarían en vivo);
-  - sin seguir redirecciones con la contraseña;
-  - solo `https`;
-  - probarlo primero con una web WordPress de Kijutech.
-
-  Mientras tanto, el brief se copia como texto.
-
-- [ ] **Panel de IA mensual (parte 11): ¿presupuesto y preguntas?** Consiste en preguntar cada mes a ChatGPT, Perplexity, Gemini y Google IA de 10 a 15 preguntas fijas por cliente y ver si lo citan a él o a su competencia.
-  - **Coste orientativo** (sin verificar; precios de la web de DataForSEO del 27 nov): entre 0,15 y 2 $ al mes por proyecto. Cabe en el tope de 5 $, pero sumaría a lo demás.
-  - **Proveedor:** DataForSEO (ya contratado: «LLM Responses», unos 0,0006 $ por pregunta más lo que cobre el modelo) o las API de cada asistente.
-  - **Qué hay que decidir:**
-    - si se activa;
-    - con qué tope;
-    - si las preguntas las propone la IA desde los temas con más valor y las confirma el equipo.
-  - **Lo que ya existe:** AI Overview en Posiciones y las visitas desde asistentes de IA en GA4 (Rendimiento).
-- [ ] **Autoridad (parte 10):** sin hacer. Necesita un proveedor de enlaces (DataForSEO Backlinks u otro) con suscripción. Contratar es línea roja: dime si se verifica precio y cobertura en 3 webs reales.
-- [ ] **GoHighLevel (parte 10b) e informe en vivo (parte 12):** para empezar hace falta el token de una subcuenta (integración privada, solo lectura) y el ID de un formulario de prueba.
+## Módulo SEO: cierre (27 nov, tarde) — construido y desplegado (§6.65 de ESTADO)
+Decidido por Enric: WordPress en el núcleo, panel de IA con 2 $, Autoridad tras verificar y GoHighLevel con el token de prueba. Lo que queda en tu mano:
+- [ ] **Web WordPress de Kijutech para la prueba:** crea en ella un usuario con rol **Colaborador** y una contraseña de aplicación. Después, en la ficha del cliente → Webs y cuentas → **Conexiones**, conéctala (o pega en `.env` `WP_TEST_URL`, `WP_TEST_USER` y `WP_TEST_APP_PASSWORD` y lo pruebo yo en local). Si un plugin de seguridad (Wordfence) bloquea las contraseñas de aplicación, saldrá un error claro.
+- [ ] **Contrato de encargado del tratamiento (RGPD, art. 28)** con cada cliente antes de conectar su GoHighLevel. Guardamos solo fecha, formulario, página, canal y UTM, sin datos personales, pero son datos de sus clientes.
+- [ ] **Conectar GoHighLevel en producción:** en la ficha de cada cliente → Conexiones, con el ID de la subcuenta y un token de integración privada con **solo** `forms.readonly`. El de prueba (Pilates Club) funciona: 151 leads en local.
+- [ ] **Panel de IA:** en cada proyecto → pestaña IA → «Proponer preguntas» → activa las que valgan → «Preguntar ahora». La primera pasada en producción confirma la forma real de las respuestas de DataForSEO (en local no hay integración). Las preguntas salen de una plantilla (servicio × población) y **no de la IA**: hace lo mismo sin coste. Si prefieres que las proponga la IA, dímelo.
+- [ ] **Autoridad:** en 3 clientes, pestaña Autoridad → «Probar cobertura» pegando los dominios de Search Console → Enlaces → «Sitios que más enlazan». Si DataForSEO encuentra el 60 % o más, enciéndela en los proyectos que quieras (gasta unos 0,15-0,30 $ al mes por proyecto, con un tope de 1,5 $). Precio tras la subida del 20 % de julio, sin verificar: míralo en el panel de DataForSEO.
+- [ ] **Informe mensual:** pestaña En vivo → «Preparar el informe del mes». Llega a Para ti para revisarlo y aprobarlo; nunca sale solo. Es una plantilla con cifras. Si lo quieres redactado por IA (agente E de la simulación), es una decisión con coste.
+- [ ] **Saber:** los leads de más de 25 meses se borran solos (retención).
 
 ## Departamento SEO: Hito 1 en producción y Hito 2 para aprobar (23-24 nov)
 Desplegado: Salud técnica, expediente, plan de mejora → encargos, intervenciones, novedades de Google y local sin Places (`docs/ESTADO.md` §6.37 y §6.38).
