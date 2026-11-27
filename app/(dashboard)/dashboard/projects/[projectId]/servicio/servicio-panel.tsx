@@ -15,6 +15,8 @@ import { PLAYBOOKS, type PlaybookKey } from '@/lib/seo/estrategia/playbooks';
 import { approvePlanAction, rejectPlanAction, requestMasterPlanAction, scorePlanAction } from '@/lib/seo/jefe-actions';
 import type { ChangeView } from '@/lib/seo/jefe/cambios';
 import { JefeChat, PlanChanges } from './jefe-chat';
+import type { CycleProposalView } from '@/lib/seo/jefe/ciclos';
+import { CycleProposal } from './ciclo-propuesta';
 
 type Res = { ok: true; message?: string } | { ok: false; error: string };
 const STATUS: Record<string, { label: string; tone: 'neutral' | 'info' | 'warning' | 'success' | 'danger' }> = {
@@ -106,7 +108,7 @@ function Decide({ projectId, planId, status, score }: { projectId: string; planI
   );
 }
 
-export function ServicioPanel({ projectId, view, isAdmin, changes }: { projectId: string; view: PlanView; isAdmin: boolean; changes: ChangeView[] }) {
+export function ServicioPanel({ projectId, view, isAdmin, changes, cycles }: { projectId: string; view: PlanView; isAdmin: boolean; changes: ChangeView[]; cycles: CycleProposalView[] }) {
   const plan = view.current;
   const base = `/dashboard/projects/${projectId}/servicio`;
   if (!plan)
@@ -271,6 +273,7 @@ export function ServicioPanel({ projectId, view, isAdmin, changes }: { projectId
       </div>
 
       {isAdmin && plan.status !== 'borrador' && <Decide projectId={projectId} planId={plan.id} status={plan.status} score={plan.shadowScore} />}
+      {isAdmin && <CycleProposal projectId={projectId} proposals={cycles} hasApprovedPlan={view.versions.some((v) => v.status === 'aprobado')} />}
       {isAdmin && <PlanChanges projectId={projectId} changes={changes} />}
       {isAdmin && <JefeChat projectId={projectId} />}
     </div>

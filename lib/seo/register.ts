@@ -25,6 +25,7 @@ import { materializeAll } from '@/lib/seo/estrategia/ciclos';
 import { advanceAll } from '@/lib/seo/arranque/arranque';
 import { registerJefeTools } from '@/lib/seo/jefe/tools';
 import { registerJefePlanJobs } from '@/lib/seo/jefe/plan';
+import { jefeCyclePass } from '@/lib/seo/jefe/ciclos';
 import { registerScheduled } from '@/lib/core/capabilities';
 import { seoWeeklyLines } from '@/lib/seo/informe-semanal';
 import { registerSeoAgentTools } from '@/lib/seo/agente-tool';
@@ -54,6 +55,8 @@ export function registerSeoCapabilities(): void {
     const seen = (G.__kijuCyclesDay ??= new Map());
     if (seen.get(tenantId) === day) return;
     seen.set(tenantId, day);
+    // Jefe SEO D4: antes, crea la estrategia aprobada que esperaba y propone la siguiente desde el plan (0 $, sin aprobar nada).
+    await jefeCyclePass(tenantId).catch((e) => console.error('[seo] jefe: ciclos desde el plan:', e instanceof Error ? e.message : e));
     await materializeAll(tenantId);
   });
   // Análisis inicial (docs/PLAN-SEO-JEFE.md, D0): un solo proceso por cuenta, cada 10 min, avanza las ejecuciones abiertas.
