@@ -7,7 +7,7 @@ import { db } from '@/lib/db/drizzle';
 import { projects } from '@/lib/db/schema';
 import { requirePermission } from '@/lib/auth/permissions';
 import { publicError } from '@/lib/errors';
-import { BriefError, briefToTask, briefToWordPress, markBriefUsed, requestBrief, retryBrief, setBriefStatus } from '@/lib/seo/contenido/briefs';
+import { BriefError, briefToTask, briefToWordPress, requestArticle, markBriefUsed, requestBrief, retryBrief, setBriefStatus } from '@/lib/seo/contenido/briefs';
 
 type Ok = { ok: true; message?: string } | { ok: false; error: string };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -94,5 +94,19 @@ export async function briefToWordPressAction(projectId: string, id: string): Pro
   } catch (e) {
     if (e instanceof BriefError) return { ok: false, error: e.userMessage };
     return { ok: false, error: publicError(e, 'No se pudo crear el borrador') };
+  }
+}
+
+/** Redactar el artículo completo con IA (Sonnet 5.5) desde el brief: en la cola, un par de minutos. */
+export async function requestArticleAction(projectId: string, id: string): Promise<Ok> {
+  try {
+    const user = await requirePermission('edit');
+    if (!(await ownProject(user.tenantId, projectId)) || !UUID.test(id)) return { ok: false, error: 'Brief no encontrado' };
+    await requestArticle(user.tenantId, projectId, id, user.name || user.email);
+    revalidatePath(PATH(projectId));
+    return { ok: true, message: 'Redactando el artículo: en 2-3 minutos aparece aquí (recarga). Después, «Crear borrador en WordPress».' };
+  } catch (e) {
+    if (e instanceof BriefError) return { ok: false, error: e.userMessage };
+    return { ok: false, error: publicError(e, 'No se pudo pedir el artículo') };
   }
 }

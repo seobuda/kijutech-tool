@@ -533,6 +533,13 @@
       "when": 1796740000000,
       "tag": "0075_seo_cierre",
       "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1796750000000,
+      "tag": "0076_seo_redactar_articulo",
+      "breakpoints": true
     }
   ]
 }

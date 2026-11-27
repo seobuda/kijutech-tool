@@ -7,7 +7,7 @@ import 'server-only';
 // destino. Sin IA. Al marcarlo «usado» con la URL publicada se registra la intervención (la parte 8 la mide).
 import { and, desc, eq, gt, inArray, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { crawlPages, crawlRuns, projects, seoBriefs, seoDemand, seoDossierFacts, seoTopicQueries, seoTopics } from '@/lib/db/schema';
+import { clients, crawlPages, crawlRuns, projects, seoBriefs, seoDemand, seoDossierFacts, seoTopicQueries, seoTopics } from '@/lib/db/schema';
 import { serpSource, workSource } from '@/lib/core/capabilities';
 import { briefToText, type BriefData } from '@/lib/seo/contenido/brief-text';
 import { extractMain, extractPage, sameSite, sha1 } from '@/lib/core/crawl-extract';
@@ -18,6 +18,8 @@ import { gscPropertiesForProject } from '@/lib/core/gsc';
 import { markInterventionDone, recordIntervention } from '@/lib/core/interventions';
 import { ConnectionError, createWordPressDraft, wordPressPostState } from '@/lib/core/connections';
 import { draftHtml } from '@/lib/core/connections-rules';
+import { callAI, getPrompt } from '@/lib/ai/gateway';
+import { parseArticle, type Article } from '@/lib/seo/contenido/article-rules';
 import { registerScheduled } from '@/lib/core/capabilities';
 import { host } from '@/lib/seo/expediente/rules';
 import { canSpend, recordDataSpend } from '@/lib/seo/gasto';
@@ -282,16 +284,106 @@ export async function briefToWordPress(tenantId: string, projectId: string, id: 
       },
       host(home)
     );
-    const title = b.keyword.charAt(0).toUpperCase() + b.keyword.slice(1);
-    created = await createWordPressDraft(tenantId, p.clientId, { title, html });
+    const art = (d as { article?: Article }).article;
+    const title = art?.title || b.keyword.charAt(0).toUpperCase() + b.keyword.slice(1);
+    created = await createWordPressDraft(tenantId, p.clientId, { title, html: art?.html ?? html, slug: art?.slug ?? null, excerpt: art?.meta ?? null });
   } catch (e) {
     await db.update(seoBriefs).set({ wpPostId: null, updatedAt: new Date() }).where(and(eq(seoBriefs.id, id), eq(seoBriefs.wpPostId, 0)));
     if (e instanceof ConnectionError) throw new BriefError(e.userMessage);
     throw e;
   }
   // Ya existe en WordPress: guardarlo aparte (si esto fallara, el reclamo NO se libera, para no crear un segundo borrador).
-  await db.update(seoBriefs).set({ wpPostId: created.postId, wpEditUrl: created.editUrl, status: 'listo', updatedAt: new Date() }).where(eq(seoBriefs.id, id));
+  await db.update(seoBriefs).set({ wpPostId: created.postId, wpEditUrl: created.editUrl, status: 'listo', data: sql`${seoBriefs.data} - 'previousWpEditUrl'`, updatedAt: new Date() }).where(eq(seoBriefs.id, id));
   return { editUrl: created.editUrl, created: true };
+}
+
+// --- Artículo completo con IA (27 nov 2026, petición de Enric) -------------------------------------------------------
+// Sonnet 5.5 (decisión de Enric) redacta el artículo entero desde el brief y lo confirmado del cliente; el HTML se limpia
+// con lista blanca (article-rules.ts) y se guarda en data.article. «Crear borrador en WordPress» lo usa si existe.
+// Unos 0,05-0,08 $ por artículo (estimación). Siempre lo revisa una persona; publicar, también una persona.
+export const ARTICLE_MODEL = 'claude-sonnet-5-5';
+export const ARTICLE_PROMPT = 'seo_redactar_articulo';
+const ARTICLE_JOB = 'seo.brief.articulo';
+const untrusted = (s: string) => `<<<DATO NO FIABLE\n${s}\nFIN>>>`;
+
+export async function requestArticle(tenantId: string, projectId: string, id: string, by: string): Promise<void> {
+  const at = new Date().toISOString();
+  // Reclamo atómico (revisor): solo pasa si no hay otra redacción en marcha de hace menos de 15 min. Dos clics = un pago.
+  const claimed = await db
+    .update(seoBriefs)
+    .set({ data: sql`${seoBriefs.data} || ${JSON.stringify({ articleStatus: { state: 'redactando', at, by } })}::jsonb`, updatedAt: new Date() })
+    .where(
+      and(
+        eq(seoBriefs.id, id),
+        eq(seoBriefs.projectId, projectId),
+        eq(seoBriefs.tenantId, tenantId),
+        inArray(seoBriefs.status, ['borrador', 'listo']),
+        sql`NOT (coalesce(${seoBriefs.data}->'articleStatus'->>'state', '') = 'redactando' AND (${seoBriefs.data}->'articleStatus'->>'at')::timestamptz > now() - interval '15 minutes')`
+      )
+    )
+    .returning({ id: seoBriefs.id });
+  if (!claimed.length) throw new BriefError('Ya se está redactando (tarda un par de minutos), o el brief aún no está listo.');
+  await enqueueJob({ tenantId, kind: ARTICLE_JOB, payload: { briefId: id, projectId }, scopeType: 'proyecto', scopeId: projectId, priority: 3, dedupeKey: `${ARTICLE_JOB}:${id}:${at}` });
+}
+
+async function writeArticle(tenantId: string, projectId: string, id: string): Promise<Record<string, unknown>> {
+  const [b] = await db.select().from(seoBriefs).where(and(eq(seoBriefs.id, id), eq(seoBriefs.projectId, projectId), eq(seoBriefs.tenantId, tenantId))).limit(1);
+  if (!b) throw new Error('brief no encontrado');
+  const prompt = await getPrompt(ARTICLE_PROMPT);
+  if (!prompt) throw new Error('Falta el prompt seo_redactar_articulo');
+  const [p] = await db.select({ name: projects.name, clientId: projects.clientId }).from(projects).where(eq(projects.id, projectId)).limit(1);
+  const [c] = p?.clientId ? await db.select({ name: clients.name }).from(clients).where(eq(clients.id, p.clientId)).limit(1) : [];
+  const d = (b.data ?? {}) as BriefData & { client?: Record<string, unknown> };
+  const val = (v: unknown) => (Array.isArray(v) ? v.map(String).join(', ') : typeof v === 'string' ? v : '') || '(sin confirmar)';
+  const vals: Record<string, string> = {
+    cliente: c?.name ?? p?.name ?? '',
+    web: (await projectWebUrl(tenantId, projectId)) ?? '',
+    negocio: val(d.client?.negocio),
+    servicios: val(d.client?.servicios),
+    zona: val(d.client?.zona),
+    publico: val(d.client?.publico),
+    busqueda: b.keyword,
+    relacionadas: (d.related ?? []).length ? untrusted((d.related ?? []).slice(0, 10).join(', ')) : '—',
+    intencion: d.intent ?? 'sin datos',
+    tipo: d.pageType ?? 'sin datos',
+    volumen: d.volume != null ? String(d.volume) : 'sin datos',
+    palabras: d.words != null ? String(d.words) : 'sin datos',
+    destino: b.targetUrl ?? 'página nueva',
+    subtemas: (d.subtopics ?? []).length ? untrusted((d.subtopics ?? []).slice(0, 25).map((s) => `- ${s.label} (${s.sites} webs)`).join('\n')) : '(no se pudieron leer: decide tú los apartados según la intención)',
+    preguntas: (d.questions ?? []).length ? untrusted((d.questions ?? []).slice(0, 15).map((q) => `- ${q}`).join('\n')) : '(sin datos: incluye las dudas típicas de quien busca esto)',
+    falta: d.score?.missing?.length ? untrusted(d.score.missing.slice(0, 15).join(', ')) : '—'
+  };
+  const fill = (t: string) => t.replace(/\{(cliente|web|negocio|servicios|zona|publico|busqueda|relacionadas|intencion|tipo|volumen|palabras|destino|subtemas|preguntas|falta)\}/g, (_m, k: string) => vals[k] ?? '');
+  const res = await callAI({
+    tenantId,
+    projectId,
+    function: 'seo_redactar_articulo',
+    promptKey: ARTICLE_PROMPT,
+    model: ARTICLE_MODEL,
+    preferredProvider: 'anthropic',
+    maxTokens: 16000, // el pensamiento de Sonnet cuenta aquí; el artículo son unos 3.000-4.000
+    timeoutMs: 300_000,
+    messages: [
+      { role: 'system', content: prompt.system_prompt },
+      { role: 'user', content: fill(prompt.user_prompt_template) }
+    ]
+  });
+  const article = parseArticle(res.content, b.keyword);
+  if (!article) throw new Error('La respuesta no trae un artículo completo');
+  const now = new Date().toISOString();
+  await db
+    .update(seoBriefs)
+    .set({ data: sql`${seoBriefs.data} || ${JSON.stringify({ article: { ...article, model: ARTICLE_MODEL, at: now }, articleStatus: { state: 'hecho', at: now } })}::jsonb`, updatedAt: new Date() })
+    .where(eq(seoBriefs.id, id));
+  // El borrador de WordPress que hubiera (esqueleto o artículo anterior) ya no corresponde: se suelta, leyendo el estado
+  // de AHORA (revisor: la IA tarda y alguien pudo crear uno mientras), y se avisa de su enlace para borrarlo a mano.
+  const [released] = (await db.execute(sql`
+    UPDATE seo_briefs b SET wp_post_id = NULL, wp_edit_url = NULL, updated_at = now()
+    FROM (SELECT id, wp_edit_url FROM seo_briefs WHERE id = ${id} FOR UPDATE) o
+    WHERE b.id = o.id AND b.wp_post_id > 0
+    RETURNING o.wp_edit_url AS url`)) as unknown as { url: string | null }[];
+  if (released) await db.update(seoBriefs).set({ data: sql`${seoBriefs.data} || ${JSON.stringify({ previousWpEditUrl: released.url })}::jsonb` }).where(eq(seoBriefs.id, id));
+  return { words: article.words };
 }
 
 /** Cierre del ciclo (auditoría): una vez al día, los borradores ya publicados pasan a «usado» con su URL (y se mide). */
@@ -409,6 +501,23 @@ export function registerBriefJobs(): void {
         return await buildBrief(ctx, ctx.tenantId, String(payload.briefId ?? ''));
       } catch (e) {
         await db.update(seoBriefs).set({ status: 'fallido', error: 'No se pudo preparar el brief.', updatedAt: new Date() }).where(eq(seoBriefs.id, String(payload.briefId ?? '')));
+        throw e;
+      }
+    }
+  });
+  registerJobKind({
+    kind: ARTICLE_JOB,
+    timeoutS: 420,
+    maxConcurrent: 2,
+    maxAttempts: 1,
+    run: async (ctx, payload) => {
+      try {
+        return await writeArticle(ctx.tenantId, String(payload.projectId ?? ''), String(payload.briefId ?? ''));
+      } catch (e) {
+        await db
+          .update(seoBriefs)
+          .set({ data: sql`${seoBriefs.data} || ${JSON.stringify({ articleStatus: { state: 'fallido', at: new Date().toISOString() } })}::jsonb`, updatedAt: new Date() })
+          .where(eq(seoBriefs.id, String(payload.briefId ?? '')));
         throw e;
       }
     }

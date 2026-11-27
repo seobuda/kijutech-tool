@@ -205,7 +205,8 @@ export const SEO_SALUD_PROCESS_MAP: ProcessStep[] = [
     status: 'built',
     file: 'lib/seo/contenido/briefs.ts',
     when: 'A mano (botón «Preparar brief»; trabajo «seo.brief.build» en la cola). El contenido que pierde tráfico, con los detectores (cada 7 días).',
-    ai: 'Nada (reglas): la IA podría redactar un esquema después, con su prompt y su examen.',
+    ai: 'El brief, por reglas. «Redactar artículo con IA» (27 nov): Sonnet 5.5 (prompt seo_redactar_articulo) escribe el artículo completo (título con gancho, meta, slug y cuerpo sin imágenes); sin datos inventados ([verificar: …]); HTML limpiado con lista blanca; unos 0,05-0,08 $.',
+    prompts: ['seo_redactar_articulo'],
     code: 'Top 10 guardado (demanda) o una SERP en directo (0,002 $, con el tope). Como mucho 5 webs legibles, sin directorios, redes ni la web del cliente, respetando su robots.txt. Contenido principal con extractMain del núcleo (sin menú, pie, barra lateral ni cookies). Subtemas: encabezados sin las palabras de la búsqueda, Jaccard ≥ 0,5. Nota: subtemas presentes en el texto (70 %), búsqueda en título y H1 (30 %); las palabras solo restan si quedan por debajo de la mitad. Enlazado: sin legales, etiquetas ni paginación; los enlaces de menú no cuentan como «ya enlaza»; texto variado. Decay (lib/seo/contenido/decay.ts): 30+ clics previos, −30 % a 90 días y frente al año anterior si hay; causa probable (posición, CTR o demanda). WordPress (parte 9b, 27 nov): «Crear borrador en WordPress» crea una entrada NUEVA en borrador con el esqueleto escapado (conexión del núcleo, usuario Colaborador, idempotente con wp_post_id); una vez al día, los borradores ya publicados pasan a «usado» con su URL y se mide.',
     tables: ['seo_briefs', 'seo_demand', 'seo_topics', 'seo_topic_queries', 'crawl_pages', 'crawl_links', 'seo_dossier_facts', 'interventions', 'gsc_daily', 'seo_data_spend']
   },
