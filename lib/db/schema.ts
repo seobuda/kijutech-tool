@@ -4458,6 +4458,9 @@ export const seoBriefs = pgTable(
     status: varchar('status', { length: 12 }).notNull().default('preparando'),
     data: jsonb('data').$type<Record<string, unknown>>().notNull().default({}),
     publishedUrl: text('published_url'),
+    // Borrador en WordPress (parte 9b, 27 nov 2026): id de la entrada y enlace de edición que construimos nosotros.
+    wpPostId: integer('wp_post_id'),
+    wpEditUrl: text('wp_edit_url'),
     error: text('error'),
     createdBy: varchar('created_by', { length: 120 }),
     createdAt: timestamp('created_at').notNull().defaultNow(),
@@ -4580,3 +4583,166 @@ export const seoTextEmbeddings = pgTable(
   },
   (table) => [primaryKey({ name: 'seo_text_embeddings_pk', columns: [table.textHash, table.model] })]
 );
+
+
+// ---------------------------------------------------------------------------
+// Cierre del módulo SEO (27 nov 2026; docs/DISENO-SEO-CIERRE.md con la auditoría Opus). Migración 0075, aditiva.
+// ---------------------------------------------------------------------------
+
+// Núcleo · conexiones de un cliente con herramientas externas (WordPress para borradores, GoHighLevel para leads). El
+// secreto va cifrado (lib/ai/encryption.ts) y nunca vuelve al navegador. Se borra en cascada con el cliente.
+export const clientConnections = pgTable(
+  'client_connections',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    // wordpress | gohighlevel
+    kind: varchar('kind', { length: 20 }).notNull(),
+    baseUrl: text('base_url'),
+    externalId: varchar('external_id', { length: 120 }),
+    username: varchar('username', { length: 120 }),
+    secretEncrypted: text('secret_encrypted').notNull(),
+    secretIv: varchar('secret_iv', { length: 64 }).notNull(),
+    // ok | error
+    status: varchar('status', { length: 10 }).notNull().default('ok'),
+    detail: jsonb('detail').$type<Record<string, unknown>>().notNull().default({}),
+    lastOkAt: timestamp('last_ok_at'),
+    lastError: text('last_error'),
+    lastSyncAt: timestamp('last_sync_at'),
+    createdBy: varchar('created_by', { length: 120 }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    unique('client_connections_unique').on(table.tenantId, table.clientId, table.kind),
+    check('client_connections_kind_check', sql`${table.kind} IN ('wordpress', 'gohighlevel')`),
+    check('client_connections_status_check', sql`${table.status} IN ('ok', 'error')`),
+  ]
+);
+export type ClientConnection = typeof clientConnections.$inferSelect;
+
+// Núcleo · leads de un cliente (envíos de formularios). Solo lo necesario para medir: ni nombre, ni correo, ni teléfono, ni
+// id del contacto (RGPD, auditoría del 27 nov); URL sin parámetros y los utm_* aparte. Retención 25 meses.
+export const clientLeads = pgTable(
+  'client_leads',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    provider: varchar('provider', { length: 20 }).notNull(),
+    externalId: varchar('external_id', { length: 100 }).notNull(),
+    formId: varchar('form_id', { length: 100 }),
+    formName: varchar('form_name', { length: 200 }),
+    pageUrl: varchar('page_url', { length: 500 }),
+    referrer: varchar('referrer', { length: 500 }),
+    // organico | pago | directo | social | referido | otros
+    channel: varchar('channel', { length: 10 }).notNull().default('otros'),
+    utm: jsonb('utm').$type<Record<string, string>>().notNull().default({}),
+    hasGclid: boolean('has_gclid').notNull().default(false),
+    submittedAt: timestamp('submitted_at').notNull(),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    unique('client_leads_unique').on(table.tenantId, table.provider, table.externalId),
+    index('client_leads_client_idx').on(table.clientId, table.submittedAt),
+  ]
+);
+export type ClientLead = typeof clientLeads.$inferSelect;
+
+// SEO · panel de IA mensual: preguntas que se hacen a los asistentes (15 como máximo por proyecto).
+export const seoAiQuestions = pgTable(
+  'seo_ai_questions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    question: varchar('question', { length: 300 }).notNull(),
+    questionKey: varchar('question_key', { length: 150 }).notNull(),
+    // plantilla | manual
+    origin: varchar('origin', { length: 10 }).notNull(),
+    // propuesta | activa | quitada
+    status: varchar('status', { length: 10 }).notNull().default('propuesta'),
+    createdBy: varchar('created_by', { length: 120 }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    unique('seo_ai_questions_unique').on(table.projectId, table.questionKey),
+    check('seo_ai_questions_status_check', sql`${table.status} IN ('propuesta', 'activa', 'quitada')`),
+  ]
+);
+
+// SEO · panel de IA: una fila por pregunta, mes, muestra (1-3) y asistente. Clave única = un reintento no paga dos veces.
+export const seoAiChecks = pgTable(
+  'seo_ai_checks',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    questionId: uuid('question_id')
+      .notNull()
+      .references(() => seoAiQuestions.id, { onDelete: 'cascade' }),
+    runMonth: date('run_month').notNull(),
+    sample: smallint('sample').notNull().default(1),
+    assistant: varchar('assistant', { length: 12 }).notNull(),
+    // pendiente | enviando | hecha | fallida
+    status: varchar('status', { length: 10 }).notNull().default('pendiente'),
+    clientCited: boolean('client_cited'),
+    clientNamed: boolean('client_named'),
+    competitors: jsonb('competitors').$type<{ domain: string; name: string; cited: boolean; named: boolean }[]>().notNull().default([]),
+    sources: jsonb('sources').$type<string[]>().notNull().default([]),
+    excerpt: varchar('excerpt', { length: 700 }),
+    costUsd: decimal('cost_usd', { precision: 8, scale: 4 }),
+    error: text('error'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    unique('seo_ai_checks_unique').on(table.questionId, table.runMonth, table.sample, table.assistant),
+    index('seo_ai_checks_project_idx').on(table.projectId, table.runMonth),
+    check('seo_ai_checks_status_check', sql`${table.status} IN ('pendiente', 'enviando', 'hecha', 'fallida')`),
+    check('seo_ai_checks_assistant_check', sql`${table.assistant} IN ('chatgpt', 'gemini', 'google_ai', 'perplexity')`),
+  ]
+);
+export type SeoAiCheck = typeof seoAiChecks.$inferSelect;
+
+// SEO · Autoridad: foto mensual de enlaces del cliente y de su competencia confirmada; los huecos van en la fila del cliente.
+export const seoLinkSnapshots = pgTable(
+  'seo_link_snapshots',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    domain: varchar('domain', { length: 255 }).notNull(),
+    isClient: boolean('is_client').notNull().default(false),
+    month: date('month').notNull(),
+    summary: jsonb('summary').$type<Record<string, unknown>>().notNull().default({}),
+    gap: jsonb('gap').$type<{ domain: string; rank: number | null; linksTo: string[] }[]>().notNull().default([]),
+    newLost: jsonb('new_lost').$type<{ month: string; newDomains: number; lostDomains: number }[]>().notNull().default([]),
+    costUsd: decimal('cost_usd', { precision: 8, scale: 4 }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [unique('seo_link_snapshots_unique').on(table.projectId, table.domain, table.month)]
+);
+export type SeoLinkSnapshot = typeof seoLinkSnapshots.$inferSelect;

@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { listConnections } from '@/lib/core/connections';
 import { and, desc, eq, inArray, ne, or, sql } from 'drizzle-orm';
 import { checkPermission, requirePagePermission } from '@/lib/auth/permissions';
 import { db } from '@/lib/db/drizzle';
@@ -85,6 +86,7 @@ export default async function FichaClientePage({ params }: { params: Promise<{ i
     competitors: sheet.competitors.map((x) => ({ id: x.id, name: x.name, domain: x.domain ?? '', notes: x.notes ?? '', source: x.source })),
     completeness: comp,
     integrations: { google, dataforseo },
+    connections: await listConnections(user.tenantId, id).catch(() => []),
     ops: {
       clickupOptionId: ops.clickupOptionId ?? '',
       clickupOptionLabel: ops.clickupOptionLabel ?? '',

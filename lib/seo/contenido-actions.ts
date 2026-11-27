@@ -7,7 +7,7 @@ import { db } from '@/lib/db/drizzle';
 import { projects } from '@/lib/db/schema';
 import { requirePermission } from '@/lib/auth/permissions';
 import { publicError } from '@/lib/errors';
-import { BriefError, briefToTask, markBriefUsed, requestBrief, retryBrief, setBriefStatus } from '@/lib/seo/contenido/briefs';
+import { BriefError, briefToTask, briefToWordPress, markBriefUsed, requestBrief, retryBrief, setBriefStatus } from '@/lib/seo/contenido/briefs';
 
 type Ok = { ok: true; message?: string } | { ok: false; error: string };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -80,5 +80,19 @@ export async function briefToTaskAction(projectId: string, id: string): Promise<
   } catch (e) {
     if (e instanceof BriefError) return { ok: false, error: e.userMessage };
     return { ok: false, error: publicError(e, 'No se pudo crear el encargo') };
+  }
+}
+
+/** Parte 9b: crear el borrador en el WordPress del cliente (entrada nueva, nunca publica). */
+export async function briefToWordPressAction(projectId: string, id: string): Promise<Ok & { editUrl?: string }> {
+  try {
+    const user = await requirePermission('edit');
+    if (!(await ownProject(user.tenantId, projectId)) || !UUID.test(id)) return { ok: false, error: 'Brief no encontrado' };
+    const r = await briefToWordPress(user.tenantId, projectId, id);
+    revalidatePath(PATH(projectId));
+    return { ok: true, message: r.created ? 'Borrador creado en WordPress. Ábrelo para escribirlo; publicarlo lo hace una persona.' : 'Ya tenía su borrador en WordPress.', editUrl: r.editUrl };
+  } catch (e) {
+    if (e instanceof BriefError) return { ok: false, error: e.userMessage };
+    return { ok: false, error: publicError(e, 'No se pudo crear el borrador') };
   }
 }

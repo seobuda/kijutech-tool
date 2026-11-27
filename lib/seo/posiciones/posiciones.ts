@@ -32,7 +32,7 @@ const EXPIRE_H = 48;
 type Outcome = { status: 'ok' | 'aviso' | 'omitido'; summary: string };
 
 /** Lo confirmado del expediente (o de la ficha): servicios, zona e idiomas. La IA sin confirmar no cuenta. */
-async function confirmedFacts(projectId: string) {
+export async function confirmedFacts(projectId: string) {
   const rows = await db.select({ field: seoDossierFacts.field, value: seoDossierFacts.value, source: seoDossierFacts.source, status: seoDossierFacts.status, confidence: seoDossierFacts.confidence }).from(seoDossierFacts).where(eq(seoDossierFacts.projectId, projectId));
   const best = (field: string) =>
     rows
@@ -48,7 +48,7 @@ async function confirmedFacts(projectId: string) {
   };
 }
 
-async function projectBasics(tenantId: string, projectId: string) {
+export async function projectBasics(tenantId: string, projectId: string) {
   const [p] = await db
     .select({ id: projects.id, clientName: clients.name, aliases: clients.aliases })
     .from(projects)

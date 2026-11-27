@@ -5,7 +5,7 @@ import 'server-only';
 // como mucho 5 webs de la competencia legibles (respetando su robots.txt), su contenido principal (sin menú ni pie),
 // subtemas, preguntas, palabras recomendadas, datos del cliente, enlazado interno sugerido y la nota de la página de
 // destino. Sin IA. Al marcarlo «usado» con la URL publicada se registra la intervención (la parte 8 la mide).
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { crawlPages, crawlRuns, projects, seoBriefs, seoDemand, seoDossierFacts, seoTopicQueries, seoTopics } from '@/lib/db/schema';
 import { serpSource, workSource } from '@/lib/core/capabilities';
@@ -16,6 +16,9 @@ import { isAllowed, parseRobots } from '@/lib/core/robots';
 import { enqueueJob, registerJobKind, type JobContext } from '@/lib/core/jobs';
 import { gscPropertiesForProject } from '@/lib/core/gsc';
 import { markInterventionDone, recordIntervention } from '@/lib/core/interventions';
+import { ConnectionError, createWordPressDraft, wordPressPostState } from '@/lib/core/connections';
+import { draftHtml } from '@/lib/core/connections-rules';
+import { registerScheduled } from '@/lib/core/capabilities';
 import { host } from '@/lib/seo/expediente/rules';
 import { canSpend, recordDataSpend } from '@/lib/seo/gasto';
 import { projectWebUrl } from '@/lib/seo/salud/audit';
@@ -246,6 +249,78 @@ export async function markBriefUsed(tenantId: string, projectId: string, id: str
   return Boolean(p?.clientId);
 }
 
+/**
+ * Parte 9b (27 nov 2026; docs/DISENO-SEO-CIERRE.md §C): crea en el WordPress del cliente una entrada NUEVA en borrador con
+ * el esqueleto del brief (todo escapado). Idempotente: se reclama el brief (wp_post_id 0 = creando) antes de llamar, así
+ * un doble clic no crea dos borradores; si falla, se libera. Publicar lo hace siempre una persona en WordPress.
+ */
+export async function briefToWordPress(tenantId: string, projectId: string, id: string): Promise<{ editUrl: string; created: boolean }> {
+  const [b] = await db.select().from(seoBriefs).where(and(eq(seoBriefs.id, id), eq(seoBriefs.projectId, projectId), eq(seoBriefs.tenantId, tenantId))).limit(1);
+  if (!b || !['borrador', 'listo'].includes(b.status)) throw new BriefError('Brief no encontrado o aún preparándose.');
+  if (b.wpPostId && b.wpEditUrl) return { editUrl: b.wpEditUrl, created: false };
+  const [p] = await db.select({ clientId: projects.clientId }).from(projects).where(eq(projects.id, projectId)).limit(1);
+  if (!p?.clientId) throw new BriefError('El proyecto no tiene cliente.');
+  // Un reclamo (0) de más de 10 min se dio por perdido (el proceso murió antes de llamar a WordPress): se puede reclamar.
+  const claimed = await db
+    .update(seoBriefs)
+    .set({ wpPostId: 0, updatedAt: new Date() })
+    .where(and(eq(seoBriefs.id, id), sql`(${seoBriefs.wpPostId} IS NULL OR (${seoBriefs.wpPostId} = 0 AND ${seoBriefs.updatedAt} < now() - interval '10 minutes'))`))
+    .returning({ id: seoBriefs.id });
+  if (!claimed.length) throw new BriefError('Ya se está creando el borrador: espera unos segundos y recarga.');
+  let created: { postId: number; editUrl: string };
+  try {
+    const d = (b.data ?? {}) as BriefData;
+    const home = await projectWebUrl(tenantId, projectId);
+    const linkFrom = (d.links ?? []).map((l) => l.from).filter(Boolean).slice(0, 8);
+    const html = draftHtml(
+      {
+        keyword: b.keyword,
+        subtopics: (d.subtopics ?? []).map((x) => x.label),
+        questions: d.questions ?? [],
+        links: [],
+        notes: [d.words ? `Extensión orientativa: unas ${d.words} palabras.` : '', linkFrom.length ? `Al publicarla, enlázala desde: ${linkFrom.join(', ')}.` : ''].filter(Boolean).join(' ') || null
+      },
+      host(home)
+    );
+    const title = b.keyword.charAt(0).toUpperCase() + b.keyword.slice(1);
+    created = await createWordPressDraft(tenantId, p.clientId, { title, html });
+  } catch (e) {
+    await db.update(seoBriefs).set({ wpPostId: null, updatedAt: new Date() }).where(and(eq(seoBriefs.id, id), eq(seoBriefs.wpPostId, 0)));
+    if (e instanceof ConnectionError) throw new BriefError(e.userMessage);
+    throw e;
+  }
+  // Ya existe en WordPress: guardarlo aparte (si esto fallara, el reclamo NO se libera, para no crear un segundo borrador).
+  await db.update(seoBriefs).set({ wpPostId: created.postId, wpEditUrl: created.editUrl, status: 'listo', updatedAt: new Date() }).where(eq(seoBriefs.id, id));
+  return { editUrl: created.editUrl, created: true };
+}
+
+/** Cierre del ciclo (auditoría): una vez al día, los borradores ya publicados pasan a «usado» con su URL (y se mide). */
+export async function checkWordPressDrafts(tenantId: string): Promise<{ checked: number; published: number }> {
+  const rows = await db
+    .select({ id: seoBriefs.id, projectId: seoBriefs.projectId, postId: seoBriefs.wpPostId, clientId: projects.clientId })
+    .from(seoBriefs)
+    .innerJoin(projects, eq(projects.id, seoBriefs.projectId))
+    .where(and(eq(seoBriefs.tenantId, tenantId), gt(seoBriefs.wpPostId, 0), inArray(seoBriefs.status, ['borrador', 'listo'])))
+    .limit(100);
+  let published = 0;
+  for (const r of rows) {
+    if (!r.clientId || !r.postId) continue;
+    const st = await wordPressPostState(tenantId, r.clientId, r.postId).catch(() => null);
+    if (!st) continue;
+    if (st.status === 'borrado') {
+      await db.update(seoBriefs).set({ wpPostId: null, wpEditUrl: null, updatedAt: new Date() }).where(eq(seoBriefs.id, r.id));
+    } else if (st.url) {
+      try {
+        await markBriefUsed(tenantId, r.projectId, r.id, st.url, 'WordPress (publicado)');
+        published++;
+      } catch (e) {
+        console.error('[seo] borrador publicado:', e instanceof Error ? e.message : e);
+      }
+    }
+  }
+  return { checked: rows.length, published };
+}
+
 /** Volver a preparar un brief fallido. */
 export async function retryBrief(tenantId: string, projectId: string, id: string): Promise<boolean> {
   const r = await db.update(seoBriefs).set({ status: 'preparando', error: null, updatedAt: new Date() }).where(and(eq(seoBriefs.id, id), eq(seoBriefs.projectId, projectId), eq(seoBriefs.tenantId, tenantId), eq(seoBriefs.status, 'fallido'))).returning({ id: seoBriefs.id });
@@ -312,12 +387,12 @@ _Brief SEO del proyecto ${p.name}. Los subtemas y preguntas salen de webs de la 
   return { ok: true, message: 'Encargo creado con el brief dentro.', url: r.url };
 }
 
-export type BriefView = { id: string; keyword: string; status: string; targetUrl: string | null; publishedUrl: string | null; error: string | null; data: Record<string, unknown>; createdAt: string; createdBy: string | null };
+export type BriefView = { id: string; keyword: string; status: string; targetUrl: string | null; publishedUrl: string | null; error: string | null; data: Record<string, unknown>; createdAt: string; createdBy: string | null; wpEditUrl: string | null };
 export async function listBriefs(tenantId: string, projectId: string): Promise<BriefView[]> {
   // Un brief «preparando» de hace más de 15 min se quedó a medias (tiempo agotado o reinicio): pasa a fallido.
   await db.update(seoBriefs).set({ status: 'fallido', error: 'Se cortó a medias: vuelve a intentarlo.', updatedAt: new Date() }).where(and(eq(seoBriefs.projectId, projectId), eq(seoBriefs.status, 'preparando'), sql`${seoBriefs.updatedAt} < now() - interval '15 minutes'`));
   const rows = await db.select().from(seoBriefs).where(and(eq(seoBriefs.tenantId, tenantId), eq(seoBriefs.projectId, projectId))).orderBy(desc(seoBriefs.createdAt)).limit(100);
-  return rows.map((r) => ({ id: r.id, keyword: r.keyword, status: r.status, targetUrl: r.targetUrl, publishedUrl: r.publishedUrl, error: r.error, data: r.data ?? {}, createdAt: r.createdAt.toISOString(), createdBy: r.createdBy }));
+  return rows.map((r) => ({ id: r.id, keyword: r.keyword, status: r.status, targetUrl: r.targetUrl, publishedUrl: r.publishedUrl, error: r.error, data: r.data ?? {}, createdAt: r.createdAt.toISOString(), createdBy: r.createdBy, wpEditUrl: r.wpPostId ? r.wpEditUrl : null }));
 }
 
 let registered = false;
@@ -337,5 +412,14 @@ export function registerBriefJobs(): void {
         throw e;
       }
     }
+  });
+  // Parte 9b: borradores de WordPress publicados → brief «usado» (una vez al día por cuenta).
+  const G = globalThis as unknown as { __kijuWpCheck?: Map<string, string> };
+  registerScheduled('seo: borradores de WordPress publicados', async (tenantId) => {
+    const day = new Date().toISOString().slice(0, 10);
+    const seen = (G.__kijuWpCheck ??= new Map());
+    if (seen.get(tenantId) === day) return;
+    seen.set(tenantId, day);
+    await checkWordPressDrafts(tenantId);
   });
 }

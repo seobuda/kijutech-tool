@@ -68,6 +68,8 @@ export type FichaData = {
   competitors: CompetitorView[];
   completeness: { pct: number; missing: MissingItem[] };
   integrations: { google: boolean; dataforseo: boolean };
+  /** Conexiones con WordPress y GoHighLevel (27 nov 2026), sin secretos. */
+  connections: import('@/lib/core/connections').ConnectionView[];
   ops: OpsView & { clickupOptionLabel: string };
   alert: AlertView;
   levels: Level[];
@@ -331,7 +333,7 @@ export function FichaView({ data }: { data: FichaData }) {
         {tab === 'resumen' && <Resumen data={data} go={go} />}
         {tab === 'empresa' && <EmpresaTab client={c} contract={data.contract} />}
         {tab === 'contactos' && <ContactosTab clientId={c.id} contacts={data.contacts} locations={data.locations} isAdmin={data.isAdmin} comms={data.comms} />}
-        {tab === 'webs' && <WebsTab clientId={c.id} assets={data.assets} integrations={data.integrations} />}
+        {tab === 'webs' && <WebsTab clientId={c.id} assets={data.assets} integrations={data.integrations} connections={data.connections} isAdmin={data.isAdmin} />}
         {tab === 'competencia' && <CompetenciaTab clientId={c.id} competitors={data.competitors} />}
         {tab === 'encargos' && <EncargosTab clientId={c.id} requests={data.work.requests} linked={Boolean(data.ops.clickupOptionId)} />}
         {tab === 'seo' && <SeoTab projects={data.work.projects} clientName={c.name} />}

@@ -200,6 +200,9 @@ const CORE_TABLES = new Set([
   // Preguntas al cliente (25 nov 2026, migración 0064, aprobado por Enric): banco por servicio, preguntas de cada cliente,
   // cuestionario en línea y textos de los correos. Comunes a todos los departamentos (SEO, Ads, Web…).
   'client_question_templates', 'client_questions', 'client_questionnaires', 'client_comms_templates',
+  // Conexiones del cliente y sus leads (27 nov 2026, migración 0075; Enric eligió «WordPress en el núcleo»): WordPress
+  // para borradores y GoHighLevel para leads; los usarán también Webs y Ads.
+  'client_connections', 'client_leads',
   // Restos de la plantilla, pendientes de borrar con una migración (ESTADO §16).
   'teams', 'team_members', 'invitations', 'activity_logs'
 ]);

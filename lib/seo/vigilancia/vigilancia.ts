@@ -1,4 +1,6 @@
 import 'server-only';
+import { runAiPanel } from '@/lib/seo/panel-ia/panel';
+import { AUTORIDAD_KEY, runAutoridad } from '@/lib/seo/autoridad/autoridad';
 
 // SEO · Vigilancia continua por proyecto (parte 0, 26 nov 2026; docs/DISENO-SEO-PARTE0.md). Lo que antes hacía
 // Estrategia por cliente (vigilancia crítica, salud semanal, velocidad y detectores), ahora por proyecto, en el
@@ -390,6 +392,10 @@ export function registerVigilancia(): void {
   run('seo.geogrid', (t, p) => runGeogrid(t, p), 300);
   run('seo.nap', runNap, 180);
   run('seo.demanda', runDemanda, 600);
+  run('seo.panel_ia', runAiPanel, 120);
+  // Parte 10: Autoridad. No entra en el alta automática (SEO_PROCESSES): se enciende por proyecto desde su pestaña.
+  registerJobKind({ kind: AUTORIDAD_KEY, timeoutS: 600, maxConcurrent: 1, maxAttempts: 1, run: async (ctx, payload) => runAutoridad(ctx.tenantId, String(payload.projectId ?? '')) });
+  registerProcess({ key: AUTORIDAD_KEY, scopeType: 'proyecto', label: 'SEO: Autoridad (enlaces del cliente y de su competencia)', defaultEveryMinutes: 30 * 1440, enqueue: (_t, scopeId) => ({ kind: AUTORIDAD_KEY, payload: { projectId: scopeId }, priority: 8 }) });
   // Parte 6 (6b): páginas de dinero. Registro propio (necesita el id del trabajo para el lote del registro de cambios).
   registerJobKind({ kind: 'seo.dinero', timeoutS: 600, maxConcurrent: 2, maxAttempts: 2, run: async (ctx, payload) => runDinero(ctx.tenantId, String(payload.projectId ?? ''), `dinero:${ctx.job.id}`, false, () => topPages(ctx.tenantId, String(payload.projectId ?? ''), 5), ctx.heartbeat) });
   registerProcess({ key: 'seo.dinero', scopeType: 'proyecto', label: `SEO: ${SEO_PROCESSES['seo.dinero'].label}`, defaultEveryMinutes: SEO_PROCESSES['seo.dinero'].every, enqueue: (_t, scopeId) => ({ kind: 'seo.dinero', payload: { projectId: scopeId }, priority: 6 }) });

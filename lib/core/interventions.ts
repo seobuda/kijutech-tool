@@ -115,7 +115,7 @@ export async function syncInterventionStatus(tenantId: string): Promise<{ checke
   let done = 0;
   for (let i = 0; i < open.length; i += 500) {
     const chunk = open.slice(i, i + 500);
-    const status = await ws.requestStatus(tenantId, chunk.map((r) => r.requestRef!));
+    const status = await ws.requestStatus(tenantId, chunk.map((r) => r.requestRef!), { checkDeleted: true });
     const byRef = new Map(status.map((s) => [s.ref, s]));
     for (const r of chunk) {
       const s = byRef.get(r.requestRef!);
