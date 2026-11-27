@@ -19,7 +19,7 @@ import { confirmedFacts } from '@/lib/seo/posiciones/posiciones';
 import { approvePlanItem } from '@/lib/seo/plan/plan';
 import { techniqueRecipe } from '@/lib/seo/plan/rules';
 import { briefToTask, requestBrief } from '@/lib/seo/contenido/briefs';
-import { eligibility, expandSlots, PLAYBOOKS, validateStrategy, weeksOf, type EligibilityContext, type LineInput, type PlaybookKey } from '@/lib/seo/estrategia/playbooks';
+import { eligibility, expandSlots, mondayOf, PLAYBOOKS, validateStrategy, weeksOf, type EligibilityContext, type LineInput, type PlaybookKey } from '@/lib/seo/estrategia/playbooks';
 
 export class CycleError extends Error {
   constructor(public userMessage: string) {
@@ -87,7 +87,7 @@ export async function createCycle(
   const { eligible } = eligibility(ctx);
   const v = validateStrategy(input.lines, { eligible, months, monthlyHours: ctx.monthlyHours, reservePct, services: ctx.services });
   if (!v.ok) throw new CycleError(v.errors.join(' '));
-  const start = /^\d{4}-\d{2}-\d{2}$/.test(input.startsOn) ? new Date(`${input.startsOn}T00:00:00Z`) : new Date();
+  const start = mondayOf(/^\d{4}-\d{2}-\d{2}$/.test(input.startsOn) ? new Date(`${input.startsOn}T00:00:00Z`) : new Date());
   const end = addDays(start, weeksOf(months) * 7 - 1);
   return db.transaction(async (tx) => {
     const [active] = await tx.select({ id: seoCycles.id }).from(seoCycles).where(and(eq(seoCycles.projectId, projectId), eq(seoCycles.status, 'activo'))).limit(1);
@@ -220,15 +220,18 @@ export async function materialize(tenantId: string, projectId: string, by = 'est
       EXISTS (SELECT 1 FROM seo_briefs b WHERE b.id = s.brief_id AND b.status = 'usado'))
     RETURNING s.id`)) as unknown as { id: string }[];
   out.hechos = done.length;
-  // 4) Encargar lo aprobado hasta 2 semanas vista (como mucho MAX_PER_RUN), y los briefs que ya están listos.
+  // 4) Encargar lo aprobado hasta 2 semanas vista y los briefs que ya están listos. El cupo (MAX_PER_RUN) cuenta acciones
+  // con efecto (briefs pedidos y encargos), no los huecos que solo esperan su brief.
   const lines = new Map((await db.select().from(seoCycleLines).where(eq(seoCycleLines.cycleId, cycle.id))).map((l) => [l.id, l]));
   const due = await db
     .select()
     .from(seoCycleSlots)
     .where(and(eq(seoCycleSlots.cycleId, cycle.id), eq(seoCycleSlots.status, 'aprobado'), lte(seoCycleSlots.dueWeek, horizon)))
     .orderBy(asc(seoCycleSlots.dueWeek), asc(seoCycleSlots.n))
-    .limit(MAX_PER_RUN);
+    .limit(200);
+  let actions = 0;
   for (const s of due) {
+    if (actions >= MAX_PER_RUN) break;
     const line = lines.get(s.lineId);
     if (!line || line.status !== 'activa') continue;
     const pb = PLAYBOOKS[line.playbook as PlaybookKey];
@@ -238,6 +241,14 @@ export async function materialize(tenantId: string, projectId: string, by = 'est
       if (CONTENT.includes(pb.key)) {
         // Contenido: un solo camino, el del brief. Primero se prepara; cuando está listo, se encarga al redactor.
         if (!s.briefId) {
+          // Reserva atómica (revisor): dos pasadas a la vez no piden dos briefs (dos SERP de pago) para el mismo hueco.
+          const claimed = await db
+            .update(seoCycleSlots)
+            .set({ interventionSource: 'reservando', updatedAt: new Date() })
+            .where(and(eq(seoCycleSlots.id, s.id), sql`${seoCycleSlots.briefId} IS NULL`, sql`(${seoCycleSlots.interventionSource} IS NULL OR ${seoCycleSlots.updatedAt} < now() - interval '30 minutes')`))
+            .returning({ id: seoCycleSlots.id });
+          if (!claimed.length) continue;
+          actions++;
           const pick = await pickContent(tenantId, projectId, pb.key);
           if (!pick) {
             await db.update(seoCycleSlots).set({ status: 'saltado', skipReason: 'No quedan temas con demanda sin trabajar', updatedAt: new Date() }).where(eq(seoCycleSlots.id, s.id));
@@ -246,13 +257,25 @@ export async function materialize(tenantId: string, projectId: string, by = 'est
           }
           const briefId = await requestBrief(tenantId, projectId, { keyword: pick.keyword, topicKey: pick.topicKey, targetUrl: pick.targetUrl }, by);
           await db.update(seoBriefs).set({ cycleLineId: line.id }).where(eq(seoBriefs.id, briefId));
-          await db.update(seoCycleSlots).set({ briefId, keyword: pick.keyword.slice(0, 200), topicKey: pick.topicKey, targetUrl: pick.targetUrl, findingIds: pick.findingIds, title: `${pb.label}: ${pick.keyword}`.slice(0, 300), updatedAt: new Date() }).where(eq(seoCycleSlots.id, s.id));
+          await db.update(seoCycleSlots).set({ briefId, interventionSource: null, keyword: pick.keyword.slice(0, 200), topicKey: pick.topicKey, targetUrl: pick.targetUrl, findingIds: pick.findingIds, title: `${pb.label}: ${pick.keyword}`.slice(0, 300), updatedAt: new Date() }).where(eq(seoCycleSlots.id, s.id));
           continue;
         }
-        const [b] = await db.select({ status: seoBriefs.status, data: seoBriefs.data }).from(seoBriefs).where(eq(seoBriefs.id, s.briefId)).limit(1);
-        if (!b || !['borrador', 'listo'].includes(b.status)) continue; // aún preparándose
-        const r = await briefToTask(tenantId, projectId, s.briefId, by);
-        if (!r.ok) throw new Error(r.message);
+        const [b] = await db.select({ status: seoBriefs.status, data: seoBriefs.data, updatedAt: seoBriefs.updatedAt }).from(seoBriefs).where(eq(seoBriefs.id, s.briefId)).limit(1);
+        // Brief fallido o atascado más de 24 h: el hueco se salta con su motivo (no se queda esperando para siempre).
+        if (!b || b.status === 'fallido' || b.status === 'archivado' || (b.status === 'preparando' && Date.now() - b.updatedAt.getTime() > 86_400_000)) {
+          await db.update(seoCycleSlots).set({ status: 'saltado', skipReason: 'No se pudo preparar el brief', updatedAt: new Date() }).where(eq(seoCycleSlots.id, s.id));
+          out.saltados++;
+          continue;
+        }
+        if (!['borrador', 'listo'].includes(b.status)) continue; // aún preparándose
+        const already = (b.data as { request?: { ref?: string | null } }).request?.ref;
+        if (!already) {
+          actions++;
+          const r = await briefToTask(tenantId, projectId, s.briefId, by);
+          if (!r.ok) throw new Error(r.message);
+          const [after] = await db.select({ data: seoBriefs.data }).from(seoBriefs).where(eq(seoBriefs.id, s.briefId)).limit(1);
+          if (!(after?.data as { request?: { ref?: string | null } } | undefined)?.request?.ref) continue; // otro proceso lo está encargando
+        }
         await db.update(seoCycleSlots).set({ status: 'encargado', interventionSource: 'seo.brief', interventionRef: s.briefId, updatedAt: new Date() }).where(eq(seoCycleSlots.id, s.id));
         out.encargados++;
         continue;
@@ -286,13 +309,23 @@ export async function materialize(tenantId: string, projectId: string, by = 'est
       const itemId = item?.id ?? (await db.select({ id: seoPlanItems.id }).from(seoPlanItems).where(and(eq(seoPlanItems.projectId, projectId), eq(seoPlanItems.planKey, `ciclo:${s.id}`))).limit(1))[0]?.id;
       if (!itemId) continue;
       await db.update(seoCycleSlots).set({ planItemId: itemId, findingIds: f ? [f.id] : [], title, updatedAt: new Date() }).where(eq(seoCycleSlots.id, s.id));
-      const r = await approvePlanItem(tenantId, projectId, itemId, by, { dueDate, note: `Estrategia «${cycle.name}» · ${pb.label}` });
-      if (!r.ok) throw new Error(r.message);
+      const [cur] = await db.select({ status: seoPlanItems.status, ref: seoPlanItems.requestRef }).from(seoPlanItems).where(eq(seoPlanItems.id, itemId)).limit(1);
+      if (!(cur?.status === 'aprobada' && cur.ref)) {
+        actions++;
+        const r = await approvePlanItem(tenantId, projectId, itemId, by, { dueDate, note: `Estrategia «${cycle.name}» · ${pb.label}` });
+        if (!r.ok) throw new Error(r.message);
+      }
       await db.update(seoCycleSlots).set({ status: 'encargado', interventionSource: 'seo.plan', interventionRef: itemId, updatedAt: new Date() }).where(eq(seoCycleSlots.id, s.id));
       out.encargados++;
     } catch (e) {
       out.errores.push(`${s.title}: ${e instanceof Error ? e.message.slice(0, 160) : 'error'}`);
     }
+  }
+  // 5) Cierre automático: pasado el final y sin nada por aprobar ni aprobado sin encargar, el ciclo queda «cerrado»
+  // (la lectura de resultados llega en read_due_on).
+  if (ymd(today) > cycle.endsOn) {
+    const [left] = await db.select({ n: sql<number>`count(*)::int` }).from(seoCycleSlots).where(and(eq(seoCycleSlots.cycleId, cycle.id), inArray(seoCycleSlots.status, ['previsto', 'aprobado'])));
+    if (Number(left?.n ?? 0) === 0) await db.update(seoCycles).set({ status: 'cerrado', closedAt: new Date(), updatedAt: new Date() }).where(and(eq(seoCycles.id, cycle.id), eq(seoCycles.status, 'activo')));
   }
   return out;
 }
@@ -368,18 +401,6 @@ export async function getCycleView(tenantId: string, projectId: string): Promise
     },
     history
   };
-}
-
-/** Horas del ciclo activo previstas en el mes de hoy (para la bolsa reactiva del plan: G1 de la auditoría). */
-export async function cycleHoursThisMonth(projectId: string): Promise<{ active: boolean; hours: number; reservePct: number }> {
-  const [c] = await db.select({ id: seoCycles.id, reservePct: seoCycles.reservePct }).from(seoCycles).where(and(eq(seoCycles.projectId, projectId), eq(seoCycles.status, 'activo'))).limit(1);
-  if (!c) return { active: false, hours: 0, reservePct: 100 };
-  const month = ymd(new Date()).slice(0, 7);
-  const [r] = await db
-    .select({ h: sql<string>`coalesce(sum(${seoCycleSlots.estHours}), 0)` })
-    .from(seoCycleSlots)
-    .where(and(eq(seoCycleSlots.cycleId, c.id), ne(seoCycleSlots.status, 'saltado'), sql`to_char(${seoCycleSlots.dueWeek}, 'YYYY-MM') = ${month}`));
-  return { active: true, hours: Number(r?.h ?? 0), reservePct: c.reservePct };
 }
 
 /** Pasada diaria de todos los proyectos con ciclo activo de la cuenta. */

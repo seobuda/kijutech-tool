@@ -10,9 +10,9 @@ import 'server-only';
 //
 // Los análisis van en cola (est_analyses): el planificador solo los pide y un trabajador aparte los hace de uno en
 // uno, para que una llamada larga a Opus no frene el resto de procesos.
-import { and, asc, desc, eq, gte, inArray, lt, ne, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { aiJobs, estAnalyses, estSuggestions, projects, type EstAnalysis, type EstSuggestion } from '@/lib/db/schema';
+import { aiJobs, estAnalyses, estSuggestions, type EstAnalysis, type EstSuggestion } from '@/lib/db/schema';
 import { externalEvents, kpiProvider, projectDossierSections, telegramOutbound, workSource } from '@/lib/core/capabilities';
 import { getClientSheet, sheetText } from '@/lib/core/clients';
 import { recordIntervention } from '@/lib/core/interventions';
@@ -430,12 +430,10 @@ export async function executeAnalysis(a: EstAnalysis, now = new Date()): Promise
     const seen: string[] = [...dossier.existingTitles];
     const valid = [];
     // Un solo cerebro (docs/PLAN-SEO-CICLOS.md, decisión de Enric del 27 nov 2026): si el cliente tiene un proyecto SEO
-    // activo, el trabajo SEO lo planifica su estrategia por ciclos; aquí no se proponen esas categorías.
-    const [seoProject] = await db
-      .select({ id: projects.id })
-      .from(projects)
-      .where(and(eq(projects.tenantId, a.tenantId), eq(projects.clientId, a.clientId), eq(projects.service, 'seo'), ne(projects.status, 'archived')))
-      .limit(1);
+    // activo CON estrategia activa, el trabajo SEO lo planifica esa estrategia; aquí no se proponen esas categorías.
+    const [seoProject] = (await db.execute(sql`
+      SELECT p.id FROM projects p JOIN seo_cycles c ON c.project_id = p.id AND c.status = 'activo'
+      WHERE p.tenant_id = ${a.tenantId} AND p.client_id = ${a.clientId} AND p.service = 'seo' AND p.status <> 'archived' LIMIT 1`)) as unknown as { id: string }[];
     const SEO_CATEGORIES = new Set(['contenido', 'onpage', 'tecnico', 'enlaces', 'gbp']);
     for (const p of out.proposals) {
       if (seoProject && SEO_CATEGORIES.has(p.category)) {
