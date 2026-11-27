@@ -83,3 +83,60 @@
 
 ## Auditoría independiente
 _(pendiente)_
+
+**Hecha** por un subagente Opus 5.5 con esfuerzo alto. **Veredicto:** la 9a vale con cambios. La 9b (WordPress) tiene dos fallos graves y una decisión de arquitectura pendiente.
+
+**Graves (9b):**
+1. **Redirecciones:** `fetchPublic` reenvía `Authorization` en cada redirección, así que la contraseña podría llegar a otro dominio.
+2. **Páginas publicadas:** en WordPress, un `POST` sobre una página publicada la cambia en vivo; no existe un «borrador de revisión» de serie.
+3. **Regla del núcleo:** `client_assets` dice «NUNCA contraseñas». Además, escribir en la web del cliente roza la línea roja 2. **Lo decide Enric.**
+
+**Importantes:**
+- WordPress debería ir en el núcleo (Webs y Ads también publicarán), con un usuario Colaborador y nunca administrador.
+- Los H2/H3 de las webs de la competencia llevan menú, pie y barra lateral: hay que quedarse solo con el contenido principal, y lo mismo para contar palabras.
+- **Subtemas:** el Jaccard tiene que hacerse sin las palabras de la búsqueda.
+- **Nota:**
+  - las palabras solo restan por debajo del 50 % de la mediana;
+  - un subtema cuenta si aparece en el texto;
+  - se muestra lo que falta.
+- **Enlazado:**
+  - los enlaces de plantilla no cuentan como «ya enlaza»;
+  - quitar la zona, las páginas legales, de etiqueta y de paginación;
+  - variar el texto del enlace.
+- **Contenido que pierde tráfico:**
+  - calcularlo siempre (que no se cierre al haber `page_drop`);
+  - sin el año anterior, como info;
+  - separar las causas: posición, CTR, demanda o redirección.
+- **Para el equipo:**
+  - copiar el brief con formato;
+  - al marcarlo «usado» con la URL publicada, registrar la intervención para que la parte 8 la mida.
+- **Menores:**
+  - las descargas, como trabajo en cola y respetando robots;
+  - las PAA no están guardadas;
+  - con pocas webs legibles, decirlo.
+
+## Decisión final, rehecha
+- **9b (WordPress): NO se construye.** Queda en `docs/PENDIENTES-ENRIC.md` con las condiciones de la auditoría:
+  - en el núcleo;
+  - usuario Colaborador;
+  - sin redirecciones con credenciales;
+  - solo entradas nuevas en borrador;
+  - la regla de `client_assets` decidida por Enric.
+- **9a** (migración 0074, solo `seo_briefs`):
+  - **Núcleo:** `extractMain(html, url)` en `crawl-extract.ts`, aditivo. Devuelve los H2/H3, las palabras y el texto del contenido principal, sin `header`, `nav`, `footer`, `aside`, `form` ni bloques de menú, barra lateral, cookies o widgets.
+  - **Brief como trabajo en cola** (`seo.brief.build`):
+    - lee el top 10 guardado (o una SERP en directo con el tope) y como mucho 5 webs legibles, respetando robots;
+    - subtemas en 2 o más webs (Jaccard ≥ 0,5 sin las palabras de la búsqueda);
+    - preguntas, mediana de palabras del contenido principal y datos del cliente;
+    - enlazado sugerido.
+  - **Nota** (si tiene URL de destino): la lista de subtemas que faltan (cubierto = aparece en el texto), las palabras (solo restan por debajo del 50 %) y la búsqueda en el título y el H1.
+  - **Enlazado:** sin enlaces de plantilla (más del 50 % de las páginas), sin páginas legales, de etiqueta, de paginación, sin 200, noindex o con canonical a otra. Tokens del tema sin la zona y texto del enlace variado.
+  - **`seo.content_decay`** en los detectores, en su lista de tipos:
+    - 30 clics o más en los 90 días previos, −30 % en los últimos 90 frente a los anteriores y frente al año anterior si hay datos; sin año anterior, info;
+    - en la evidencia, la causa probable (posición, CTR, demanda o redirección);
+    - se calcula aunque haya `page_drop`.
+  - **Brief:**
+    - estados `borrador`, `listo` y `usado`;
+    - «Copiar como texto»;
+    - «Usado» pide la URL publicada y registra la intervención (núcleo `recordIntervention` + `markInterventionDone`, aditivo), así la parte 8 la mide.
+  - **Pantalla:** Palabras → «Briefs», con botón «Brief» en cada tema e idea.

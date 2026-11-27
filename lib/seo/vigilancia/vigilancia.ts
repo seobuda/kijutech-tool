@@ -32,6 +32,7 @@ import { registerDineroConfirm, runDinero } from '@/lib/seo/cambios/dinero';
 import { purgeChangeLog } from '@/lib/seo/cambios/registro';
 import { runDemanda } from '@/lib/seo/demanda/demanda';
 import { runDiagnostico } from '@/lib/seo/medir/diagnostico';
+import { computeDecay } from '@/lib/seo/contenido/decay';
 import {
   DETECTORES_SOURCE,
   SEO_PROCESSES,
@@ -306,7 +307,16 @@ export async function runDetectores(tenantId: string, projectId: string): Promis
       }
       parts.push(`${inspected} página(s) inspeccionada(s) en Search Console`);
     }
-    await syncFindings(tenantId, projectId, DETECTORES_SOURCE, found, ['seo.page_drop', 'seo.not_indexed']);
+    // Parte 9a: contenido que pierde tráfico (90 días); se calcula siempre, aunque haya «página en caída» (corto plazo).
+    const decay = await computeDecay(prop).catch((e) => {
+      console.error('[seo] detectores: contenido que pierde tráfico:', e instanceof Error ? e.message : e);
+      return null;
+    });
+    if (decay) {
+      found.push(...decay);
+      parts.push(`${decay.length} página(s) perdiendo tráfico a 90 días`);
+    }
+    await syncFindings(tenantId, projectId, DETECTORES_SOURCE, found, decay ? ['seo.page_drop', 'seo.not_indexed', 'seo.content_decay'] : ['seo.page_drop', 'seo.not_indexed']);
     // Parte 6: señales de web hackeada (fuente propia; un fallo aquí no tumba el resto de detectores).
     const h = await runHackeo(tenantId, projectId, prop).catch((e) => {
       console.error('[seo] detectores: hackeo:', e instanceof Error ? e.message : e);

@@ -19,6 +19,7 @@ import { registerPreguntasJobs } from '@/lib/seo/preguntas/preguntas';
 import { registerProjectDossierProvider } from '@/lib/core/capabilities';
 import { seoProjectDossier } from '@/lib/seo/dossier-provider';
 import { registerSeoEvidence } from '@/lib/seo/medir/evidence';
+import { registerBriefJobs } from '@/lib/seo/contenido/briefs';
 
 export function registerSeoCapabilities(): void {
   registerSaludAudit();
@@ -29,6 +30,7 @@ export function registerSeoCapabilities(): void {
   registerPreguntasJobs(); // Hito 2: correo de 3 preguntas y lectura de la respuesta del cliente
   registerSeoWatch();
   registerPuertasJob(); // parte 5c: páginas puerta (texto propio comparado), tras cada auditoría
+  registerBriefJobs(); // parte 9a: briefs de contenido (SERP real y competencia)
   registerSeoEvidence(); // parte 8: fecha real de las intervenciones (registro de cambios) para medir si funcionaron
   registerGeogridJobs(); // parte 5b: recogida del mapa por zonas
   registerLocalJobs(); // parte 5a: confirmación de «ficha cerrada» antes de avisar

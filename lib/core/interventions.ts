@@ -86,6 +86,15 @@ export async function recordIntervention(input: InterventionInput): Promise<Inte
   return row;
 }
 
+/** Hecha sin encargo (p. ej. un brief publicado por el equipo): la fecha la pone quien la registra (SEO parte 9). */
+export async function markInterventionDone(tenantId: string, source: string, sourceRef: string, doneAt: Date): Promise<void> {
+  await db
+    .update(interventions)
+    .set({ status: 'hecha', doneAt, updatedAt: new Date() })
+    .where(and(eq(interventions.tenantId, tenantId), eq(interventions.source, source.slice(0, 40)), eq(interventions.sourceRef, sourceRef.slice(0, 60)), eq(interventions.status, 'prevista')));
+  await ensureScheduleIfMissing(tenantId, 'core.interventions.measure', '', 1440);
+}
+
 /** Se descartó el trabajo antes de hacerse (p. ej. se borró el encargo o se deshizo la aprobación). */
 export async function cancelIntervention(tenantId: string, source: string, sourceRef: string): Promise<void> {
   await db

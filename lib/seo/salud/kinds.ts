@@ -135,6 +135,11 @@ export const GEOGRID_KINDS: SaludKind[] = [
   { kind: 'seo.maps_spam', group: 'local', title: 'Competidor con nombre sospechoso en el mapa', explain: 'Un competidor que sale en el top 3 en muchos puntos tiene un nombre que parece relleno de palabras clave (Google lo prohíbe: el nombre debe ser el real del negocio). Se puede sugerir la edición a Google; si su rótulo real es así, descártalo.', severityDefault: 'info', ruleVersion: 1 }
 ];
 
+/** Parte 9a: contenido que pierde tráfico (fuente de los detectores, «seo.detectores:gsc»; va en VIGILANCIA_KINDS de su lista). */
+export const DECAY_FINDING_KINDS: SaludKind[] = [
+  { kind: 'seo.content_decay', group: 'search_console', title: 'Contenido que pierde tráfico poco a poco', explain: 'Esta página tenía visitas y en los últimos 3 meses ha perdido un 30 % o más (y no es temporada: el año pasado por estas fechas tenía más, si hay datos). En la ficha va la causa probable: si pierde posición, el contenido se ha quedado atrás (actualizarlo con un brief); si pierde CTR con la misma posición, es la SERP (respuesta de IA, anuncios); si baja la demanda, no es culpa de la página.', severityDefault: 'aviso', ruleVersion: 1 }
+];
+
 /** Parte 8: diagnóstico de caídas («seo.vigilancia:diagnostico»). */
 export const DIAG_FINDING_KINDS: SaludKind[] = [
   { kind: 'seo.traffic_drop_diagnosed', group: 'search_console', title: 'Caída de visitas desde Google, con diagnóstico', explain: 'Los clics de las últimas 4 semanas han caído bastante frente a las 4 anteriores (y frente al año pasado, si hay datos). En la ficha están las posibles causas por capas: demanda (temporada), problemas técnicos, indexación, cambios en la web, posiciones y CTR. Revisa primero la primera capa con datos.', severityDefault: 'importante', ruleVersion: 1 }
@@ -166,5 +171,5 @@ export const PUERTAS_KINDS: SaludKind[] = [
   { kind: 'seo.doorway_pages', group: 'contenido', title: 'Páginas puerta: la misma página cambiando la población', explain: 'Hay 3 o más páginas casi idénticas que solo cambian el nombre de la población. Google las considera páginas puerta y puede penalizar la web entera. Mejor una sola página bien hecha, o páginas de zona con contenido propio y útil de cada sitio.', severityDefault: 'importante', ruleVersion: 1 }
 ];
 
-export const SEO_KINDS: SaludKind[] = [...SALUD_KINDS, ...LOCAL_KINDS, ...MAPA_KINDS, ...VIGILANCIA_KINDS, ...EXTERNOS_KINDS, ...POSICIONES_KINDS, ...FICHA_KINDS, ...GEOGRID_KINDS, ...NAP_ANTIGUO_KINDS, ...PUERTAS_KINDS, ...HACKEO_FINDING_KINDS, ...DINERO_FINDING_KINDS, ...DEMANDA_FINDING_KINDS, ...DIAG_FINDING_KINDS];
+export const SEO_KINDS: SaludKind[] = [...SALUD_KINDS, ...LOCAL_KINDS, ...MAPA_KINDS, ...VIGILANCIA_KINDS, ...EXTERNOS_KINDS, ...POSICIONES_KINDS, ...FICHA_KINDS, ...GEOGRID_KINDS, ...NAP_ANTIGUO_KINDS, ...PUERTAS_KINDS, ...HACKEO_FINDING_KINDS, ...DINERO_FINDING_KINDS, ...DEMANDA_FINDING_KINDS, ...DIAG_FINDING_KINDS, ...DECAY_FINDING_KINDS];
 export const SALUD_KIND_BY_KEY = new Map(SEO_KINDS.map((k) => [k.kind, k]));

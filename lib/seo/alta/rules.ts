@@ -6,7 +6,7 @@ import { normText } from '@/lib/seo/expediente/rules';
 export type AltaPage = { url: string; title: string | null; h1: string[]; h2: string[]; anchors: string[]; inlinks: number };
 
 /** Páginas que no describen servicios: legales, blog, etiquetas, autores, carrito, cuenta… */
-const NOT_SERVICE = /\/(aviso-legal|legal|privacidad|privacy|politica|cookies?|terminos|condiciones|blog|noticias|news|tag|etiqueta|category|categoria|author|autor|page|feed|carrito|cart|checkout|mi-cuenta|my-account|wp-json|search|buscar)(\/|$|-)/i;
+export const NOT_SERVICE = /\/(aviso-legal|legal|privacidad|privacy|politica|cookies?|terminos|condiciones|blog|noticias|news|tag|etiqueta|category|categoria|author|autor|page|feed|carrito|cart|checkout|mi-cuenta|my-account|wp-json|search|buscar)(\/|$|-)/i;
 
 /** Las páginas que se enseñan a la IA: las más enlazadas desde la web (el menú), sin legales ni blog; como mucho `max`. */
 export function candidatePages(pages: AltaPage[], max = 120): AltaPage[] {
