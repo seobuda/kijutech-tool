@@ -253,3 +253,37 @@ export function extractPage(html: string, pageUrl: string): ExtractedPage {
     signatures: [...signatures]
   };
 }
+
+// --- Contenido principal (SEO parte 9, 27 nov 2026) -------------------------------------------------------------------
+// Para briefs y notas: los encabezados y el texto SIN menú, cabecera, pie, barra lateral, formularios ni bloques de cookies
+// o widgets (se repiten entre webs y ensucian los subtemas y el recuento de palabras).
+const NOT_MAIN_TAGS = new Set(['header', 'nav', 'footer', 'aside', 'form', 'script', 'style', 'noscript', 'template', 'svg', 'head', 'button', 'select']);
+const NOT_MAIN_ATTR = /(^|[\s_-])(menu|nav|navbar|sidebar|widget|footer|header|cookie|cookies|breadcrumb|share|social|related|comments?|newsletter|popup|modal)([\s_-]|$)/i;
+
+export type MainContent = { h2: string[]; h3: string[]; words: number; text: string };
+export function extractMain(html: string): MainContent {
+  const doc = parse(html.slice(0, 2_000_000)) as unknown as Node;
+  const h2: string[] = [];
+  const h3: string[] = [];
+  const parts: string[] = [];
+  const visit = (n: Node) => {
+    const tag = n.tagName;
+    if (tag) {
+      if (NOT_MAIN_TAGS.has(tag)) return;
+      const cls = `${attr(n, 'class') ?? ''} ${attr(n, 'id') ?? ''} ${attr(n, 'role') ?? ''}`;
+      if (tag !== 'body' && tag !== 'html' && tag !== 'main' && tag !== 'article' && NOT_MAIN_ATTR.test(cls)) return;
+      if (tag === 'h2' && h2.length < 60) {
+        const t = textOf(n).slice(0, 200);
+        if (t) h2.push(t);
+      } else if (tag === 'h3' && h3.length < 80) {
+        const t = textOf(n).slice(0, 200);
+        if (t) h3.push(t);
+      }
+    }
+    if (n.nodeName === '#text' && n.value) parts.push(n.value);
+    for (const c of n.childNodes ?? []) visit(c);
+  };
+  visit(doc);
+  const text = clean(parts.join(' ')).slice(0, 200_000);
+  return { h2, h3, words: text ? text.split(/\s+/).filter(Boolean).length : 0, text };
+}

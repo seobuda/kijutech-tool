@@ -3,7 +3,22 @@
 Lista viva de lo que solo puede hacer Enric (accesos, decisiones, el equipo). Claude la actualiza al terminar cada bloque.
 Detalle paso a paso de la activación en `docs/PRUEBAS-EN-VIVO.md`.
 
-**Última actualización:** 25 nov 2026. En producción: `main` (Hito 2 del SEO casi completo, Google Places conectado), 64 migraciones.
+**Última actualización:** 27 nov 2026 (SEO partes 5c a 9a en producción). En producción: `main` (Hito 2 del SEO casi completo, Google Places conectado), 64 migraciones.
+
+## Módulo SEO: decisiones del 27 nov (encargo de la noche)
+- [ ] **WordPress (parte 9b): ¿se construye y cómo?** La auditoría Opus lo frenó por tres motivos:
+  1. **Contraseñas:** `client_assets` dice «NUNCA contraseñas» y una *application password* lo es. ¿Se permite guardarla cifrada, solo para esto?
+  2. **Escribir en la web del cliente** (aunque sea un borrador) roza la línea roja 2: algunos plugins reaccionan también a los borradores.
+  3. **Dónde:** debería ir en el núcleo (Webs y Ads también publicarán), no en SEO.
+
+  Condiciones si se hace:
+  - usuario propio de WordPress con rol **Colaborador** (nunca administrador; se rechaza si puede publicar);
+  - solo **entradas nuevas** en borrador, nunca tocar páginas publicadas (en WordPress se cambiarían en vivo);
+  - sin seguir redirecciones con la contraseña;
+  - solo `https`;
+  - probarlo primero con una web WordPress de Kijutech.
+
+  Mientras tanto, el brief se copia como texto.
 
 ## Departamento SEO: Hito 1 en producción y Hito 2 para aprobar (23-24 nov)
 Desplegado: Salud técnica, expediente, plan de mejora → encargos, intervenciones, novedades de Google y local sin Places (`docs/ESTADO.md` §6.37 y §6.38).

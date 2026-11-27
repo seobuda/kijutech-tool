@@ -13,6 +13,8 @@ import { ProjectSeoNav } from '../seo-nav';
 import { competitorComparison } from '@/lib/seo/competencia/competencia';
 import { PalabrasPanel, type OpportunityView, type TopicView } from './palabras-panel';
 import { DemandaPanel } from './demanda-panel';
+import { BriefsPanel } from './briefs-panel';
+import { listBriefs } from '@/lib/seo/contenido/briefs';
 import { getDemandView } from '@/lib/seo/demanda/demanda';
 
 const OPP_KINDS = ['seo.topic_new_page', 'seo.topic_unclear_page', 'seo.striking_distance', 'seo.low_ctr'];
@@ -104,7 +106,8 @@ export default async function PalabrasPage({ params }: { params: Promise<{ proje
     queries: (byTopic.get(t.id) ?? []).slice(0, 25).map((q) => ({ query: q.query, clicks: q.clicks, impressions: q.impressions, position: q.position }))
   }));
   const job = lastJobs[0];
-  const demand = await getDemandView(user.tenantId, projectId);
+  const [demand, briefs] = await Promise.all([getDemandView(user.tenantId, projectId), listBriefs(user.tenantId, projectId)]);
+  const briefTopics = topics.filter((t) => t.status === 'activo' && (byTopic.get(t.id) ?? []).length).map((t) => ({ topicKey: t.topicKey, name: t.name, url: t.url, query: [...(byTopic.get(t.id) ?? [])].sort((a, b) => b.impressions - a.impressions)[0].query }));
   return (
     <PageContainer>
       <Link href="/dashboard/projects" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
@@ -136,6 +139,7 @@ export default async function PalabrasPage({ params }: { params: Promise<{ proje
         comparison={comparison}
       />
       <DemandaPanel projectId={projectId} view={demand} canEdit={canEdit} />
+      <BriefsPanel projectId={projectId} briefs={briefs} canEdit={canEdit} topics={briefTopics} />
     </PageContainer>
   );
 }

@@ -4440,6 +4440,36 @@ export const seoDemand = pgTable(
 );
 export type SeoDemand = typeof seoDemand.$inferSelect;
 
+// SEO parte 9a (0074): briefs de contenido con la SERP real (docs/DISENO-SEO-CONTENIDO.md).
+export const seoBriefs = pgTable(
+  'seo_briefs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    keyword: varchar('keyword', { length: 200 }).notNull(),
+    topicKey: varchar('topic_key', { length: 80 }),
+    targetUrl: text('target_url'),
+    // preparando | borrador | listo | usado | fallido | archivado
+    status: varchar('status', { length: 12 }).notNull().default('preparando'),
+    data: jsonb('data').$type<Record<string, unknown>>().notNull().default({}),
+    publishedUrl: text('published_url'),
+    error: text('error'),
+    createdBy: varchar('created_by', { length: 120 }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    index('seo_briefs_project_idx').on(table.projectId, table.status, table.createdAt),
+    check('seo_briefs_status_check', sql`${table.status} IN ('preparando', 'borrador', 'listo', 'usado', 'fallido', 'archivado')`),
+  ]
+);
+export type SeoBrief = typeof seoBriefs.$inferSelect;
+
 export const seoReviews = pgTable(
   'seo_reviews',
   {
