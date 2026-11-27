@@ -36,8 +36,9 @@ export function didEffect(pre: WeekPoint[], post: WeekPoint[], invert = false): 
   const b = post.map(lr);
   const sign = invert ? -1 : 1;
   const effectLog = sign * (mean(b) - mean(a));
-  const se = Math.sqrt(sd(a) ** 2 / (a.length || 1) + sd(b) ** 2 / (b.length || 1));
-  return { effectLog, se, t: se > 0 ? effectLog / se : effectLog !== 0 ? Infinity * Math.sign(effectLog) : 0 };
+  // Suelo de 0,05: con series planas o pocas semanas el error saldría 0 (pesos infinitos al agregar).
+  const se = Math.max(0.05, Math.sqrt(sd(a) ** 2 / (a.length || 1) + sd(b) ** 2 / (b.length || 1)));
+  return { effectLog, se, t: effectLog / se };
 }
 
 /** Tendencias paralelas: el «efecto» entre la primera y la segunda mitad del periodo previo debe ser casi cero. */

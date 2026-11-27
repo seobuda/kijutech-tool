@@ -100,5 +100,17 @@ export const PLATAFORMA_PROCESS_MAP: ProcessStep[] = [
     ai: 'Nada.',
     code: 'Reglas puras en lib/core/measure-rules.ts: diferencias en diferencias con log((tratadas+1)/(control+1)), prueba t, tendencias paralelas antes del cambio (si no, «no concluyente»: evita la regresión a la media de las páginas que acaban de caer), umbral simétrico de ±15 % con t ≥ 2 y mínimos por métrica (30 clics, 300 impresiones, 100 impresiones de la cesta). Posición y CTR con una cesta fija de búsquedas ponderada por las impresiones previas (posición: bajar = mejorar). Sin el intervalo dudoso + 7 días de reindexación. Técnicas de toda la web o de la ficha: «no medible» por esta vía. El núcleo no lee tablas de módulos: usa registerInterventionEvidence.',
     tables: ['interventions', 'gsc_daily', 'gsc_pages', 'gsc_properties']
+  },
+  {
+    id: 'plt-tendencias',
+    lane: 'Datos',
+    name: 'Tendencias por técnica entre clientes',
+    description: 'Agrega lo medido de todas las intervenciones de la cuenta por técnica (y métrica): cada cliente cuenta una vez y se combinan con efectos aleatorios. Etiqueta honesta: «pocos casos», «tendencia» o, con 50 casos y 10 clientes, «aprendizaje». Solo entonces ordena el plan de mejora (dentro de cada prioridad). Plan → Resultados → «Tendencias por técnica».',
+    status: 'built',
+    file: 'lib/core/technique-trends.ts',
+    when: 'Al abrir Plan → Resultados y al rehacer cada plan.',
+    ai: 'Nada.',
+    code: 'Reglas en lib/core/technique-trends-rules.ts: un punto de control por intervención (el primero ≥ su ventana), solo los válidos (tendencias paralelas, datos suficientes), sin intervenciones solapadas ni de Estrategia; media por cliente; DerSimonian-Laird; error con suelo de 0,05. Factor del plan en clics, centrado en la media y acotado a [0,8, 1,25], sin las técnicas que nacen de una caída (regresión a la media).',
+    tables: ['interventions']
   }
 ];

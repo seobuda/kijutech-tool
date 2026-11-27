@@ -14,7 +14,8 @@ import { whyLine } from '@/lib/seo/plan/rules';
 import { techniqueLabel } from '@/lib/core/techniques';
 import { ProjectSeoNav } from '../seo-nav';
 import { PlanPanel, type PlanContext, type PlanItemView } from './plan-panel';
-import { ResultadosPanel, type ResultView } from './resultados-panel';
+import { ResultadosPanel, type ResultView, type TrendView } from './resultados-panel';
+import { accountTechniqueTrends } from '@/lib/core/technique-trends';
 import { listProjectInterventions } from '@/lib/core/interventions';
 
 export default async function PlanPage({ params }: { params: Promise<{ projectId: string }> }) {
@@ -30,6 +31,13 @@ export default async function PlanPage({ params }: { params: Promise<{ projectId
   if (!p) notFound();
   const [items, canEdit, sched] = await Promise.all([listPlanItems(user.tenantId, projectId), checkPermission('edit').then((r) => r.ok), planSchedule(user.tenantId, projectId)]);
   const monthOf = new Map(sched.items.map((i) => [i.id, i.month]));
+  // Parte 11: tendencias por técnica entre clientes.
+  const trends: TrendView[] = (
+    await accountTechniqueTrends(user.tenantId).catch((e) => {
+      console.error('[seo] tendencias:', e instanceof Error ? e.message : e);
+      return [];
+    })
+  ).map((t) => ({ technique: t.technique, label: techniqueLabel(t.technique), metric: t.metric, n: t.n, clients: t.clients, funciono: t.funciono, effectPct: t.effectPct, lowPct: t.lowPct, highPct: t.highPct, tag: t.label }));
   // Parte 8: resultado de cada intervención (lo mide el núcleo cada día).
   const ints = (await listProjectInterventions(user.tenantId, projectId, 300)).filter((i) => i.domain === 'seo' && i.status !== 'cancelada');
   const results: ResultView[] = ints.map((i) => {
@@ -108,7 +116,7 @@ export default async function PlanPage({ params }: { params: Promise<{ projectId
       />
       <ProjectSeoNav projectId={projectId} active="plan" />
       <PlanPanel projectId={projectId} items={view} canEdit={canEdit} ctx={ctx} />
-      <ResultadosPanel results={results} />
+      <ResultadosPanel results={results} trends={trends} />
     </PageContainer>
   );
 }

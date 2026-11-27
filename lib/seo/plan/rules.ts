@@ -205,7 +205,7 @@ export const plural = (t: string) => t.replace(/\b1 (página|servicio|tema)\(s\)
  * Propuestas a partir de los hallazgos abiertos. «impressions» = impresiones (90 días) por URL en Search Console;
  * «monthlyHours» = horas del proyecto al mes (null = sin límite). Las propuestas salen ordenadas por prioridad.
  */
-export function buildPlan(findings: PlanFinding[], impressions: Map<string, number>, monthlyHours: number | null, labels: Record<string, string> = {}): PlanDraft[] {
+export function buildPlan(findings: PlanFinding[], impressions: Map<string, number>, monthlyHours: number | null, labels: Record<string, string> = {}, techniqueFactor: Map<string, number> = new Map()): PlanDraft[] {
   const byTech = new Map<string, PlanFinding[]>();
   for (const f of findings) {
     const t = KIND_TECHNIQUE[f.kind];
@@ -269,10 +269,12 @@ export function buildPlan(findings: PlanFinding[], impressions: Map<string, numb
       score,
       estHours,
       hypothesis: { metric: r.metric, direction: 'sube', windowDays: r.windowDays },
-      evidence: { kinds, pages, pagesTotal: ranked.length, impressions: impr, severity, gainPerMonth, valor }
+      evidence: { kinds, pages, pagesTotal: ranked.length, impressions: impr, severity, gainPerMonth, valor, ...(techniqueFactor.has(technique) ? { factorTecnica: techniqueFactor.get(technique) } : {}) }
     });
   }
-  drafts.sort((a, b) => a.priority - b.priority || b.score - a.score);
+  // Parte 11: lo aprendido entre clientes solo ordena DENTRO de cada prioridad (nunca sube ni baja de prioridad).
+  const f = (d: PlanDraft) => d.score * (techniqueFactor.get(d.technique) ?? 1);
+  drafts.sort((a, b) => a.priority - b.priority || f(b) - f(a));
   if (monthlyHours !== null && monthlyHours > 0) {
     let used = 0;
     for (const d of drafts) {

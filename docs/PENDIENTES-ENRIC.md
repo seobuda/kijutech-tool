@@ -20,6 +20,17 @@ Detalle paso a paso de la activación en `docs/PRUEBAS-EN-VIVO.md`.
 
   Mientras tanto, el brief se copia como texto.
 
+- [ ] **Panel de IA mensual (parte 11): ¿presupuesto y preguntas?** Consiste en preguntar cada mes a ChatGPT, Perplexity, Gemini y Google IA de 10 a 15 preguntas fijas por cliente y ver si lo citan a él o a su competencia.
+  - **Coste orientativo** (sin verificar; precios de la web de DataForSEO del 27 nov): entre 0,15 y 2 $ al mes por proyecto. Cabe en el tope de 5 $, pero sumaría a lo demás.
+  - **Proveedor:** DataForSEO (ya contratado: «LLM Responses», unos 0,0006 $ por pregunta más lo que cobre el modelo) o las API de cada asistente.
+  - **Qué hay que decidir:**
+    - si se activa;
+    - con qué tope;
+    - si las preguntas las propone la IA desde los temas con más valor y las confirma el equipo.
+  - **Lo que ya existe:** AI Overview en Posiciones y las visitas desde asistentes de IA en GA4 (Rendimiento).
+- [ ] **Autoridad (parte 10):** sin hacer. Necesita un proveedor de enlaces (DataForSEO Backlinks u otro) con suscripción. Contratar es línea roja: dime si se verifica precio y cobertura en 3 webs reales.
+- [ ] **GoHighLevel (parte 10b) e informe en vivo (parte 12):** para empezar hace falta el token de una subcuenta (integración privada, solo lectura) y el ID de un formulario de prueba.
+
 ## Departamento SEO: Hito 1 en producción y Hito 2 para aprobar (23-24 nov)
 Desplegado: Salud técnica, expediente, plan de mejora → encargos, intervenciones, novedades de Google y local sin Places (`docs/ESTADO.md` §6.37 y §6.38).
 - [ ] **CM Ibérica en producción:** Proyectos → Salud → «Rastrear y auditar» (unos 50 min). Después, mira Expediente y Plan de mejora y **aprueba una propuesta** para ver el encargo en ClickUp.

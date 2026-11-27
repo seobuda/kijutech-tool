@@ -178,6 +178,12 @@ export async function measureOne(i: Intervention, now = new Date()): Promise<Out
     baseTotal,
     pages: treated.length,
     controlExcluded: excluded.length,
+    // Parte 11: válido para agregar = sin motivos de calidad (solo «efecto pequeño» no invalida); clics como moneda común.
+    valid: treated.length > 0 && v.reasons.every((r) => r.startsWith('efecto pequeño')),
+    clicksEffectLog: Math.round(cv.effectLog * 1000) / 1000,
+    clicksSe: Math.round(cv.se * 1000) / 1000,
+    clicksValid: cv.reasons.every((r) => r.startsWith('efecto pequeño')),
+    confounders,
     incrementalClicks: confounders.length || (cv.verdict !== 'funciono' && cv.verdict !== 'no_funciono') || v.verdict === 'no_concluyente' ? null : incrementalClicks(cPost.reduce((s2, p) => s2 + p.treated, 0), cv.effectLog)
   };
   const checkpoints = [...(prev.checkpoints ?? []).filter((c) => c.days !== cp), checkpoint].sort((a, b) => a.days - b.days);

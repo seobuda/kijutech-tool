@@ -60,3 +60,41 @@
 
 ## Auditoría independiente
 _(pendiente)_
+
+**Hecha** por un subagente Opus 5.5 con esfuerzo alto. **Veredicto:** el enfoque se mantiene, pero no se podía implementar tal como estaba.
+
+**Graves:**
+1. Sin criterio de validez entraban efectos sesgados (tendencias no paralelas, páginas nuevas). Solución: `valid` en cada punto de control.
+2. **Doble conteo:** se contaban varios puntos de control por intervención y los confounders crecían. Solución: un solo punto por intervención, el primero ≥ ventana de la hipótesis, con los confounders dentro.
+3. Se mezclaban métricas. Solución: agrupar por técnica + métrica + versión, y usar clics como moneda común para orquestar (`clicksEffectLog`).
+4. El multiplicador cambiaría la prioridad. Solución: que solo ordene dentro de cada prioridad.
+
+**Importantes:**
+- `se ≈ 0`: poner un suelo de 0,05 y sumar τ².
+- **Dependencia y heterogeneidad:** media por cliente y luego DerSimonian-Laird entre clientes. Exigir n ≥ 50 y 10 clientes.
+- El tipo de negocio, solo informativo.
+- **Factor centrado y contraído hacia la media**, y fuera las técnicas que nacen de una caída (regresión a la media).
+- **`priorEffect`:** añadirlo al tipo y copiarlo.
+
+**Menores:**
+- versión de taxonomía;
+- excluir `source='estrategia'`.
+
+**Panel de IA:**
+- condiciones: varias muestras, búsqueda web y ubicación, detección de la marca con código, y el tope de gasto;
+- coste orientativo (sin verificar): de 0,15 a 2 $ al mes por proyecto;
+- el bloqueo es el presupuesto y elegir las preguntas.
+
+## Decisión final, rehecha (sin migración)
+- **Núcleo (`measure.ts`):** cada punto de control guarda `valid` (sin motivos de calidad), `clicksEffectLog`, `clicksSe` y `confounders`. El `se` tiene un suelo de 0,05.
+- **Núcleo (`technique-trends.ts`, puro + consulta):**
+  - qué entra: un punto por intervención (el primero ≥ `windowDays`), solo `valid`, sin confounders, sin `source='estrategia'`;
+  - cómo se agrega: por técnica + métrica + versión de taxonomía, con la media por cliente y luego DerSimonian-Laird entre clientes;
+  - etiqueta: «pocos casos» (< 5), «tendencia» (5 a 49 o menos de 10 clientes) y «aprendizaje» (≥ 50 y ≥ 10 clientes).
+- **Factor del plan** (`planFactors`):
+  - solo con «aprendizaje», en clics;
+  - centrado en la media de las técnicas con aprendizaje y acotado a [0,8, 1,25];
+  - sin las técnicas que nacen de una caída: `titulo_reescrito`, `recuperar_pagina`, `contenido_actualizado`, `optimizar_al_alcance`, `meta_descripcion`.
+- **Plan:** `buildPlan` recibe el factor y lo usa solo para ordenar dentro de cada prioridad. Hoy es 1 en todas, porque no hay datos.
+- **Pantalla:** Plan → «Resultados» añade «Tendencias por técnica en todos los clientes», con n, clientes, efecto e intervalo, la etiqueta y el aviso de sesgo.
+- **Panel de IA:** a `docs/PENDIENTES-ENRIC.md` (presupuesto y preguntas).
