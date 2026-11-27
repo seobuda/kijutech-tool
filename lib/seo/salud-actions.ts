@@ -55,14 +55,14 @@ export async function decideSaludFindingAction(projectId: string, findingId: str
     if (!['descartado', 'aceptado', 'abierto'].includes(status)) return { ok: false, error: 'Estado no válido' };
     // Solo hallazgos de Salud de ese proyecto y de la cuenta del usuario.
     const [f] = await db
-      .select({ id: findings.id, source: findings.source, url: findings.url })
+      .select({ id: findings.id, source: findings.source, url: findings.url, kind: findings.kind })
       .from(findings)
       .where(and(eq(findings.id, findingId), eq(findings.projectId, projectId), eq(findings.tenantId, user.tenantId), inArray(findings.source, [SALUD_SOURCE, LOCAL_SOURCE, 'seo.mapa:gsc', 'seo.salud:externos', 'seo.posiciones:serp', 'seo.local:ficha', 'seo.local:geogrid', 'seo.local:nap_antiguo', 'seo.salud:puertas', 'seo.vigilancia:hackeo', 'seo.vigilancia:dinero', ...VIGILANCIA_SOURCES])))
       .limit(1);
     if (!f) return { ok: false, error: 'Hallazgo no encontrado' };
     await decideFinding(user.tenantId, findingId, status, user.name || user.email, reason);
     // Páginas de dinero: «Dejar así» o «No es un problema» acepta la foto actual como referencia (versión nueva).
-    if (f.source === 'seo.vigilancia:dinero' && status !== 'abierto') await acceptMoneyBaseline(projectId, f.url);
+    if (f.kind === 'seo.money_page_changed' && status !== 'abierto') await acceptMoneyBaseline(projectId, f.url);
     revalidatePath(`/dashboard/projects/${projectId}/salud`);
     return { ok: true };
   } catch (e) {

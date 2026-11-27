@@ -4355,7 +4355,7 @@ export const seoChangeLog = pgTable(
   },
   (table) => [
     uniqueIndex('seo_change_log_unique').on(table.projectId, table.batch, table.urlHash, table.field),
-    index('seo_change_log_project_idx').on(table.projectId, table.detectedAt),
+    index('seo_change_log_project_idx').on(table.projectId, table.detectedAt.desc()),
     index('seo_change_log_url_idx').on(table.projectId, table.urlHash, table.detectedAt),
     check('seo_change_log_source_check', sql`${table.source} IN ('rastreo', 'dinero')`),
   ]

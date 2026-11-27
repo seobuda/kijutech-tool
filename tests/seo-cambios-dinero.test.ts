@@ -68,6 +68,7 @@ describe('páginas de dinero', () => {
     expect(moneyCondition(snap({ indexable: false }), snap({ indexable: false }), false, sameUrl, U)).toBeNull();
     expect(moneyCondition(snap(), snap({ status: 404, indexable: false }), false, sameUrl, U)).toBe('estado');
     expect(moneyCondition(snap(), snap({ status: 404 }), true, sameUrl, U)).toBeNull();
+    expect(moneyCondition(snap(), snap({ status: 301, indexable: false }), false, sameUrl, U)).toBe('redireccion');
     expect(moneyCondition(snap(), snap({ canonical: 'https://w.es/otra' }), false, sameUrl, U)).toBe('canonical');
     expect(moneyCondition(snap(), snap({ canonical: U }), false, sameUrl, U)).toBeNull();
     expect(moneyCondition(snap(), snap({ words: 150 }), false, sameUrl, U)).toBe('contenido');

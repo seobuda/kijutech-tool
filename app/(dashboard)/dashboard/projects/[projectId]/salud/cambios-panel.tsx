@@ -27,7 +27,7 @@ const FIELD: Record<string, string> = {
   host: 'Dominio',
   tech: 'Tecnología'
 };
-const PENDING: Record<string, string> = { estado: 'no responde bien', noindex: 'noindex', canonical: 'canonical a otra', titulo: 'sin título', h1: 'sin H1', contenido: 'perdió texto' };
+const PENDING: Record<string, string> = { estado: 'no responde bien', redireccion: 'redirige', noindex: 'noindex', canonical: 'canonical a otra', titulo: 'sin título', h1: 'sin H1', contenido: 'perdió texto' };
 const fmt = (iso: string | null) => (iso ? new Date(iso).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' }) : '—');
 const day = (iso: string) => new Date(iso).toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' });
 const path = (u: string) => {

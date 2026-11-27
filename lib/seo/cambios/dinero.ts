@@ -146,9 +146,10 @@ export async function runDinero(tenantId: string, projectId: string, batch: stri
         .values(diffs.map((d) => ({ tenantId, projectId, url: p.url, urlHash: p.urlHash, field: d.field, before: d.before, after: d.after, source: 'dinero', batch, prevObservedAt: p.lastCheckedAt ?? null, detectedAt: now })))
         .onConflictDoNothing();
     }
-    let cond: MoneyCondition | null = moneyCondition(baseline, snap, isHome, sameUrl, p.url);
-    // Estado o noindex con «página que funcionaba y ahora no» ya abierto: no se repite.
-    if (cond && (cond === 'estado' || cond === 'noindex') && regressed.has(p.url)) cond = null;
+    const rawCond = moneyCondition(baseline, snap, isHome, sameUrl, p.url);
+    let cond: MoneyCondition | null = rawCond;
+    // Estado o noindex con «página que funcionaba y ahora no» ya abierto: no se repite (pero la referencia no avanza).
+    if (cond && (cond === 'estado' || cond === 'noindex' || cond === 'redireccion') && regressed.has(p.url)) cond = null;
     let pendingKind = p.pendingKind;
     let pendingSince = p.pendingSince;
     if (cond) {
@@ -166,7 +167,7 @@ export async function runDinero(tenantId: string, projectId: string, batch: stri
       pendingKind = null;
       pendingSince = null;
     }
-    const advance = !cond && canAdvanceBaseline(baseline, snap);
+    const advance = !rawCond && canAdvanceBaseline(baseline, snap);
     const contentLogged = diffs.some((d) => d.field === 'content');
     await db
       .update(seoMoneyPages)
@@ -192,7 +193,12 @@ export async function runDinero(tenantId: string, projectId: string, batch: stri
   for (const f of openMoney) if (!checked.has(f.url ?? '') || (f.kind === 'seo.money_pages_unreadable' && (confirmPass || read === 0))) out.push({ kind: f.kind, dedupeKey: f.dedupeKey, url: f.url, severity: f.severity as FindingInput['severity'], evidence: (f.evidence ?? {}) as Record<string, unknown> });
   await syncFindings(tenantId, projectId, DINERO_SOURCE, out, DINERO_KINDS);
 
-  if (needConfirm) await enqueueJob({ tenantId, kind: CONFIRM_KIND, payload: { projectId }, scopeType: 'proyecto', scopeId: projectId, priority: 2, runAt: new Date(Date.now() + CONFIRM_MINUTES * 60_000), dedupeKey: `${CONFIRM_KIND}:${projectId}` });
+  if (needConfirm) {
+    const job = { tenantId, kind: CONFIRM_KIND, payload: { projectId }, scopeType: 'proyecto' as const, scopeId: projectId, priority: 2, runAt: new Date(Date.now() + CONFIRM_MINUTES * 60_000) };
+    // Si ya hay una confirmación en cola o en marcha (p. ej. esta misma), otra con su minuto: la nueva condición no espera 6 h.
+    const r = await enqueueJob({ ...job, dedupeKey: `${CONFIRM_KIND}:${projectId}` });
+    if (!r.created) await enqueueJob({ ...job, dedupeKey: `${CONFIRM_KIND}:${projectId}:${Math.floor(Date.now() / 60_000)}` });
+  }
   if (newCritical.length) {
     const [pr] = await db.select({ name: projects.name, clientId: projects.clientId }).from(projects).where(eq(projects.id, projectId)).limit(1);
     const link = BASE_URL() ? `\n<a href="${BASE_URL()}/dashboard/projects/${projectId}/salud">Abrir la Salud del proyecto</a>` : '';

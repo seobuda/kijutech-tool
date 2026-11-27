@@ -149,10 +149,11 @@ export function snapOf(status: number, xRobots: string | null, page: Extracted |
 /** No concluyente: error de red, bloqueo o error del servidor puntual. Suma fallos, no decide. */
 export const inconclusive = (s: MoneySnap) => s.status === 0 || [401, 403, 429].includes(s.status) || s.status >= 500;
 
-export type MoneyCondition = 'estado' | 'noindex' | 'canonical' | 'titulo' | 'h1' | 'contenido';
-export const MONEY_SEVERITY: Record<MoneyCondition, 'critico' | 'importante'> = { estado: 'critico', noindex: 'critico', canonical: 'importante', titulo: 'importante', h1: 'importante', contenido: 'importante' };
+export type MoneyCondition = 'estado' | 'redireccion' | 'noindex' | 'canonical' | 'titulo' | 'h1' | 'contenido';
+export const MONEY_SEVERITY: Record<MoneyCondition, 'critico' | 'importante'> = { estado: 'critico', redireccion: 'importante', noindex: 'critico', canonical: 'importante', titulo: 'importante', h1: 'importante', contenido: 'importante' };
 export const MONEY_LABEL: Record<MoneyCondition, string> = {
   estado: 'ha dejado de responder bien',
+  redireccion: 'ahora redirige a otra dirección',
   noindex: 'ahora tiene noindex (Google la quitará)',
   canonical: 'su canonical apunta ahora a otra URL',
   titulo: 'se ha quedado sin título',
@@ -167,6 +168,8 @@ export const MONEY_LABEL: Record<MoneyCondition, string> = {
 export function moneyCondition(baseline: MoneySnap, now: MoneySnap, isHome: boolean, sameUrlFn: (a: string, b: string) => boolean, url: string): MoneyCondition | null {
   if (inconclusive(now)) return null;
   const okBase = baseline.status >= 200 && baseline.status < 300;
+  // Una redirección (no se siguen) es «importante», no crítica: puede ser a propósito (barra final, URL nueva).
+  if (okBase && now.status >= 300 && now.status < 400) return isHome ? null : 'redireccion';
   if (okBase && !(now.status >= 200 && now.status < 300)) return isHome ? null : 'estado';
   if (!(now.status >= 200 && now.status < 300)) return null;
   if (baseline.indexable && !now.indexable) return isHome ? null : 'noindex';
