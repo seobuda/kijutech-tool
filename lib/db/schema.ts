@@ -4746,3 +4746,22 @@ export const seoLinkSnapshots = pgTable(
   (table) => [unique('seo_link_snapshots_unique').on(table.projectId, table.domain, table.month)]
 );
 export type SeoLinkSnapshot = typeof seoLinkSnapshots.$inferSelect;
+
+
+// Núcleo · uso de las pantallas (plan de UX del SEO v2, fase 0, 27 nov 2026; migración 0077, aditiva). Solo qué vista se
+// abre, quién y de qué proyecto: la línea base para saber si el rediseño funciona. Retención 180 días.
+export const appUsageEvents = pgTable(
+  'app_usage_events',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    userId: integer('user_id'),
+    area: varchar('area', { length: 30 }).notNull(),
+    view: varchar('view', { length: 40 }).notNull(),
+    scopeId: uuid('scope_id'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [index('app_usage_events_idx').on(table.tenantId, table.area, table.createdAt)]
+);

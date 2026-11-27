@@ -10,6 +10,7 @@ import { clients, findings, interventions, projects } from '@/lib/db/schema';
 import { requirePagePermission } from '@/lib/auth/permissions';
 import { Badge, PageContainer, PageHeader } from '@/components/ui/page';
 import { ProjectSeoNav } from '../seo-nav';
+import { SeverityBadge } from '@/components/ui/severity';
 import { projectReadiness } from '@/lib/seo/alta/alta';
 import { listPlanItems, planSchedule } from '@/lib/seo/plan/plan';
 import { getPositionsView } from '@/lib/seo/posiciones/view';
@@ -112,7 +113,7 @@ export default async function ResumenPage({ params }: { params: Promise<{ projec
           ) : urgent.length ? (
             <>
               <p className="mb-2">
-                {crit ? <Badge tone="danger">{crit} crítico{crit === 1 ? '' : 's'}</Badge> : null} <Badge tone="warning">{open.length - crit} importante{open.length - crit === 1 ? '' : 's'}</Badge>
+                {crit ? <SeverityBadge severity="critico" count={crit} /> : null} <SeverityBadge severity="importante" count={open.length - crit} />
               </p>
               <ul className="space-y-1 text-muted-foreground">
                 {urgent.slice(0, 5).map(([k, v]) => (

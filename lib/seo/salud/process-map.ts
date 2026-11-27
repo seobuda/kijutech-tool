@@ -201,7 +201,7 @@ export const SEO_SALUD_PROCESS_MAP: ProcessStep[] = [
     id: 'briefs',
     lane: 'Plan de mejora',
     name: 'Briefs de contenido (SERP real)',
-    description: 'Para escribir o mejorar una página: lo que tratan las webs que ganan en Google (subtemas en 2+ webs, preguntas, extensión orientativa), los datos propios del cliente, desde qué páginas enlazarla y, si mejora una existente, su nota con lo que le falta. «Copiar como texto» o «Encargar al redactor» (crea el encargo en ClickUp con el brief dentro y registra la intervención con ese encargo: el núcleo pone la fecha de hecho); «Ya está publicada» la marca hecha para medir si funcionó. Palabras → «Briefs de contenido». Además, en los detectores: «contenido que pierde tráfico» a 90 días.',
+    description: 'Para escribir o mejorar una página: lo que tratan las webs que ganan en Google (subtemas en 2+ webs, preguntas, extensión orientativa), los datos propios del cliente, desde qué páginas enlazarla y, si mejora una existente, su nota con lo que le falta. «Copiar como texto» o «Encargar al redactor» (crea el encargo en ClickUp con el brief dentro y registra la intervención con ese encargo: el núcleo pone la fecha de hecho); «Ya está publicada» la marca hecha para medir si funcionó. Trabajo → «Briefs y artículos». Además, en los detectores: «contenido que pierde tráfico» a 90 días.',
     status: 'built',
     file: 'lib/seo/contenido/briefs.ts',
     when: 'A mano (botón «Preparar brief»; trabajo «seo.brief.build» en la cola). El contenido que pierde tráfico, con los detectores (cada 7 días).',

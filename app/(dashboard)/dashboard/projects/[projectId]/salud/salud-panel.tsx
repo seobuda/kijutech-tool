@@ -9,6 +9,7 @@ import { Check, ChevronDown, ChevronRight, Copy, ExternalLink, Loader2, Play, Ro
 import { Button } from '@/components/ui/button';
 import { Badge, EmptyState, Section } from '@/components/ui/page';
 import { cn } from '@/lib/utils';
+import { SeverityBadge } from '@/components/ui/severity';
 import { SALUD_GROUP_LABEL, SALUD_KIND_BY_KEY, type SaludGroup, type Severity } from '@/lib/seo/salud/kinds';
 import type { SaludFinding, SaludView } from '@/lib/seo/salud/view';
 import { decideSaludFindingAction, saveSeoBusinessTypeAction, startSaludAuditAction } from '@/lib/seo/salud-actions';
@@ -165,9 +166,7 @@ export function SaludPanel({ view, canEdit, businessType, businessTypes }: { vie
           actions={
             <div className="flex flex-wrap gap-1.5">
               {(Object.keys(SEV) as Severity[]).map((s) => (
-                <Badge key={s} tone={SEV[s].tone}>
-                  {SEV[s].label}: {view.counts[s]}
-                </Badge>
+                <SeverityBadge key={s} severity={s} count={view.counts[s]} />
               ))}
             </div>
           }
