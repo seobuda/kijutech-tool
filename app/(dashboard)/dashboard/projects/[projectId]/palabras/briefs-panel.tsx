@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge, Section } from '@/components/ui/page';
 import type { BriefView } from '@/lib/seo/contenido/briefs';
-import { briefToTaskAction, markBriefUsedAction, requestBriefAction, retryBriefAction, setBriefStatusAction } from '@/lib/seo/contenido-actions';
+import { briefToTaskAction, briefToWordPressAction, markBriefUsedAction, requestBriefAction, retryBriefAction, setBriefStatusAction } from '@/lib/seo/contenido-actions';
 import { briefToText, type BriefData } from '@/lib/seo/contenido/brief-text';
 
 const STATUS: Record<string, { label: string; tone: 'neutral' | 'info' | 'success' | 'outline' | 'danger' | 'warning' }> = {
@@ -179,6 +179,16 @@ export function BriefsPanel({ projectId, briefs, canEdit, topics }: { projectId:
                           {(b.data as { request?: { url?: string | null } }).request?.url && (
                             <a href={(b.data as { request: { url: string } }).request.url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline">
                               Ver el encargo
+                            </a>
+                          )}
+                          {canEdit && (b.status === 'borrador' || b.status === 'listo') && !b.wpEditUrl && (
+                            <Button size="sm" variant="outline" disabled={pending} onClick={() => act(() => briefToWordPressAction(projectId, b.id))} title="Crea una entrada NUEVA en borrador en el WordPress del cliente con este esqueleto (hace falta conectar WordPress en la ficha del cliente). Publicarla lo hace una persona.">
+                              Crear borrador en WordPress
+                            </Button>
+                          )}
+                          {b.wpEditUrl && (
+                            <a href={b.wpEditUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline">
+                              Abrir el borrador en WordPress
                             </a>
                           )}
                           {canEdit && b.status === 'borrador' && (

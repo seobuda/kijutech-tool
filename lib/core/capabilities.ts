@@ -649,6 +649,23 @@ export type SerpSource = {
   volumes?: (tenantId: string, keywords: string[], location: string, language: string) => Promise<{ volumes: Map<string, number | null>; costUsd: number }>;
   /** Ideas de búsquedas a partir de unas semillas (Google Ads), con volumen, CPC, competencia y meses (SEO parte 7). */
   keywordIdeas?: (tenantId: string, seeds: string[], location: string, language: string) => Promise<{ ideas: KeywordIdea[]; costUsd: number }>;
+  /** Respuesta de un asistente de IA a una pregunta, como la ve un usuario en España (SEO parte 11, panel de IA). Si falla
+   * después de cobrar, el error lleva `costUsd`. */
+  aiAnswer?: (tenantId: string, q: { assistant: AiAnswerAssistant; question: string; language: string; location?: string | null }) => Promise<AiAnswer>;
+  /** Datos de enlaces (SEO parte 10, Autoridad). */
+  links?: LinkSource;
+};
+export type AiAnswerAssistant = 'chatgpt' | 'gemini' | 'google_ai' | 'perplexity';
+export type AiAnswer = { text: string; sources: string[]; brands: string[]; costUsd: number };
+export type LinkSummary = { backlinks: number | null; referringDomains: number | null; rank: number | null; spamScore: number | null };
+export type LinkSource = {
+  summary: (tenantId: string, domain: string) => Promise<{ summary: LinkSummary; costUsd: number }>;
+  /** Dominios que enlazan a varios `targets` (hasta 20) y no a `exclude`. */
+  intersection: (tenantId: string, targets: string[], exclude: string[], limit: number) => Promise<{ domains: { domain: string; rank: number | null; linksTo: string[] }[]; costUsd: number }>;
+  /** Dominios nuevos y perdidos por mes desde una fecha. */
+  newLost: (tenantId: string, domain: string, fromYmd: string) => Promise<{ months: { month: string; newDomains: number; lostDomains: number }[]; costUsd: number }>;
+  /** Los dominios que enlazan a uno (para la prueba de cobertura). */
+  referringDomains: (tenantId: string, domain: string, limit: number) => Promise<{ domains: string[]; total: number | null; costUsd: number }>;
 };
 export type KeywordIdea = { keyword: string; volume: number | null; cpc: number | null; competition: string | null; monthly: { month: string; volume: number }[] };
 export type MapsItem = { rank: number; cid: string | null; placeId: string | null; title: string; domain: string | null; rating: number | null; votes: number | null; category: string | null };

@@ -206,7 +206,7 @@ export const SEO_SALUD_PROCESS_MAP: ProcessStep[] = [
     file: 'lib/seo/contenido/briefs.ts',
     when: 'A mano (botón «Preparar brief»; trabajo «seo.brief.build» en la cola). El contenido que pierde tráfico, con los detectores (cada 7 días).',
     ai: 'Nada (reglas): la IA podría redactar un esquema después, con su prompt y su examen.',
-    code: 'Top 10 guardado (demanda) o una SERP en directo (0,002 $, con el tope). Como mucho 5 webs legibles, sin directorios, redes ni la web del cliente, respetando su robots.txt. Contenido principal con extractMain del núcleo (sin menú, pie, barra lateral ni cookies). Subtemas: encabezados sin las palabras de la búsqueda, Jaccard ≥ 0,5. Nota: subtemas presentes en el texto (70 %), búsqueda en título y H1 (30 %); las palabras solo restan si quedan por debajo de la mitad. Enlazado: sin legales, etiquetas ni paginación; los enlaces de menú no cuentan como «ya enlaza»; texto variado. Decay (lib/seo/contenido/decay.ts): 30+ clics previos, −30 % a 90 días y frente al año anterior si hay; causa probable (posición, CTR o demanda). WordPress: NO (decisión de Enric pendiente; docs/PENDIENTES-ENRIC.md).',
+    code: 'Top 10 guardado (demanda) o una SERP en directo (0,002 $, con el tope). Como mucho 5 webs legibles, sin directorios, redes ni la web del cliente, respetando su robots.txt. Contenido principal con extractMain del núcleo (sin menú, pie, barra lateral ni cookies). Subtemas: encabezados sin las palabras de la búsqueda, Jaccard ≥ 0,5. Nota: subtemas presentes en el texto (70 %), búsqueda en título y H1 (30 %); las palabras solo restan si quedan por debajo de la mitad. Enlazado: sin legales, etiquetas ni paginación; los enlaces de menú no cuentan como «ya enlaza»; texto variado. Decay (lib/seo/contenido/decay.ts): 30+ clics previos, −30 % a 90 días y frente al año anterior si hay; causa probable (posición, CTR o demanda). WordPress (parte 9b, 27 nov): «Crear borrador en WordPress» crea una entrada NUEVA en borrador con el esqueleto escapado (conexión del núcleo, usuario Colaborador, idempotente con wp_post_id); una vez al día, los borradores ya publicados pasan a «usado» con su URL y se mide.',
     tables: ['seo_briefs', 'seo_demand', 'seo_topics', 'seo_topic_queries', 'crawl_pages', 'crawl_links', 'seo_dossier_facts', 'interventions', 'gsc_daily', 'seo_data_spend']
   },
   {
@@ -409,6 +409,42 @@ export const SEO_SALUD_PROCESS_MAP: ProcessStep[] = [
     ai: 'La del estratega (su prompt no cambia).',
     code: 'Sin leer tablas de otro módulo: SEO registra el proveedor y Estrategia lo pide al núcleo. Va marcado como dato no fiable (lleva búsquedas de fuera).',
     tables: ['findings', 'seo_plan_items', 'seo_topics', 'client_competitors']
+  },
+  {
+    id: 'panel-ia',
+    lane: 'Vigilancia continua',
+    name: 'Panel de IA (ChatGPT, Gemini, Google y Perplexity)',
+    description: 'Hasta 15 preguntas de compra por proyecto («¿cuál es la mejor empresa de X en Y?») que se hacen tres veces al mes a ChatGPT y Gemini (como los ve un usuario en España), al modo IA de Google y a Perplexity. Por pregunta y asistente: si nombran o citan al cliente, qué competidor confirmado sale y qué fuentes citan. Pestaña IA del proyecto. Aviso «la competencia sale y tú no» con margen.',
+    status: 'built',
+    file: 'lib/seo/panel-ia/panel.ts',
+    when: 'Cada 10 días (proceso «seo.panel_ia», tres muestras al mes; editable en Salud → Vigilancia automática) o «Preguntar ahora». Un trabajo por pregunta («seo.panel_ia.pregunta»). Sin preguntas activas no gasta nada.',
+    ai: 'La respuesta es de los asistentes (por DataForSEO). Las preguntas salen de una plantilla y la detección es por reglas: sin IA propia (directiva de IA).',
+    code: 'Preguntas: servicio × población (confirmados) y temas de más valor; el equipo las activa. Filas con clave única (pregunta × mes × muestra × asistente); cada trabajo reclama sus filas de forma atómica (pendiente → enviando) y una fila «enviando» de más de 1 h pasa a fallida sin reenviarse (nunca se paga dos veces). Tope propio del panel (ajuste «ai_panel_budget_usd», 2 $ por defecto) dentro del de 5 $, comprobado antes de cada petición; coste estimado apuntado ANTES de enviar y ajustado con el real. «Citado» = dominio exacto en las fuentes; «nombrado» = nombre completo sin las palabras de la pregunta (un nombre genérico solo cuenta por dominio). Hallazgo «seo.ai_competitor_only» (técnica citaciones_locales): dos meses con 0 % y competencia en más de la mitad, con 3 respuestas o más. Fuente «seo.panel_ia:respuestas». Auditoría Opus: docs/DISENO-SEO-CIERRE.md.',
+    tables: ['seo_ai_questions', 'seo_ai_checks', 'seo_data_spend', 'seo_topics', 'seo_dossier_facts', 'client_competitors', 'findings', 'jobs', 'job_schedules']
+  },
+  {
+    id: 'autoridad',
+    lane: 'Vigilancia continua',
+    name: 'Autoridad (enlaces del cliente y de su competencia)',
+    description: 'Cada mes: webs que enlazan, enlaces, fuerza y spam del cliente y de hasta 4 competidores confirmados; webs ganadas y perdidas por mes; y huecos (webs que enlazan a 2+ competidores y no al cliente, sin directorios ni redes). Pestaña Autoridad. Apagada por proyecto hasta que un administrador la enciende; antes, «Probar cobertura» frente a Search Console → Enlaces (criterio 60 % en 3 clientes).',
+    status: 'built',
+    file: 'lib/seo/autoridad/autoridad.ts',
+    when: 'Cada 30 días por proyecto encendido (proceso «seo.autoridad», no se da de alta solo) o «Consultar ahora». La prueba de cobertura, a mano (admin, una vez al día).',
+    ai: 'Nada.',
+    code: 'DataForSEO Backlinks por el núcleo (serpSource.links; pago por uso desde el 1 jul 2026, sin contrato). Tope propio («autoridad_budget_usd», 1,5 $) dentro del de 5 $; estimado apuntado antes de cada petición y ajustado. Lo ya consultado ese mes no se repite (clave única proyecto × dominio × mes). Huecos: rank ≥ 10, sin directorios ni redes, 50 como máximo. Hallazgo «seo.link_gap» (técnica enlaces_externos) con 5 huecos o más. Fuente «seo.autoridad:enlaces».',
+    tables: ['seo_link_snapshots', 'seo_data_spend', 'client_competitors', 'findings', 'jobs', 'job_schedules']
+  },
+  {
+    id: 'en-vivo-informe',
+    lane: 'Plan de mejora',
+    name: 'En vivo e informe mensual',
+    description: 'Pestaña En vivo: contactos por los formularios de la web (GoHighLevel) por mes, canal y página, cruzados con las visitas de Google de cada página; visitas de Google por mes; trabajo hecho con lo medido; posiciones y presencia en IA. «Preparar el informe del mes» deja un borrador para el cliente en Para ti, siempre con aprobación.',
+    status: 'built',
+    file: 'lib/seo/vivo/vivo.ts',
+    when: 'Al abrir la pestaña (solo tablas propias, sin llamadas externas). El informe, a mano.',
+    ai: 'Nada: el informe es una plantilla con cifras (sin atribuir causas que no se han medido).',
+    code: 'Leads del núcleo (leadsSummary); gsc_daily_totals por mes y gsc_daily por página; intervenciones hechas con su veredicto. El informe pasa por createClientMessage con forceApproval y dedupeKey informe:<proyecto>:<mes> (auditoría Opus, grave 1: nunca sale solo aunque el cliente no pida aprobación).',
+    tables: ['client_leads', 'gsc_daily_totals', 'gsc_daily', 'gsc_pages', 'interventions', 'seo_plan_items', 'client_messages']
   },
   {
     id: 'seo-resenas',

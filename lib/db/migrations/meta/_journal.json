@@ -526,6 +526,13 @@
       "when": 1796730000000,
       "tag": "0074_seo_briefs",
       "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1796740000000,
+      "tag": "0075_seo_cierre",
+      "breakpoints": true
     }
   ]
 }

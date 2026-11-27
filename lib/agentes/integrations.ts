@@ -116,12 +116,12 @@ export async function isConnected(tenantId: string, provider: ProviderKey): Prom
 
 // --- DataForSEO -------------------------------------------------------------------------------------------
 
-async function dfs<T>(creds: Record<string, string>, path: string, body?: unknown): Promise<T> {
+async function dfs<T>(creds: Record<string, string>, path: string, body?: unknown, timeoutMs = 60_000): Promise<T> {
   const res = await fetch(`https://api.dataforseo.com/v3${path}`, {
     method: body ? 'POST' : 'GET',
     headers: { Authorization: `Basic ${Buffer.from(`${creds.login}:${creds.password}`).toString('base64')}`, 'Content-Type': 'application/json' },
     body: body ? JSON.stringify(body) : undefined,
-    signal: AbortSignal.timeout(60_000)
+    signal: AbortSignal.timeout(timeoutMs)
   });
   if (!res.ok) throw new Error(`DataForSEO (${res.status})`);
   const json = (await res.json()) as { status_code?: number; status_message?: string };
@@ -298,6 +298,121 @@ export async function dataForSeoLocations(tenantId: string, country: string): Pr
   const list = (r.tasks?.[0]?.result ?? []).map((x) => ({ name: x.location_name, type: x.location_type }));
   cache.set(key, { at: Date.now(), list });
   return list;
+}
+
+// --- DataForSEO: respuestas de asistentes de IA (SEO parte 11, panel de IA; 27 nov 2026, docs/DISENO-SEO-CIERRE.md §A) ----
+// ChatGPT y Gemini por «LLM Scraper» (lo que ve un usuario), Google por el modo IA de la SERP y Perplexity por LLM Responses
+// (sonar, que siempre busca). La forma de la respuesta solo está comprobada en la documentación [NV]: se lee de forma
+// defensiva, recorriendo el JSON en busca del texto (markdown/text) y de las fuentes (url/domain).
+
+/** Texto, fuentes y marcas de cualquier resultado de IA de DataForSEO (puro: se prueba en tests/seo-panel-ia.test.ts). */
+export function readAiResult(result: unknown): { text: string; sources: string[]; brands: string[] } {
+  const texts: string[] = [];
+  const sources = new Set<string>();
+  const brands = new Set<string>();
+  const walk = (v: unknown, key: string, parent: string, depth: number) => {
+    if (depth > 10 || v == null) return;
+    if (typeof v === 'string') {
+      if ((key === 'markdown' || key === 'text') && v.trim()) texts.push(v);
+      if ((key === 'url' || key === 'direct_url' || key === 'domain') && /^(https?:\/\/)?[a-z0-9-]+(\.[a-z0-9-]+)+/i.test(v)) sources.add(v.slice(0, 300));
+      if (key === 'title' && parent === 'brand_entities') brands.add(v.slice(0, 120));
+      return;
+    }
+    if (Array.isArray(v)) {
+      for (const x of v.slice(0, 200)) walk(x, key, parent, depth + 1);
+      return;
+    }
+    if (typeof v === 'object') for (const [k, x] of Object.entries(v as Record<string, unknown>)) walk(x, k, Array.isArray(x) || (x && typeof x === 'object') ? k : key, depth + 1);
+  };
+  walk(result, '', '', 0);
+  // El markdown entero suele repetir los textos parciales: el más largo primero y fuera lo que ya contiene.
+  const uniq = [...new Set(texts)].sort((a, b) => b.length - a.length);
+  const text = uniq.filter((t, i) => !uniq.slice(0, i).some((u) => u.includes(t))).join('\n').slice(0, 20_000);
+  // Las URL de redirección de Google (vertexaisearch) no son la fuente.
+  const src = [...sources].filter((u) => !/vertexaisearch\.cloud\.google\.com|googleusercontent\.com/i.test(u));
+  return { text, sources: src.slice(0, 50), brands: [...brands].slice(0, 30) };
+}
+
+type CostError = Error & { costUsd?: number };
+const costError = (msg: string, cost: number): CostError => Object.assign(new Error(msg.slice(0, 300)), { costUsd: cost });
+
+export async function dataForSeoAiAnswer(tenantId: string, q: { assistant: import('@/lib/core/capabilities').AiAnswerAssistant; question: string; language: string; location?: string | null }): Promise<import('@/lib/core/capabilities').AiAnswer> {
+  const creds = readCredentials(await getIntegration(tenantId, 'dataforseo'));
+  const question = q.question.slice(0, 480);
+  const lang = q.language === 'ca' && q.assistant === 'google_ai' ? 'es' : q.language;
+  let path: string;
+  let body: Record<string, unknown>;
+  if (q.assistant === 'chatgpt' || q.assistant === 'gemini') {
+    path = `/ai_optimization/${q.assistant === 'chatgpt' ? 'chat_gpt' : 'gemini'}/llm_scraper/live/advanced`;
+    body = { keyword: question, location_code: 2724, language_code: lang };
+  } else if (q.assistant === 'google_ai') {
+    path = '/serp/google/ai_mode/live/advanced';
+    body = q.location ? { keyword: question, location_name: q.location, language_code: lang } : { keyword: question, location_code: 2724, language_code: lang };
+  } else {
+    path = '/ai_optimization/perplexity/llm_responses/live';
+    body = { user_prompt: question, model_name: 'sonar', web_search_country_iso_code: 'ES', max_output_tokens: 800 };
+  }
+  const r = await dfs<{ cost?: number; tasks?: DfsTask<unknown>[] }>(creds, path, [body], 120_000);
+  const t = r.tasks?.[0];
+  const cost = typeof t?.cost === 'number' ? t.cost : typeof r.cost === 'number' ? r.cost : 0;
+  if (!t || t.status_code !== 20000) throw costError(`DataForSEO IA (${q.assistant}): ${t?.status_code ?? '?'} ${t?.status_message ?? 'sin respuesta'}`, cost);
+  await markIntegration(tenantId, 'dataforseo', true);
+  return { ...readAiResult(t.result?.[0] ?? null), costUsd: cost };
+}
+
+// --- DataForSEO Backlinks (SEO parte 10, Autoridad; pago por uso desde el 1 jul 2026) ---------------------------------
+
+const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+
+export async function dataForSeoLinkSummary(tenantId: string, domain: string): Promise<{ summary: import('@/lib/core/capabilities').LinkSummary; costUsd: number }> {
+  const creds = readCredentials(await getIntegration(tenantId, 'dataforseo'));
+  type Res = { backlinks?: number; referring_domains?: number; rank?: number; backlinks_spam_score?: number; info?: { target_spam_score?: number } };
+  const r = await dfs<{ cost?: number; tasks?: DfsTask<Res>[] }>(creds, '/backlinks/summary/live', [{ target: domain, include_subdomains: true, backlinks_status_type: 'live', rank_scale: 'one_hundred' }]);
+  const t = r.tasks?.[0];
+  const cost = typeof t?.cost === 'number' ? t.cost : 0;
+  if (!t || t.status_code !== 20000) throw costError(`DataForSEO enlaces: ${t?.status_code ?? '?'} ${t?.status_message ?? ''}`, cost);
+  const x = t.result?.[0] ?? {};
+  return { summary: { backlinks: num(x.backlinks), referringDomains: num(x.referring_domains), rank: num(x.rank), spamScore: num(x.info?.target_spam_score ?? x.backlinks_spam_score) }, costUsd: cost };
+}
+
+export async function dataForSeoLinkIntersection(tenantId: string, targets: string[], exclude: string[], limit: number): Promise<{ domains: { domain: string; rank: number | null; linksTo: string[] }[]; costUsd: number }> {
+  const creds = readCredentials(await getIntegration(tenantId, 'dataforseo'));
+  const tg = Object.fromEntries(targets.slice(0, 20).map((d, i) => [String(i + 1), d]));
+  type Item = Record<string, { domain?: string; rank?: number } | undefined>;
+  const r = await dfs<{ cost?: number; tasks?: DfsTask<{ items?: Item[] | null }>[] }>(creds, '/backlinks/domain_intersection/live', [
+    { targets: tg, exclude_targets: exclude.slice(0, 10), include_subdomains: true, limit: Math.min(Math.max(limit, 1), 100), intersection_mode: 'partial', rank_scale: 'one_hundred' }
+  ]);
+  const t = r.tasks?.[0];
+  const cost = typeof t?.cost === 'number' ? t.cost : 0;
+  if (!t || t.status_code !== 20000) throw costError(`DataForSEO huecos de enlaces: ${t?.status_code ?? '?'} ${t?.status_message ?? ''}`, cost);
+  const out: { domain: string; rank: number | null; linksTo: string[] }[] = [];
+  for (const it of t.result?.[0]?.items ?? []) {
+    const hits = Object.entries(it ?? {}).filter(([, v]) => v && typeof v === 'object' && v.domain);
+    if (!hits.length) continue;
+    out.push({ domain: String(hits[0][1]!.domain).replace(/^www\./, ''), rank: num(hits[0][1]!.rank), linksTo: hits.map(([k]) => tg[k]).filter(Boolean) });
+  }
+  return { domains: out, costUsd: cost };
+}
+
+export async function dataForSeoLinkNewLost(tenantId: string, domain: string, fromYmd: string): Promise<{ months: { month: string; newDomains: number; lostDomains: number }[]; costUsd: number }> {
+  const creds = readCredentials(await getIntegration(tenantId, 'dataforseo'));
+  type Res = { items?: { date?: string; new_referring_domains?: number; lost_referring_domains?: number }[] | null };
+  const r = await dfs<{ cost?: number; tasks?: DfsTask<Res>[] }>(creds, '/backlinks/timeseries_new_lost_summary/live', [{ target: domain, date_from: fromYmd, group_range: 'month', include_subdomains: true }]);
+  const t = r.tasks?.[0];
+  const cost = typeof t?.cost === 'number' ? t.cost : 0;
+  if (!t || t.status_code !== 20000) throw costError(`DataForSEO nuevos y perdidos: ${t?.status_code ?? '?'} ${t?.status_message ?? ''}`, cost);
+  return { months: (t.result?.[0]?.items ?? []).filter((x) => x.date).map((x) => ({ month: String(x.date).slice(0, 7), newDomains: Number(x.new_referring_domains ?? 0), lostDomains: Number(x.lost_referring_domains ?? 0) })), costUsd: cost };
+}
+
+export async function dataForSeoReferringDomains(tenantId: string, domain: string, limit: number): Promise<{ domains: string[]; total: number | null; costUsd: number }> {
+  const creds = readCredentials(await getIntegration(tenantId, 'dataforseo'));
+  type Res = { total_count?: number; items?: { domain?: string }[] | null };
+  const r = await dfs<{ cost?: number; tasks?: DfsTask<Res>[] }>(creds, '/backlinks/referring_domains/live', [{ target: domain, include_subdomains: true, limit: Math.min(Math.max(limit, 1), 1000), backlinks_status_type: 'live' }]);
+  const t = r.tasks?.[0];
+  const cost = typeof t?.cost === 'number' ? t.cost : 0;
+  if (!t || t.status_code !== 20000) throw costError(`DataForSEO dominios que enlazan: ${t?.status_code ?? '?'} ${t?.status_message ?? ''}`, cost);
+  const res = t.result?.[0];
+  return { domains: (res?.items ?? []).map((x) => String(x.domain ?? '').replace(/^www\./, '')).filter(Boolean), total: num(res?.total_count), costUsd: cost };
 }
 
 /** Volumen mensual medio (Google Ads) de hasta 1000 búsquedas, con su coste. */

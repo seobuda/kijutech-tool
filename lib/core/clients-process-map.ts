@@ -190,5 +190,29 @@ export const CLIENTES_PROCESS_MAP: ProcessStep[] = [
     ai: 'Nada.',
     code: 'Cada cliente aislado: un fallo no para a los demás.',
     tables: ['client_questions', 'client_questionnaires']
+  },
+  {
+    id: 'cli-conexiones',
+    lane: 'Conexiones',
+    name: 'Conexiones con WordPress y GoHighLevel',
+    description: 'Ficha → Webs y cuentas → Conexiones. WordPress: SEO crea borradores desde los briefs (nunca publica). GoHighLevel: los leads de los formularios de su web. Contraseña o token cifrados; la pantalla solo ve el final enmascarado. Se borran con el cliente.',
+    status: 'built',
+    file: 'lib/core/connections.ts',
+    when: 'A mano (administrador): conectar, comprobar o quitar. WordPress se vuelve a comprobar antes de cada borrador.',
+    ai: 'Nada.',
+    code: 'WordPress: lista blanca (solo rol «contributor», sin publish_*, upload_files, unfiltered_html, edit_published/others ni manage_*), https en el puerto estándar, host de una web del cliente, sin seguir redirecciones (publicFetch), cambiar la URL o el usuario obliga a reescribir la contraseña, solo POST de entradas nuevas en borrador; enlace de edición construido por nosotros. GoHighLevel: host fijo, token de solo lectura (forms.readonly), cabecera Version 2021-07-28 (comprobada el 27 nov con una subcuenta real). Nunca se registran cabeceras ni cuerpos. Auditoría Opus: docs/DISENO-SEO-CIERRE.md.',
+    tables: ['client_connections', 'client_assets', 'clients']
+  },
+  {
+    id: 'cli-leads',
+    lane: 'Conexiones',
+    name: 'Leads de los formularios (GoHighLevel)',
+    description: 'Cada día se descargan los envíos de formularios de cada cliente conectado: fecha, formulario, página de la web, referente, canal (orgánico, anuncios, directo, redes, otras webs) y UTM. Los usa la pestaña En vivo de SEO y el informe mensual.',
+    status: 'built',
+    file: 'lib/core/connections.ts',
+    when: 'Una vez al día (proceso «clientes.leads», se da de alta al conectar el primer cliente) o «Descargar ahora».',
+    ai: 'Nada.',
+    code: 'GET /forms/submissions por páginas de 100 desde la última descarga − 2 días (35 días la primera vez), clave única por envío. RGPD: ni nombre, ni correo, ni teléfono, ni IP, ni id del contacto; URL sin parámetros y solo los utm_*. Retención 25 meses. Espera ante el 429.',
+    tables: ['client_leads', 'client_connections']
   }
 ];

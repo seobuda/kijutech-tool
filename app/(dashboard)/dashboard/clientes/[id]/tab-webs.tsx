@@ -16,6 +16,8 @@ import { areaClass, brandBtn, checkClass, ConfirmDelete, MsgLine, selectClass, u
 import { Field } from './tab-contactos';
 import { GOOGLE_KINDS, GooglePanel, GooglePicker } from './google-props';
 import type { AssetView } from './ficha-view';
+import type { ConnectionView } from '@/lib/core/connections';
+import { Conexiones } from './conexiones';
 
 const empty: AssetView = { id: '', kind: 'web', label: '', value: '', access: 'sin_revisar', accessNotes: '', isPrimary: false, recognizeEmails: true, emailDomain: '', notes: '' };
 const ACCESS_TONE: Record<string, 'success' | 'warning' | 'danger' | 'neutral'> = { si: 'success', pendiente: 'warning', no: 'danger', sin_revisar: 'neutral', no_aplica: 'neutral' };
@@ -30,7 +32,7 @@ const PLACEHOLDER: Partial<Record<AssetKind, string>> = {
   mapa_contenido: 'https://docs.google.com/spreadsheets/d/…'
 };
 
-export function WebsTab({ clientId, assets, integrations }: { clientId: string; assets: AssetView[]; integrations: { google: boolean; dataforseo: boolean } }) {
+export function WebsTab({ clientId, assets, integrations, connections, isAdmin }: { clientId: string; assets: AssetView[]; integrations: { google: boolean; dataforseo: boolean }; connections: ConnectionView[]; isAdmin: boolean }) {
   const [edit, setEdit] = useState<string | null>(null);
   const { run, pending, msg } = useRun();
   const has = (k: AssetKind) => assets.some((a) => a.kind === k);
@@ -140,6 +142,7 @@ export function WebsTab({ clientId, assets, integrations }: { clientId: string; 
           )}
         </ul>
       )}
+      {(isAdmin || connections.length > 0) && <Conexiones clientId={clientId} connections={connections} isAdmin={isAdmin} canEdit />}
     </div>
   );
 }

@@ -171,5 +171,11 @@ export const PUERTAS_KINDS: SaludKind[] = [
   { kind: 'seo.doorway_pages', group: 'contenido', title: 'Páginas puerta: la misma página cambiando la población', explain: 'Hay 3 o más páginas casi idénticas que solo cambian el nombre de la población. Google las considera páginas puerta y puede penalizar la web entera. Mejor una sola página bien hecha, o páginas de zona con contenido propio y útil de cada sitio.', severityDefault: 'importante', ruleVersion: 1 }
 ];
 
-export const SEO_KINDS: SaludKind[] = [...SALUD_KINDS, ...LOCAL_KINDS, ...MAPA_KINDS, ...VIGILANCIA_KINDS, ...EXTERNOS_KINDS, ...POSICIONES_KINDS, ...FICHA_KINDS, ...GEOGRID_KINDS, ...NAP_ANTIGUO_KINDS, ...PUERTAS_KINDS, ...HACKEO_FINDING_KINDS, ...DINERO_FINDING_KINDS, ...DEMANDA_FINDING_KINDS, ...DIAG_FINDING_KINDS, ...DECAY_FINDING_KINDS];
+/** Partes 10 y 11 (27 nov 2026): huecos de enlaces («seo.autoridad:enlaces») y panel de IA («seo.panel_ia:respuestas»). */
+export const CIERRE_FINDING_KINDS: SaludKind[] = [
+  { kind: 'seo.ai_competitor_only', group: 'contenido', title: 'Los asistentes de IA recomiendan a la competencia y no al cliente', explain: 'Dos meses seguidos, ChatGPT, Gemini, Google o Perplexity han respondido a esta pregunta sin nombrar ni citar al cliente, y sí a un competidor confirmado en más de la mitad de las respuestas. Los asistentes citan sobre todo las webs y directorios que ya posicionan y las reseñas: mira en la pestaña IA qué fuentes citan y consigue estar en ellas, con una página propia clara que responda a la pregunta.', severityDefault: 'aviso', ruleVersion: 1 },
+  { kind: 'seo.link_gap', group: 'enlazado', title: 'Webs que enlazan a la competencia y no al cliente', explain: 'Hay 5 o más webs de cierta calidad (no directorios ni redes) que enlazan a dos o más competidores y no al cliente: asociaciones, prensa local, proveedores, patrocinios… Son las oportunidades de enlace más realistas. La lista está en la pestaña Autoridad.', severityDefault: 'aviso', ruleVersion: 1 }
+];
+
+export const SEO_KINDS: SaludKind[] = [...SALUD_KINDS, ...CIERRE_FINDING_KINDS, ...LOCAL_KINDS, ...MAPA_KINDS, ...VIGILANCIA_KINDS, ...EXTERNOS_KINDS, ...POSICIONES_KINDS, ...FICHA_KINDS, ...GEOGRID_KINDS, ...NAP_ANTIGUO_KINDS, ...PUERTAS_KINDS, ...HACKEO_FINDING_KINDS, ...DINERO_FINDING_KINDS, ...DEMANDA_FINDING_KINDS, ...DIAG_FINDING_KINDS, ...DECAY_FINDING_KINDS];
 export const SALUD_KIND_BY_KEY = new Map(SEO_KINDS.map((k) => [k.kind, k]));

@@ -1,4 +1,5 @@
 import 'server-only';
+import { registerConnectionJobs } from '@/lib/core/connections';
 
 // Núcleo: alta de los cimientos de la plataforma al arrancar (cimientos, 23 nov 2026). Lo llama wireApp().
 // Registra en la cola los trabajos del núcleo (envío de mensajes a clientes, descarga de Search Console, rastreo), la
@@ -72,6 +73,7 @@ export function registerPlatformCapabilities(): void {
   registerMeasureJobs(); // SEO parte 8: medir si funcionaron las intervenciones (diario por cuenta)
   registerInterventionJobs(); // Hito 1 SEO: fecha de «hecho» de las intervenciones (cada hora)
   registerQuestionsJobs(); // 25 nov 2026: preguntas al cliente (leer respuestas, envío automático y pasada diaria)
+  registerConnectionJobs(); // 27 nov 2026: leads de GoHighLevel de cada cliente (cada día)
   registerFeedEvents(); // Hito 1 SEO: actualizaciones e incidencias de Google como eventos externos
   registerTools([escribirAlCliente]);
   // Trabajos terminados de la cola: se borran con la limpieza semanal (los fallidos se guardan el doble de tiempo).
