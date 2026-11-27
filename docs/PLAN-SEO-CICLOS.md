@@ -191,3 +191,34 @@ Cada fase cierra con el Mapa Visual, `ESTADO.md`, el documento de sesión y el r
 - % de opciones aprobadas sin editar;
 - % de ciclos con lectura a +90 días;
 - minutos de Enric por revisión semanal.
+
+## 11. Auditoría independiente (Opus 5.5, alto, 27 nov) y cambios del modelo antes de la migración
+Se aceptan todos los hallazgos:
+- **G1, dos bolsas de horas:**
+  - Los huecos del ciclo van por su semana y no pasan por `scheduleMonths`.
+  - Lo reactivo tiene de tope `monthlyHours × reserva` más lo que el ciclo no use.
+  - Activar un ciclo exige `monthlyHours`.
+  - Si un crítico se come horas del ciclo, los huecos se mueven o se saltan, siempre con su motivo.
+- **G2, aprobación del lote:**
+  - `seo_cycles.approval_mode` (`lote_admin` en los dos primeros ciclos de estrategia de cada proyecto y `automatico` después; editable).
+  - La aprobación vive en los huecos (`approved_by` / `approved_at`, guard `admin`). Se aprueba el mes entero.
+  - La materialización a 14 días solo encarga huecos aprobados.
+- **G3, un solo camino para el contenido:**
+  - El hueco de contenido se encarga por el brief (`requestBrief` → `briefToTask`, intervención `seo.brief`). No crea propuesta en el plan.
+  - Los demás roles van por `seo_plan_items` (`origin='ia'`) → `approvePlanItem`.
+  - Que la medición no deje «sin páginas» para siempre al contenido nuevo es núcleo: va a la fase E, con su protocolo.
+- **I1, ciclo de vida:**
+  - Cancelar el ciclo o una línea pasa sus pendientes a `caducada` y sus huecos a `saltado`.
+  - Un hueco atrasado se encarga una vez con fecha nueva. Si no está aprobado tres semanas después de su semana, pasa a `saltado` con su motivo.
+- **I2, sin duplicados entre las dos bolsas:** el hueco guarda los `finding_ids` de su tema. Los temas se eligen al materializar, excluyendo los que tienen una propuesta reactiva abierta.
+- **I3, modelo:**
+  - Sin `planned_units` / `done_units`: se derivan de los huecos.
+  - Únicos: `(project_id, seq)` y `(line_id, due_week, n)`; un solo ciclo activo por proyecto.
+  - Cascada ciclo → líneas → huecos; `seo_plan_items.cycle_id` con `SET NULL`.
+  - El objetivo va por línea.
+  - Las propuestas de la IA (varias por ciclo) irán en una tabla propia en la fase D.
+- **I4, marcador mínimo en la fase C:** publicados frente a previstos e impresiones y clics de las URL publicadas (`gsc_daily`; no incluye las búsquedas anónimas, y así se dice). Los leads por URL de entrada no se pueden medir: fuera del marcador.
+- **I5:** en el expediente se dice que el ciclo n+1 se propone sin la lectura del n; se usan indicadores a 28 y 56 días, marcados como tales.
+- **I6:** en la fase D, la opción recomendada sale de un puntuador por reglas y Opus solo aporta la tesis y otro foco. Evidencias como identificadores validados, versión del prompt guardada y examen.
+- **I7, un solo cerebro en código:** `seoCoverage` (`lib/estrategia/processes.ts`) corta las propuestas SEO del estratega `est` en clientes con proyecto SEO.
+- **Orden nuevo:** **A+C juntas** (ciclo manual desde el catálogo, calendario, aprobación del mes por un admin, dos bolsas y marcador mínimo) → B (ciclo 0 y etapas) → PLAN-UX 2 → D (IA, tras 2-3 ciclos manuales) → E → F.

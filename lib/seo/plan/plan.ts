@@ -348,17 +348,25 @@ export async function planSchedule(tenantId: string, projectId: string): Promise
   const byRef = new Map(st.map((x) => [x.ref, x]));
   // Atasco 3 de la simulación (27 nov 2026): lo consumido es el máximo entre lo estimado y lo fichado de verdad, y un
   // encargo cancelado (borrado) no consume nada.
+  // Dos bolsas (estrategia por ciclos, auditoría G1): lo que sale de una estrategia va por su propio calendario y no cuenta
+  // aquí; la cola reactiva tiene las horas que el ciclo no usa este mes, y como mínimo su reserva.
   const usedThisMonth = items
-    .filter((i) => (i.status === 'aprobada' || i.status === 'hecha') && i.decidedAt && i.decidedAt >= start)
+    .filter((i) => !i.cycleId && (i.status === 'aprobada' || i.status === 'hecha') && i.decidedAt && i.decidedAt >= start)
     .reduce((a, i) => {
       const s2 = i.requestRef ? byRef.get(i.requestRef) : undefined;
       if (s2?.cancelled) return a;
       return a + Math.max(Number(i.estHours), (s2?.spentMinutes ?? 0) / 60);
     }, 0);
-  const pending = items.filter((i) => i.status === 'pendiente');
+  const pending = items.filter((i) => i.status === 'pendiente' && !i.cycleId);
+  const monthly = project.monthlyHours != null ? Number(project.monthlyHours) : null;
+  const [cyc] = (await db.execute(sql`
+    SELECT c.reserve_pct, coalesce(sum(s.est_hours) FILTER (WHERE s.status <> 'saltado' AND to_char(s.due_week, 'YYYY-MM') = to_char(now() AT TIME ZONE 'Europe/Madrid', 'YYYY-MM')), 0)::float AS hours
+    FROM seo_cycles c LEFT JOIN seo_cycle_slots s ON s.cycle_id = c.id
+    WHERE c.project_id = ${projectId} AND c.status = 'activo' GROUP BY c.reserve_pct`)) as unknown as { reserve_pct: number; hours: number }[];
+  const reactiveHours = monthly != null && cyc ? Math.max((monthly * Number(cyc.reserve_pct)) / 100, monthly - Number(cyc.hours)) : monthly;
   const sched = scheduleMonths(
     pending.map((i) => ({ id: i.id, estHours: Number(i.estHours), priority: i.priority, severity: (i.evidence as { severity?: string }).severity ?? null })),
-    project.monthlyHours != null ? Number(project.monthlyHours) : null,
+    reactiveHours,
     usedThisMonth
   );
   const options = project.clientId && ws?.taskOptions ? await ws.taskOptions(tenantId, project.clientId, 'seo').catch(() => null) : null;
