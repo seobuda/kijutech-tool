@@ -162,6 +162,8 @@ export function registerSaludAudit(): void {
       await enqueueJob({ ...base, kind: 'seo.mapa.build', priority: 6, dedupeKey: `seo.mapa:${projectId}` });
       // Parte 1 (técnico 2a): enlaces a otras webs, en un trabajo aparte (peticiones a terceros, con su tiempo).
       await enqueueJob({ ...base, payload: { projectId, runId: run.id }, kind: 'seo.salud.externos', priority: 8, dedupeKey: `seo.salud.externos:${projectId}` });
+      // Parte 5c: páginas puerta (vuelve a leer como mucho 20 candidatas y compara su texto propio).
+      await enqueueJob({ ...base, payload: { projectId, runId: run.id }, kind: 'seo.salud.puertas', priority: 8, dedupeKey: `seo.salud.puertas:${projectId}` });
       return r;
     }
   });

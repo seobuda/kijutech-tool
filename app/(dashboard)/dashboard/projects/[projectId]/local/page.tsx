@@ -11,12 +11,14 @@ import { ProjectSeoNav } from '../seo-nav';
 import { LocalPanel } from './local-panel';
 import { GeogridPanel } from './geogrid-panel';
 import { getGeogridView } from '@/lib/seo/local/geogrid-view';
+import { getCitasView } from '@/lib/seo/local/citas-view';
+import { CitasPanel } from './citas-panel';
 
 export default async function LocalPage({ params }: { params: Promise<{ projectId: string }> }) {
   const user = await requirePagePermission('view');
   const { projectId } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(projectId)) notFound();
-  const [view, canEdit, dossier, grid] = await Promise.all([getLocalView(user.tenantId, projectId), checkPermission('edit').then((r) => r.ok), getDossierView(user.tenantId, projectId), getGeogridView(user.tenantId, projectId)]);
+  const [view, canEdit, dossier, grid, citas] = await Promise.all([getLocalView(user.tenantId, projectId), checkPermission('edit').then((r) => r.ok), getDossierView(user.tenantId, projectId), getGeogridView(user.tenantId, projectId), getCitasView(user.tenantId, projectId)]);
   if (!view || !dossier) notFound();
   return (
     <PageContainer>
@@ -32,6 +34,7 @@ export default async function LocalPage({ params }: { params: Promise<{ projectI
       <ProjectSeoNav projectId={projectId} active="local" />
       <LocalPanel projectId={projectId} view={view} canEdit={canEdit} clientName={dossier.project.clientName ?? dossier.project.name} />
       {view.client && <GeogridPanel projectId={projectId} grid={grid} canEdit={canEdit} />}
+      {view.clientId && <CitasPanel projectId={projectId} citas={citas} canEdit={canEdit} name={view.client?.snap?.title ?? dossier.project.clientName ?? dossier.project.name} category={view.client?.snap?.category ?? null} projectPath={`/dashboard/projects/${projectId}`} />}
     </PageContainer>
   );
 }

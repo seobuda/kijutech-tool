@@ -153,7 +153,7 @@ export async function dataForSeoSerp(tenantId: string, keyword: string, location
 /** SERP estructurada (orgánico y paquete local) para la fuente de búsquedas del núcleo (registerSerpSource, Hito 2 SEO). */
 export async function dataForSeoSerpResult(tenantId: string, q: { keyword: string; location: string; language: string; depth?: number }): Promise<SerpResult> {
   const creds = readCredentials(await getIntegration(tenantId, 'dataforseo'));
-  type Item = { type: string; rank_absolute: number; rank_group?: number; title?: string; url?: string; domain?: string; rating?: { value?: number; votes_count?: number } | null; items?: Item[] };
+  type Item = { type: string; rank_absolute: number; rank_group?: number; title?: string; description?: string; url?: string; domain?: string; rating?: { value?: number; votes_count?: number } | null; items?: Item[] };
   const r = await dfs<{ cost?: number; tasks?: { result?: { items?: Item[] }[] }[] }>(creds, '/serp/google/organic/live/advanced', [
     { keyword: q.keyword.slice(0, 200), location_name: q.location, language_code: q.language, depth: Math.min(q.depth ?? 20, 50) }
   ]);
@@ -167,7 +167,7 @@ export async function dataForSeoSerpResult(tenantId: string, q: { keyword: strin
     }
   };
   return {
-    organic: items.filter((i) => i.type === 'organic' && i.url).map((i) => ({ rank: i.rank_group ?? i.rank_absolute, domain: (i.domain ?? host(i.url) ?? '').replace(/^www\./, ''), url: i.url!, title: i.title ?? '' })),
+    organic: items.filter((i) => i.type === 'organic' && i.url).map((i) => ({ rank: i.rank_group ?? i.rank_absolute, domain: (i.domain ?? host(i.url) ?? '').replace(/^www\./, ''), url: i.url!, title: i.title ?? '', description: i.description ?? '' })),
     localPack: items
       .filter((i) => i.type === 'local_pack')
       .map((i, n) => ({ rank: n + 1, title: i.title ?? '', domain: host(i.url) ?? (i.domain ? i.domain.replace(/^www\./, '') : null), rating: i.rating?.value ?? null, reviews: i.rating?.votes_count ?? null })),

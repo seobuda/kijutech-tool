@@ -11,13 +11,14 @@ import 'server-only';
 import { randomUUID } from 'node:crypto';
 import { and, desc, eq, inArray, isNull, lt, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { clients, findings, projects, seoDossierFacts, seoRankChecks, seoRankKeywords } from '@/lib/db/schema';
+import { clients, crawlPages, crawlRuns, findings, projects, seoDossierFacts, seoRankChecks, seoRankKeywords } from '@/lib/db/schema';
 import { serpSource } from '@/lib/core/capabilities';
 import { enqueueJob, registerJobKind } from '@/lib/core/jobs';
 import { syncFindings } from '@/lib/core/findings';
 import { gscPropertiesForProject } from '@/lib/core/gsc';
 import { projectWebUrl } from '@/lib/seo/salud/audit';
 import { brandTokens, host, isBrandQuery, normText } from '@/lib/seo/expediente/rules';
+import { missingZonePages } from '@/lib/seo/local/citas-zonas-rules';
 import { canSpend, recordDataSpend } from '@/lib/seo/gasto';
 import { buildSeed, isImportant, keywordLanguage, kwKey, lostLocalPackState, MAX_KEYWORDS, pickLocation, rankDropState, readSerp, zoneTowns, type HistoryPoint } from '@/lib/seo/posiciones/rules';
 
@@ -260,7 +261,44 @@ async function evaluateFindings(tenantId: string, projectId: string): Promise<vo
     const packKey = `seo.lost_local_pack:${k.id}`;
     if (lostLocalPackState(h, open.has(packKey))) out.push({ kind: 'seo.lost_local_pack', dedupeKey: packKey, query: k.keyword, evidence: { history: h.filter((x) => x.ok).map((x) => x.localRank) } });
   }
-  await syncFindings(tenantId, projectId, POSICIONES_SOURCE, out, ['seo.rank_drop', 'seo.lost_local_pack']);
+  out.push(...(await zoneFindings(tenantId, projectId, kws).catch((e) => {
+    console.error('[seo] posiciones: páginas de zona:', e instanceof Error ? e.message : e);
+    return [];
+  })));
+  await syncFindings(tenantId, projectId, POSICIONES_SOURCE, out, ['seo.rank_drop', 'seo.lost_local_pack', 'seo.zone_page_missing']);
+}
+
+/**
+ * Páginas de zona con demanda (parte 5c): búsquedas «servicio + población» con volumen o impresiones, fuera del top 10,
+ * cuya población (validada en la lista de ubicaciones) no tiene página propia. Solo si el negocio va a domicilio.
+ */
+async function zoneFindings(tenantId: string, projectId: string, kws: (typeof seoRankKeywords.$inferSelect)[]): Promise<Parameters<typeof syncFindings>[3]> {
+  const facts = await db.select({ field: seoDossierFacts.field, value: seoDossierFacts.value, status: seoDossierFacts.status }).from(seoDossierFacts).where(eq(seoDossierFacts.projectId, projectId));
+  const atencion = facts.find((f) => f.field === 'atencion' && f.status === 'confirmado')?.value;
+  if (atencion !== 'domicilio' && atencion !== 'ambos') return [];
+  const { zona } = await confirmedFacts(projectId);
+  let towns = zoneTowns(zona);
+  const src = serpSource();
+  if (src?.locations && towns.length) {
+    const list = await src.locations(tenantId, 'es').catch(() => []);
+    const cities = new Set(list.filter((l) => /city|municipality/i.test(l.type)).map((l) => normText(l.name.split(',')[0])));
+    if (cities.size) towns = towns.filter((t) => cities.has(normText(t)));
+  }
+  if (!towns.length) return [];
+  const sz = kws.filter((k) => k.origin === 'servicio_zona');
+  if (!sz.length) return [];
+  const latest = await db
+    .select({ keywordId: seoRankChecks.keywordId, position: seoRankChecks.position, createdAt: seoRankChecks.createdAt })
+    .from(seoRankChecks)
+    .where(and(eq(seoRankChecks.projectId, projectId), eq(seoRankChecks.status, 'hecha'), inArray(seoRankChecks.keywordId, sz.map((k) => k.id))))
+    .orderBy(desc(seoRankChecks.createdAt));
+  const posOf = new Map<string, number | null>();
+  for (const l of latest) if (!posOf.has(l.keywordId)) posOf.set(l.keywordId, l.position);
+  const [run] = await db.select({ id: crawlRuns.id }).from(crawlRuns).where(and(eq(crawlRuns.projectId, projectId), eq(crawlRuns.target, 'propio'), eq(crawlRuns.status, 'hecho'))).orderBy(desc(crawlRuns.createdAt)).limit(1);
+  if (!run) return [];
+  const pages = (await db.select({ url: crawlPages.url, title: crawlPages.title, h1: crawlPages.h1, statusCode: crawlPages.statusCode, robotsMeta: crawlPages.robotsMeta }).from(crawlPages).where(eq(crawlPages.runId, run.id))).filter((p) => p.statusCode === 200 && !/noindex/i.test(p.robotsMeta ?? ''));
+  const missing = missingZonePages(sz.filter((k) => posOf.has(k.id)).map((k) => ({ keyword: k.keyword, volume: k.volume, impressions: k.impressions, position: posOf.get(k.id) ?? null })), towns, pages.map((p) => ({ url: p.url, title: p.title, h1: p.h1 ?? [] })));
+  return missing.map((m) => ({ kind: 'seo.zone_page_missing', dedupeKey: `seo.zone_page_missing:${normText(m.town)}`, query: m.keyword, evidence: { town: m.town, keyword: m.keyword } }));
 }
 
 let registered = false;

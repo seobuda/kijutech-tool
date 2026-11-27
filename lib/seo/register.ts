@@ -12,6 +12,7 @@ import { registerAltaJobs } from '@/lib/seo/alta/alta';
 import { registerPosicionesJobs } from '@/lib/seo/posiciones/posiciones';
 import { registerLocalJobs } from '@/lib/seo/local/ficha';
 import { registerGeogridJobs } from '@/lib/seo/local/geogrid';
+import { registerPuertasJob } from '@/lib/seo/local/puertas';
 import { registerMapaJobs } from '@/lib/seo/mapa/mapa';
 import { registerCompetenciaJobs } from '@/lib/seo/competencia/competencia';
 import { registerPreguntasJobs } from '@/lib/seo/preguntas/preguntas';
@@ -26,6 +27,7 @@ export function registerSeoCapabilities(): void {
   registerCompetenciaJobs(); // Hito 2: competencia en Google (DataForSEO por el núcleo)
   registerPreguntasJobs(); // Hito 2: correo de 3 preguntas y lectura de la respuesta del cliente
   registerSeoWatch();
+  registerPuertasJob(); // parte 5c: páginas puerta (texto propio comparado), tras cada auditoría
   registerGeogridJobs(); // parte 5b: recogida del mapa por zonas
   registerLocalJobs(); // parte 5a: confirmación de «ficha cerrada» antes de avisar
   registerPosicionesJobs(); // parte 4: recogida de las posiciones enviadas a la cola de DataForSEO
