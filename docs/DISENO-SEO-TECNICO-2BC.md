@@ -217,3 +217,119 @@ Hecha por un subagente Opus 5.5 con esfuerzo alto. **Veredicto: vale con cambios
   - lectura hasta 2 MB;
   - no avisa de lo que ya cubre `page_regressed`, ni del noindex o el estado de la portada (lo cubre la vigilancia).
 - Se rehará esta parte del diseño antes de construirla, con lo aprendido en la 6a.
+
+## Tanda 6b, diseño concreto (27 nov, tras desplegar la 6a)
+
+### Tablas (migración 0072, aditiva)
+
+**`seo_change_log`:**
+- Columnas:
+  - `id bigserial`;
+  - `tenant_id` y `project_id` (FK, en cascada);
+  - `url text` y `url_hash varchar(40)`;
+  - `field varchar(30)`;
+  - `before` y `after` (`text`, como mucho 500 caracteres);
+  - `extra jsonb` (p. ej. `{pages: 37}` en un cambio de plantilla);
+  - `source varchar(10)` (`rastreo` o `dinero`);
+  - `batch varchar(64)` (el `run_id` del rastreo o `dinero:<fecha y hora>`);
+  - `prev_observed_at timestamp` (inicio de la ventana en que pasó el cambio);
+  - `detected_at timestamp`.
+- Clave única `(project_id, batch, url_hash, field)`: un reintento no duplica.
+- Índices `(project_id, detected_at desc)` y `(project_id, url_hash, detected_at)`.
+- Sin FK al rastreo, porque los rastreos se purgan (se guardan 3).
+
+**`seo_money_pages`:**
+- Columnas:
+  - `id`, `tenant_id`, `project_id`, `url` y `url_hash`;
+  - `reason varchar(10)` (`home`, `top`, `pinned` o `encargo`) y `expires_at`;
+  - `active boolean`;
+  - `baseline jsonb` (la última foto sana o aceptada) y `last jsonb`;
+  - `last_checked_at`;
+  - `pending_kind varchar(40)` y `pending_since`;
+  - `fail_streak int`;
+  - `created_at` y `updated_at`.
+- Clave única `(project_id, url_hash)`.
+- Foto: `{status, title, h1, canonical, indexable, words, simhash}`.
+
+### Registro desde el rastreo (al terminar cada auditoría)
+- **Rastreo anterior:** el último rastreo `hecho` del proyecto que no sea este, sin filtrar por `rootUrl`. Si cambia el host, se empareja por ruta.
+- **Campos comparados:**
+  - `title`, `meta_description`, `h1` (el primero), `canonical` (como ruta si es interno), `indexable` y `status`;
+  - `content`: con 150 palabras o más en alguna de las dos versiones, simhash a 10 bits o más **y** las palabras cambian un 30 % o más;
+  - `schema`: los tipos y el nombre, teléfono y dirección del negocio, normalizados.
+- **`url_new` / `url_gone`:**
+  - solo URLs sin parámetros, con los dos rastreos sin truncar y menos del 20 % de bloqueos (la misma guarda que `pageRegressions`);
+  - `gone` solo de URLs que antes eran indexables. Se apunta «ya no aparece en el rastreo», no «ya no existe».
+- **Plantilla:** si un mismo campo cambia en 20 páginas o más y en el 50 % o más de las comunes, se guarda **una sola fila** `url='*'`, con el número de páginas y un ejemplo.
+- Como mucho 500 filas por rastreo, primero las páginas con clics de GSC.
+- `prev_observed_at` = `finished_at` del rastreo anterior.
+
+### Páginas de dinero (proceso `seo.dinero`, cada 6 h; editable a 3, 6, 12 o 24)
+- **Lista:** se repasa en cada pasada, que es barato.
+  - `home`: la web del proyecto;
+  - `top`: las 5 con más clics de GSC en 28 días; las que dejan de serlo pasan a `active=false`;
+  - `pinned`: como mucho 5, las fija una persona;
+  - `encargo`: URLs de los ítems del plan `hecha` en los últimos 30 días, como mucho 10, con `expires_at` = hecha + 30 días. Sirven para la fecha real de la parte 8.
+- **Lectura:** con `publicFetch` y `resolvesPublic`, sin seguir redirecciones, hasta 2 MB y `extractPage` del núcleo. 15 s por página, una detrás de otra.
+- **Error de red:**
+  - `fail_streak` + 1 y no se decide nada;
+  - los hallazgos abiertos de esa URL se vuelven a emitir tal cual;
+  - con 4 fallos seguidos hay un aviso informativo («no podemos leer la página»), no crítico.
+- **Condiciones** (sobre la foto actual; las relativas, frente a `baseline`):
+  - noindex (crítico) o estado distinto de 200 (crítico): **no en la portada**, que ya la cubre la vigilancia horaria;
+  - canonical a otra URL (importante);
+  - título o H1 vacíos (importante);
+  - palabras por debajo del 50 % de `baseline` con `baseline` de 150 o más (importante).
+- **Confirmación:**
+  - la primera vez se guarda `pending_kind`/`pending_since` y se encola `seo.dinero.confirmar` a los 30 min;
+  - si en la confirmación sigue igual, sale el hallazgo `seo.money_page_changed` (clave por URL y tipo), con fuente `seo.vigilancia:dinero`;
+  - si se arregla, se limpia lo pendiente y se resuelve.
+- **No avisa** si ya está abierto `seo.page_regressed` para esa URL.
+- **`baseline`:**
+  - se actualiza a la foto actual cuando no hay ninguna condición;
+  - si la persona marca el hallazgo «Dejar así» o «No es un problema», `baseline` = la última foto (lo acepta).
+- **Registro:** cada diferencia con `last` en los mismos campos va al registro de cambios (`source='dinero'`). El contenido solo cuenta si la diferencia ya estaba en la pasada anterior (que persista).
+- **Purga** del registro con más de 18 meses en cada pasada de dinero del proyecto.
+
+### Pantallas
+- **Salud → «Cambios en la web»:** los últimos 90 días, 200 filas, con filtro por texto de URL. Por fila: fecha, URL, qué cambió, antes y después y de dónde sale.
+- **Salud → «Páginas de dinero»:**
+  - la lista con su motivo, la última comprobación y el estado;
+  - «Fijar una página» (URL de la web del proyecto) y «Quitar»;
+  - permiso `edit`.
+
+### Mapa Visual y ESTADO
+- Pasos «Registro de cambios» y «Páginas de dinero», con `runs` y `tables`.
+- Proveedor `live` si el patrón de SEO lo usa.
+
+### Auditoría del diseño concreto (Opus 5.5, esfuerzo alto)
+**Veredicto: vale con cambios.** Aplicados todos.
+
+**Graves:**
+1. Las URLs de un encargo se vigilan **desde que se aprueba**: la intervención `prevista` se crea al aprobar. La vigilancia dura hasta `interventions.done_at` + 30 días; si no, la fecha real se pierde.
+2. **«Dejar así» actualiza `baseline` en la propia acción** (`decideSaludFindingAction`) y sube `baseline_version`. La versión forma parte de la clave del hallazgo, así que un fallo posterior abre uno nuevo y el descartado queda como historia.
+3. **Todas las condiciones son relativas a `baseline`** («antes 200 e indexable, ahora no»). La primera foto se toma como `baseline`, sea cual sea.
+4. Una página con algo pendiente o con hallazgo abierto **no se desactiva**. Una página que sale del top se desactiva a las 4 semanas.
+
+**Importantes:**
+- 401, 403, 429, 5xx y los errores de red son «no concluyente»: suman a `fail_streak` y no deciden nada.
+- El contenido en dinero se compara con la última versión estable (`stable`), no con `last`.
+- **En el registro desde el rastreo:**
+  - se saltan las páginas sin respuesta o bloqueadas en cualquiera de los dos rastreos;
+  - la guarda del 20 % de bloqueos se aplica a los dos rastreos;
+  - la fila de plantilla guarda en `extra.urls` las URLs afectadas (como mucho 500). Las páginas vigiladas o con encargo conservan además su fila propia.
+- `reasons text[]`: una página solo se desactiva cuando no le queda ningún motivo.
+- Todas las URLs pasan por `normalizeUrl` antes del hash, y lo fijado y los encargos solo se aceptan del mismo sitio (`sameSite`).
+- El rastreo anterior se busca con `target='propio'`. Si cambia de host a una web distinta, se apunta una sola fila `host`.
+- La clave de dinero es `dinero:<id del trabajo>` (los reintentos no duplican).
+- **Aviso:** un crítico de dinero confirmado va a Telegram (`notifyOwner`) y a la alerta del proyecto, igual que la vigilancia.
+
+**Menores:**
+- La pasada normal también confirma lo pendiente que tenga más de 30 min.
+- `baseline` solo avanza si no hay ninguna condición y el cambio de palabras es menor del 20 % (una erosión lenta no se cuela).
+- Si falta el JSON-LD en uno de los dos rastreos, solo se comparan los tipos.
+- La supresión por `page_regressed` solo afecta a estado y noindex.
+- Si no se puede leer ninguna página, sale un único aviso de proyecto, y nada si `site_down` está abierto.
+- La purga va en una tarea diaria.
+- La lectura usa `safeFetcher` del núcleo (2 MB, sin redirecciones).
+- Permisos: el listado pide `view`; fijar y quitar, `edit`. Ambos tienen pruebas de seguridad.

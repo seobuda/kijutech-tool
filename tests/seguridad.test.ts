@@ -78,6 +78,8 @@ import { connectAnthropicAdminAction, disconnectAnthropicAdminAction, refreshOrg
 import { connectDoTokenAction, disconnectDoTokenAction, refreshInfraAction } from '@/lib/operaciones/infra-actions';
 import { chatWithAgentAction, deleteAgentAction, deleteIntegrationAction, previewVoiceAction, retryJobAction, saveAgentAction, saveIntegrationAction, saveVoiceSettingsAction } from '@/lib/agentes/actions';
 import { decideAgentToolAction, setToolAutonomyAction } from '@/lib/operaciones/agent-capabilities-actions';
+import { pinMoneyPageAction, unpinMoneyPageAction } from '@/lib/seo/cambios-actions';
+import { checkOldPhonesNowAction } from '@/lib/seo/local-actions';
 import ProjectsPage from '@/app/(dashboard)/dashboard/projects/page';
 import ArchivedProjectsPage from '@/app/(dashboard)/dashboard/projects/archived/page';
 import NewProjectPage from '@/app/(dashboard)/dashboard/projects/new/page';
@@ -247,6 +249,9 @@ const ACCIONES_ADMIN: [string, () => unknown][] = [
   ['setClientCommsApprovalAction (correos a clientes)', () => setClientCommsApprovalAction(ZERO, 'nunca')]
 ];
 const ACCIONES_EDITOR: [string, () => unknown][] = [
+  ['pinMoneyPageAction (SEO: fijar página de dinero)', () => pinMoneyPageAction(ZERO, 'https://example.com/')],
+  ['unpinMoneyPageAction (SEO: quitar página de dinero)', () => unpinMoneyPageAction(ZERO, ZERO)],
+  ['checkOldPhonesNowAction (SEO: buscar teléfonos antiguos)', () => checkOldPhonesNowAction(ZERO)],
   ['addLooseQuestionAction (Preguntas: pregunta suelta)', () => addLooseQuestionAction(ZERO, { text: '', answerType: 'texto', target: 'memoria' })],
   ['editClientQuestionAction (Preguntas: editar para un cliente)', () => editClientQuestionAction(ZERO, '', null)],
   ['setQuestionStatusAction (Preguntas: no aplica)', () => setQuestionStatusAction(ZERO, 'no_aplica')],

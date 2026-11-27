@@ -505,6 +505,13 @@
       "when": 1796700000000,
       "tag": "0071_seo_geogrid",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1796710000000,
+      "tag": "0072_seo_cambios_dinero",
+      "breakpoints": true
     }
   ]
 }

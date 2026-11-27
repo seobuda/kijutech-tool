@@ -12,13 +12,16 @@ import { SaludPanel } from './salud-panel';
 import { VigilanciaPanel } from './vigilancia-panel';
 import { VelocidadPanel } from './velocidad-panel';
 import { getVigilanciaView } from '@/lib/seo/vigilancia/view';
+import { listMoneyPages } from '@/lib/seo/cambios/dinero';
+import { listChanges } from '@/lib/seo/cambios/registro';
+import { CambiosPanel } from './cambios-panel';
 
 export default async function SaludPage({ params, searchParams }: { params: Promise<{ projectId: string }>; searchParams: Promise<{ tipo?: string }> }) {
   const user = await requirePagePermission('view');
   const { projectId } = await params;
   const { tipo } = await searchParams;
   if (!/^[0-9a-f-]{36}$/i.test(projectId)) notFound();
-  const [view, canEdit, vigilancia] = await Promise.all([getSaludView(user.tenantId, projectId, tipo ?? null), checkPermission('edit').then((r) => r.ok), getVigilanciaView(user.tenantId, projectId)]);
+  const [view, canEdit, vigilancia, money, changes] = await Promise.all([getSaludView(user.tenantId, projectId, tipo ?? null), checkPermission('edit').then((r) => r.ok), getVigilanciaView(user.tenantId, projectId), listMoneyPages(user.tenantId, projectId), listChanges(user.tenantId, projectId)]);
   if (!view) notFound();
 
   return (
@@ -40,6 +43,7 @@ export default async function SaludPage({ params, searchParams }: { params: Prom
       <ProjectSeoNav projectId={projectId} active="salud" />
       {vigilancia && <VigilanciaPanel projectId={projectId} view={vigilancia} canEdit={canEdit} />}
       {vigilancia && <VelocidadPanel speed={vigilancia.speed} />}
+      <CambiosPanel projectId={projectId} money={money} changes={changes} canEdit={canEdit} />
       <SaludPanel view={view} canEdit={canEdit} businessType={view.businessType} businessTypes={BUSINESS_TYPES} />
     </PageContainer>
   );

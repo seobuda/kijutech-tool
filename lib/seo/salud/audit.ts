@@ -19,6 +19,7 @@ import { auditCrawl, type AuditPage } from '@/lib/seo/salud/audit-rules';
 import { aiCrawlerIssues, genericAnchors, hreflangIssues, langMissing, pageRegressions, redirectLoops, robotsGoogleIssues, type PrevPage, type TecnicoPage } from '@/lib/seo/salud/audit-rules-tecnico';
 import { SALUD_KINDS, SEO_KINDS } from '@/lib/seo/salud/kinds';
 import { isIndexable } from '@/lib/seo/salud/audit-rules';
+import { logCrawlChanges } from '@/lib/seo/cambios/registro';
 import { detectTech, internalNofollow, schemaPhoneInconsistent, seoPluginsConflict, soft404Pages, soft404Site, stagingLeftovers, type ProbeResult } from '@/lib/seo/salud/audit-rules-2b';
 
 export const SALUD_SOURCE = 'seo.salud:rastreo';
@@ -172,7 +173,12 @@ export async function auditFinishedCrawl(tenantId: string, projectId: string, ru
   // Todos los tipos de Salud: lo que ya no aparece se resuelve solo. Si la sonda no fue concluyente, su aviso se deja como está.
   const kinds = SALUD_KINDS.map((k) => k.kind).filter((k) => probe !== null || k !== 'seo.soft_404_site');
   const r = await syncFindings(tenantId, projectId, SALUD_SOURCE, found, kinds);
-  return { pages: pages.length, gscPages: gscPages.length, ...r };
+  // Parte 6 (6b): registro de cambios frente al rastreo anterior (un fallo aquí no tumba la auditoría).
+  const changes = await logCrawlChanges(tenantId, projectId, run, new Map(gscPages.map((g) => [g.url, g.clicks]))).catch((e) => {
+    console.error('[seo] registro de cambios:', e instanceof Error ? e.message : e);
+    return 0;
+  });
+  return { pages: pages.length, gscPages: gscPages.length, changes, ...r };
 }
 
 let registered = false;

@@ -28,6 +28,8 @@ import { runLocal } from '@/lib/seo/local/ficha';
 import { runGeogrid } from '@/lib/seo/local/geogrid';
 import { runNap } from '@/lib/seo/local/nap';
 import { runHackeo } from '@/lib/seo/vigilancia/hackeo';
+import { registerDineroConfirm, runDinero } from '@/lib/seo/cambios/dinero';
+import { purgeChangeLog } from '@/lib/seo/cambios/registro';
 import {
   DETECTORES_SOURCE,
   SEO_PROCESSES,
@@ -350,7 +352,7 @@ export async function syncProjectSchedules(tenantId: string): Promise<{ active: 
 }
 
 let registered = false;
-const G = globalThis as unknown as { __kijuSeoSchedSync?: Map<string, number> };
+const G = globalThis as unknown as { __kijuSeoSchedSync?: Map<string, number>; __kijuSeoPurgeDay?: string };
 
 export function registerVigilancia(): void {
   if (registered) return;
@@ -367,6 +369,17 @@ export function registerVigilancia(): void {
   run('seo.local', (t, p) => runLocal(t, p, false), 300);
   run('seo.geogrid', (t, p) => runGeogrid(t, p), 300);
   run('seo.nap', runNap, 180);
+  // Parte 6 (6b): páginas de dinero. Registro propio (necesita el id del trabajo para el lote del registro de cambios).
+  registerJobKind({ kind: 'seo.dinero', timeoutS: 600, maxConcurrent: 2, maxAttempts: 2, run: async (ctx, payload) => runDinero(ctx.tenantId, String(payload.projectId ?? ''), `dinero:${ctx.job.id}`, false, () => topPages(ctx.tenantId, String(payload.projectId ?? ''), 5), ctx.heartbeat) });
+  registerProcess({ key: 'seo.dinero', scopeType: 'proyecto', label: `SEO: ${SEO_PROCESSES['seo.dinero'].label}`, defaultEveryMinutes: SEO_PROCESSES['seo.dinero'].every, enqueue: (_t, scopeId) => ({ kind: 'seo.dinero', payload: { projectId: scopeId }, priority: 6 }) });
+  registerDineroConfirm((t, p) => topPages(t, p, 5));
+  // Purga diaria del registro de cambios (más de 18 meses).
+  registerScheduled('seo: purgar el registro de cambios', async () => {
+    const day = new Date().toISOString().slice(0, 10);
+    if (G.__kijuSeoPurgeDay === day) return;
+    G.__kijuSeoPurgeDay = day;
+    await purgeChangeLog();
+  });
   registerJobKind({ kind: CONFIRM_KIND, timeoutS: 120, maxConcurrent: 4, maxAttempts: 2, run: async (ctx, payload) => runVigilancia(ctx.tenantId, String(payload.projectId ?? ''), true) });
   // Alta de los procesos de los proyectos: como mucho una vez cada hora por cuenta.
   registerScheduled('seo: programar la vigilancia de los proyectos', async (tenantId) => {

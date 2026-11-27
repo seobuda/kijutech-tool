@@ -19,7 +19,8 @@ export const SEO_PROCESSES = {
   'seo.posiciones': { label: 'Posiciones en Google (búsquedas que se siguen, mapa e IA)', every: 7 * 1440, options: [7 * 1440, 14 * 1440, 30 * 1440] },
   'seo.local': { label: 'Ficha de Google y reseñas (cliente y competencia)', every: 7 * 1440, options: [7 * 1440, 14 * 1440, 30 * 1440] },
   'seo.geogrid': { label: 'Mapa por zonas (geo-grid de Google Maps)', every: 30 * 1440, options: [14 * 1440, 30 * 1440, 60 * 1440] },
-  'seo.nap': { label: 'Teléfonos antiguos publicados en otras webs', every: 90 * 1440, options: [30 * 1440, 90 * 1440, 180 * 1440] }
+  'seo.nap': { label: 'Teléfonos antiguos publicados en otras webs', every: 90 * 1440, options: [30 * 1440, 90 * 1440, 180 * 1440] },
+  'seo.dinero': { label: 'Páginas de dinero (portada, las de más clics, fijadas y de encargos)', every: 360, options: [180, 360, 720, 1440] }
 } as const;
 export type SeoProcessKey = keyof typeof SEO_PROCESSES;
 export const SEO_PROCESS_KEYS = Object.keys(SEO_PROCESSES) as SeoProcessKey[];
