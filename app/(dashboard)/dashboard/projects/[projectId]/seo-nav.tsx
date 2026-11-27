@@ -26,6 +26,7 @@ type GroupKey = (typeof GROUPS)[number]['key'] | 'proyecto';
 /** Cada sección (una ruta del proyecto) y su grupo. El orden dentro del grupo es el de la segunda fila. */
 const SECTIONS = {
   resumen: { group: 'resumen', label: 'Resumen' },
+  estrategia: { group: 'trabajo', label: 'Estrategia' },
   plan: { group: 'trabajo', label: 'Plan de mejora' },
   briefs: { group: 'trabajo', label: 'Briefs y artículos' },
   salud: { group: 'tecnico', label: 'Salud técnica' },

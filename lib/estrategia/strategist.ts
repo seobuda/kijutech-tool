@@ -429,7 +429,17 @@ export async function executeAnalysis(a: EstAnalysis, now = new Date()): Promise
     const discarded: { title: string; reason: string }[] = [];
     const seen: string[] = [...dossier.existingTitles];
     const valid = [];
+    // Un solo cerebro (docs/PLAN-SEO-CICLOS.md, decisión de Enric del 27 nov 2026): si el cliente tiene un proyecto SEO
+    // activo CON estrategia activa, el trabajo SEO lo planifica esa estrategia; aquí no se proponen esas categorías.
+    const [seoProject] = (await db.execute(sql`
+      SELECT p.id FROM projects p JOIN seo_cycles c ON c.project_id = p.id AND c.status = 'activo'
+      WHERE p.tenant_id = ${a.tenantId} AND p.client_id = ${a.clientId} AND p.service = 'seo' AND p.status <> 'archived' LIMIT 1`)) as unknown as { id: string }[];
+    const SEO_CATEGORIES = new Set(['contenido', 'onpage', 'tecnico', 'enlaces', 'gbp']);
     for (const p of out.proposals) {
+      if (seoProject && SEO_CATEGORIES.has(p.category)) {
+        discarded.push({ title: p.title, reason: 'Lo planifica la estrategia SEO del proyecto (un solo cerebro)' });
+        continue;
+      }
       const ev = validEvidence(p, dossier.refs);
       if (!ev.length) {
         discarded.push({ title: p.title, reason: 'Sin evidencia que esté en el expediente' });

@@ -21,6 +21,8 @@ import { seoProjectDossier } from '@/lib/seo/dossier-provider';
 import { registerSeoEvidence } from '@/lib/seo/medir/evidence';
 import { registerBriefJobs } from '@/lib/seo/contenido/briefs';
 import { registerAiPanelJobs } from '@/lib/seo/panel-ia/panel';
+import { materializeAll } from '@/lib/seo/estrategia/ciclos';
+import { registerScheduled } from '@/lib/core/capabilities';
 import { seoWeeklyLines } from '@/lib/seo/informe-semanal';
 import { registerSeoAgentTools } from '@/lib/seo/agente-tool';
 import { registerReportSection } from '@/lib/core/capabilities';
@@ -39,6 +41,16 @@ export function registerSeoCapabilities(): void {
   registerSeoAgentTools(); // simulación del 27 nov: «seo_proyecto» para el jefe de Operaciones y el principal
   registerBriefJobs(); // parte 9a: briefs de contenido (SERP real y competencia)
   registerAiPanelJobs(); // parte 11: panel de IA (un trabajo por pregunta)
+  // Estrategias por ciclos (docs/PLAN-SEO-CICLOS.md): una pasada al día por cuenta encarga lo aprobado a 2 semanas vista,
+  // salta lo no aprobado a tiempo y marca hecho lo terminado.
+  const G = globalThis as unknown as { __kijuCyclesDay?: Map<string, string> };
+  registerScheduled('seo: encargar las tareas de las estrategias', async (tenantId) => {
+    const day = new Date().toISOString().slice(0, 10);
+    const seen = (G.__kijuCyclesDay ??= new Map());
+    if (seen.get(tenantId) === day) return;
+    seen.set(tenantId, day);
+    await materializeAll(tenantId);
+  });
   registerSeoEvidence(); // parte 8: fecha real de las intervenciones (registro de cambios) para medir si funcionaron
   registerGeogridJobs(); // parte 5b: recogida del mapa por zonas
   registerLocalJobs(); // parte 5a: confirmación de «ficha cerrada» antes de avisar

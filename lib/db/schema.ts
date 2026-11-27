@@ -4057,6 +4057,9 @@ export const seoPlanItems = pgTable(
     rejectNote: text('reject_note'),
     // reglas | ia | persona
     origin: varchar('origin', { length: 10 }).notNull().default('reglas'),
+    // Estrategia por ciclos (migración 0078): de qué ciclo y línea sale (null = cola reactiva por reglas).
+    cycleId: uuid('cycle_id'),
+    cycleLineId: uuid('cycle_line_id'),
     createdAt: timestamp('created_at').notNull().defaultNow(),
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
   },
@@ -4460,6 +4463,8 @@ export const seoBriefs = pgTable(
     publishedUrl: text('published_url'),
     // Borrador en WordPress (parte 9b, 27 nov 2026): id de la entrada y enlace de edición que construimos nosotros.
     wpPostId: integer('wp_post_id'),
+    // Estrategia por ciclos (migración 0078): línea de la que sale este brief.
+    cycleLineId: uuid('cycle_line_id'),
     wpEditUrl: text('wp_edit_url'),
     error: text('error'),
     createdBy: varchar('created_by', { length: 120 }),
@@ -4765,3 +4770,135 @@ export const appUsageEvents = pgTable(
   },
   (table) => [index('app_usage_events_idx').on(table.tenantId, table.area, table.createdAt)]
 );
+
+
+// ---------------------------------------------------------------------------
+// SEO · Estrategias por ciclos (docs/PLAN-SEO-CICLOS.md, aprobado por Enric el 27 nov 2026, con la auditoría Opus §11).
+// Migración 0078, aditiva. Cliente → Proyecto → Ciclos (uno activo) → Líneas del catálogo → Huecos (calendario semanal).
+// ---------------------------------------------------------------------------
+export const seoCycles = pgTable(
+  'seo_cycles',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    seq: integer('seq').notNull(),
+    // cimientos | estrategia
+    kind: varchar('kind', { length: 12 }).notNull().default('estrategia'),
+    name: varchar('name', { length: 160 }).notNull(),
+    periodMonths: smallint('period_months').notNull().default(3),
+    startsOn: date('starts_on', { mode: 'string' }).notNull(),
+    endsOn: date('ends_on', { mode: 'string' }).notNull(),
+    // propuesto | activo | cerrado | leido | cancelado
+    status: varchar('status', { length: 12 }).notNull().default('propuesto'),
+    monthlyHours: decimal('monthly_hours', { precision: 5, scale: 1 }),
+    reservePct: smallint('reserve_pct').notNull().default(30),
+    // lote_admin (un administrador aprueba el mes) | automatico
+    approvalMode: varchar('approval_mode', { length: 12 }).notNull().default('lote_admin'),
+    thesis: text('thesis'),
+    baseline: jsonb('baseline').$type<Record<string, unknown>>().notNull().default({}),
+    options: jsonb('options').$type<Record<string, unknown>>(),
+    businessType: varchar('business_type', { length: 40 }),
+    createdBy: varchar('created_by', { length: 120 }),
+    approvedBy: varchar('approved_by', { length: 120 }),
+    approvedAt: timestamp('approved_at'),
+    closedAt: timestamp('closed_at'),
+    closeReport: jsonb('close_report').$type<Record<string, unknown>>(),
+    readDueOn: date('read_due_on', { mode: 'string' }),
+    readReport: jsonb('read_report').$type<Record<string, unknown>>(),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    unique('seo_cycles_seq_unique').on(table.projectId, table.seq),
+    uniqueIndex('seo_cycles_one_active').on(table.projectId).where(sql`${table.status} = 'activo'`),
+    check('seo_cycles_kind_check', sql`${table.kind} IN ('cimientos', 'estrategia')`),
+    check('seo_cycles_status_check', sql`${table.status} IN ('propuesto', 'activo', 'cerrado', 'leido', 'cancelado')`),
+    check('seo_cycles_approval_check', sql`${table.approvalMode} IN ('lote_admin', 'automatico')`),
+  ]
+);
+export type SeoCycle = typeof seoCycles.$inferSelect;
+
+export const seoCycleLines = pgTable(
+  'seo_cycle_lines',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    cycleId: uuid('cycle_id')
+      .notNull()
+      .references(() => seoCycles.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    playbook: varchar('playbook', { length: 40 }).notNull(),
+    playbookVersion: smallint('playbook_version').notNull().default(1),
+    params: jsonb('params').$type<Record<string, unknown>>().notNull().default({}),
+    technique: varchar('technique', { length: 40 }).notNull(),
+    hoursBudget: decimal('hours_budget', { precision: 6, scale: 1 }).notNull().default('0'),
+    goal: jsonb('goal').$type<Record<string, unknown>>().notNull().default({}),
+    // activa | cancelada
+    status: varchar('status', { length: 12 }).notNull().default('activa'),
+    sort: smallint('sort').notNull().default(0),
+    scorecard: jsonb('scorecard').$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    index('seo_cycle_lines_cycle_idx').on(table.cycleId),
+    check('seo_cycle_lines_status_check', sql`${table.status} IN ('activa', 'cancelada')`),
+  ]
+);
+export type SeoCycleLine = typeof seoCycleLines.$inferSelect;
+
+export const seoCycleSlots = pgTable(
+  'seo_cycle_slots',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    cycleId: uuid('cycle_id')
+      .notNull()
+      .references(() => seoCycles.id, { onDelete: 'cascade' }),
+    lineId: uuid('line_id')
+      .notNull()
+      .references(() => seoCycleLines.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    dueWeek: date('due_week', { mode: 'string' }).notNull(),
+    n: smallint('n').notNull().default(1),
+    title: varchar('title', { length: 300 }).notNull(),
+    // tecnico | redactor | agente
+    role: varchar('role', { length: 12 }).notNull(),
+    estHours: decimal('est_hours', { precision: 5, scale: 1 }).notNull().default('0'),
+    topicKey: varchar('topic_key', { length: 80 }),
+    keyword: varchar('keyword', { length: 200 }),
+    targetUrl: text('target_url'),
+    findingIds: uuid('finding_ids').array().notNull().default(sql`'{}'::uuid[]`),
+    // previsto | aprobado | encargado | hecho | saltado
+    status: varchar('status', { length: 12 }).notNull().default('previsto'),
+    skipReason: text('skip_reason'),
+    approvedBy: varchar('approved_by', { length: 120 }),
+    approvedAt: timestamp('approved_at'),
+    planItemId: uuid('plan_item_id').references(() => seoPlanItems.id, { onDelete: 'set null' }),
+    briefId: uuid('brief_id').references(() => seoBriefs.id, { onDelete: 'set null' }),
+    interventionSource: varchar('intervention_source', { length: 40 }),
+    interventionRef: varchar('intervention_ref', { length: 80 }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    unique('seo_cycle_slots_unique').on(table.lineId, table.dueWeek, table.n),
+    index('seo_cycle_slots_project_idx').on(table.projectId, table.status, table.dueWeek),
+    check('seo_cycle_slots_status_check', sql`${table.status} IN ('previsto', 'aprobado', 'encargado', 'hecho', 'saltado')`),
+    check('seo_cycle_slots_role_check', sql`${table.role} IN ('tecnico', 'redactor', 'agente')`),
+  ]
+);
+export type SeoCycleSlot = typeof seoCycleSlots.$inferSelect;

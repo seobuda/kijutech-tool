@@ -412,6 +412,18 @@ export const SEO_SALUD_PROCESS_MAP: ProcessStep[] = [
     tables: ['findings', 'seo_plan_items', 'seo_topics', 'client_competitors']
   },
   {
+    id: 'estrategia-ciclos',
+    lane: 'Plan de mejora',
+    name: 'Estrategia por ciclos (trabajo planificado)',
+    description: 'Trabajo → Estrategia. Un periodo (trimestral por defecto) con 1-3 líneas de un catálogo (contenido con cadencia, refuerzo de lo que está cerca, páginas de servicio y zona, ficha y reseñas, enlaces, datos estructurados, recuperar contenido) repartidas en huecos semanales. Lo crea un administrador; en los dos primeros ciclos de cada proyecto un administrador aprueba el lote de cada mes y después se aprueba solo. Los arreglos siguen en el Plan de mejora con su reserva de horas (dos bolsas).',
+    status: 'built',
+    file: 'lib/seo/estrategia/ciclos.ts',
+    when: 'A mano (crear, aprobar el mes, cancelar: admin) y una pasada al día por cuenta (tarea del planificador «seo: encargar las tareas de las estrategias»).',
+    ai: 'Nada en esta fase: el catálogo, las horas, el calendario y los temas son reglas (lib/seo/estrategia/playbooks.ts). El agente que propone estrategias llegará tras 2-3 ciclos manuales (fase D).',
+    code: 'Validación de líneas (elegibles, sin repetir, como mucho 3, que quepan en meses × horas × (1 − reserva)). Calendario por lunes. La pasada salta lo no aprobado 3 semanas después de su semana, aprueba solo en modo automático, encarga como mucho 10 por pasada lo aprobado a 14 días (contenido por el brief → «Encargar al redactor»; lo demás por una propuesta del plan con origen «ia» → approvePlanItem) y marca hecho lo terminado. regeneratePlan solo rehace la cola «reglas». El estratega del módulo Estrategia no propone SEO donde hay proyecto SEO (un solo cerebro). Marcador mínimo de contenido: páginas publicadas y sus clics e impresiones (sin búsquedas anónimas). Diseño de Fable 5.2 con la auditoría Opus: docs/PLAN-SEO-CICLOS.md.',
+    tables: ['seo_cycles', 'seo_cycle_lines', 'seo_cycle_slots', 'seo_plan_items', 'seo_briefs', 'seo_topics', 'findings', 'gsc_daily', 'gsc_pages', 'interventions']
+  },
+  {
     id: 'panel-ia',
     lane: 'Vigilancia continua',
     name: 'Panel de IA (ChatGPT, Gemini, Google y Perplexity)',
