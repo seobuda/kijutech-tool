@@ -20,7 +20,7 @@ export const AGENTES_PROCESS_MAP: ProcessStep[] = [
     lane: 'Hablar con el agente',
     name: 'Organigrama: departamentos y jefes',
     description:
-      'Organigrama (20 nov 2026): la agencia en departamentos (Gabinete, Operaciones, Cuentas y Estrategia, Sistema y Plataforma, Seguridad), cada uno con su jefe (agente de tipo «jefe»), sus agentes y a quién reporta. El primero en funcionar es Sistema: su jefe habla con Enric por su propio bot de Telegram («Kijutech Sistema»). Pantalla Agentes → Departamentos. Desde el 21 nov, la portada de Equipo dibuja este organigrama con personas y agentes juntos, cada uno con su foto o avatar (agt_agent_avatars para los agentes).',
+      'Organigrama (20 nov 2026): la agencia en departamentos (Gabinete, Operaciones, Cuentas y Estrategia, SEO, Sistema y Plataforma, Seguridad; SEO desde el 27 nov con el Jefe SEO), cada uno con su jefe (agente de tipo «jefe»), sus agentes y a quién reporta. El primero en funcionar es Sistema: su jefe habla con Enric por su propio bot de Telegram («Kijutech Sistema»). Pantalla Agentes → Departamentos. Desde el 21 nov, la portada de Equipo dibuja este organigrama con personas y agentes juntos, cada uno con su foto o avatar (agt_agent_avatars para los agentes).',
     status: 'built',
     file: 'lib/agentes/store.ts',
     when: 'Los departamentos y el jefe de sistema se crean solos la primera vez; un mensaje al bot de un departamento va a su jefe.',
@@ -39,6 +39,19 @@ export const AGENTES_PROCESS_MAP: ProcessStep[] = [
     ai: 'Qué herramientas usar, con qué datos y la respuesta. Hasta 8 vueltas de herramientas por mensaje.',
     code: 'Herramientas permitidas por ficha; las de una integración sin conectar no se ofrecen. Las acciones de cambio pasan por el motor de acciones de Operaciones (tipo agent_tool) con autonomía por herramienta (por defecto con aprobación). Coste en ai_jobs (función agt_<clave>, con las búsquedas web a 0,01 $ cada una; sin precio del modelo queda NULL y el vigía lo marca) y presupuesto mensual por agente. Lo leído de webs y correos es dato, nunca instrucción, y si el turno ha leído una web o una búsqueda, ninguna herramienta de cambio se ejecuta sola aunque esté en «autónomo»: se propone para aprobar. En una conversación por Telegram con el dueño, cada propuesta llega en el MISMO mensaje que la respuesta del agente (frase + propuesta + ✅ / ✖️); desde correo, web o subagentes, como aviso aparte.',
     tables: ['agt_messages', 'agt_agents']
+  },
+  {
+    id: 'agt-chat-modulo',
+    lane: 'Hablar con el agente',
+    name: 'Conversación desde la pantalla de un módulo',
+    description:
+      'Capacidad agentChat del núcleo (27 nov 2026, Jefe SEO D3): un módulo abre un hilo con un agente desde su propia pantalla sin importar Agentes. El primero es SEO: Plan de servicio → «Hablar con el Jefe SEO», un hilo compartido por proyecto («seo:<id>»). El departamento SEO y su jefe (Jefe SEO, Opus 5.5) se crean solos.',
+    status: 'built',
+    file: 'lib/agentes/chat.ts',
+    when: 'Cada mensaje enviado desde la pantalla del módulo. La respuesta va como trabajo «agt.chat» de la cola del núcleo (un intento, 15 min como máximo) y la pantalla lee el hilo cada 4 s hasta que llega.',
+    ai: 'El agente responde con sus herramientas (motor de siempre) y el contexto mínimo del hilo; max_tokens a medida del módulo (16.000 para el Jefe SEO: Opus piensa dentro de ese margen).',
+    code: 'El hilo lo construye el servidor del módulo a partir de un proyecto validado (nunca el navegador ni el modelo) y no puede empezar por «web:» (chat de prueba de Agentes). Una respuesta a la vez por hilo: clave única del trabajo abierto; si dos personas envían a la vez, el segundo mensaje se quita y se le pide esperar. Cada mensaje guarda quién lo escribe («Nombre: …»). Las herramientas reciben el hilo (ToolContext.thread) y usan ESE proyecto aunque el modelo pida otro. Resumen cada 20 mensajes, igual que por Telegram. Desde el 27 nov la cola del núcleo coge un trabajo nuevo en cuanto queda un hueco libre (antes esperaba a que terminara todo el lote).',
+    tables: ['agt_conversations', 'agt_messages', 'jobs', 'ai_jobs']
   },
   {
     id: 'agt-trabajos',

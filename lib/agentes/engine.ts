@@ -134,7 +134,7 @@ export async function runAgent(params: {
 
   const custom = await availableTools(tenantId, agent.tools.filter((t) => !SERVER_TOOLS[t]));
   const tools: Anthropic.Messages.ToolUnion[] = [
-    ...custom.map((t) => ({ name: t.name, description: `${t.description}${t.risk === 'cambio' ? ' (Se propone a Enric con botones; no se hace hasta que la aprueba.)' : ''}`, input_schema: t.inputSchema as Anthropic.Tool.InputSchema })),
+    ...custom.map((t) => ({ name: t.name, description: `${t.description}${t.risk === 'cambio' ? ' (Queda propuesta para que la apruebe una persona; no se hace hasta entonces. No la des por hecha.)' : ''}`, input_schema: t.inputSchema as Anthropic.Tool.InputSchema })),
     ...(agent.tools.includes('web_fetch') ? [{ type: 'web_fetch_20260209' as const, name: 'web_fetch' as const, max_uses: 6 }] : []),
     ...(agent.tools.includes('web_search') ? [{ type: 'web_search_20260209' as const, name: 'web_search' as const, max_uses: 5 }] : [])
   ];

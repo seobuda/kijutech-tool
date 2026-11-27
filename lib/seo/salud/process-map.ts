@@ -449,6 +449,18 @@ export const SEO_SALUD_PROCESS_MAP: ProcessStep[] = [
     prompts: ['seo_jefe_plan_maestro']
   },
   {
+    id: 'jefe-chat',
+    lane: 'Plan de mejora',
+    name: 'Jefe SEO: conversación y cambios propuestos',
+    description: 'Trabajo → Plan de servicio (solo admin): «Hablar con el Jefe SEO», un hilo compartido por proyecto para preguntarle por qué planteó algo o pedirle un cambio. Si de la conversación sale un cambio (añadir, quitar, mover de trimestre o ajustar un frente), queda PROPUESTO en «Cambios propuestos por el Jefe»: un administrador lo acepta o lo rechaza con motivo. Aceptar no toca el plan aprobado: el cambio entra en el prompt de la versión siguiente, que se revisa y se aprueba como siempre (una sola puerta).',
+    status: 'built',
+    file: 'lib/seo/jefe/cambios.ts',
+    when: 'A mano, cada mensaje desde la pantalla. La respuesta llega en segundo plano (trabajo «agt.chat» del módulo Agentes por la capacidad agentChat del núcleo).',
+    ai: 'El agente Jefe SEO (Opus 5.5) con seo_plan_maestro, seo_expediente_estrategico, seo_pronostico, seo_proyecto, buscar_conocimiento y seo_proponer_cambio_plan. Unos céntimos por mensaje.',
+    code: 'Antes de enviar, el tope del Jefe («jefe_budget_usd») debe dejar margen para una versión del plan: el chat no puede dejar sin presupuesto la generación. El proyecto lo fija el hilo, no el modelo. Una propuesta necesita al menos un dato real del expediente (las evidencias inventadas se quitan y se apuntan); sin duplicados por título y como mucho 8 pendientes por proyecto (candado por proyecto). Al aprobarse una versión nueva, los pendientes sobre versiones anteriores caducan. Los cambios aceptados sobre la versión vigente entran en el prompt de la siguiente como dato delimitado; los motivos de rechazo de planes siguen aparte (los de cambios no los desplazan).',
+    tables: ['seo_jefe_proposals', 'seo_master_plans', 'seo_master_plan_items', 'agt_conversations', 'agt_messages', 'jobs']
+  },
+  {
     id: 'estrategia-ciclos',
     lane: 'Plan de mejora',
     name: 'Estrategia por ciclos (trabajo planificado)',

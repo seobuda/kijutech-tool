@@ -17,6 +17,8 @@ import { eligibilityContext } from '@/lib/seo/estrategia/ciclos';
 import { buildStrategicDossier } from '@/lib/seo/jefe/expediente';
 import { untrusted } from '@/lib/seo/jefe/evidence';
 import { extractJson, scorePlan, validatePlan } from '@/lib/seo/jefe/plan-rules';
+import { PlanError } from '@/lib/seo/jefe/errors';
+import { acceptedChangesForNextPlan, expireStaleChanges } from '@/lib/seo/jefe/cambios';
 
 export const JEFE_MODEL = 'claude-opus-5-5';
 export const PLAN_PROMPT = 'seo_jefe_plan_maestro';
@@ -27,11 +29,7 @@ export const PLAN_COST_ESTIMATE_USD = 0.6;
 export const DEFAULT_JEFE_BUDGET_USD = 35;
 export const MAX_PLANS_PER_DAY = 2;
 
-export class PlanError extends Error {
-  constructor(public userMessage: string) {
-    super(userMessage);
-  }
-}
+export { PlanError } from '@/lib/seo/jefe/errors';
 
 const monthStart = () => {
   const d = new Date();
@@ -43,7 +41,7 @@ export async function jefeSpentThisMonth(tenantId: string): Promise<number> {
   const [r] = await db
     .select({ usd: sql<string>`coalesce(sum(${aiJobs.estimatedCost}), 0)` })
     .from(aiJobs)
-    .where(and(eq(aiJobs.tenantId, tenantId), gte(aiJobs.createdAt, monthStart()), sql`(${aiJobs.function} LIKE 'seo_jefe_%' OR ${aiJobs.function} = 'agt_jefe_seo')`));
+    .where(and(eq(aiJobs.tenantId, tenantId), gte(aiJobs.createdAt, monthStart()), sql`(${aiJobs.function} LIKE 'seo_jefe_%' OR ${aiJobs.function} IN ('agt_jefe_seo', 'agt_jefe_seo_resumen'))`));
   return Number(r?.usd ?? 0);
 }
 export const jefeBudget = () => numberSetting('jefe_budget_usd', DEFAULT_JEFE_BUDGET_USD);
@@ -119,7 +117,7 @@ export async function generateMasterPlan(tenantId: string, planId: string): Prom
     .orderBy(desc(seoMasterPlans.version))
     .limit(1);
   const [prevApproved] = await db
-    .select({ id: seoMasterPlans.id })
+    .select({ id: seoMasterPlans.id, version: seoMasterPlans.version, status: seoMasterPlans.status })
     .from(seoMasterPlans)
     .where(and(eq(seoMasterPlans.projectId, plan.projectId), inArray(seoMasterPlans.status, ['aprobado', 'sombra', 'propuesto']), sql`${seoMasterPlans.version} < ${plan.version}`))
     .orderBy(sql`(${seoMasterPlans.status} = 'aprobado') DESC`, desc(seoMasterPlans.version))
@@ -130,13 +128,28 @@ export async function generateMasterPlan(tenantId: string, planId: string): Prom
   const decisions = await db
     .select({ status: seoJefeProposals.status, reason: seoJefeProposals.decisionReason, version: seoJefeProposals.baseVersion })
     .from(seoJefeProposals)
-    .where(and(eq(seoJefeProposals.projectId, plan.projectId), sql`${seoJefeProposals.decisionReason} IS NOT NULL`))
+    .where(and(eq(seoJefeProposals.projectId, plan.projectId), eq(seoJefeProposals.kind, 'plan'), sql`${seoJefeProposals.decisionReason} IS NOT NULL`))
     .orderBy(desc(seoJefeProposals.decidedAt))
     .limit(5);
+  // D3: cambios aceptados desde la conversación con el Jefe sobre la versión aprobada vigente: esta versión los incorpora.
+  // Cambios al plan que la agencia rechazó (con su motivo): que la versión nueva no los vuelva a meter.
+  const rejectedChanges = await db
+    .select({ payload: seoJefeProposals.payload, reason: seoJefeProposals.decisionReason })
+    .from(seoJefeProposals)
+    .where(and(eq(seoJefeProposals.projectId, plan.projectId), eq(seoJefeProposals.kind, 'cambio'), eq(seoJefeProposals.status, 'rechazada')))
+    .orderBy(desc(seoJefeProposals.decidedAt))
+    .limit(5);
+  const accepted = await acceptedChangesForNextPlan(tenantId, plan.projectId, prevApproved?.status === 'aprobado' ? prevApproved.version : null);
   const prevText = [
     prev ? `Versión ${prev.version} (${prev.status}): ${untrusted(prev.thesis.slice(0, 1200))}` : 'Ninguno: es el primer plan del proyecto.',
     prevItems.length ? `Frentes de la versión de referencia (REUTILIZA su clave si es el mismo frente):\n${prevItems.map((i) => `- clave ${i.frenteKey} · ${i.kind}${i.playbook ? ` · ${i.playbook}` : ''} · T${i.fromQuarter}-T${i.toQuarter} · ${untrusted(i.title)}`).join('\n')}` : '',
-    decisions.length ? `Decisiones de la agencia sobre planes anteriores (criterio a respetar):\n${decisions.map((d) => `- v${d.version ?? '?'} ${d.status}: ${untrusted(String(d.reason).slice(0, 600))}`).join('\n')}` : ''
+    decisions.length ? `Decisiones de la agencia sobre planes anteriores (criterio a respetar):\n${decisions.map((d) => `- v${d.version ?? '?'} ${d.status}: ${untrusted(String(d.reason).slice(0, 600))}`).join('\n')}` : '',
+    rejectedChanges.length
+      ? `Cambios al plan que la agencia RECHAZÓ (no los vuelvas a proponer sin datos nuevos):\n${rejectedChanges.map((c) => `- ${untrusted(String((c.payload as { titulo?: string }).titulo ?? ''))}: ${untrusted(String(c.reason ?? '').slice(0, 400))}`).join('\n')}`
+      : '',
+    accepted.length
+      ? `Cambios que la agencia ACEPTÓ incorporar en esta versión (hazlos salvo que los datos lo impidan; si no, explícalo en «riesgos»):\n${accepted.map((c) => `- ${c.tipo}${c.frente ? ` (frente ${c.frente})` : ''}: ${untrusted(`${c.titulo}. ${c.detalle} Motivo: ${c.motivo}`.slice(0, 700))}${c.evidencias.length ? ` · evidencias ${c.evidencias.slice(0, 6).join(', ')}` : ''}`).join('\n')}`
+      : ''
   ]
     .filter(Boolean)
     .join('\n\n');
@@ -267,6 +280,7 @@ export async function approvePlan(tenantId: string, projectId: string, planId: s
       .returning({ id: seoMasterPlans.id });
     if (!r.length) throw new PlanError('El plan cambió mientras tanto: recarga la página.');
     await recordDecision(tx, tenantId, p, 'aprobada', by, note);
+    await expireStaleChanges(tx, projectId, p.version);
   });
 }
 

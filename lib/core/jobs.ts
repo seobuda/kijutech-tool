@@ -400,15 +400,33 @@ export function startWorker(): void {
   G.__kijuWorker = { running: true, id };
   const slots = Math.max(1, Number(process.env.WORKER_SLOTS ?? 3));
   console.log(`[trabajos] trabajador ${id} en marcha (${slots} a la vez)`);
+  // Cola continua (27 nov 2026, Jefe SEO D3): antes cada vuelta esperaba a que acabara TODO el lote (Promise.all), así que un
+  // trabajo largo (un plan de Opus, un rastreo) dejaba parados los demás huecos durante minutos, también la respuesta de un
+  // chat. Ahora, en cuanto un hueco queda libre, se coge el siguiente trabajo.
+  const active = new Set<Promise<unknown>>();
+  let lastMaintenance = 0;
   const loop = async () => {
     while (G.__kijuWorker?.running) {
-      let did = 0;
+      let claimed = 0;
       try {
-        did = await runWorkerOnce(id, slots);
+        if (Date.now() - lastMaintenance >= 2000) {
+          lastMaintenance = Date.now();
+          await reapStaleJobs().catch((e) => console.error('[trabajos] recuperar caídos:', e instanceof Error ? e.message : e));
+          await tickSchedules().catch((e) => console.error('[trabajos] procesos:', e instanceof Error ? e.message : e));
+        }
+        while (active.size < slots) {
+          const job = await claimNextJob(id);
+          if (!job) break;
+          claimed++;
+          const p: Promise<unknown> = executeJob(job)
+            .catch((e) => console.error('[trabajos] ejecutar:', e instanceof Error ? e.message : e))
+            .finally(() => active.delete(p));
+          active.add(p);
+        }
       } catch (e) {
         console.error('[trabajos] vuelta del trabajador:', e instanceof Error ? e.message : e);
       }
-      await new Promise((r) => setTimeout(r, did ? 200 : 2000));
+      await new Promise((r) => setTimeout(r, claimed ? 200 : active.size >= slots ? 1000 : 2000));
     }
   };
   void loop();

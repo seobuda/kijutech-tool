@@ -47,7 +47,8 @@ const KNOWN_IMPORT_EXCEPTIONS = new Map([
   // (ESTADO §16). Mientras tanto, solo estas tres.
   ['lib/agentes/actions.ts → lib/app-wiring', 'wireApp() en las acciones'],
   ['lib/estrategia/actions.ts → lib/app-wiring', 'wireApp() en las acciones'],
-  ['lib/rendimiento/actions.ts → lib/app-wiring', 'wireApp() en las acciones']
+  ['lib/rendimiento/actions.ts → lib/app-wiring', 'wireApp() en las acciones'],
+  ['lib/seo/jefe-actions.ts → lib/app-wiring', 'wireApp() en las acciones (chat con el Jefe SEO por la capacidad agentChat, D3)']
 ]);
 
 type Zone = { kind: 'module' | 'core' | 'app' | 'outside'; name: string };

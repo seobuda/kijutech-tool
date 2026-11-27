@@ -4,7 +4,7 @@ import 'server-only';
 //   - atiende los mensajes libres de Telegram y correo del dueño (agente principal);
 //   - publica sus herramientas: trabajos de subagentes e integraciones (DataForSEO, Clarity, Google);
 //   - programa los trabajos de los subagentes en el planificador.
-import { registerAssetDirectory, registerMetricSource, registerRetention, registerSerpSource, registerSpeedSource, registerBusinessSource, registerScheduled, registerTools, setAgentJobCreator, setInboundHandler, type AgentTool, type ToolContext } from '@/lib/core/capabilities';
+import { registerAssetDirectory, registerMetricSource, registerRetention, registerSerpSource, registerSpeedSource, registerBusinessSource, registerScheduled, registerTools, setAgentChat, setAgentJobCreator, setInboundHandler, type AgentTool, type ToolContext } from '@/lib/core/capabilities';
 import { and, eq, lt } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { agtMessages, aiJobs } from '@/lib/db/schema';
@@ -13,6 +13,7 @@ import { findCoreClient, primaryAsset } from '@/lib/core/clients';
 import { handleInbound } from '@/lib/agentes/inbound';
 import { createJob, encargarAgente, estadoTrabajos, runAgentJobs } from '@/lib/agentes/jobs';
 import { ensureDefaultAgents } from '@/lib/agentes/store';
+import { AGENT_CHAT, registerAgentChatJobs } from '@/lib/agentes/chat';
 import { registerTeamCapabilities } from '@/lib/agentes/team';
 import {
   clarityInsights,
@@ -248,6 +249,9 @@ export function registerAgentesCapabilities(): void {
     const r = await db.delete(agtMessages).where(and(eq(agtMessages.tenantId, tenantId), lt(agtMessages.createdAt, cutoff))).returning({ id: agtMessages.id });
     return r.length;
   });
+  // Un módulo (SEO: el Jefe SEO en Plan de servicio) conversa con un agente desde su pantalla sin importar este módulo.
+  setAgentChat(AGENT_CHAT);
+  registerAgentChatJobs();
   // El núcleo (registro de errores) encarga diagnósticos al Técnico de mantenimiento sin importar este módulo.
   setAgentJobCreator(async (r) => {
     // Los agentes por defecto (el Técnico de mantenimiento entre ellos) se crean al primer uso: asegurarlos antes.
