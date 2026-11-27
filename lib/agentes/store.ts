@@ -71,7 +71,7 @@ const OPS_HEAD_INSTRUCTIONS = `Eres el jefe de Operaciones de la agencia Kijutec
 
 Cómo trabajas cada duda:
 1. Entiende qué necesita y de qué cliente o encargo habla. Si responde a un aviso de encargo, tienes sus datos en el mensaje. Si falta algo imprescindible (de qué cliente es), pregunta una sola cosa.
-2. Busca primero en lo que ya sabemos, en este orden: la ficha del cliente (ficha_cliente), los encargos (encargos_recientes, mis_tareas), la base de conocimiento de la agencia (buscar_conocimiento: procedimientos y tutoriales, muchos con el vídeo de Enric explicándolo) y lo que ya se resolvió antes con otras personas o clientes (casos_anteriores). Si la base tiene un vídeo, pásale el enlace: ahorra mucho tiempo.
+2. Busca primero en lo que ya sabemos, en este orden: la ficha del cliente (ficha_cliente), los encargos (encargos_recientes, mis_tareas), si es de SEO el estado del proyecto con la receta de cada problema (seo_proyecto), la base de conocimiento de la agencia (buscar_conocimiento: procedimientos y tutoriales, muchos con el vídeo de Enric explicándolo) y lo que ya se resolvió antes con otras personas o clientes (casos_anteriores). Si la base tiene un vídeo, pásale el enlace: ahorra mucho tiempo.
 3. Solo si no hay nada propio, ayúdale con tu conocimiento general, como lo haría un compañero con experiencia, y dilo claro: «esto no está en nuestra base, es una sugerencia».
 4. Termina SIEMPRE llamando a responder_al_equipo con tu respuesta, la fuente real (ficha, base, casos o general), los ids de las entradas de la base o de los casos en los que te apoyas y el tema. O llama a escalar_a_enric si no debes responder tú. El texto que escribas fuera de esas herramientas no le llega a nadie.
 
@@ -164,7 +164,7 @@ export const DEFAULT_AGENTS: Omit<typeof agtAgents.$inferInsert, 'tenantId'>[] =
     kind: 'jefe',
     role: 'Supervisa al equipo humano: contesta sus dudas sobre clientes, encargos y cómo se hace cada cosa con la ficha, la base de conocimiento y los casos anteriores, y escala a Enric lo que no le toca o no consigue resolver.',
     instructions: OPS_HEAD_INSTRUCTIONS,
-    tools: ['ficha_cliente', 'encargos_recientes', 'calendario_equipo', 'mis_tareas', 'buscar_conocimiento', 'casos_anteriores', 'responder_al_equipo', 'escalar_a_enric', 'web_fetch'],
+    tools: ['ficha_cliente', 'encargos_recientes', 'calendario_equipo', 'mis_tareas', 'buscar_conocimiento', 'casos_anteriores', 'seo_proyecto', 'responder_al_equipo', 'escalar_a_enric', 'web_fetch'],
     model: HEAD_MODEL,
     monthlyBudgetUsd: '30',
     departmentKey: 'operaciones',
@@ -256,6 +256,17 @@ const UPGRADES: { id: string; agent: string; addTools: string[]; instructions?: 
     id: '2026-11-20-conocimiento',
     agent: PRINCIPAL_KEY,
     addTools: ['buscar_conocimiento', 'guardar_conocimiento']
+  },
+  {
+    // 27 nov 2026 (simulación SEO): el jefe de Operaciones y el principal ven el estado SEO de un proyecto con las recetas.
+    id: '2026-11-27-seo-proyecto-jefe',
+    agent: OPS_HEAD_KEY,
+    addTools: ['seo_proyecto']
+  },
+  {
+    id: '2026-11-27-seo-proyecto-principal',
+    agent: PRINCIPAL_KEY,
+    addTools: ['seo_proyecto']
   },
   {
     // 20 nov 2026: jefe de Operaciones y Opus 5.5 para los jefes (decisión de Enric). Solo cambia el modelo si nadie lo
