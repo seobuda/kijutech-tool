@@ -133,8 +133,8 @@ export async function runAiQuestion(tenantId: string, payload: Record<string, un
     } catch (e) {
       // Sin «costUsd» = error HTTP (no llegó a procesarse, no se cobra): se devuelve el estimado. Con él, se cobró.
       const charged = (e as { costUsd?: number }).costUsd;
-      if (charged === undefined && e instanceof Error && /^DataForSEO( \(\d{3}\)|:)/.test(e.message)) await refundDataSpend(tenantId, projectId, 'serp', `${PANEL_IA_OP}: ${a}`, estimate);
-      else if (charged > estimate) await recordDataSpend(tenantId, projectId, 'serp', `${PANEL_IA_OP}: ${a} (ajuste)`, charged - estimate);
+      if (charged === undefined && e instanceof Error && /^DataForSEO( \(4\d\d\)|:)/.test(e.message)) await refundDataSpend(tenantId, projectId, 'serp', `${PANEL_IA_OP}: ${a}`, estimate);
+      else if (charged !== undefined && charged > estimate) await recordDataSpend(tenantId, projectId, 'serp', `${PANEL_IA_OP}: ${a} (ajuste)`, charged - estimate);
       await db.update(seoAiChecks).set({ status: 'fallida', error: (e instanceof Error ? e.message : 'error').slice(0, 300), costUsd: (charged ?? 0).toFixed(4), updatedAt: new Date() }).where(eq(seoAiChecks.id, row.id));
       failed++;
     }

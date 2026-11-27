@@ -66,8 +66,8 @@ async function spend<T extends { costUsd: number }>(tenantId: string, projectId:
     return r;
   } catch (e) {
     const c = (e as { costUsd?: number }).costUsd;
-    if (c === undefined && e instanceof Error && /^DataForSEO( \(\d{3}\)|:)/.test(e.message)) await refundDataSpend(tenantId, projectId, 'serp', `${AUTORIDAD_OP}: ${label}`, estimate);
-    else if (c > estimate) await recordDataSpend(tenantId, projectId, 'serp', `${AUTORIDAD_OP}: ${label} (ajuste)`, c - estimate);
+    if (c === undefined && e instanceof Error && /^DataForSEO( \(4\d\d\)|:)/.test(e.message)) await refundDataSpend(tenantId, projectId, 'serp', `${AUTORIDAD_OP}: ${label}`, estimate);
+    else if (c !== undefined && c > estimate) await recordDataSpend(tenantId, projectId, 'serp', `${AUTORIDAD_OP}: ${label} (ajuste)`, c - estimate);
     throw e;
   }
 }

@@ -3,7 +3,7 @@
 // SEO · acciones de las pestañas IA (parte 11) y Autoridad (parte 10), 27 nov 2026. Permisos en el servidor: «edit» para
 // las preguntas y «Preguntar ahora»; «admin» para encender Autoridad (gasta cada mes) y para la prueba de cobertura.
 import { revalidatePath } from 'next/cache';
-import { and, count, eq, inArray } from 'drizzle-orm';
+import { and, count, eq, inArray, lt } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { projects, seoAiChecks, seoAiQuestions } from '@/lib/db/schema';
 import { requirePermission } from '@/lib/auth/permissions';
@@ -76,6 +76,8 @@ export async function runAiPanelNowAction(projectId: string): Promise<Ok> {
   try {
     const user = await requirePermission('edit');
     if (!(await ownProject(user.tenantId, projectId))) return { ok: false, error: 'Proyecto no encontrado' };
+    // Las filas «enviando» de más de 1 h se quedaron a medias: pasan a fallida (no se reenvían) y no bloquean.
+    await db.update(seoAiChecks).set({ status: 'fallida', error: 'se quedó a medio enviar', updatedAt: new Date() }).where(and(eq(seoAiChecks.projectId, projectId), eq(seoAiChecks.status, 'enviando'), lt(seoAiChecks.updatedAt, new Date(Date.now() - 3_600_000))));
     const [{ n }] = await db.select({ n: count() }).from(seoAiChecks).where(and(eq(seoAiChecks.projectId, projectId), inArray(seoAiChecks.status, ['pendiente', 'enviando'])));
     if (Number(n) > 0) return { ok: false, error: 'Ya hay preguntas en curso: espera a que terminen.' };
     const r = await enqueueJob({ tenantId: user.tenantId, kind: 'seo.panel_ia', payload: { projectId }, scopeType: 'proyecto', scopeId: projectId, priority: 4, dedupeKey: `sched:seo.panel_ia:${projectId}` });

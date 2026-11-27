@@ -5,7 +5,7 @@ import 'server-only';
 // como mucho 5 webs de la competencia legibles (respetando su robots.txt), su contenido principal (sin menú ni pie),
 // subtemas, preguntas, palabras recomendadas, datos del cliente, enlazado interno sugerido y la nota de la página de
 // destino. Sin IA. Al marcarlo «usado» con la URL publicada se registra la intervención (la parte 8 la mide).
-import { and, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { crawlPages, crawlRuns, projects, seoBriefs, seoDemand, seoDossierFacts, seoTopicQueries, seoTopics } from '@/lib/db/schema';
 import { serpSource, workSource } from '@/lib/core/capabilities';
@@ -260,8 +260,14 @@ export async function briefToWordPress(tenantId: string, projectId: string, id: 
   if (b.wpPostId && b.wpEditUrl) return { editUrl: b.wpEditUrl, created: false };
   const [p] = await db.select({ clientId: projects.clientId }).from(projects).where(eq(projects.id, projectId)).limit(1);
   if (!p?.clientId) throw new BriefError('El proyecto no tiene cliente.');
-  const claimed = await db.update(seoBriefs).set({ wpPostId: 0, updatedAt: new Date() }).where(and(eq(seoBriefs.id, id), isNull(seoBriefs.wpPostId))).returning({ id: seoBriefs.id });
+  // Un reclamo (0) de más de 10 min se dio por perdido (el proceso murió antes de llamar a WordPress): se puede reclamar.
+  const claimed = await db
+    .update(seoBriefs)
+    .set({ wpPostId: 0, updatedAt: new Date() })
+    .where(and(eq(seoBriefs.id, id), sql`(${seoBriefs.wpPostId} IS NULL OR (${seoBriefs.wpPostId} = 0 AND ${seoBriefs.updatedAt} < now() - interval '10 minutes'))`))
+    .returning({ id: seoBriefs.id });
   if (!claimed.length) throw new BriefError('Ya se está creando el borrador: espera unos segundos y recarga.');
+  let created: { postId: number; editUrl: string };
   try {
     const d = (b.data ?? {}) as BriefData;
     const home = await projectWebUrl(tenantId, projectId);
@@ -277,14 +283,15 @@ export async function briefToWordPress(tenantId: string, projectId: string, id: 
       host(home)
     );
     const title = b.keyword.charAt(0).toUpperCase() + b.keyword.slice(1);
-    const r = await createWordPressDraft(tenantId, p.clientId, { title, html });
-    await db.update(seoBriefs).set({ wpPostId: r.postId, wpEditUrl: r.editUrl, status: 'listo', updatedAt: new Date() }).where(eq(seoBriefs.id, id));
-    return { editUrl: r.editUrl, created: true };
+    created = await createWordPressDraft(tenantId, p.clientId, { title, html });
   } catch (e) {
     await db.update(seoBriefs).set({ wpPostId: null, updatedAt: new Date() }).where(and(eq(seoBriefs.id, id), eq(seoBriefs.wpPostId, 0)));
     if (e instanceof ConnectionError) throw new BriefError(e.userMessage);
     throw e;
   }
+  // Ya existe en WordPress: guardarlo aparte (si esto fallara, el reclamo NO se libera, para no crear un segundo borrador).
+  await db.update(seoBriefs).set({ wpPostId: created.postId, wpEditUrl: created.editUrl, status: 'listo', updatedAt: new Date() }).where(eq(seoBriefs.id, id));
+  return { editUrl: created.editUrl, created: true };
 }
 
 /** Cierre del ciclo (auditoría): una vez al día, los borradores ya publicados pasan a «usado» con su URL (y se mide). */
