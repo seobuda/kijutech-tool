@@ -67,12 +67,18 @@ export async function runDemanda(tenantId: string, projectId: string, heartbeat:
 
   // 1. Volumen de las búsquedas principales (3 por tema) de los temas con más valor.
   if (src.volumes) {
-    const want = [...new Map(topics.slice(0, MAX_VOLUME_TOPICS).flatMap((t) => t.queries.slice(0, 3)).filter((q) => q.length <= 80).map((q) => [keywordKey(q), q])).values()].filter((q) => !fresh(byKey.get(keywordKey(q))?.volumeAt));
+    const want = [...new Map(topics.slice(0, MAX_VOLUME_TOPICS).flatMap((t) => t.queries.slice(0, 3)).filter((q) => q.length <= 80 && q.trim().split(/\s+/).length <= 10).map((q) => [keywordKey(q), q])).values()].filter((q) => !fresh(byKey.get(keywordKey(q))?.volumeAt));
     if (want.length && (await canSpend(projectId, VOLUME_COST)).ok) {
-      const r = await src.volumes(tenantId, want.slice(0, 1000), loc.name, 'es');
-      await recordDataSpend(tenantId, projectId, 'serp', 'demanda: volumen de los temas', r.costUsd || VOLUME_COST);
-      for (const q of want.slice(0, 1000)) await upsertDemand(tenantId, projectId, q, { volume: r.volumes.get(q.toLowerCase()) ?? 0, volumeAt: new Date() });
-      parts.push(`volumen de ${Math.min(want.length, 1000)} búsquedas`);
+      // Un fallo del volumen no tumba la pasada (la SERP y los hallazgos siguen).
+      try {
+        const r = await src.volumes(tenantId, want.slice(0, 1000), loc.name, 'es');
+        await recordDataSpend(tenantId, projectId, 'serp', 'demanda: volumen de los temas', r.costUsd || VOLUME_COST);
+        for (const q of want.slice(0, 1000)) await upsertDemand(tenantId, projectId, q, { volume: r.volumes.get(q.toLowerCase()) ?? 0, volumeAt: new Date() });
+        parts.push(`volumen de ${Math.min(want.length, 1000)} búsquedas`);
+      } catch (e) {
+        console.error('[seo] demanda: volumen:', e instanceof Error ? e.message : e);
+        parts.push('volumen: no se pudo pedir');
+      }
     }
   }
   await heartbeat();
