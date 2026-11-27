@@ -22,7 +22,7 @@ const STATUS: Record<string, { label: string; tone: 'success' | 'neutral' | 'war
   provisional: { label: 'Provisional', tone: 'warning' },
   descartado: { label: 'Descartado', tone: 'neutral' }
 };
-const EDITABLE = new Set(['nombre', 'negocio', 'web', 'telefono', 'tipo_negocio', 'perfiles', 'logo', 'servicios', 'zona', 'publico', 'atencion', 'idiomas']);
+const EDITABLE = new Set(['nombre', 'negocio', 'web', 'telefono', 'tipo_negocio', 'perfiles', 'logo', 'servicios', 'zona', 'publico', 'atencion', 'idiomas', 'telefonos_antiguos']);
 const TO_FICHA = new Set(['tipo_negocio', 'logo', 'servicios', 'zona', 'negocio', 'publico']);
 const fmt = (iso: string | null) => (iso ? new Date(iso).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' }) : '—');
 
@@ -231,7 +231,7 @@ function FieldRow({
               ))}
             </select>
           ) : (
-            <Input className="h-9 max-w-md" value={text} onChange={(e) => setText(e.target.value)} placeholder={field.field === 'perfiles' ? 'URLs separadas por comas' : field.field === 'idiomas' ? 'Códigos: es, ca' : field.field === 'servicios' ? 'Separados por comas' : ''} />
+            <Input className="h-9 max-w-md" value={text} onChange={(e) => setText(e.target.value)} placeholder={field.field === 'perfiles' ? 'URLs separadas por comas' : field.field === 'idiomas' ? 'Códigos: es, ca' : field.field === 'telefonos_antiguos' ? 'Teléfonos que tuvo, separados por comas' : field.field === 'servicios' ? 'Separados por comas' : ''} />
           )}
           <Button
             size="sm"

@@ -98,7 +98,7 @@ export const SEO_SALUD_PROCESS_MAP: ProcessStep[] = [
     file: 'lib/seo/posiciones/posiciones.ts',
     when: 'Cada 7 días por defecto (editable: 7, 14 o 30; Salud → Vigilancia automática) o «Consultar ahora» (no si hay una en curso o de hace menos de 12 h). La recogida («seo.posiciones.recoger») corre cada 10 min solo mientras quedan tareas enviadas.',
     ai: 'Nada.',
-    code: 'Cola asíncrona de DataForSEO por el núcleo (serpSource.postTasks/getTask, lo registra Agentes): fila «pendiente» por búsqueda y ejecución (clave única: un reintento no paga dos veces), tope de gasto antes de enviar, gasto apuntado al enviar (cuando se cobra), recogida por el id guardado (gratis 30 días), caduca a las 48 h. Volumen mensual de Google Ads una vez al mes. Semilla: solo se añade; lo quitado no vuelve. Idioma por búsqueda (es/ca); ubicación: la población de la zona si está en la lista de DataForSEO, si no la región o España (avisado). Hallazgos con margen: caída del top 10 dos semanas seguidas (cierra al volver al 8) y salida del mapa dos veces seguidas. Fuente «seo.posiciones:serp».',
+    code: 'Cola asíncrona de DataForSEO por el núcleo (serpSource.postTasks/getTask, lo registra Agentes): fila «pendiente» por búsqueda y ejecución (clave única: un reintento no paga dos veces), tope de gasto antes de enviar, gasto apuntado al enviar (cuando se cobra), recogida por el id guardado (gratis 30 días), caduca a las 48 h. Volumen mensual de Google Ads una vez al mes. Semilla: solo se añade; lo quitado no vuelve. Idioma por búsqueda (es/ca); ubicación: la población de la zona si está en la lista de DataForSEO, si no la región o España (avisado). Hallazgos con margen: caída del top 10 dos semanas seguidas (cierra al volver al 8) y salida del mapa dos veces seguidas. Páginas de zona (parte 5c): búsqueda «servicio + población» con volumen o impresiones, fuera del top 10, población validada en la lista de ubicaciones y sin página propia (título, H1 o URL de una página indexable que no es del blog; solo si atiende a domicilio) → aviso info con técnica «pagina_zona». Fuente «seo.posiciones:serp».',
     tables: ['seo_rank_keywords', 'seo_rank_checks', 'seo_data_spend', 'findings', 'gsc_daily', 'gsc_queries', 'seo_dossier_facts', 'client_competitors', 'jobs', 'job_schedules']
   },
   {
@@ -124,6 +124,30 @@ export const SEO_SALUD_PROCESS_MAP: ProcessStep[] = [
     ai: 'Nada.',
     code: 'DataForSEO Maps en cola por el núcleo (serpSource.postMapsTasks/getMapsTask): location_coordinate con zoom fijo y guardado, search_this_area: false, depth 100 (mismo precio, unos 0,0006 $ por punto). Cliente identificado solo por cid o place_id (fuera = 21 en la media); los anuncios no cuentan. Filas pendientes, tope antes, gasto al enviar, recogida por id, caducidad 48 h. Hallazgos: débil (top 3 < 30 % en la búsqueda principal), caída (media 3+ peor y 8+ puntos que bajan, solo con los mismos parámetros) y nombre sospechoso (2 señales; lo descartado no vuelve). Fuente «seo.local:geogrid».',
     tables: ['seo_geogrid_runs', 'seo_geogrid_points', 'seo_local_places', 'seo_local_snapshots', 'seo_data_spend', 'findings', 'seo_dossier_facts']
+  },
+  {
+    id: 'local-nap-antiguo',
+    lane: 'Vigilancia continua',
+    name: 'Teléfonos antiguos publicados (citas)',
+    description: 'Busca en Google los teléfonos que tuvo el negocio y ya no son el suyo (los que cambiaron en su ficha, los del expediente y los que añade una persona en «Teléfonos antiguos»), como mucho 3. Si siguen publicados en otras webs, aviso con sus URLs para pedir la corrección. Pestaña Local → Teléfonos antiguos, con la lista de directorios de su sector para revisar a mano.',
+    status: 'built',
+    file: 'lib/seo/local/nap.ts',
+    when: 'Cada 90 días por defecto (proceso «seo.nap», editable: 30, 90 o 180) o «Buscar ahora» en la pestaña Local.',
+    ai: 'Nada.',
+    code: 'SERP orgánica en directo de DataForSEO por el núcleo (serpSource.search, unos 0,002 $ por búsqueda, con el tope de gasto) con el teléfono en sus formatos; cuenta solo si el teléfono sale en el título o el fragmento de una web que no es la del cliente. Los directorios NO se rastrean ni se comprueban solos (sus condiciones), solo enlaces de búsqueda. Solo resuelve avisos si se buscaron todos los teléfonos. Fuente «seo.local:nap_antiguo».',
+    tables: ['seo_local_places', 'seo_local_snapshots', 'seo_dossier_facts', 'seo_data_spend', 'findings']
+  },
+  {
+    id: 'puertas',
+    lane: 'Vigilancia continua',
+    name: 'Páginas puerta (misma página cambiando la población)',
+    description: 'Tras cada auditoría: vuelve a leer como mucho 20 páginas candidatas (población en el título o la URL, o patrón de URL repetido de 3+), quita lo común con la portada (menú, pie), tapa las poblaciones y compara su texto propio. Grupos de 3+ casi iguales → aviso importante. En el plan, sus URLs no se proponen además como casi duplicadas.',
+    status: 'built',
+    file: 'lib/seo/local/puertas.ts',
+    when: 'Al terminar cada auditoría (trabajo «seo.salud.puertas»).',
+    ai: 'Nada.',
+    code: 'Jaccard de trigramas de palabras ≥ 0,8 (solo textos con 20+ trigramas), grupos por unión. Solo decide si pudo leer al menos el 80 % de las candidatas. Fuente «seo.salud:puertas».',
+    tables: ['crawl_runs', 'crawl_pages', 'seo_dossier_facts', 'findings']
   },
   {
     id: 'gasto-datos',

@@ -78,6 +78,9 @@ export async function savePersonaFactAction(projectId: string, field: string, ra
     else if (field === 'idiomas') {
       value = [...new Set(text.toLowerCase().split(/[\s,;]+/).filter((x) => /^[a-z]{2}$/.test(x)))].slice(0, 4);
       if (!(value as string[]).length) return { ok: false, error: 'Escribe los códigos de idioma, p. ej. «es, ca»' };
+    } else if (field === 'telefonos_antiguos') {
+      value = [...new Set(text.split(/[,;\n]/).map((x) => normPhone(x.trim())).filter((x): x is string => Boolean(x)))].slice(0, 5);
+      if (!(value as string[]).length) return { ok: false, error: 'Escribe uno o varios teléfonos separados por comas' };
     } else if (field === 'negocio' || field === 'publico') value = text.slice(0, 300);
     else if (field === 'zona') value = text.slice(0, 255);
     const by = (user.name || user.email).slice(0, 120);

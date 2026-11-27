@@ -109,6 +109,7 @@ export const EXTERNOS_KINDS: SaludKind[] = [
 /** Posiciones (fuente «seo.posiciones:serp», parte 4): con margen para no avisar por la volatilidad semanal de Google. */
 export const POSICIONES_KINDS: SaludKind[] = [
   { kind: 'seo.rank_drop', group: 'search_console', title: 'Búsqueda importante que sale del top 10', explain: 'Esta búsqueda estaba en la primera página de Google y lleva dos semanas seguidas fuera. Mirar qué página salía, si cambió, quién la ha adelantado y si coincide con una actualización de Google.', severityDefault: 'importante', ruleVersion: 1 },
+  { kind: 'seo.zone_page_missing', group: 'local', title: 'Población con búsquedas y sin página propia', explain: 'Se busca su servicio en esta población (hay búsquedas o impresiones), no sale en la primera página y la web no tiene una página que hable de esa población. Una página útil y propia (trabajos hechos allí, desplazamiento, precios) puede posicionar; una copia cambiando el nombre del pueblo, no.', severityDefault: 'info', ruleVersion: 1 },
   { kind: 'seo.lost_local_pack', group: 'local', title: 'Ya no sale en el mapa de Google para esta búsqueda', explain: 'Google sigue enseñando el mapa con negocios para esta búsqueda, pero el cliente ha dejado de aparecer dos semanas seguidas. Revisar su ficha de Google (categoría, horario, reseñas recientes, si está marcada como cerrada) y quién ha entrado.', severityDefault: 'importante', ruleVersion: 1 }
 ];
 
@@ -127,5 +128,13 @@ export const GEOGRID_KINDS: SaludKind[] = [
   { kind: 'seo.maps_spam', group: 'local', title: 'Competidor con nombre sospechoso en el mapa', explain: 'Un competidor que sale en el top 3 en muchos puntos tiene un nombre que parece relleno de palabras clave (Google lo prohíbe: el nombre debe ser el real del negocio). Se puede sugerir la edición a Google; si su rótulo real es así, descártalo.', severityDefault: 'info', ruleVersion: 1 }
 ];
 
-export const SEO_KINDS: SaludKind[] = [...SALUD_KINDS, ...LOCAL_KINDS, ...MAPA_KINDS, ...VIGILANCIA_KINDS, ...EXTERNOS_KINDS, ...POSICIONES_KINDS, ...FICHA_KINDS, ...GEOGRID_KINDS];
+/** Parte 5c: teléfonos antiguos publicados («seo.local:nap_antiguo») y páginas puerta («seo.salud:puertas»), cada una con su fuente. */
+export const NAP_ANTIGUO_KINDS: SaludKind[] = [
+  { kind: 'seo.old_nap_found', group: 'local', title: 'Un teléfono antiguo sigue publicado en otras webs', explain: 'Un teléfono que ya no es el del negocio aparece en directorios u otras webs: quien llame a ese número no le encontrará. Hay que pedir la corrección en cada web (o editar la ficha si es suya).', severityDefault: 'aviso', ruleVersion: 1 }
+];
+export const PUERTAS_KINDS: SaludKind[] = [
+  { kind: 'seo.doorway_pages', group: 'contenido', title: 'Páginas puerta: la misma página cambiando la población', explain: 'Hay 3 o más páginas casi idénticas que solo cambian el nombre de la población. Google las considera páginas puerta y puede penalizar la web entera. Mejor una sola página bien hecha, o páginas de zona con contenido propio y útil de cada sitio.', severityDefault: 'importante', ruleVersion: 1 }
+];
+
+export const SEO_KINDS: SaludKind[] = [...SALUD_KINDS, ...LOCAL_KINDS, ...MAPA_KINDS, ...VIGILANCIA_KINDS, ...EXTERNOS_KINDS, ...POSICIONES_KINDS, ...FICHA_KINDS, ...GEOGRID_KINDS, ...NAP_ANTIGUO_KINDS, ...PUERTAS_KINDS];
 export const SALUD_KIND_BY_KEY = new Map(SEO_KINDS.map((k) => [k.kind, k]));

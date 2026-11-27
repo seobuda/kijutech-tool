@@ -121,3 +121,16 @@ export async function checkGeogridNowAction(projectId: string): Promise<Ok> {
     return { ok: false, error: publicError(e, 'No se pudo lanzar') };
   }
 }
+
+export async function checkOldPhonesNowAction(projectId: string): Promise<Ok> {
+  try {
+    const user = await requirePermission('edit');
+    if (!(await ownProject(user.tenantId, projectId))) return { ok: false, error: 'Proyecto no encontrado' };
+    // Misma clave que el proceso programado (cada trimestre): nunca dos búsquedas a la vez.
+    const r = await enqueueJob({ tenantId: user.tenantId, kind: 'seo.nap', payload: { projectId }, scopeType: 'proyecto', scopeId: projectId, priority: 4, dedupeKey: `sched:seo.nap:${projectId}` });
+    revalidatePath(PATH(projectId));
+    return { ok: true, message: r.created ? 'En marcha: en un minuto se actualiza.' : 'Ya estaba en marcha.' };
+  } catch (e) {
+    return { ok: false, error: publicError(e, 'No se pudo lanzar') };
+  }
+}

@@ -611,7 +611,7 @@ export async function projectDossierSections(tenantId: string, clientId: string)
 // Para la competencia: quién sale en orgánico y en el paquete local por una búsqueda. Lo registra quien tenga un
 // proveedor (Agentes, con DataForSEO); SEO lo usa sin saber de DataForSEO.
 export type SerpResult = {
-  organic: { rank: number; domain: string; url: string; title: string }[];
+  organic: { rank: number; domain: string; url: string; title: string; description?: string }[];
   localPack: { rank: number; title: string; domain: string | null; rating: number | null; reviews: number | null }[];
   costUsd: number | null;
 };

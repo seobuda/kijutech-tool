@@ -20,6 +20,7 @@ export const DOSSIER_FIELDS: { field: string; label: string; client: boolean }[]
   { field: 'publico', label: 'Público (a quién vende)', client: true },
   { field: 'atencion', label: 'Cómo atiende (local, a domicilio, online)', client: false },
   { field: 'idiomas', label: 'Idiomas en los que le buscan', client: false },
+  { field: 'telefonos_antiguos', label: 'Teléfonos antiguos (para buscarlos publicados)', client: false },
   { field: 'titulo_inicio', label: 'Título de la página de inicio', client: false },
   { field: 'primera_fecha_web', label: 'Primera vez archivada en Internet', client: false },
   { field: 'datos_search_console', label: 'Datos en Search Console desde', client: false },
