@@ -76,7 +76,17 @@ export async function eligibilityContext(tenantId: string, projectId: string): P
 export async function createCycle(
   tenantId: string,
   projectId: string,
-  input: { name: string; months: number; startsOn: string; reservePct?: number; thesis?: string | null; lines: LineInput[] },
+  input: {
+    name: string;
+    months: number;
+    startsOn: string;
+    reservePct?: number;
+    thesis?: string | null;
+    lines: LineInput[];
+    /** Jefe SEO D4: plan de servicio del que sale el ciclo y frente de cada línea (mismo orden que `lines`). */
+    masterPlanId?: string | null;
+    masterItemIds?: (string | null)[];
+  },
   by: string
 ): Promise<string> {
   const ctx = await eligibilityContext(tenantId, projectId);
@@ -110,6 +120,7 @@ export async function createCycle(
         // Decisión de Enric: en los dos primeros ciclos de estrategia, un administrador aprueba el lote de cada mes.
         approvalMode: Number(previous) < 2 ? 'lote_admin' : 'automatico',
         thesis: input.thesis?.trim().slice(0, 2000) || null,
+        masterPlanId: input.masterPlanId ?? null,
         readDueOn: ymd(addDays(end, 90)),
         createdBy: by.slice(0, 120),
         approvedBy: by.slice(0, 120),
@@ -120,7 +131,7 @@ export async function createCycle(
       const pb = PLAYBOOKS[l.playbook];
       const [line] = await tx
         .insert(seoCycleLines)
-        .values({ tenantId, cycleId: cycle.id, projectId, playbook: l.playbook, playbookVersion: pb.version, params: l.params, technique: pb.technique, hoursBudget: l.hours.toFixed(1), sort: i })
+        .values({ tenantId, cycleId: cycle.id, projectId, playbook: l.playbook, playbookVersion: pb.version, params: l.params, technique: pb.technique, hoursBudget: l.hours.toFixed(1), sort: i, masterItemId: input.masterItemIds?.[i] ?? null })
         .returning({ id: seoCycleLines.id });
       const slots = expandSlots(l.playbook, l.params, start, months);
       if (slots.length)

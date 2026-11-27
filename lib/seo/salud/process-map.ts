@@ -461,6 +461,18 @@ export const SEO_SALUD_PROCESS_MAP: ProcessStep[] = [
     tables: ['seo_jefe_proposals', 'seo_master_plans', 'seo_master_plan_items', 'agt_conversations', 'agt_messages', 'jobs']
   },
   {
+    id: 'jefe-ciclos',
+    lane: 'Plan de mejora',
+    name: 'Jefe SEO: estrategia del trimestre desde el plan',
+    description: 'Trabajo → Plan de servicio → «Estrategia del trimestre (desde el plan)» (solo admin). Del plan aprobado sale la estrategia del trimestre que toca: los frentes vivos en ese trimestre con línea del catálogo, por prioridad. Un administrador la aprueba y se crea la estrategia de siempre (Trabajo → Estrategia), enlazada al plan y a cada frente; si aún hay una activa, queda aprobada y se crea en cuanto esa se cierre. Los frentes sin línea (trabajo puntual, como lo básico de la ficha) y lo que no cabe quedan apuntados con su motivo.',
+    status: 'built',
+    file: 'lib/seo/jefe/ciclos.ts',
+    when: 'Una pasada al día por cuenta (dentro de «seo: encargar las tareas de las estrategias», antes de encargar): propone el siguiente ciclo 21 días antes del final del activo, o en cuanto hay plan aprobado y no hay ciclo; y crea los aprobados que esperaban. También a mano («Proponer la estrategia del trimestre»).',
+    ai: 'Ninguna (0 $). La IA ya decidió los frentes de cada trimestre en el plan; traducirlos a un ciclo es ordenar y comprobar horas (directiva de optimización de IA).',
+    code: 'lib/seo/jefe/ciclo-rules.ts (puro): trimestre del plan según la fecha de inicio, lunes de inicio, frentes vivos por prioridad, una línea por tipo, solo elegibles, como mucho 3 y que quepan en las horas con la reserva del 30 % (el validador de siempre). Una propuesta abierta por proyecto (candado); la pasada no repite una fecha ya decidida. No se aprueba si el plan aprobado cambió; al aprobarse otra versión, la pendiente caduca. Si crear falla (p. ej. faltan las horas), vuelve a pendiente. No toca materialize.',
+    tables: ['seo_jefe_proposals', 'seo_master_plans', 'seo_master_plan_items', 'seo_cycles', 'seo_cycle_lines']
+  },
+  {
     id: 'estrategia-ciclos',
     lane: 'Plan de mejora',
     name: 'Estrategia por ciclos (trabajo planificado)',

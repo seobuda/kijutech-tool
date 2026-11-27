@@ -102,12 +102,17 @@ export async function listPlanChanges(tenantId: string, projectId: string): Prom
   return rows.map((r) => ({ ...r, payload: r.payload as ChangePayload }));
 }
 
-/** Al aprobarse una versión del plan, los cambios pendientes propuestos sobre versiones anteriores caducan (ya no aplican). */
+/** Al aprobarse una versión del plan, los cambios y ciclos pendientes propuestos sobre versiones anteriores caducan. */
 export async function expireStaleChanges(tx: Pick<typeof db, 'update'>, projectId: string, approvedVersion: number): Promise<void> {
   await tx
     .update(seoJefeProposals)
     .set({ status: 'caducada', decisionReason: `Se aprobó la versión ${approvedVersion} del plan antes de decidirlo.`, decidedAt: new Date() })
-    .where(and(eq(seoJefeProposals.projectId, projectId), eq(seoJefeProposals.kind, 'cambio'), eq(seoJefeProposals.status, 'pendiente'), sql`coalesce(${seoJefeProposals.baseVersion}, 0) < ${approvedVersion}`));
+    .where(and(eq(seoJefeProposals.projectId, projectId), inArray(seoJefeProposals.kind, ['cambio', 'ciclo']), eq(seoJefeProposals.status, 'pendiente'), sql`coalesce(${seoJefeProposals.baseVersion}, 0) < ${approvedVersion}`));
+  // Estrategias aprobadas que esperaban a crearse sobre un plan anterior: tampoco valen ya.
+  await tx
+    .update(seoJefeProposals)
+    .set({ status: 'caducada', decisionReason: `Se aprobó la versión ${approvedVersion} del plan antes de crearla.`, payload: sql`${seoJefeProposals.payload} || '{"pendingCreate": false}'::jsonb` })
+    .where(and(eq(seoJefeProposals.projectId, projectId), eq(seoJefeProposals.kind, 'ciclo'), eq(seoJefeProposals.status, 'aprobada'), sql`${seoJefeProposals.payload}->>'pendingCreate' = 'true'`, sql`coalesce(${seoJefeProposals.baseVersion}, 0) < ${approvedVersion}`));
 }
 
 /** Aceptar o rechazar un cambio. Rechazar exige motivo (el Jefe lo lee en la siguiente versión). */

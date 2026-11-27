@@ -12,6 +12,7 @@ import { wireApp } from '@/lib/app-wiring';
 import { agentChat, type AgentChatMessage } from '@/lib/core/capabilities';
 import { approvePlan, approvedPlan, jefeBudget, jefeSpentThisMonth, PLAN_COST_ESTIMATE_USD, PlanError, rejectPlan, requestMasterPlan, scorePlanShadow } from '@/lib/seo/jefe/plan';
 import { decidePlanChange } from '@/lib/seo/jefe/cambios';
+import { decideCycleProposal, proposeCycleFromPlan } from '@/lib/seo/jefe/ciclos';
 import { JEFE_AGENT_KEY, JEFE_CHAT_MAX_TOKENS, jefeThread } from '@/lib/seo/jefe/chat';
 
 type Ok = { ok: true; message?: string } | { ok: false; error: string };
@@ -131,6 +132,34 @@ export async function decidePlanChangeAction(projectId: string, changeId: string
     await decidePlanChange(user.tenantId, projectId, changeId, accept ? 'aprobada' : 'rechazada', user.name || user.email, String(reason ?? '').slice(0, 2000) || null);
     paths(projectId);
     return { ok: true, message: accept ? 'Aceptado: el Jefe lo incorporará en la próxima versión del plan (genérala cuando quieras).' : 'Rechazado. El Jefe tendrá en cuenta el motivo.' };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+// --- D4: estrategia trimestral desde el plan aprobado (la calcula el código; la aprueba un admin) -----------------------
+
+export async function proposeCycleAction(projectId: string): Promise<Ok> {
+  try {
+    const user = await requirePermission('admin');
+    if (!(await ownProject(user.tenantId, projectId))) return { ok: false, error: 'Proyecto no encontrado' };
+    const r = await proposeCycleFromPlan(user.tenantId, projectId);
+    paths(projectId);
+    return { ok: true, message: `Estrategia propuesta con ${r.lines} línea(s). Revísala y apruébala.` };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function decideCycleAction(projectId: string, proposalId: string, accept: boolean, reason: string): Promise<Ok> {
+  try {
+    const user = await requirePermission('admin');
+    if (!(await ownProject(user.tenantId, projectId)) || !UUID.test(proposalId)) return { ok: false, error: 'Propuesta no encontrada' };
+    const r = await decideCycleProposal(user.tenantId, projectId, proposalId, Boolean(accept), user.name || user.email, String(reason ?? '').slice(0, 2000) || null);
+    paths(projectId);
+    revalidatePath(`/dashboard/projects/${projectId}/estrategia`);
+    if (!accept) return { ok: true, message: 'Descartada. El motivo queda apuntado.' };
+    return { ok: true, message: r.cycleId ? 'Estrategia creada y activa: aprueba el lote del primer mes en Trabajo → Estrategia.' : 'Aprobada. Se creará sola en cuanto se cierre la estrategia activa.' };
   } catch (e) {
     return fail(e);
   }
