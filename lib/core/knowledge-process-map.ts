@@ -131,12 +131,12 @@ export const CONOCIMIENTO_PROCESS_MAP: ProcessStep[] = [
     lane: 'I+D',
     name: 'Bitácora de novedades (I+D fase A)',
     description:
-      'Lo que publican las fuentes oficiales de cada departamento, guardado sin repetir: hoy Google Search (panel de incidencias, con las core y spam updates, y blog de Search Central). Las actualizaciones e incidencias avisan al dueño al momento y se ven como eventos en las gráficas y en el expediente del estratega. Cada lunes, lo de la semana se propone como entrada de la base. Pantalla: Conocimiento → Novedades de Google.',
+      'Lo que publican las fuentes oficiales de cada departamento, guardado sin repetir: hoy Google Search (panel de incidencias, con las core y spam updates, y blog de Search Central). Las actualizaciones e incidencias avisan al dueño al momento y se ven como eventos en las gráficas y en el expediente del estratega. Cada lunes, lo de la semana se propone como entrada de la base. Desde el 27 nov también blogs y canales de herramientas SEO, marcados como opinión y en una sección aparte. Pantalla: Conocimiento → Novedades de SEO.',
     status: 'built',
     file: 'lib/core/knowledge-feed.ts',
     when: 'Lectura cada 3 horas (trabajo «seo.id.watch» del módulo SEO) y resumen los lunes («seo.id.digest»). Se dan de alta solas con el primer uso de SEO en la cuenta.',
     ai: 'Solo el resumen semanal, y solo si hubo novedades: lo redacta el prompt de la base (redactar una entrada), que ya tiene examen. Leer, clasificar y avisar no usa IA.',
-    code: 'Sin repetir por fuente y huella; una incidencia ya guardada se actualiza cuando termina. Solo avisa de lo publicado en los últimos 10 días (la primera lectura no avisa del histórico). Las fuentes y cómo leerlas son del módulo (lib/seo/id/sources.ts); la tabla es del núcleo para que Ads añada las suyas.',
+    code: 'Sin repetir por fuente y huella; una incidencia ya guardada se actualiza cuando termina. Solo avisa de lo publicado en los últimos 10 días (la primera lectura no avisa del histórico). Las fuentes y cómo leerlas son del módulo (lib/seo/id/fuentes.ts, editables en Ajustes → Fuentes de novedades SEO; lo no oficial va al dominio «seo_ext», que no avisa ni entra en el resumen); la tabla es del núcleo para que Ads añada las suyas.',
     tables: ['kb_feed_items', 'kb_articles'],
     prompts: ['kb_redactar_entrada']
   },

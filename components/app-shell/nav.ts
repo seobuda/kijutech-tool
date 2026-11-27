@@ -41,6 +41,7 @@ import {
   Cog,
   Timer,
   UserRound,
+  Rss,
   type LucideIcon
 } from 'lucide-react';
 
@@ -213,7 +214,8 @@ export const NAV: NavGroup[] = [
       { href: '/dashboard/ai/my-keys', label: 'Mis claves de IA', icon: Bot, show: (r) => r.canAccessAi && !r.isSuperAdmin },
       { href: '/dashboard/ai/brain', label: 'Cerebro', icon: Brain, keywords: 'aprendizaje costes', show: (r) => r.isSuperAdmin },
       { href: '/dashboard/architecture', label: 'Mapa del sistema', icon: Network, keywords: 'arquitectura procesos', show: (r) => r.isSuperAdmin },
-      { href: '/dashboard/seo/admin/settings', label: 'Configuración SEO', icon: SlidersHorizontal, show: (r) => r.isSuperAdmin }
+      { href: '/dashboard/seo/admin/settings', label: 'Configuración SEO', icon: SlidersHorizontal, show: (r) => r.isSuperAdmin },
+      { href: '/dashboard/seo/fuentes', label: 'Fuentes de novedades SEO', icon: Rss, keywords: 'fuentes rss blogs youtube novedades google ahrefs semrush investigador', show: adminOnly }
     ]
   },
   {
@@ -308,6 +310,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   usuarios: 'Usuarios',
   seo: 'SEO',
   admin: 'Administración',
+  fuentes: 'Fuentes de novedades',
   cards: 'Fichas SEO',
   general: 'Mi cuenta',
   'mis-tareas': 'Mis tareas',

@@ -575,6 +575,13 @@
       "when": 1796800000000,
       "tag": "0081_seo_jefe_local",
       "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1796900000000,
+      "tag": "0082_seo_fuentes",
+      "breakpoints": true
     }
   ]
 }

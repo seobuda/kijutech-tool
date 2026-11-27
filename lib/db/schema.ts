@@ -5054,3 +5054,40 @@ export const seoJefeProposals = pgTable(
   ]
 );
 export type SeoJefeProposal = typeof seoJefeProposals.$inferSelect;
+
+// SEO · fuentes de novedades editables (27 nov 2026, migración 0082). RSS o Atom, webs con su RSS detectado, canales de
+// YouTube y el panel de incidencias de Google, con su nivel. Las de serie las crea el código (lib/seo/id/fuentes.ts).
+export const seoSources = pgTable(
+  'seo_sources',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    // Clave estable: es la source_key de kb_feed_items (no se repite lo ya guardado).
+    key: varchar('key', { length: 40 }).notNull(),
+    label: varchar('label', { length: 160 }).notNull(),
+    // google_status | rss | youtube
+    kind: varchar('kind', { length: 16 }).notNull(),
+    inputUrl: text('input_url').notNull(),
+    feedUrl: text('feed_url').notNull(),
+    // oficial | reputada | comunidad
+    level: varchar('level', { length: 12 }).notNull().default('reputada'),
+    active: boolean('active').notNull().default(true),
+    builtin: boolean('builtin').notNull().default(false),
+    lastCheckedAt: timestamp('last_checked_at'),
+    lastOkAt: timestamp('last_ok_at'),
+    lastError: text('last_error'),
+    itemsTotal: integer('items_total').notNull().default(0),
+    createdBy: varchar('created_by', { length: 120 }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    unique('seo_sources_key_unique').on(table.tenantId, table.key),
+    index('seo_sources_tenant_idx').on(table.tenantId, table.active),
+    check('seo_sources_kind_check', sql`${table.kind} IN ('google_status', 'rss', 'youtube')`),
+    check('seo_sources_level_check', sql`${table.level} IN ('oficial', 'reputada', 'comunidad')`),
+  ]
+);
+export type SeoSourceRow = typeof seoSources.$inferSelect;
