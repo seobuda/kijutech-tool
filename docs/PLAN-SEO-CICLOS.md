@@ -1,7 +1,7 @@
 # Plan: estrategias (ciclos) del SEO — fase 2 «Trabajo»
 
 **Fecha:** 2026-11-27 · **Autor del análisis y del plan:** Fable 5.2 (pedido por Enric), en solo lectura sobre el código.
-**Ejecuta:** Claude Opus 5.5. **Estado:** propuesta; pendiente de las decisiones de Enric (§9).
+**Ejecuta:** Claude Opus 5.5. **Estado:** APROBADO por Enric el 27 nov con las 6 recomendaciones del §9: por proyecto; trimestral con lectura a +90 días (mensual solo técnico); lote mensual aprobado por Enric en los dos primeros ciclos y automático después; aprueba solo admin; un solo cerebro (el estratega antiguo deja de proponer SEO donde hay proyecto SEO); reserva del 30 %, editable.
 **Origen:** la visión de Enric para la fase 2: ficha → servicio → accesos → «Iniciar estrategia» → el sistema, de forma secuencial, monta la estrategia → tareas a personas y agentes → seguimiento; estrategias aisladas (mensuales, trimestrales…); un agente que propone estrategias; aprender qué funciona entre clientes y sectores. Lo marcado [NV] no está verificado.
 
 ## 1. Veredicto crítico
