@@ -432,8 +432,8 @@ export const SEO_SALUD_PROCESS_MAP: ProcessStep[] = [
     file: 'lib/seo/jefe/expediente.ts',
     when: 'Cada vez que se genera un plan de servicio o un agente pide el expediente.',
     ai: 'Ninguna: el expediente y los pronósticos (rango bajo-medio-alto con supuestos, o «sin base») los calcula el código (lib/seo/jefe/forecast.ts).',
-    code: 'Claves estables que sobreviven a rehacer el mapa (lib/seo/jefe/evidence.ts); lo que viene de webs va delimitado como dato no fiable. Curva de CTR propia del proyecto solo con 5.000 impresiones o más.',
-    tables: ['gsc_daily_totals', 'findings', 'seo_topics', 'seo_demand', 'seo_rank_keywords', 'client_competitors', 'seo_dossier_facts', 'seo_cycles', 'seo_cycle_lines']
+    code: 'Claves estables que sobreviven a rehacer el mapa (lib/seo/jefe/evidence.ts); lo que viene de webs va delimitado como dato no fiable. Curva de CTR propia del proyecto solo con 5.000 impresiones o más. Sección «Ficha de Google y mapa»: perfil según cómo atiende (local físico, a domicilio, online, sin público, sin confirmar; lib/seo/jefe/local-profile.ts) y evidencias L: de la ficha, las reseñas frente a la competencia, el mapa por zonas y la coherencia NAP, con lo ya descargado (0 $ extra); lo no medido dice «sin medir».',
+    tables: ['gsc_daily_totals', 'findings', 'seo_topics', 'seo_demand', 'seo_rank_keywords', 'client_competitors', 'seo_dossier_facts', 'seo_cycles', 'seo_cycle_lines', 'seo_local_places', 'seo_local_snapshots', 'seo_geogrid_runs']
   },
   {
     id: 'jefe-plan-servicio',
@@ -444,7 +444,7 @@ export const SEO_SALUD_PROCESS_MAP: ProcessStep[] = [
     file: 'lib/seo/jefe/plan.ts',
     when: 'A mano («Generar el plan», admin). Trabajo «seo.jefe.plan» en la cola, un intento, 7 min como máximo.',
     ai: 'Opus 5.5 con esfuerzo alto y SIN IA de reserva (si Anthropic falla, no lo hace otro modelo). Unos 0,6 $ por versión.',
-    code: 'Una generación a la vez y 2 al día por proyecto (candado de PostgreSQL); tope mensual del Jefe (ajuste «jefe_budget_usd», 35 $ por defecto) sumando todas sus llamadas. Validación (lib/seo/jefe/plan-rules.ts): evidencias que existen y del tipo que sostiene cada frente (lo inventado se descarta y se apunta; más del 30 % inventado = plan no aceptado), claves de frente reutilizadas de la versión anterior, línea del tipo y elegible (la bloqueada pasa al T2 condicionada), trimestres dentro del horizonte, como mucho 10 frentes y horas del T1. Puntuador por reglas con el orden de la agencia: avisa, no veta. Cada decisión queda en seo_jefe_proposals con su motivo. Examen del prompt con 3 expedientes inventados (IA → Prompts). Auditoría Opus: docs/PLAN-SEO-JEFE.md.',
+    code: 'Una generación a la vez y 2 al día por proyecto (candado de PostgreSQL); tope mensual del Jefe (ajuste «jefe_budget_usd», 35 $ por defecto) sumando todas sus llamadas. Validación (lib/seo/jefe/plan-rules.ts): evidencias que existen y del tipo que sostiene cada frente (lo inventado se descarta y se apunta; más del 30 % inventado = plan no aceptado), claves de frente reutilizadas de la versión anterior, línea del tipo y elegible (la bloqueada pasa al T2 condicionada), trimestres dentro del horizonte, como mucho 10 frentes y horas del T1. Puntuador por reglas con el orden de la agencia SEGÚN CÓMO ATIENDE el negocio (decisión de Enric del 27 nov: en negocio local, lo básico de la ficha siempre en el T1; reseñas continuas solo si va por detrás o parada; las pide el cliente; publicaciones al final): avisa, no veta. Cada decisión queda en seo_jefe_proposals con su motivo. Examen del prompt con 7 expedientes inventados (IA → Prompts). Auditoría Opus: docs/PLAN-SEO-JEFE.md.',
     tables: ['seo_master_plans', 'seo_master_plan_items', 'seo_jefe_proposals', 'ai_jobs', 'jobs'],
     prompts: ['seo_jefe_plan_maestro']
   },

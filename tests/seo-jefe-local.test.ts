@@ -13,7 +13,8 @@ describe('Jefe SEO local: perfil', () => {
     expect(localProfile({ atencion: 'domicilio', businessType: null, hasGoogleProfile: false })).toBe('area_servicio');
     expect(localProfile({ atencion: 'ambos', businessType: null, hasGoogleProfile: false })).toBe('area_servicio');
     expect(localProfile({ atencion: 'local', businessType: null, hasGoogleProfile: false })).toBe('local_fisico');
-    expect(localProfile({ atencion: null, businessType: 'Organization', hasGoogleProfile: true })).toBe('sin_publico');
+    expect(localProfile({ atencion: null, businessType: 'Organization', hasGoogleProfile: false })).toBe('sin_publico');
+    expect(localProfile({ atencion: null, businessType: 'Organization', hasGoogleProfile: true })).toBe('desconocido');
     expect(localProfile({ atencion: null, businessType: null, hasGoogleProfile: true })).toBe('local_fisico');
     expect(localProfile({ atencion: null, businessType: null, hasGoogleProfile: false })).toBe('desconocido');
   });

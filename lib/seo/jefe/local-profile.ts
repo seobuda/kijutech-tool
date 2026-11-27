@@ -20,7 +20,8 @@ export function localProfile(i: { atencion: string | null; businessType: string 
   if (a === 'online') return 'online';
   if (a === 'domicilio' || a === 'ambos') return 'area_servicio';
   if (a === 'local') return 'local_fisico';
-  if (i.businessType === 'Organization') return 'sin_publico';
+  // Revisor: con ficha de Google y tipo «Organization» sin confirmar cómo atiende, no se adivina: se avisa.
+  if (i.businessType === 'Organization') return i.hasGoogleProfile ? 'desconocido' : 'sin_publico';
   if (i.hasGoogleProfile) return 'local_fisico';
   return 'desconocido';
 }
@@ -43,10 +44,11 @@ export function localEvidence(i: { profile: LocalProfile; snapshot: LocalSnapsho
     out.push({
       id: evidenceId('L', `ficha:${s.cid}`),
       type: 'L',
-      label: `Ficha de Google: ${s.title}`,
+      // La categoría es texto de Google editable por el negocio: va en la etiqueta, que se delimita como dato no fiable.
+      label: `Ficha de Google: ${s.title}${s.category ? ` (categoría: ${s.category})` : ''}`,
       data: {
         reclamada: s.isClaimed == null ? 'sin medir' : s.isClaimed ? 'sí' : 'no',
-        categoria: s.category ?? 'sin categoría',
+        categoria: s.category ? 'definida' : 'sin categoría',
         categoriasExtra: s.additional,
         horario: s.hasHours ? 'sí' : 'no',
         estado: s.status ?? 'sin medir',
@@ -92,7 +94,7 @@ export function localSignal(evidence: Iterable<Evidence>): { signal: number; rev
         signal += 3;
         basicsMissing = true;
       }
-      if (d.horario === 'no' || d.categoria === 'sin categoría' || d.categoriasExtra === 0) {
+      if (d.horario === 'no' || d.categoria === 'sin categoría') {
         signal += 1;
         basicsMissing = true;
       }
@@ -101,15 +103,11 @@ export function localSignal(evidence: Iterable<Evidence>): { signal: number; rev
         signal += 2;
         reviewsNeedWork = true;
       }
-      if (d.paradas === 'sí') {
-        signal += 1;
-        reviewsNeedWork = true;
-      }
+      if (d.paradas === 'sí') reviewsNeedWork = true; // la señal ya la suma el hallazgo seo.reviews_stalled
     } else if (e.id.startsWith('L:mapa:')) {
       if (typeof d.top3Pct === 'number' && d.top3Pct < 30) signal += 2;
-    } else if (e.id === 'L:nap') {
-      if (typeof d.incoherencias === 'number' && d.incoherencias > 0) signal += 1;
     }
+    // L:nap no suma: sus hallazgos seo.nap_* ya cuentan en el grupo local.
   }
   return { signal, reviewsNeedWork, basicsMissing };
 }

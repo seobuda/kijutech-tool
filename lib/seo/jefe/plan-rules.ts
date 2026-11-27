@@ -278,7 +278,8 @@ export function scorePlan(plan: ParsedPlan, evidence: Map<string, Evidence>, pro
   let penalty = 0;
   for (const k of FRENTE_KINDS) {
     if (sig[k] < 3 || q1Kinds.has(k)) continue;
-    if (k === 'local' && !isLocal(profile)) continue;
+    // Lo local de un negocio local lo cubre su regla propia (abajo): sin doble penalización.
+    if (k === 'local') continue;
     const later = FRENTE_KINDS.filter((x) => q1Kinds.has(x) && tier[x] > tier[k]);
     if (later.length) {
       divergences.push(`El expediente pide «${KIND_LABEL[k]}» (señal ${sig[k]}) y el plan empieza por ${later.map((x) => `«${KIND_LABEL[x]}»`).join(', ')}.`);
@@ -291,8 +292,11 @@ export function scorePlan(plan: ParsedPlan, evidence: Map<string, Evidence>, pro
       divergences.push(`«${KIND_LABEL[k]}» tiene mucha señal (${sig[k]}) y no aparece en ningún trimestre.`);
       penalty += 10;
     }
+  // Decisión de Enric: en un local físico lo básico de la ficha va siempre en el T1; a domicilio, solo si le falta lo básico
+  // (ficha sin identificar o sin reclamar); si no, la ficha está al mismo nivel que exprimir y servicio y zona.
   const local = localSignal(evidence.values());
-  if (isLocal(profile) && !q1Kinds.has('local')) {
+  const needsQ1 = profile === 'local_fisico' || (profile === 'area_servicio' && local.basicsMissing);
+  if (needsQ1 && !q1Kinds.has('local')) {
     divergences.push('Negocio local sin la ficha de Google en el primer trimestre (criterio de la agencia: lo básico de la ficha va siempre al principio).');
     penalty += 20;
   }
