@@ -201,13 +201,25 @@ export const SEO_SALUD_PROCESS_MAP: ProcessStep[] = [
     id: 'briefs',
     lane: 'Plan de mejora',
     name: 'Briefs de contenido (SERP real)',
-    description: 'Para escribir o mejorar una página: lo que tratan las webs que ganan en Google (subtemas en 2+ webs, preguntas, extensión orientativa), los datos propios del cliente, desde qué páginas enlazarla y, si mejora una existente, su nota con lo que le falta. «Copiar como texto» para el encargo; «Ya está publicada» registra la intervención para medir si funcionó. Palabras → «Briefs de contenido». Además, en los detectores: «contenido que pierde tráfico» a 90 días.',
+    description: 'Para escribir o mejorar una página: lo que tratan las webs que ganan en Google (subtemas en 2+ webs, preguntas, extensión orientativa), los datos propios del cliente, desde qué páginas enlazarla y, si mejora una existente, su nota con lo que le falta. «Copiar como texto» o «Encargar al redactor» (crea el encargo en ClickUp con el brief dentro y registra la intervención con ese encargo: el núcleo pone la fecha de hecho); «Ya está publicada» la marca hecha para medir si funcionó. Palabras → «Briefs de contenido». Además, en los detectores: «contenido que pierde tráfico» a 90 días.',
     status: 'built',
     file: 'lib/seo/contenido/briefs.ts',
     when: 'A mano (botón «Preparar brief»; trabajo «seo.brief.build» en la cola). El contenido que pierde tráfico, con los detectores (cada 7 días).',
     ai: 'Nada (reglas): la IA podría redactar un esquema después, con su prompt y su examen.',
     code: 'Top 10 guardado (demanda) o una SERP en directo (0,002 $, con el tope). Como mucho 5 webs legibles, sin directorios, redes ni la web del cliente, respetando su robots.txt. Contenido principal con extractMain del núcleo (sin menú, pie, barra lateral ni cookies). Subtemas: encabezados sin las palabras de la búsqueda, Jaccard ≥ 0,5. Nota: subtemas presentes en el texto (70 %), búsqueda en título y H1 (30 %); las palabras solo restan si quedan por debajo de la mitad. Enlazado: sin legales, etiquetas ni paginación; los enlaces de menú no cuentan como «ya enlaza»; texto variado. Decay (lib/seo/contenido/decay.ts): 30+ clics previos, −30 % a 90 días y frente al año anterior si hay; causa probable (posición, CTR o demanda). WordPress: NO (decisión de Enric pendiente; docs/PENDIENTES-ENRIC.md).',
     tables: ['seo_briefs', 'seo_demand', 'seo_topics', 'seo_topic_queries', 'crawl_pages', 'crawl_links', 'seo_dossier_facts', 'interventions', 'gsc_daily', 'seo_data_spend']
+  },
+  {
+    id: 'informe-semanal-seo',
+    lane: 'Vigilancia continua',
+    name: 'Apartado SEO del informe semanal',
+    description: 'En el informe semanal del dueño (Telegram), por proyecto SEO con novedades: críticos e importantes nuevos de la semana, caída de visitas abierta y propuestas por aprobar; los demás, en una línea; y el gasto en datos del mes. Además, aviso inmediato de hackeo y de caída de visitas (lib/seo/avisos.ts).',
+    status: 'built',
+    file: 'lib/seo/informe-semanal.ts',
+    when: 'Con el informe semanal del núcleo (registerReportSection «seo»).',
+    ai: 'Nada.',
+    code: 'Solo lectura de hallazgos y propuestas; HTML escapado. Sin proyectos SEO, no sale el apartado.',
+    tables: ['findings', 'seo_plan_items', 'seo_data_spend', 'projects']
   },
   {
     id: 'gasto-datos',
