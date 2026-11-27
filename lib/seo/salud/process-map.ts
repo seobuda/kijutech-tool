@@ -81,13 +81,13 @@ export const SEO_SALUD_PROCESS_MAP: ProcessStep[] = [
     id: 'vigilancia-detectores',
     lane: 'Vigilancia continua',
     name: 'Detectores: mapa de palabras, páginas en caída e indexación',
-    description: 'Rehace el mapa de palabras (al alcance, CTR bajo, canibalización y temas sin página), busca las páginas que pierden clics (4 semanas frente a las 4 anteriores, mínimo 30 clics y −30 %) e inspecciona en Search Console la portada y las 7 páginas con más clics.',
+    description: 'Rehace el mapa de palabras (al alcance, CTR bajo, canibalización y temas sin página), busca las páginas que pierden clics (4 semanas frente a las 4 anteriores, mínimo 30 clics y −30 %) e inspecciona en Search Console la portada y las 7 páginas con más clics. Parte 6: señales de web hackeada (búsquedas basura NUEVAS, sin impresiones en los 92 días anteriores; y páginas basura con impresiones o rastreadas).',
     status: 'built',
     file: 'lib/seo/vigilancia/vigilancia.ts',
     when: 'Cada 7 días por defecto (editable: 3, 7, 14 o 30).',
     ai: 'Nada (el mapa de palabras usa embeddings en su propio trabajo).',
-    code: 'Sobre el detalle de Search Console del núcleo, no la API en directo; una sola propiedad (la de dominio si la hay) para no contar dos veces. El año anterior solo se usa si el histórico llega: si entonces también cayó, es temporada (informativo). Fuente «seo.detectores:gsc»; «Recuperar una página que pierde clics» y «indexación» entran en el plan.',
-    tables: ['findings', 'gsc_daily', 'gsc_pages', 'gsc_properties', 'jobs']
+    code: 'Sobre el detalle de Search Console del núcleo, no la API en directo; una sola propiedad (la de dominio si la hay) para no contar dos veces. El año anterior solo se usa si el histórico llega: si entonces también cayó, es temporada (informativo). Fuente «seo.detectores:gsc»; «Recuperar una página que pierde clics» y «indexación» entran en el plan. Hackeo (`lib/seo/vigilancia/hackeo.ts`, fuente «seo.vigilancia:hackeo»): solo con 120 días de histórico de Search Console; lista estrecha con límites de palabra (fármacos de marca, réplicas, apuestas) y escritura japonesa o china si la web no está en ese idioma; 3+ búsquedas o 50+ impresiones; crítico si sus URLs no son de la web conocida, si no aviso (p. ej. una farmacia). El cloaking puede ocultar la basura al rastreo: por eso se mira lo que Google ya muestra.',
+    tables: ['findings', 'gsc_daily', 'gsc_pages', 'gsc_queries', 'gsc_properties', 'crawl_pages', 'jobs']
   },
   {
     id: 'posiciones',
@@ -164,14 +164,14 @@ export const SEO_SALUD_PROCESS_MAP: ProcessStep[] = [
   {
     id: 'salud-reglas',
     lane: 'Auditoría',
-    name: 'Comprobaciones técnicas (41 reglas, sin IA)',
-    description: 'Sobre las páginas rastreadas: respuestas 4xx/5xx, cadenas de redirección y enlaces a redirecciones, sitemap, noindex en el sitemap, canonical a otra URL o roto, títulos (falta, largo, repetido), meta descripción, H1, contenido escaso, duplicado y casi duplicado (simhash), imágenes sin alt, huérfanas, profundidad, HTTPS, servidor lento (mediana ≥ 2,5 s), web pintada con JavaScript y datos estructurados (negocio sin marcar o incompleto, FAQ, reseñas propias). Desde la parte 1 (26 nov 2026, `audit-rules-tecnico.ts`): bucles de redirección, páginas enlazadas casi siempre con textos genéricos, hreflang (código no válido, sin vuelta, hacia una página rota), páginas sin idioma y regresiones (páginas que en el rastreo anterior eran indexables y ahora, al volver a pedirlas, dan error o noindex; nunca por ausencia). Técnico 2a (26 nov): robots.txt evaluado como Googlebot (CSS/JS de la web bloqueados, URLs del sitemap bloqueadas) y rastreadores de IA bloqueados (los de búsqueda, aviso; los de entrenamiento, informativo).',
+    name: 'Comprobaciones técnicas (47 reglas, sin IA)',
+    description: 'Sobre las páginas rastreadas: respuestas 4xx/5xx, cadenas de redirección y enlaces a redirecciones, sitemap, noindex en el sitemap, canonical a otra URL o roto, títulos (falta, largo, repetido), meta descripción, H1, contenido escaso, duplicado y casi duplicado (simhash), imágenes sin alt, huérfanas, profundidad, HTTPS, servidor lento (mediana ≥ 2,5 s), web pintada con JavaScript y datos estructurados (negocio sin marcar o incompleto, FAQ, reseñas propias). Desde la parte 1 (26 nov 2026, `audit-rules-tecnico.ts`): bucles de redirección, páginas enlazadas casi siempre con textos genéricos, hreflang (código no válido, sin vuelta, hacia una página rota), páginas sin idioma y regresiones (páginas que en el rastreo anterior eran indexables y ahora, al volver a pedirlas, dan error o noindex; nunca por ausencia). Técnico 2a (26 nov): robots.txt evaluado como Googlebot (CSS/JS de la web bloqueados, URLs del sitemap bloqueadas) y rastreadores de IA bloqueados (los de búsqueda, aviso; los de entrenamiento, informativo). Técnico 2b (parte 6, 27 nov, `audit-rules-2b.ts`): soft 404 por página (frases completas y poco texto) y de la web (sonda con 2 URLs inventadas: 200 o redirección a la portada), restos de staging (enlaces, CSS/JS, canonical, hreflang y JSON-LD), nofollow interno a páginas indexables (sin legales, carrito ni cuenta), teléfonos distintos en el schema (solo con una sede), dos plugins de SEO a la vez y tecnología detectada (CMS, tema y plugins visibles, en Salud); canonical a otra URL sube a importante si la URL está en el sitemap.',
     status: 'built',
     file: 'lib/seo/salud/audit-rules.ts',
     when: 'Cuando termina el rastreo (trabajo «seo.salud.audit» en la cola).',
     ai: 'Nada: son reglas fijas y versionadas (cada hallazgo guarda la versión de la regla que lo detectó).',
-    code: 'Solo las páginas indexables (200, sin noindex y con canonical propio) cuentan para títulos y contenido. Las huérfanas solo si el rastreo fue completo. Repetidos: un hallazgo por grupo. Casi duplicados: simhash a ≤ 3 bits, hasta 1.500 páginas.',
-    tables: ['crawl_pages', 'crawl_links']
+    code: 'La sonda de soft 404 no sigue redirecciones; con 401/403/429/5xx o error de red no decide y deja el aviso como estaba. El rastreo guarda en facts el generator y las firmas de plugins de SEO (comentarios y clases). Solo las páginas indexables (200, sin noindex y con canonical propio) cuentan para títulos y contenido. Las huérfanas solo si el rastreo fue completo. Repetidos: un hallazgo por grupo. Casi duplicados: simhash a ≤ 3 bits, hasta 1.500 páginas.',
+    tables: ['crawl_pages', 'crawl_links', 'client_locations', 'findings']
   },
   {
     id: 'salud-externos',

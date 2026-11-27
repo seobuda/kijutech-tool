@@ -118,6 +118,15 @@ export function SaludPanel({ view, canEdit, businessType, businessTypes }: { vie
               <dd className="font-medium">{fmt(view.crawl.finishedAt)}</dd>
             </div>
             {view.crawl.error && <p className="text-destructive sm:col-span-4">Error del rastreo: {view.crawl.error}</p>}
+            {view.tech && (
+              <p className="text-muted-foreground sm:col-span-4">
+                Tecnología: <span className="font-medium text-foreground">{view.tech.cms ?? 'no identificada'}{view.tech.version ? ` ${view.tech.version}` : ''}</span>
+                {view.tech.theme && <> · tema <span className="font-medium text-foreground">{view.tech.theme}</span></>}
+                {view.tech.seoPluginLabels.length > 0 && <> · SEO: <span className="font-medium text-foreground">{view.tech.seoPluginLabels.join(', ')}</span></>}
+                {view.tech.plugins.length > 0 && <> · {view.tech.plugins.length} plugins visibles ({view.tech.plugins.slice(0, 8).join(', ')}{view.tech.plugins.length > 8 ? '…' : ''})</>}
+                <span className="block text-xs">Solo lo que deja huella en la web pública (muchos plugins no se ven).</span>
+              </p>
+            )}
           </dl>
         )}
         <div className="mt-4 border-t pt-3 text-sm text-muted-foreground">

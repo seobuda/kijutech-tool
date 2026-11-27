@@ -128,7 +128,8 @@ export function auditCrawl(input: AuditInput): FindingInput[] {
     if (p.canonical && !sameUrl(p.canonical, p.url)) {
       const target = findPage(p.canonical);
       if (target && !ok(target)) add('seo.canonical_broken', k, { url: p.url, evidence: { canonical: p.canonical, status: target.statusCode } });
-      else add('seo.canonical_other', k, { url: p.url, evidence: { canonical: p.canonical } });
+      // En el sitemap y con canonical a otra: le decimos a Google dos cosas distintas (parte 6: sube a importante).
+      else add('seo.canonical_other', k, { url: p.url, severity: p.inSitemap ? 'importante' : undefined, evidence: { canonical: p.canonical, inSitemap: p.inSitemap } });
       continue; // una variante: sus títulos y textos no cuentan como problemas propios
     }
     // A partir de aquí, solo páginas indexables.

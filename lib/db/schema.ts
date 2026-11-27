@@ -3822,7 +3822,7 @@ export const crawlPages = pgTable(
     schemaTypes: text('schema_types').array(),
     imagesWithoutAlt: integer('images_without_alt'),
     // Hechos acotados (0067): { ext: enlaces a otras webs (≤ 100), res: CSS y JS que carga (≤ 40) }.
-    facts: jsonb('facts').$type<{ ext?: string[]; res?: string[] }>(),
+    facts: jsonb('facts').$type<{ ext?: string[]; res?: string[]; gen?: string; sig?: string[] }>(),
     bytes: integer('bytes'),
     fetchMs: integer('fetch_ms'),
     error: text('error'),
