@@ -1,7 +1,7 @@
 # Plan de UX/UI del módulo SEO
 
 **Fecha:** 2026-11-27. **Origen:** Enric pidió revisar la estructura, la UX, la arquitectura, el diseño y los gráficos de SE Ranking, Semrush y Ahrefs (con las cuentas de la agencia abiertas en Chrome) y, con eso, mejorar el módulo SEO.
-**Estado:** propuesta. No se construye nada hasta que Enric la apruebe.
+**Estado:** propuesta **v2** (27 nov, tras la revisión independiente de Fable 5.2, §9). No se construye nada hasta que Enric la apruebe.
 
 ## 1. Lo que se vio en las tres herramientas
 
@@ -71,78 +71,112 @@
   Ninguna de las tres tiene esto: **es lo que más hay que lucir**.
 - Detalles: la respuesta de la IA se ve como texto pegado; la vista previa del artículo es texto plano; los colores de gravedad no son los mismos en todas las pantallas.
 
-## 3. Principios del rediseño
-1. **Cifra → tendencia → detalle → acción.** Cada pantalla empieza con 3-6 cifras con su variación, sigue con un gráfico y termina en la tabla, y cada problema lleva su botón de acción.
-2. **Menos texto.** Las explicaciones van a un «?» con tooltip (conectado al glosario de Ayuda que ya existe). Un párrafo solo cuando una persona tiene que decidir algo.
-3. **Un solo semáforo** para todo el módulo: crítico, importante, aviso, info y bien, con los mismos colores y los mismos iconos.
-4. **Comparación siempre visible:** frente a la semana, el mes o el rastreo anterior.
-5. **Nuestro diferencial, arriba:** en los gráficos se marcan los **encargos hechos** (además de las actualizaciones de Google) y se ve el «¿funcionó?» junto al dato.
-6. **Ancho completo y cuadrícula** de 2-3 columnas en escritorio, una columna en móvil y modo oscuro desde el principio.
-7. **Estados vacíos con una acción.**
+## 3. Principios del rediseño (v2)
+1. **Decisión → evidencia → cifra.** Nuestro usuario no es un analista: es un junior que ejecuta y Enric, que aprueba. Cada pantalla empieza por **qué hay que hacer ahora** (3 acciones como mucho, con su botón); después va el porqué, y al final las cifras. Las tres herramientas acaban en «el problema»; nosotros, en «funcionó / no funcionó / no concluyente».
+2. **La unidad del módulo es el «Caso».** Un hallazgo o tema recorre su vida en una línea: detectado → propuesto → aprobado → encargo en ClickUp → hecho → medido a 28/56/90 días → veredicto, con su evidencia y su antes/después. Todo enlaza a su Caso.
+3. **Honestidad estadística en cada cifra.** Con pocos datos se dice «sin datos suficientes»; nunca un −18 % en rojo sobre 40 clics. Nada de notas 0-100: en vez del medidor de salud, «3 críticos · 2 nuevos desde el último rastreo».
+4. **Como mucho 4 cifras y una acción principal por pantalla.** Fuera el párrafo descriptivo de cada pantalla. **Se queda el texto de trabajo** (la receta y «cómo se verifica»), visible: un tooltip no sirve en móvil ni con teclado.
+5. **Por rol.** Enric ve la cartera y lo que pide su decisión; el junior, qué hacer hoy y cómo; el redactor, sus briefs. No hacen falta bloques personalizables.
+6. **Un solo lenguaje visual en toda la app.** Las piezas van a `components/ui`, y el semáforo y las aprobaciones son los de Para ti. El color nunca va solo: siempre con icono y texto.
+7. **Rápido.** Cada bloque carga por separado (`loading` y `error` en cada pantalla), con consultas agrupadas y, si hace falta, una foto diaria por proyecto.
 
-## 4. Nueva arquitectura de navegación
-**Cartera (lista de proyectos), al estilo de Ahrefs.** Una fila por cliente con:
-- miniatura;
-- medidor de salud;
-- visitas de Google del mes, con variación y minigráfico;
-- búsquedas en el top 10;
-- leads del mes;
-- presencia en IA;
-- urgentes;
-- progreso del plan del mes.
+## 4. Navegación (v2)
+- **No hay menú lateral propio:** la app ya tiene el global. Quedan **seis pestañas**, con las sub-vistas `?vista=` que ya existen:
 
-Además: filtros por responsable o por estado, favoritos y orden por «lo que pide atención».
-
-**Dentro del proyecto: menú lateral agrupado** (sustituye a las 10 pestañas) y **selector de proyecto** arriba.
-
-| Grupo | Secciones |
+| Pestaña | Qué reúne |
 |---|---|
-| Visión | Resumen · Resultados (lo que hoy es «En vivo»: leads y visitas) · Informe del mes |
-| Técnico | Salud y auditoría · Vigilancia y velocidad · Cambios en la web |
-| Búsquedas | Posiciones · Palabras y temas · Demanda |
-| Contenido | **Briefs y artículos** (sale de Palabras) · Contenido que pierde tráfico |
-| Local | Ficha y reseñas · Mapa por zonas · Citas y zonas |
-| IA y autoridad | Asistentes de IA · Autoridad |
-| Trabajo | Plan de mejora · ¿Funcionó? (resultados de los encargos) |
-| Proyecto | Expediente y puesta en marcha · Ajustes (procesos, frecuencias, gasto) |
+| **Resumen** | «Qué necesita este proyecto ahora» (3 acciones como mucho) + 4 cifras (leads, visitas, top 10 y plan/horas del contrato) + la línea de tiempo |
+| **Trabajo** | Plan, briefs y artículos y «¿Funcionó?» en **un embudo**: Propuesto · Aprobado · En curso · Hecho · Midiendo · Con veredicto. Fichas de Caso y aprobación por lote con horas y capacidad restante |
+| **Técnico** | Salud (novedades frente al rastreo anterior), vigilancia y velocidad, cambios en la web y Autoridad (sub-vista que solo se ve si está encendida) |
+| **Búsquedas** | Posiciones, temas y palabras, demanda y asistentes de IA (todas responden a «dónde aparecemos») |
+| **Local** | Ficha y reseñas, mapa por zonas (cuadrícula de calor con selector de población) y citas y zonas |
+| **Resultados** | Leads y visitas, línea de tiempo causa → efecto, páginas que traen contactos e informe del mes |
 
-En móvil, el menú lateral se convierte en un desplegable arriba.
+- **Engranaje del proyecto** en la cabecera: expediente, puesta en marcha, procesos, frecuencias y gasto.
+- **Selector de proyecto** en la cabecera, con buscador. Al cambiar de cliente se mantiene la pestaña.
+- **Cartera por excepción** (sustituye a «Proyectos SEO»):
+  - las filas se ordenan por «pide atención», con el motivo en una frase («caída diagnosticada», «5 propuestas sin aprobar», «plan al 20 % a día 25», «gasto al 90 %») y **la acción en la fila**;
+  - cada fila muestra leads, visitas con minigráfico, top 10 y horas («6 de 10 h»);
+  - debajo, plegado, lo que está «todo en orden»;
+  - sin miniaturas ni carpetas mientras haya pocos clientes.
+- **Estados vacíos:** enlazan a la puesta en marcha (los 13 puntos), no un botón suelto por pantalla.
 
-## 5. Pantalla por pantalla
+## 5. Lo que nos hace mejores que las tres
 
-| Pantalla | Cómo queda |
-|---|---|
-| **Resumen** | Fila de cifras clave: salud (medidor), visitas de Google (± % y minigráfico), top 10, leads del mes, presencia en IA y gasto de datos. Gráfico de visitas a 12 meses con **marcas de nuestros encargos y de las actualizaciones de Google**. Bloques «Lo urgente», «Este mes» (barra de progreso del plan), «Posiciones», «Local» e «IA», cada uno con «Ver detalle». |
-| **Salud y auditoría** | Medidor de salud con histórico por rastreo. Barras de crítico, importante, aviso e info. Tabla «Novedades / Todos» con insignia Nuevo, casos, cambio frente al rastreo anterior, «?» y acción (va al plan / dejar así). «Comparar con el rastreo del …». |
-| **Posiciones** | Cifras (top 3, top 10, en el mapa, citado por la IA). Gráfico por tramos de posición (áreas apiladas). Tabla al estilo de SE Ranking: una columna por semana, celdas de color, flecha de cambio, **etiqueta de tema con color**, filtros Top 3/10/20 y columnas a elegir. |
-| **Asistentes de IA** | Cifra de presencia por asistente con su evolución. Matriz pregunta × asistente con celdas de color. Detalle **con formato** (párrafos y listas, el nombre del cliente y de la competencia resaltados, fuentes como etiquetas) en lugar de texto pegado. |
-| **Local** | El mapa por zonas como cuadrícula de calor (color por posición) sobre un fondo esquemático. Reseñas frente a la competencia en barras. Ficha con los cambios marcados. |
-| **Autoridad** | Gráfico de dominios que enlazan (cliente frente a competencia) en el tiempo. Barras de ganados y perdidos por mes. Huecos en una tabla con su fuerza en barra. |
-| **Briefs y artículos** | Lista con estado (brief, artículo, borrador en WordPress, publicado, medido). Al abrir uno: el brief a la izquierda y la **vista previa formateada del artículo** a la derecha, con los `[verificar: …]` resaltados. Botones «Redactar», «Crear borrador en WordPress» y «Encargar». |
-| **Plan de mejora** | Barra de progreso del mes (hecho, en curso, pendiente), propuestas por prioridad con su impacto estimado y, en «¿Funcionó?», los veredictos con su gráfico antes/después. |
-| **Resultados** (hoy En vivo) | Leads y visitas en un gráfico doble. Páginas que traen contactos, con barras. El informe del mes, con vista previa. |
+| Idea | Para quién | Por qué gana | Tamaño |
+|---|---|---|---|
+| **Ficha de Caso** (principio 2) | Todos | La competencia acaba en el problema; nosotros, en el veredicto | M |
+| **Línea de tiempo causa → efecto:** visitas, leads y posiciones con marcas de **nuestros encargos**, cambios detectados en la web, cambios en la ficha y actualizaciones de Google. Al pulsar una marca se abre su Caso | Enric, cliente | Semrush solo marca las actualizaciones de Google | M |
+| **Cartera por excepción**, con la acción en la fila | Enric | Ellos enseñan métricas; nosotros, decisiones pendientes | M |
+| **Horas del contrato** («6 de 10 h», estimado frente a fichado) | Enric | Ninguna lo tiene; el dato ya existe | S |
+| **Leads como métrica principal**, por página y canal (con pocos leads, solo descriptivo) | Enric, cliente | Ellos miden visibilidad; nosotros, negocio | S-M |
+| **Veredicto honesto visible:** tres estados + «por qué no concluyente» + «qué miramos en su lugar» | Todos | Nadie más admite «no lo sé» | S |
+| **«Hoy» por persona** en Mis tareas: encargos SEO con receta, URL, cómo se verifica, horas y botón «duda» al jefe de operaciones | Junior, redactor | Ninguna dice qué hacer hoy ni cómo | S-M |
+| **Alertas accionables:** en Telegram y en Para ti, «Encargar», «Descartar con motivo» y «Ver caso» | Enric | Las suyas son correos informativos | S-M |
+| **Aprobación por lote** del plan del mes, con impacto, horas y capacidad | Enric | Gestionar 20 clientes en 10 minutos | S |
+| **«Explicado para el cliente»:** el mismo dato en una frase sin jerga, en el Resumen y en el informe | Cliente | Ocupa el lugar de AgencyAnalytics con un relato de causa → efecto | S |
+| **Portal del cliente** (enlace de solo lectura) | Cliente | Lo mismo, en directo | L: toca el acceso (línea roja 3) y **lo decide Enric** |
 
-## 6. Sistema visual: piezas comunes
-- **Piezas:** tarjeta de cifra (valor, variación, minigráfico, «?»), medidor, gráfico de línea o área con marcas (encargos y actualizaciones de Google), barras apiladas, donut, celda de calor, tabla (cabecera fija, ordenar, filtros, columnas a elegir, paginación), bloque con «Ver detalle», estado vacío con una acción e insignia de gravedad única.
-- **Paleta:** una sola paleta de datos validada para claro y oscuro (con la guía de visualización de datos) y un semáforo común.
-- **Densidad:** ancho completo; texto explicativo en tooltips.
+## 6. Pantallas de detalle
+- **Posiciones:**
+  - tabla por semanas con 8 columnas como mucho, agrupada por tema;
+  - celdas de color **con el número**, primera columna fija y scroll horizontal;
+  - en lugar del gráfico por tramos, «suben / bajan / entran en el top 10».
+- **Técnico:** novedades frente al rastreo anterior (nuevo, resuelto, empeora), recuento por gravedad y receta visible. Sin medidor 0-100.
+- **IA:** respuesta con formato (párrafos y listas, el cliente y la competencia resaltados, las fuentes como etiquetas) y presencia por asistente en el tiempo.
+- **Local:** cuadrícula de calor con el número en cada celda y selector de población.
+- **Briefs y artículos** (dentro de Trabajo): el brief a un lado y la **vista previa formateada** del artículo al otro, con los `[verificar: …]` resaltados.
+- **Accesibilidad:** cada gráfico con su tabla alternativa; tooltips que funcionen con teclado y en táctil.
+- **Móvil:** primero Cartera, Resumen y aprobar. Las tablas densas, en escritorio.
 
-## 7. Decisiones que necesito de Enric
-1. **Librería de gráficos** (una dependencia nueva es línea roja 5):
-   - **A. Gráficos propios en SVG.** Ya hay minigráficos así. Sin dependencias y ligero, pero más trabajo y menos interacción (tooltips sencillos).
-   - **B. Recharts.** La más usada con React; tooltips, zoom y leyendas gratis. Añade unos 100 KB.
-   - **Recomendación: B**, con su OK. Con la A todo es posible, pero tarda más y queda menos pulido.
-2. **¿Resumen con bloques que cada persona puede quitar u ordenar** (como SE Ranking) o un Resumen fijo e igual para todos? Recomendación: **fijo** al principio (menos piezas y más fácil de enseñar al equipo) y personalizable más adelante si se pide.
-3. **Nombres del menú** (los de la tabla del §4): ¿te encajan como los diría el equipo?
-4. ¿La **cartera de proyectos** sustituye a «Proyectos SEO» o queda como vista aparte?
+## 7. Gráficos
+Hacen falta cuatro tipos: línea con marcas, barras, celda de calor y minigráfico. Se dibujan **en SVG propio en el servidor**, como los que ya existen en Posiciones y Velocidad: sin dependencias nuevas, ligeros y accesibles, con un tooltip sencillo. Recharts (línea roja 5) solo si la línea de tiempo acaba pidiendo zoom, y entonces se preguntará.
 
-## 8. Fases (cada una se despliega sola)
+## 8. Fases (v2)
+
 | Fase | Qué | Tamaño |
 |---|---|---|
-| 1 | Piezas visuales comunes (cifra, medidor, gráficos, tabla, semáforo, estados vacíos) + menú lateral agrupado + selector de proyecto | M |
-| 2 | Cartera de proyectos + Resumen nuevo (con las marcas de encargos en el gráfico) | M |
-| 3 | Salud y auditoría + Posiciones (tabla por semanas y gráfico por tramos) | M-L |
-| 4 | IA (detalle con formato), Local (cuadrícula de calor), Autoridad, Briefs y artículos (vista previa formateada) | M-L |
-| 5 | Plan y «¿Funcionó?», Resultados e informe; repaso de móvil y oscuro; guía y glosario actualizados | M |
+| 0 | **Línea base:** registrar con `logEvent` las visitas por pestaña, el tiempo hasta aprobar el plan y los clics hasta un encargo | S |
+| 1 | Selector de proyecto, 6 pestañas, semáforo único, piezas comunes en `components/ui`, `loading`/`error` y redirecciones de las rutas antiguas | S-M |
+| 2 | **Trabajo:** embudo, ficha de Caso, veredictos con antes/después, horas del contrato y aprobación por lote | M-L |
+| 3 | **Cartera por excepción** + Resumen «qué necesita ahora» (+ foto diaria si hace falta: migración aditiva) | M |
+| 4 | **Resultados:** línea de tiempo causa → efecto, leads, informe y «explicado para el cliente» | M |
+| 5 | «Hoy» en Mis tareas y alertas accionables | S-M |
+| 6 | Posiciones, Local (calor), IA con formato y Técnico (novedades) | M-L |
+| 7 | Portal del cliente (si Enric lo aprueba), repaso de móvil y modo oscuro, guía y glosario | L |
 
-Antes de cada fase: recorrido en el navegador, protocolo de decisión para lo que cueste deshacer, revisor de código y pruebas de pantallas con cada rol. Los datos ya existen: el rediseño es de presentación y navegación, sin migraciones previstas, salvo quizá favoritos y carpetas de la cartera.
+**Qué se mide para saber si funciona** (comparado con la línea base de la fase 0):
+- **Ritmo de trabajo:**
+  - tiempo de Enric en la revisión semanal de la cartera (objetivo [opinión]: < 10 min con 5 clientes);
+  - días de propuesta a aprobación y de aprobación a hecho;
+  - % del plan mensual completado;
+  - horas estimadas frente a fichadas.
+- **Calidad del resultado:**
+  - % de encargos con veredicto y % de «no concluyente»;
+  - dudas del junior por encargo;
+  - informes aprobados sin editar;
+  - alertas atendidas en menos de 48 h.
+- **Uso y rendimiento:**
+  - clics desde un hallazgo hasta «encargar»;
+  - tiempo de carga de Cartera y Resumen (p95);
+  - uso de cada pestaña, para quitar la que nadie abra.
+
+## 9. Revisión independiente (Fable 5.2, 27 nov) y qué cambió respecto a la v1
+Se aceptan los 8 fallos que señaló:
+1. El plan copiaba herramientas de analista.
+2. No distinguía roles.
+3. Añadía un segundo menú lateral con 18 secciones.
+4. Partía en dos el diferencial.
+5. Mostraba cifras sin incertidumbre y un medidor 0-100.
+6. Lo mandaba todo a tooltips.
+7. Ignoraba los atascos de flujo de la simulación.
+8. Daba por hecho, con optimismo, que no haría falta ninguna migración, y no decía cómo medir el éxito.
+
+De ahí salen los §3-§8 de esta versión.
+
+**Sin verificar:** los tamaños S/M/L son estimaciones. Fable no vio las pantallas en el navegador; yo sí (§1-§2).
+
+## 10. Decisiones que necesito de Enric
+1. **¿Apruebas la v2** (6 pestañas, el Caso como unidad, cartera por excepción, gráficos en SVG propio) para empezar por las fases 0 y 1?
+2. **Portal del cliente** (fase 7): ¿se plantea? Toca el acceso (línea roja 3).
+3. **«Explicado para el cliente»:** ¿frases deterministas (gratis) o con IA cuando haga falta (con coste)?
