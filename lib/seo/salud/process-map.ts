@@ -323,14 +323,14 @@ export const SEO_SALUD_PROCESS_MAP: ProcessStep[] = [
   {
     id: 'seo-id',
     lane: 'I+D',
-    name: 'Vigilar las fuentes oficiales de Google',
-    description: 'Fuentes de SEO de la bitácora del núcleo: panel de incidencias de Google Search (JSON) y blog de Search Central (RSS). Detalle en el mapa de Conocimiento.',
+    name: 'Vigilar las fuentes de novedades (editables)',
+    description: 'Ajustes → Fuentes de novedades SEO (desde el 27 nov, petición de Enric): las fuentes de la cuenta (seo_sources). De serie: oficiales (panel de incidencias y blog de Google Search Central, canal de YouTube de Search Central, blog de Bing Webmaster) y blogs y canales de herramientas de referencia (Ahrefs, Semrush, Moz, SISTRIX, SE Ranking, Yoast, Backlinko, Search Engine Journal, Search Engine Roundtable). Un administrador añade más pegando una URL: un RSS o Atom, una web o blog (su RSS se busca solo) o un canal de YouTube; se comprueba que se lee antes de añadirla. Detalle de la bitácora en el mapa de Conocimiento.',
     status: 'built',
-    file: 'lib/seo/id/watch.ts',
-    when: 'Cada 3 horas («seo.id.watch») y resumen los lunes («seo.id.digest»).',
-    ai: 'Solo el resumen semanal (prompt de la base de conocimiento).',
-    code: 'Si una fuente cambia de formato y no devuelve nada, se anota; si fallan todas, el trabajo falla y se ve en la salud de la cola.',
-    tables: ['kb_feed_items']
+    file: 'lib/seo/id/fuentes.ts',
+    when: 'Cada 3 horas («seo.id.watch»), de 4 en 4 fuentes; «Leer ahora» a mano. Resumen los lunes («seo.id.digest», solo lo oficial).',
+    ai: 'Ninguna al leer (0 $). Solo el resumen semanal de lo oficial (prompt de la base de conocimiento).',
+    code: 'Nivel por fuente: lo oficial va a la bitácora de siempre (dominio «seo»: avisa de actualizaciones de Google y entra en el resumen); lo reputado o de la comunidad va aparte (dominio «seo_ext»), siempre como «novedad» (nunca avisa ni marca eventos) y se enseña como opinión. Como mucho 30 elementos por lectura (cortado a 3 MB al descargar) y 40 fuentes por cuenta; comprobar una nueva, 30 s como mucho. Solo el panel de incidencias y el blog de Search Central pueden avisar de una actualización de Google; enlaces solo http(s). Cada fuente guarda su última lectura, su error y lo guardado; si fallan todas, el trabajo falla y se ve en la salud de la cola. Las de serie no se borran (se pausan). Search Engine Land y Screaming Frog bloquean a los robots: no se incluyen.',
+    tables: ['seo_sources', 'kb_feed_items']
   },
   {
     id: 'seo-local',
