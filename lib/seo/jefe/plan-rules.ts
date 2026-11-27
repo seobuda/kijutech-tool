@@ -29,6 +29,19 @@ export const KIND_PLAYBOOKS: Record<FrenteKind, (PlaybookKey | null)[]> = {
   visibilidad_ia: [null]
 };
 export const MAX_FRENTES = 10;
+/** Tipos de evidencia que pueden sostener cada tipo de frente (al menos una de ellas; auditoría Opus). */
+export const KIND_EVIDENCE: Record<FrenteKind, string[]> = {
+  rendimiento: ['H', 'U'],
+  existente: ['Q', 'U', 'T', 'P'],
+  servicio_zona: ['T', 'Q', 'P', 'H', 'M'],
+  contenido: ['Q', 'T', 'P'],
+  local: ['L', 'H', 'M', 'C'],
+  autoridad: ['C', 'H', 'X'],
+  visibilidad_ia: ['N', 'M', 'T', 'Q', 'C']
+};
+/** Si más de esta parte de lo citado no existe, el plan no se acepta. */
+export const MAX_INVENTED_SHARE = 0.3;
+export type PreviousFrente = { frenteKey: string; kind: string; playbook: string | null };
 export const CONFIDENCE = ['alta', 'media', 'baja'] as const;
 
 export type PlanFrente = {
@@ -90,11 +103,12 @@ const keyOf = (s: string) =>
 /** Valida el plan que propone la IA contra el expediente y el catálogo. */
 export function validatePlan(
   raw: unknown,
-  ctx: { evidence: Map<string, Evidence>; eligible: string[]; blocked?: { key: string; why: string }[]; horizonMonths: number; monthlyHours: number | null; services?: string[] }
+  ctx: { evidence: Map<string, Evidence>; eligible: string[]; blocked?: { key: string; why: string }[]; horizonMonths: number; monthlyHours: number | null; services?: string[]; previous?: PreviousFrente[] }
 ): PlanValidation {
   const errors: string[] = [];
   const warnings: string[] = [];
   const rejected = new Set<string>();
+  let cited = 0;
   const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const thesis = str(o.tesis, 1500);
   if (thesis.length < 20) errors.push('El plan no tiene tesis (la idea central de la estrategia).');
@@ -106,14 +120,19 @@ export function validatePlan(
     if (!text) return [];
     const v = validateEvidence(r.evidencias, ctx.evidence);
     v.rejected.forEach((x) => rejected.add(x));
+    cited += v.ok.length + v.rejected.length;
     return [{ text, evidence: v.ok.map((e) => e.id) }];
   });
 
   const frentesRaw = Array.isArray(o.frentes) ? o.frentes : [];
-  if (frentesRaw.length > MAX_FRENTES) warnings.push(`La IA propuso ${frentesRaw.length} frentes; se quedan los ${MAX_FRENTES} primeros.`);
+
   const frentes: PlanFrente[] = [];
   const keys = new Set<string>();
-  for (const f of frentesRaw.slice(0, MAX_FRENTES)) {
+  for (const f of frentesRaw.slice(0, 20)) {
+    if (frentes.length >= MAX_FRENTES) {
+      warnings.push(`La IA propuso más de ${MAX_FRENTES} frentes válidos; se quedan los ${MAX_FRENTES} primeros.`);
+      break;
+    }
     const r = (f && typeof f === 'object' ? f : {}) as Record<string, unknown>;
     const title = str(r.titulo, 200);
     const kind = str(r.tipo, 20) as FrenteKind;
@@ -144,12 +163,23 @@ export function validatePlan(
     }
     const v = validateEvidence(r.evidencias, ctx.evidence);
     v.rejected.forEach((x) => rejected.add(x));
+    cited += v.ok.length + v.rejected.length;
     if (!v.ok.length) {
       warnings.push(`«${title}»: ninguna evidencia del expediente lo respalda; frente descartado.`);
       continue;
     }
+    if (!v.ok.some((e) => KIND_EVIDENCE[kind].includes(e.type))) {
+      warnings.push(`«${title}»: sus datos no son del tipo que sostiene ${KIND_LABEL[kind]}; frente descartado.`);
+      continue;
+    }
     let frenteKey = keyOf(str(r.clave, 80) || `${kind}:${title}`);
     if (!frenteKey.startsWith(`${kind}`)) frenteKey = keyOf(`${kind}:${frenteKey}`);
+    // Claves estables entre versiones (auditoría): si la clave es nueva pero hay un frente anterior del mismo tipo y línea,
+    // y solo uno, se reutiliza su clave.
+    if (ctx.previous?.length && !ctx.previous.some((p) => p.frenteKey === frenteKey)) {
+      const same = ctx.previous.filter((p) => p.kind === kind && p.playbook === playbook && !keys.has(p.frenteKey));
+      if (same.length === 1) frenteKey = same[0].frenteKey;
+    }
     if (keys.has(frenteKey)) {
       warnings.push(`«${title}»: clave repetida (${frenteKey}); frente descartado.`);
       continue;
@@ -171,6 +201,7 @@ export function validatePlan(
     });
   }
   if (!frentes.length) errors.push('Ningún frente del plan se sostiene con los datos del expediente.');
+  if (cited > 0 && rejected.size / cited > MAX_INVENTED_SHARE) errors.push(`Cita ${rejected.size} de ${cited} datos que no están en el expediente: demasiado inventado.`);
 
   // Horas del primer trimestre: las líneas que empiezan en el T1 deben caber en lo que deja libre la reserva de arreglos.
   const q1 = frentes.filter((f) => f.fromQuarter === 1 && f.playbook);

@@ -13,7 +13,7 @@ const good = {
   frentes: [
     { clave: 'rendimiento:indexacion', tipo: 'rendimiento', linea: null, titulo: 'Quitar noindex y arreglar enlaces rotos', por_que: 'Bloquea todo lo demás.', evidencias: ['H:seo.noindex_important', 'H:seo.broken_internal'], desde_trimestre: 1, hasta_trimestre: 1, prioridad: 1 },
     { clave: 'existente:reformas', tipo: 'existente', linea: 'refuerzo_al_alcance', parametros: { porMes: 2 }, titulo: 'Empujar reformas integrales', por_que: 'Está en la 8.', evidencias: ['Q:reformas integrales terrassa', 'Q:reformar baño terrassa'], desde_trimestre: 1, hasta_trimestre: 2, prioridad: 2 },
-    { clave: 'local:ficha', tipo: 'local', linea: 'local_ficha_resenas', titulo: 'Ficha de Google', por_que: 'Cuando se confirme.', evidencias: ['S:gsc'], desde_trimestre: 2, hasta_trimestre: 3, prioridad: 3 }
+    { clave: 'local:ficha', tipo: 'local', linea: 'local_ficha_resenas', titulo: 'Ficha de Google', por_que: 'Cuando se confirme.', evidencias: ['H:seo.title_missing'], desde_trimestre: 2, hasta_trimestre: 3, prioridad: 3 }
   ],
   riesgos: ['Que la web tarde en reindexarse'],
   lo_que_no_se: ['Si hay ficha de Google'],
@@ -58,6 +58,21 @@ describe('Jefe SEO D2: validación del plan', () => {
   it('avisa si el primer trimestre no cabe en las horas', () => {
     const v = validatePlan({ ...good, frentes: [{ ...good.frentes[1], parametros: { porMes: 99 } }] }, { ...ctx, monthlyHours: 2 });
     expect(v.ok && v.warnings.some((w) => /primer trimestre necesita/.test(w))).toBe(true);
+  });
+});
+
+describe('Jefe SEO D2: arreglos de la auditoría', () => {
+  it('un frente sostenido solo por datos de otro tipo se descarta', () => {
+    const v = validatePlan({ ...good, frentes: [...good.frentes, { clave: 'contenido:z', tipo: 'contenido', linea: 'contenido_cadencia', titulo: 'Z', por_que: 'x', evidencias: ['S:gsc'], desde_trimestre: 2, hasta_trimestre: 3 }] }, ctx);
+    expect(v.ok && v.plan.frentes.some((f) => f.frenteKey === 'contenido:z')).toBe(false);
+  });
+  it('demasiado inventado = plan no aceptado', () => {
+    const v = validatePlan({ ...good, diagnostico: [{ texto: 'x', evidencias: ['H:a', 'H:b', 'H:c', 'H:d', 'H:e', 'H:f'] }] }, ctx);
+    expect(v.ok).toBe(false);
+  });
+  it('reutiliza la clave del frente anterior del mismo tipo y línea', () => {
+    const v = validatePlan(good, { ...ctx, previous: [{ frenteKey: 'existente:reformas_terrassa', kind: 'existente', playbook: 'refuerzo_al_alcance' }] });
+    expect(v.ok && v.plan.frentes.some((f) => f.frenteKey === 'existente:reformas_terrassa')).toBe(true);
   });
 });
 

@@ -37,7 +37,7 @@ export function evidenceLine(e: Evidence, external = false): string {
   const data = Object.entries(e.data)
     .filter(([, v]) => v !== null && v !== undefined && v !== '')
     .slice(0, 8)
-    .map(([k, v]) => `${k}=${typeof v === 'number' ? Math.round(v * 100) / 100 : String(v).slice(0, 80)}`)
+    .map(([k, v]) => `${k}=${typeof v === 'number' ? Math.round(v * 100) / 100 : String(v).replace(/[\s<>\[\]]+/g, ' ').slice(0, 80)}`)
     .join(' · ');
   return `[${e.id}] ${external ? untrusted(e.label) : e.label}${data ? ` · ${data}` : ''}`;
 }

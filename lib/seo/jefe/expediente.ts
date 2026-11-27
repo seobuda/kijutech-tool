@@ -51,7 +51,11 @@ export async function buildStrategicDossier(tenantId: string, projectId: string)
     db.select({ id: seoCycles.id, name: seoCycles.name, status: seoCycles.status, startsOn: seoCycles.startsOn, endsOn: seoCycles.endsOn }).from(seoCycles).where(eq(seoCycles.projectId, projectId)).orderBy(desc(seoCycles.seq)).limit(6)
   ]);
   const ev = new Map<string, Evidence>();
-  const add = (e: Evidence) => ev.set(e.id, e);
+  // Revisor: una búsqueda puede estar a la vez cerca del top 3 y en la demanda (misma clave Q:): se fusionan los datos.
+  const add = (e: Evidence) => {
+    const prev = ev.get(e.id);
+    ev.set(e.id, prev ? { ...prev, data: { ...e.data, ...prev.data } } : e);
+  };
   const sections: string[] = [];
 
   // Search Console: totales 90 días frente a los 90 anteriores, y curva de CTR del proyecto.

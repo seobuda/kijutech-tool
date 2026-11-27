@@ -130,7 +130,7 @@ export function ServicioPanel({ projectId, view, isAdmin }: { projectId: string;
       </div>
     );
   const st = STATUS[plan.status] ?? { label: plan.status, tone: 'neutral' as const };
-  const scorer = (plan.scorer ?? {}) as { score?: number; divergences?: string[]; warnings?: string[]; q1Hours?: number; q1Available?: number | null };
+  const scorer = (plan.scorer ?? {}) as { score?: number; divergences?: string[]; warnings?: string[]; q1Hours?: number; q1Available?: number | null; shadowNote?: string };
   const quarters = Math.max(1, Math.round(plan.horizonMonths / 3));
   const diagnosis = asList(plan.diagnosis) as { text: string; evidence: string[] }[];
   const discarded = asList(plan.discarded) as { option: string; reason: string }[];
@@ -163,6 +163,12 @@ export function ServicioPanel({ projectId, view, isAdmin }: { projectId: string;
             <p className="rounded-md bg-muted p-3 text-sm">
               <span className="font-medium">Revisión: </span>
               {plan.reviewNote}
+            </p>
+          )}
+          {isAdmin && scorer.shadowNote && (
+            <p className="rounded-md border p-3 text-sm">
+              <span className="font-medium">Tu nota{plan.shadowScore ? ` (${plan.shadowScore}/5)` : ''}: </span>
+              {scorer.shadowNote}
             </p>
           )}
           {diagnosis.length > 0 && (

@@ -430,12 +430,11 @@ export async function executeAnalysis(a: EstAnalysis, now = new Date()): Promise
     const seen: string[] = [...dossier.existingTitles];
     const valid = [];
     // Un solo cerebro (docs/PLAN-SEO-CICLOS.md, decisión de Enric del 27 nov 2026): si el cliente tiene un proyecto SEO
-    // activo CON estrategia activa o plan de servicio aprobado (Jefe SEO D2), el trabajo SEO lo planifica el módulo SEO; aquí no se proponen esas categorías.
+    // activo CON estrategia activa (un ciclo; con D4 los ciclos salen del plan de servicio), el trabajo SEO lo planifica el módulo SEO; aquí no se proponen esas categorías.
     const [seoProject] = (await db.execute(sql`
       SELECT p.id FROM projects p
       WHERE p.tenant_id = ${a.tenantId} AND p.client_id = ${a.clientId} AND p.service = 'seo' AND p.status <> 'archived'
-        AND (EXISTS (SELECT 1 FROM seo_cycles c WHERE c.project_id = p.id AND c.status = 'activo')
-          OR EXISTS (SELECT 1 FROM seo_master_plans m WHERE m.project_id = p.id AND m.status = 'aprobado'))
+        AND EXISTS (SELECT 1 FROM seo_cycles c WHERE c.project_id = p.id AND c.status = 'activo')
       LIMIT 1`)) as unknown as { id: string }[];
     const SEO_CATEGORIES = new Set(['contenido', 'onpage', 'tecnico', 'enlaces', 'gbp']);
     for (const p of out.proposals) {

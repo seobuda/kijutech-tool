@@ -15,6 +15,7 @@ import { numberSetting } from '@/lib/seo/gasto';
 import { eligibility, PLAYBOOKS } from '@/lib/seo/estrategia/playbooks';
 import { eligibilityContext } from '@/lib/seo/estrategia/ciclos';
 import { buildStrategicDossier } from '@/lib/seo/jefe/expediente';
+import { untrusted } from '@/lib/seo/jefe/evidence';
 import { extractJson, scorePlan, validatePlan } from '@/lib/seo/jefe/plan-rules';
 
 export const JEFE_MODEL = 'claude-opus-5-5';
@@ -54,10 +55,22 @@ export async function requestMasterPlan(tenantId: string, projectId: string, by:
   if (spent + PLAN_COST_ESTIMATE_USD > budget) throw new PlanError(`El Jefe SEO ya ha gastado ${spent.toFixed(2)} $ de ${budget} $ este mes: sube el tope en Ajustes o espera al mes que viene.`);
   const created = await db.transaction(async (tx) => {
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`seo_jefe_plan:${projectId}`}))`);
+    // Revisor: si el proceso cayó a mitad de la generación, el borrador se quedaba para siempre. Caduca a los 20 min.
+    await tx
+      .update(seoMasterPlans)
+      .set({ status: 'rechazado', thesis: '(no se pudo generar)', reviewNote: 'Caducó: la generación no terminó (reinicio o fallo del trabajo).', decidedBy: 'sistema', decidedAt: new Date(), updatedAt: new Date() })
+      .where(
+        and(
+          eq(seoMasterPlans.projectId, projectId),
+          eq(seoMasterPlans.status, 'borrador'),
+          sql`${seoMasterPlans.createdAt} < now() - interval '20 minutes'`,
+          sql`NOT EXISTS (SELECT 1 FROM jobs j WHERE j.dedupe_key = ${PLAN_JOB} || ':' || ${seoMasterPlans.id}::text AND j.status IN ('pendiente', 'en_curso') AND j.created_at > now() - interval '2 hours')`
+        )
+      );
     const [busy] = await tx
       .select({ id: seoMasterPlans.id })
       .from(seoMasterPlans)
-      .where(and(eq(seoMasterPlans.projectId, projectId), eq(seoMasterPlans.status, 'borrador'), gte(seoMasterPlans.createdAt, new Date(Date.now() - 20 * 60_000))))
+      .where(and(eq(seoMasterPlans.projectId, projectId), eq(seoMasterPlans.status, 'borrador')))
       .limit(1);
     if (busy) throw new PlanError('Ya se está preparando un plan (tarda unos minutos).');
     const [today] = await tx
@@ -73,7 +86,12 @@ export async function requestMasterPlan(tenantId: string, projectId: string, by:
       .returning({ id: seoMasterPlans.id });
     return { planId: row.id, version };
   });
-  await enqueueJob({ tenantId, kind: PLAN_JOB, payload: { planId: created.planId, projectId }, scopeType: 'proyecto', scopeId: projectId, priority: 3, dedupeKey: `${PLAN_JOB}:${created.planId}` });
+  try {
+    await enqueueJob({ tenantId, kind: PLAN_JOB, payload: { planId: created.planId, projectId }, scopeType: 'proyecto', scopeId: projectId, priority: 3, dedupeKey: `${PLAN_JOB}:${created.planId}` });
+  } catch (e) {
+    await failPlan(created.planId, 'No se pudo poner en la cola.');
+    throw e;
+  }
   return created;
 }
 
@@ -100,6 +118,28 @@ export async function generateMasterPlan(tenantId: string, planId: string): Prom
     .where(and(eq(seoMasterPlans.projectId, plan.projectId), inArray(seoMasterPlans.status, ['aprobado', 'rechazado', 'sombra']), sql`${seoMasterPlans.version} < ${plan.version}`, sql`${seoMasterPlans.thesis} <> '(no se pudo generar)'`))
     .orderBy(desc(seoMasterPlans.version))
     .limit(1);
+  const [prevApproved] = await db
+    .select({ id: seoMasterPlans.id })
+    .from(seoMasterPlans)
+    .where(and(eq(seoMasterPlans.projectId, plan.projectId), inArray(seoMasterPlans.status, ['aprobado', 'sombra', 'propuesto']), sql`${seoMasterPlans.version} < ${plan.version}`))
+    .orderBy(sql`(${seoMasterPlans.status} = 'aprobado') DESC`, desc(seoMasterPlans.version))
+    .limit(1);
+  const prevItems = prevApproved
+    ? await db.select({ frenteKey: seoMasterPlanItems.frenteKey, kind: seoMasterPlanItems.kind, playbook: seoMasterPlanItems.playbook, title: seoMasterPlanItems.title, fromQuarter: seoMasterPlanItems.fromQuarter, toQuarter: seoMasterPlanItems.toQuarter }).from(seoMasterPlanItems).where(eq(seoMasterPlanItems.planId, prevApproved.id))
+    : [];
+  const decisions = await db
+    .select({ status: seoJefeProposals.status, reason: seoJefeProposals.decisionReason, version: seoJefeProposals.baseVersion })
+    .from(seoJefeProposals)
+    .where(and(eq(seoJefeProposals.projectId, plan.projectId), sql`${seoJefeProposals.decisionReason} IS NOT NULL`))
+    .orderBy(desc(seoJefeProposals.decidedAt))
+    .limit(5);
+  const prevText = [
+    prev ? `Versión ${prev.version} (${prev.status}): ${untrusted(prev.thesis.slice(0, 1200))}` : 'Ninguno: es el primer plan del proyecto.',
+    prevItems.length ? `Frentes de la versión de referencia (REUTILIZA su clave si es el mismo frente):\n${prevItems.map((i) => `- clave ${i.frenteKey} · ${i.kind}${i.playbook ? ` · ${i.playbook}` : ''} · T${i.fromQuarter}-T${i.toQuarter} · ${untrusted(i.title)}`).join('\n')}` : '',
+    decisions.length ? `Decisiones de la agencia sobre planes anteriores (criterio a respetar):\n${decisions.map((d) => `- v${d.version ?? '?'} ${d.status}: ${untrusted(String(d.reason).slice(0, 600))}`).join('\n')}` : ''
+  ]
+    .filter(Boolean)
+    .join('\n\n');
   const vals: Record<string, string> = {
     horizonte: String(plan.horizonMonths),
     trimestres: String(Math.round(plan.horizonMonths / 3)),
@@ -108,7 +148,7 @@ export async function generateMasterPlan(tenantId: string, planId: string): Prom
       .filter((p) => p.key !== 'cimientos')
       .map((p) => `- ${p.key}: ${p.label} — ${p.description} (${p.unitLabel}, ~${p.hoursPerUnit} h cada una)`)
       .join('\n'),
-    anterior: prev ? `Versión ${prev.version} (${prev.status}): ${prev.thesis}${prev.reviewNote ? `\nComentario de quien la revisó: ${prev.reviewNote}` : ''}` : 'Ninguno: es el primer plan del proyecto.'
+    anterior: prevText
   };
   const fill = (t: string) => t.replace(/\{(horizonte|trimestres|expediente|lineas|anterior)\}/g, (_m, k: string) => vals[k] ?? '');
   let res: Awaited<ReturnType<typeof callAI>>;
@@ -123,7 +163,8 @@ export async function generateMasterPlan(tenantId: string, planId: string): Prom
       requireProvider: 'anthropic',
       noFallback: true,
       effort: 'high',
-      maxTokens: 16000,
+      // El razonamiento cuenta dentro de max_tokens y no se puede apagar en Opus 5.5 (auditoría S3).
+      maxTokens: 32000,
       timeoutMs: 300_000,
       messages: [
         { role: 'system', content: prompt.system_prompt },
@@ -134,7 +175,7 @@ export async function generateMasterPlan(tenantId: string, planId: string): Prom
     await failPlan(planId, `La IA no respondió: ${e instanceof Error ? e.message.slice(0, 300) : 'error'}`);
     throw e;
   }
-  const v = validatePlan(extractJson(res.content), { evidence: dossier.evidence, eligible: el.eligible, blocked: el.blocked, horizonMonths: plan.horizonMonths, monthlyHours: dossier.summary.monthlyHours, services: ectx.services });
+  const v = validatePlan(extractJson(res.content), { evidence: dossier.evidence, eligible: el.eligible, blocked: el.blocked, horizonMonths: plan.horizonMonths, monthlyHours: dossier.summary.monthlyHours, services: ectx.services, previous: prevItems });
   const [job] = await db.select({ cost: aiJobs.estimatedCost }).from(aiJobs).where(eq(aiJobs.id, res.jobId)).limit(1);
   if (!v.ok) {
     await failPlan(planId, `El plan no pasó la validación: ${v.errors.join(' ')}`, v.rejectedEvidence);
@@ -188,8 +229,9 @@ export async function generateMasterPlan(tenantId: string, planId: string): Prom
   return { ok: true, frentes: v.plan.frentes.length, score: score.score, descartadas: v.rejectedEvidence.length };
 }
 
-async function recordDecision(tenantId: string, plan: SeoMasterPlan, status: 'aprobada' | 'rechazada', by: string, reason: string | null) {
-  await db.insert(seoJefeProposals).values({
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+async function recordDecision(tx: Tx, tenantId: string, plan: SeoMasterPlan, status: 'aprobada' | 'rechazada', by: string, reason: string | null) {
+  await tx.insert(seoJefeProposals).values({
     tenantId,
     projectId: plan.projectId,
     kind: 'plan',
@@ -224,29 +266,35 @@ export async function approvePlan(tenantId: string, projectId: string, planId: s
       .where(and(eq(seoMasterPlans.id, planId), inArray(seoMasterPlans.status, ['sombra', 'propuesto'])))
       .returning({ id: seoMasterPlans.id });
     if (!r.length) throw new PlanError('El plan cambió mientras tanto: recarga la página.');
+    await recordDecision(tx, tenantId, p, 'aprobada', by, note);
   });
-  await recordDecision(tenantId, p, 'aprobada', by, note);
 }
 
 export async function rejectPlan(tenantId: string, projectId: string, planId: string, by: string, reason: string): Promise<void> {
   const p = await loadPlan(tenantId, projectId, planId);
   if (!['sombra', 'propuesto'].includes(p.status)) throw new PlanError('Solo se puede rechazar un plan en sombra o propuesto.');
   if (reason.trim().length < 5) throw new PlanError('Escribe por qué se rechaza: el Jefe lo usa en la siguiente versión.');
-  await db
-    .update(seoMasterPlans)
-    .set({ status: 'rechazado', reviewNote: reason.slice(0, 2000), decidedBy: by.slice(0, 120), decidedAt: new Date(), updatedAt: new Date() })
-    .where(and(eq(seoMasterPlans.id, planId), inArray(seoMasterPlans.status, ['sombra', 'propuesto'])));
-  await recordDecision(tenantId, p, 'rechazada', by, reason);
+  await db.transaction(async (tx) => {
+    const r = await tx
+      .update(seoMasterPlans)
+      .set({ status: 'rechazado', reviewNote: reason.slice(0, 2000), decidedBy: by.slice(0, 120), decidedAt: new Date(), updatedAt: new Date() })
+      .where(and(eq(seoMasterPlans.id, planId), inArray(seoMasterPlans.status, ['sombra', 'propuesto'])))
+      .returning({ id: seoMasterPlans.id });
+    if (!r.length) throw new PlanError('El plan cambió mientras tanto: recarga la página.');
+    await recordDecision(tx, tenantId, p, 'rechazada', by, reason);
+  });
 }
 
 /** Modo sombra: nota de 1 a 5 de quien revisa («¿lo habría hecho yo así?») y comentario. */
 export async function scorePlanShadow(tenantId: string, projectId: string, planId: string, score: number, note: string | null): Promise<void> {
-  await loadPlan(tenantId, projectId, planId);
+  const p = await loadPlan(tenantId, projectId, planId);
+  if (p.status === 'borrador') throw new PlanError('El plan aún se está preparando.');
   const s = Math.round(score);
   if (!(s >= 1 && s <= 5)) throw new PlanError('La nota va de 1 a 5.');
+  const extra = note?.trim() ? { shadowNote: note.trim().slice(0, 2000) } : {};
   await db
     .update(seoMasterPlans)
-    .set({ shadowScore: s, ...(note?.trim() ? { reviewNote: note.trim().slice(0, 2000) } : {}), updatedAt: new Date() })
+    .set({ shadowScore: s, scorer: sql`${seoMasterPlans.scorer} || ${JSON.stringify(extra)}::jsonb`, updatedAt: new Date() })
     .where(eq(seoMasterPlans.id, planId));
 }
 
@@ -271,7 +319,7 @@ export async function getPlanView(tenantId: string, projectId: string, includeSh
     jefeSpentThisMonth(tenantId),
     jefeBudget()
   ]);
-  const generating = versions.some((v) => v.status === 'borrador' && v.createdAt.getTime() > Date.now() - 20 * 60_000);
+  const generating = versions.some((v) => v.status === 'borrador' && v.createdAt.getTime() > Date.now() - 2 * 3600_000);
   const pick =
     (planId && versions.find((v) => v.id === planId)) ||
     versions.find((v) => v.status === 'aprobado') ||
@@ -281,7 +329,11 @@ export async function getPlanView(tenantId: string, projectId: string, includeSh
   if (pick) {
     const [row] = await db.select().from(seoMasterPlans).where(eq(seoMasterPlans.id, pick.id)).limit(1);
     const items = await db.select().from(seoMasterPlanItems).where(eq(seoMasterPlanItems.planId, pick.id)).orderBy(seoMasterPlanItems.fromQuarter, seoMasterPlanItems.priority, seoMasterPlanItems.sort);
-    current = row ? { ...row, items } : null;
+    current = row
+      ? includeShadow
+        ? { ...row, items }
+        : { ...row, items, scorer: {}, costUsd: null, aiJobId: null, createdBy: null, decidedBy: null, reviewNote: null, rejectedEvidence: [], shadowScore: null }
+      : null;
   }
   return { versions, current, generating, spent, budget };
 }
