@@ -102,8 +102,17 @@ export function publicFetch(url: string, init: PublicFetchInit = {}): Promise<Re
         servername: isIP(host) ? undefined : host
       },
       (res) => {
-        const enc = String(res.headers['content-encoding'] ?? '').toLowerCase();
+        const status0 = res.statusCode ?? 0;
+        // Sin cuerpo (HEAD, 204, 304): no se crea descompresor. Un Brotli/gzip que recibe 0 bytes da «unexpected end of
+        // file», y si nadie lo escucha es una excepción sin capturar (27 nov 2026, registro de errores).
+        const noBody0 = status0 === 204 || status0 === 304 || (init.method ?? 'GET').toUpperCase() === 'HEAD';
+        const enc = noBody0 ? '' : String(res.headers['content-encoding'] ?? '').toLowerCase();
         const dec = enc === 'gzip' || enc === 'x-gzip' ? zlib.createGunzip() : enc === 'deflate' ? zlib.createInflate() : enc === 'br' ? zlib.createBrotliDecompress() : null;
+        // Un cuerpo truncado o cancelado a medias tampoco debe escaparse: quien lee ya recibe el error por su stream.
+        if (dec) {
+          dec.on('error', () => undefined);
+          res.on('error', () => undefined);
+        }
         // pipeline propaga en los dos sentidos: si la conexión se corta (o salta el tiempo máximo) el descompresor da
         // error y quien lee no se queda colgado; si quien lee cancela, se cierra también la conexión.
         const stream: Readable = dec ? (pipeline(res, dec, () => undefined) as unknown as Readable) : res;
@@ -113,9 +122,9 @@ export function publicFetch(url: string, init: PublicFetchInit = {}): Promise<Re
           if (Array.isArray(v)) v.forEach((x) => headers.append(k, x));
           else headers.set(k, String(v));
         }
-        const status = res.statusCode ?? 0;
+        const status = status0;
         // Response no admite cuerpo con 204/304 ni estados fuera de 200-599.
-        const noBody = status === 204 || status === 304 || (init.method ?? 'GET').toUpperCase() === 'HEAD';
+        const noBody = noBody0;
         const body = noBody ? null : (Readable.toWeb(stream as Readable) as unknown as ReadableStream);
         if (noBody) res.resume();
         try {

@@ -115,10 +115,16 @@ async function refreshVolumes(tenantId: string, projectId: string, location: str
     const group = stale.filter((s) => s.language === lang);
     // Volumen de Google Ads: 0,06-0,075 $ por llamada [NV]; se comprueba el tope antes.
     if (!(await canSpend(projectId, 0.08)).ok) break;
-    const r = await src.volumes(tenantId, group.map((g) => g.keyword), location, lang);
+    // Google Ads no admite búsquedas de más de 10 palabras (error 40501): esas se quedan sin volumen.
+    const ok = group.filter((g) => g.keyword.trim().split(/\s+/).length <= 10 && g.keyword.length <= 80);
+    const tooLong = group.filter((g) => !ok.includes(g));
+    // Las que Google Ads no admite: sin volumen (null, no 0 = «sin búsquedas») y con fecha, para no reintentarlas cada vez.
+    for (const g of tooLong) await db.update(seoRankKeywords).set({ volume: null, volumeAt: new Date(), updatedAt: new Date() }).where(eq(seoRankKeywords.id, g.id));
+    if (!ok.length) continue;
+    const r = await src.volumes(tenantId, ok.map((g) => g.keyword), location, lang);
     cost += r.costUsd;
     if (r.costUsd > 0) await recordDataSpend(tenantId, projectId, 'serp', 'posiciones: volumen de búsqueda', r.costUsd);
-    for (const g of group) await db.update(seoRankKeywords).set({ volume: r.volumes.get(g.keyword.toLowerCase()) ?? 0, volumeAt: new Date(), updatedAt: new Date() }).where(eq(seoRankKeywords.id, g.id));
+    for (const g of ok) await db.update(seoRankKeywords).set({ volume: r.volumes.get(g.keyword.toLowerCase()) ?? 0, volumeAt: new Date(), updatedAt: new Date() }).where(eq(seoRankKeywords.id, g.id));
   }
   return cost > 0 ? stale.length : 0;
 }
