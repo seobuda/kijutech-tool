@@ -81,7 +81,12 @@ async function weeklyBasket(propertyId: number, kind: 'posicion' | 'ctr', pages:
   return { series: new Map([...acc].map(([k, a]) => [k, a.num / a.den])), base };
 }
 
-const split = (pts: WeekPoint[], cut: Date) => ({ pre: pts.filter((p) => new Date(`${p.week}T00:00:00Z`) < cut), post: pts.filter((p) => new Date(`${p.week}T00:00:00Z`) >= cut) });
+/** Solo semanas COMPLETAS dentro de [from, to): sin días cambiados en «antes» ni semanas de un día en «después». */
+const within = (pts: WeekPoint[], from: Date, to: Date) =>
+  pts.filter((p) => {
+    const start = new Date(`${p.week}T00:00:00Z`).getTime();
+    return start >= from.getTime() && start + 7 * DAY <= to.getTime();
+  });
 
 type Checkpoint = Record<string, unknown> & { days: number };
 type Outcome = Record<string, unknown> & { checkpoints?: Checkpoint[] };
@@ -107,7 +112,11 @@ export async function measureOne(i: Intervention, now = new Date()): Promise<Out
   const eff = { from: new Date(effective.from), to: new Date(effective.to) };
   const doneState = (await ev?.isDone(i.tenantId, i.projectId, i.urls, i.technique, since).catch(() => 'sin_datos' as const)) ?? 'sin_datos';
   const due = CHECKPOINTS.filter((d) => !done.has(d) && now.getTime() >= eff.to.getTime() + (GAP_DAYS + d + 3) * DAY);
-  if (!due.length) return { ...prev, method: MEASURE_METHOD, effective, done: { status: doneState, at: now.toISOString() } };
+  if (!due.length) {
+    const prevDone = (prev.done as { status?: string } | undefined)?.status;
+    if (prev.effective && prevDone === doneState) return null;
+    return { ...prev, method: MEASURE_METHOD, effective, done: { status: doneState, at: now.toISOString() } };
+  }
   const cp = due[0];
   const props = (await gscPropertiesForProject(i.tenantId, i.projectId)).filter((p) => p.status === 'activa' && p.lastDate);
   const prop = props.sort((a, b) => Number(b.kind === 'dominio') - Number(a.kind === 'dominio'))[0];
@@ -136,19 +145,25 @@ export async function measureOne(i: Intervention, now = new Date()): Promise<Out
     const weeks = [...t.series.keys()].filter((k) => c.series.has(k)).sort();
     const pts = weeks.map((k) => ({ week: k, treated: t.series.get(k)!, control: c.series.get(k)! }));
     baseTotal = Math.round(t.base);
-    pre = split(pts, w.pre[1]).pre;
-    post = split(pts, w.post[0]).post;
+    pre = within(pts, w.pre[0], w.pre[1]);
+    post = within(pts, w.post[0], w.post[1]);
   } else {
     const pts = await weeklySum(prop.id, metric === 'impresiones' ? 'impressions' : 'clicks', treated, excluded, w.pre[0], w.post[1]);
-    pre = split(pts, w.pre[1]).pre;
-    post = split(pts, w.post[0]).post;
+    pre = within(pts, w.pre[0], w.pre[1]);
+    post = within(pts, w.post[0], w.post[1]);
     baseTotal = Math.round(pre.reduce((s, p) => s + p.treated, 0));
   }
   const v = verdictOf({ pre, post, metric, baseTotal, invert });
+  // Si el registro dice que el cambio no está en la web, no se atribuye nada.
+  if (doneState === 'no_hecho' && v.verdict !== 'no_concluyente') {
+    v.verdict = 'no_concluyente';
+    v.reasons.push('no consta el cambio en la web (registro de cambios)');
+  }
   // Clics incrementales (siempre por clics, para el informe): una sola vez si hay intervenciones solapadas (se marca).
   const clicksPts = metric === 'clics' ? [...pre, ...post] : await weeklySum(prop.id, 'clicks', treated, excluded, w.pre[0], w.post[1]);
-  const cPost = split(clicksPts, w.post[0]).post;
-  const cv = verdictOf({ pre: split(clicksPts, w.pre[1]).pre, post: cPost, metric: 'clics', baseTotal: 30 });
+  const cPost = within(clicksPts, w.post[0], w.post[1]);
+  const cPre = within(clicksPts, w.pre[0], w.pre[1]);
+  const cv = verdictOf({ pre: cPre, post: cPost, metric: 'clics', baseTotal: Math.round(cPre.reduce((s2, p) => s2 + p.treated, 0)) });
   const checkpoint: Checkpoint = {
     days: cp,
     windows: { pre: [iso(w.pre[0]), iso(w.pre[1])], post: [iso(w.post[0]), iso(w.post[1])], gapDays: GAP_DAYS },
@@ -163,7 +178,7 @@ export async function measureOne(i: Intervention, now = new Date()): Promise<Out
     baseTotal,
     pages: treated.length,
     controlExcluded: excluded.length,
-    incrementalClicks: confounders.length ? null : incrementalClicks(cPost.reduce((s, p) => s + p.treated, 0), cv.effectLog)
+    incrementalClicks: confounders.length || (cv.verdict !== 'funciono' && cv.verdict !== 'no_funciono') || v.verdict === 'no_concluyente' ? null : incrementalClicks(cPost.reduce((s2, p) => s2 + p.treated, 0), cv.effectLog)
   };
   const checkpoints = [...(prev.checkpoints ?? []).filter((c) => c.days !== cp), checkpoint].sort((a, b) => a.days - b.days);
   return { ...prev, method: MEASURE_METHOD, effective, done: { status: doneState, at: now.toISOString() }, direction: 'mejora', propertyId: prop.id, confounders, checkpoints, verdict: checkpoint.verdict, effectPct: checkpoint.effectPct };
@@ -173,7 +188,18 @@ export async function measureInterventions(tenantId: string, now = new Date()): 
   const list = await db
     .select()
     .from(interventions)
-    .where(and(eq(interventions.tenantId, tenantId), eq(interventions.status, 'hecha'), isNotNull(interventions.doneAt), isNotNull(interventions.projectId), lt(interventions.doneAt, new Date(now.getTime() - 14 * DAY))))
+    .where(
+      and(
+        eq(interventions.tenantId, tenantId),
+        eq(interventions.status, 'hecha'),
+        isNotNull(interventions.doneAt),
+        isNotNull(interventions.projectId),
+        lt(interventions.doneAt, new Date(now.getTime() - 14 * DAY)),
+        sql`coalesce(${interventions.outcome}->>'verdict', '') <> 'no_medible'`,
+        sql`jsonb_array_length(coalesce(${interventions.outcome}->'checkpoints', '[]'::jsonb)) < ${CHECKPOINTS.length}`
+      )
+    )
+    .orderBy(sql`${interventions.measuredAt} ASC NULLS FIRST`, interventions.doneAt)
     .limit(300);
   let measured = 0;
   for (const i of list) {

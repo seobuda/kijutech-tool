@@ -56,6 +56,9 @@ describe('diagnóstico de caídas', () => {
     expect(dropState({ clicks: 850, impressions: 1 }, { clicks: 1000, impressions: 1 }, null, false).drop).toBe(false);
     expect(dropState({ clicks: 850, impressions: 1 }, { clicks: 1000, impressions: 1 }, null, true).drop).toBe(true);
     expect(dropState({ clicks: 50, impressions: 1 }, { clicks: 150, impressions: 1 }, null, false).drop).toBe(false);
+    // Abierto tras una caída en escalón: el mes anterior ya es bajo, pero frente a la base del episodio sigue abierto.
+    expect(dropState({ clicks: 700, impressions: 1 }, { clicks: 700, impressions: 1 }, null, true, 1000).drop).toBe(true);
+    expect(dropState({ clicks: 950, impressions: 1 }, { clicks: 700, impressions: 1 }, null, true, 1000).drop).toBe(false);
     // Frente al año anterior no cae (temporada): no se abre.
     expect(dropState({ clicks: 700, impressions: 1 }, { clicks: 1000, impressions: 1 }, { clicks: 700, impressions: 1 }, false).drop).toBe(false);
   });

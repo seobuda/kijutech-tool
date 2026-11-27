@@ -25,8 +25,9 @@ export async function runDiagnostico(tenantId: string, projectId: string, prop: 
   const prev = await totals(prop.id, addDays(end, -55), addDays(end, -28));
   const yoyAvail = prop.firstDate && prop.firstDate <= addDays(end, -364 - 27);
   const yoy = yoyAvail ? await totals(prop.id, addDays(end, -364 - 27), addDays(end, -364)) : null;
-  const [open] = await db.select({ dedupeKey: findings.dedupeKey }).from(findings).where(and(eq(findings.projectId, projectId), eq(findings.kind, DIAG_KIND), eq(findings.status, 'abierto'))).limit(1);
-  const st = dropState(cur, prev, yoy, Boolean(open));
+  const [open] = await db.select({ dedupeKey: findings.dedupeKey, evidence: findings.evidence }).from(findings).where(and(eq(findings.projectId, projectId), eq(findings.kind, DIAG_KIND), eq(findings.status, 'abierto'))).limit(1);
+  const base = Number((open?.evidence as { anterior?: { clicks?: number }; base?: number } | null)?.base ?? (open?.evidence as { anterior?: { clicks?: number } } | null)?.anterior?.clicks ?? 0) || null;
+  const st = dropState(cur, prev, yoy, Boolean(open), base);
   if (!st.drop) {
     await syncFindings(tenantId, projectId, DIAG_SOURCE, [], [DIAG_KIND]);
     return 'sin caída de tráfico';
@@ -42,7 +43,7 @@ export async function runDiagnostico(tenantId: string, projectId: string, prop: 
   const layers = diagnoseLayers({ cur, prev, yoy, recentFindings: recent, changes: Object.fromEntries(ch.map((c) => [c.field, Number(c.n)])) });
   const key = open?.dedupeKey ?? `${DIAG_KIND}:${weekKey(end)}`;
   await syncFindings(tenantId, projectId, DIAG_SOURCE, [
-    { kind: DIAG_KIND, dedupeKey: key, metric: 'clics_28d', value: cur.clicks, severity: 'importante', evidence: { caidaPct: Math.round(st.pct * 100), interanualPct: st.yoyPct === null ? null : Math.round(st.yoyPct * 100), actual: cur, anterior: prev, anioAnterior: yoy, capas: layers, hasta: end } }
+    { kind: DIAG_KIND, dedupeKey: key, metric: 'clics_28d', value: cur.clicks, severity: 'importante', evidence: { base: base ?? prev.clicks, caidaPct: Math.round(st.pct * 100), interanualPct: st.yoyPct === null ? null : Math.round(st.yoyPct * 100), actual: cur, anterior: prev, anioAnterior: yoy, capas: layers, hasta: end } }
   ], [DIAG_KIND]);
   return `caída de clics ${Math.round(st.pct * 100)} %: ${layers.length ? layers.map((l) => l.capa).join(', ') : 'sin causa clara'}`;
 }

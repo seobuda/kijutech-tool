@@ -8,9 +8,14 @@ export const MIN_BASE_CLICKS = 200;
 
 export type Totals = { clicks: number; impressions: number };
 /** ¿Abrir (−20 % frente al mes anterior Y frente al año anterior si hay) o mantener abierto (sigue peor que −10 %)? */
-export function dropState(cur: Totals, prev: Totals, yoy: Totals | null, isOpen: boolean): { drop: boolean; pct: number; yoyPct: number | null } {
+export function dropState(cur: Totals, prev: Totals, yoy: Totals | null, isOpen: boolean, episodeBase: number | null = null): { drop: boolean; pct: number; yoyPct: number | null } {
   const pct = prev.clicks > 0 ? cur.clicks / prev.clicks - 1 : 0;
   const yoyPct = yoy && yoy.clicks > 0 ? cur.clicks / yoy.clicks - 1 : null;
+  // Abierto: se compara con la base FIJA del episodio (el mes anterior se mueve y cerraría una caída en escalón sin recuperar).
+  if (isOpen && episodeBase && episodeBase > 0) {
+    const vsBase = cur.clicks / episodeBase - 1;
+    return { drop: vsBase <= -0.1, pct: vsBase, yoyPct };
+  }
   if (prev.clicks < MIN_BASE_CLICKS) return { drop: false, pct, yoyPct };
   const lim = isOpen ? -0.1 : -0.2;
   const drop = pct <= lim && (yoyPct === null || yoyPct <= lim);

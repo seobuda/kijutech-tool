@@ -120,7 +120,9 @@ export async function syncInterventionStatus(tenantId: string): Promise<{ checke
     }
   }
   // Parte 8: con alguna hecha, el proceso diario que mide si funcionaron (se da de alta una vez).
-  if (done) await ensureScheduleIfMissing(tenantId, 'core.interventions.measure', '', 1440);
+  // (también si ya había hechas de antes: se comprueba barato una vez por pasada)
+  const [anyDone] = done ? [{ id: 'x' }] : await db.select({ id: interventions.id }).from(interventions).where(and(eq(interventions.tenantId, tenantId), eq(interventions.status, 'hecha'))).limit(1);
+  if (anyDone) await ensureScheduleIfMissing(tenantId, 'core.interventions.measure', '', 1440);
   return { checked: open.length, done };
 }
 
