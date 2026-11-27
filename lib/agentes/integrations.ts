@@ -16,7 +16,7 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { agtIntegrations, type AgtIntegration } from '@/lib/db/schema';
 import { decrypt, encrypt } from '@/lib/ai/encryption';
-import type { SerpResult } from '@/lib/core/capabilities';
+import type { KeywordIdea, SerpResult } from '@/lib/core/capabilities';
 
 export type ProviderKey = 'dataforseo' | 'clarity' | 'google' | 'places' | 'pagespeed';
 
@@ -307,6 +307,25 @@ export async function dataForSeoVolumes(tenantId: string, keywords: string[], lo
   const t = r.tasks?.[0];
   if (t && t.status_code !== 20000) throw new Error(`DataForSEO volumen: ${t.status_code} ${t.status_message ?? ''}`);
   return { volumes: new Map((t?.result ?? []).map((x) => [x.keyword.toLowerCase(), x.search_volume])), costUsd: typeof r.cost === 'number' ? r.cost : 0 };
+}
+
+/** Ideas de búsquedas (Google Ads keywords_for_keywords, en directo, unos 0,09 $ por tarea), sin socios de búsqueda. */
+export async function dataForSeoKeywordIdeas(tenantId: string, seeds: string[], location: string, language: string): Promise<{ ideas: KeywordIdea[]; costUsd: number }> {
+  const creds = readCredentials(await getIntegration(tenantId, 'dataforseo'));
+  type Res = { keyword: string; search_volume: number | null; cpc: number | null; competition: string | null; monthly_searches?: { year: number; month: number; search_volume: number | null }[] | null };
+  const r = await dfs<{ cost?: number; tasks?: DfsTask<Res>[] }>(creds, '/keywords_data/google_ads/keywords_for_keywords/live', [
+    { keywords: seeds.slice(0, 20).map((x) => x.slice(0, 80)), location_name: location, language_code: language, search_partners: false, sort_by: 'search_volume' }
+  ]);
+  const t = r.tasks?.[0];
+  if (t && t.status_code !== 20000) throw new Error(`DataForSEO ideas: ${t.status_code} ${t.status_message ?? ''}`);
+  const ideas = (t?.result ?? []).slice(0, 1000).map((x) => ({
+    keyword: String(x.keyword ?? '').toLowerCase(),
+    volume: typeof x.search_volume === 'number' ? x.search_volume : null,
+    cpc: typeof x.cpc === 'number' ? x.cpc : null,
+    competition: typeof x.competition === 'string' ? x.competition.toLowerCase().slice(0, 10) : null,
+    monthly: (x.monthly_searches ?? []).filter((m) => typeof m.search_volume === 'number').slice(0, 12).map((m) => ({ month: `${m.year}-${String(m.month).padStart(2, '0')}`, volume: m.search_volume as number }))
+  }));
+  return { ideas, costUsd: typeof r.cost === 'number' ? r.cost : 0 };
 }
 
 // --- DataForSEO: ficha de Google de un negocio (SEO parte 5, local, 26 nov 2026) -------------------------------------

@@ -65,7 +65,7 @@ export async function regeneratePlan(tenantId: string, projectId: string): Promi
     db
       .select({ id: findings.id, kind: findings.kind, severity: findings.severity, url: findings.url, query: findings.query, evidence: findings.evidence })
       .from(findings)
-      .where(and(eq(findings.projectId, projectId), eq(findings.tenantId, tenantId), inArray(findings.source, [SALUD_SOURCE, LOCAL_SOURCE, 'seo.mapa:gsc', 'seo.salud:externos', 'seo.posiciones:serp', 'seo.local:ficha', 'seo.local:geogrid', 'seo.local:nap_antiguo', 'seo.salud:puertas', 'seo.vigilancia:hackeo', 'seo.vigilancia:dinero', ...VIGILANCIA_SOURCES]), eq(findings.status, 'abierto'))),
+      .where(and(eq(findings.projectId, projectId), eq(findings.tenantId, tenantId), inArray(findings.source, [SALUD_SOURCE, LOCAL_SOURCE, 'seo.mapa:gsc', 'seo.salud:externos', 'seo.posiciones:serp', 'seo.local:ficha', 'seo.local:geogrid', 'seo.local:nap_antiguo', 'seo.salud:puertas', 'seo.vigilancia:hackeo', 'seo.vigilancia:dinero', 'seo.demanda:serp', ...VIGILANCIA_SOURCES]), eq(findings.status, 'abierto'))),
     db.select().from(seoPlanItems).where(and(eq(seoPlanItems.projectId, projectId), eq(seoPlanItems.tenantId, tenantId))),
     impressionsByUrl(tenantId, projectId)
   ]);

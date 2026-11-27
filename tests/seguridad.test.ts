@@ -79,6 +79,7 @@ import { connectDoTokenAction, disconnectDoTokenAction, refreshInfraAction } fro
 import { chatWithAgentAction, deleteAgentAction, deleteIntegrationAction, previewVoiceAction, retryJobAction, saveAgentAction, saveIntegrationAction, saveVoiceSettingsAction } from '@/lib/agentes/actions';
 import { decideAgentToolAction, setToolAutonomyAction } from '@/lib/operaciones/agent-capabilities-actions';
 import { pinMoneyPageAction, unpinMoneyPageAction } from '@/lib/seo/cambios-actions';
+import { generateIdeasAction, runDemandNowAction, setIdeaStatusAction } from '@/lib/seo/demanda-actions';
 import { checkOldPhonesNowAction } from '@/lib/seo/local-actions';
 import ProjectsPage from '@/app/(dashboard)/dashboard/projects/page';
 import ArchivedProjectsPage from '@/app/(dashboard)/dashboard/projects/archived/page';
@@ -249,6 +250,9 @@ const ACCIONES_ADMIN: [string, () => unknown][] = [
   ['setClientCommsApprovalAction (correos a clientes)', () => setClientCommsApprovalAction(ZERO, 'nunca')]
 ];
 const ACCIONES_EDITOR: [string, () => unknown][] = [
+  ['generateIdeasAction (SEO: buscar ideas)', () => generateIdeasAction(ZERO)],
+  ['setIdeaStatusAction (SEO: seguir idea)', () => setIdeaStatusAction(ZERO, ZERO, 'seguida')],
+  ['runDemandNowAction (SEO: demanda ahora)', () => runDemandNowAction(ZERO)],
   ['pinMoneyPageAction (SEO: fijar página de dinero)', () => pinMoneyPageAction(ZERO, 'https://example.com/')],
   ['unpinMoneyPageAction (SEO: quitar página de dinero)', () => unpinMoneyPageAction(ZERO, ZERO)],
   ['checkOldPhonesNowAction (SEO: buscar teléfonos antiguos)', () => checkOldPhonesNowAction(ZERO)],

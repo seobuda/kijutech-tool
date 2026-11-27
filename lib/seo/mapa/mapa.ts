@@ -9,7 +9,8 @@ import 'server-only';
 import { and, eq, inArray, notInArray, sql } from 'drizzle-orm';
 import { HDBSCAN } from 'hdbscan-ts';
 import { db } from '@/lib/db/drizzle';
-import { clientMemory, clients, projects, seoDossierFacts, seoTextEmbeddings, seoTopicQueries, seoTopics } from '@/lib/db/schema';
+import { clientMemory, clients, projects, seoDemand, seoDossierFacts, seoTextEmbeddings, seoTopicQueries, seoTopics } from '@/lib/db/schema';
+import { keywordKey, topicVolume } from '@/lib/seo/demanda/rules';
 import { gscPropertiesForProject } from '@/lib/core/gsc';
 import { syncFindings } from '@/lib/core/findings';
 import { enqueueJob, registerJobKind } from '@/lib/core/jobs';
@@ -183,6 +184,17 @@ export async function buildKeywordMap(tenantId: string, projectId: string, round
     t.metrics.servicio = v.servicio;
     t.metrics.aviso = v.aviso;
     t.metrics.oportunidad = topicGain(t);
+  }
+  // Parte 7: volumen (Google Ads, sin inflar variantes) e intención por la SERP real, de la tabla de demanda.
+  const demand = await db.select({ key: seoDemand.keywordKey, volume: seoDemand.volume, intent: seoDemand.intent, pageType: seoDemand.pageType }).from(seoDemand).where(eq(seoDemand.projectId, projectId));
+  if (demand.length) {
+    const dk = new Map(demand.map((d) => [d.key, d]));
+    for (const t of topics) {
+      t.metrics.volumen = topicVolume(t.queries.map((q) => q.query), (k) => dk.get(k)?.volume);
+      const main = t.queries[0] ? dk.get(keywordKey(t.queries[0].query)) : undefined;
+      if (main?.intent) (t.metrics as Record<string, unknown>).intencion = main.intent;
+      if (main?.pageType) (t.metrics as Record<string, unknown>).tipoPagina = main.pageType;
+    }
   }
   const [lim] = (await db.execute(sql`SELECT to_char(max(date), 'YYYY-MM-DD') AS d FROM gsc_daily WHERE property_id IN (${ids}) AND search_type = 1`)) as unknown as { d: string | null }[];
   if (lim?.d) {

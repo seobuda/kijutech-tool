@@ -12,6 +12,8 @@ import { gscPropertiesForProject } from '@/lib/core/gsc';
 import { ProjectSeoNav } from '../seo-nav';
 import { competitorComparison } from '@/lib/seo/competencia/competencia';
 import { PalabrasPanel, type OpportunityView, type TopicView } from './palabras-panel';
+import { DemandaPanel } from './demanda-panel';
+import { getDemandView } from '@/lib/seo/demanda/demanda';
 
 const OPP_KINDS = ['seo.topic_new_page', 'seo.topic_unclear_page', 'seo.striking_distance', 'seo.low_ctr'];
 
@@ -102,6 +104,7 @@ export default async function PalabrasPage({ params }: { params: Promise<{ proje
     queries: (byTopic.get(t.id) ?? []).slice(0, 25).map((q) => ({ query: q.query, clicks: q.clicks, impressions: q.impressions, position: q.position }))
   }));
   const job = lastJobs[0];
+  const demand = await getDemandView(user.tenantId, projectId);
   return (
     <PageContainer>
       <Link href="/dashboard/projects" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
@@ -132,6 +135,7 @@ export default async function PalabrasPage({ params }: { params: Promise<{ proje
         compJob={compJobs[0] ? { status: compJobs[0].status, result: (compJobs[0].result ?? null) as Record<string, unknown> | null, error: compJobs[0].error } : null}
         comparison={comparison}
       />
+      <DemandaPanel projectId={projectId} view={demand} canEdit={canEdit} />
     </PageContainer>
   );
 }

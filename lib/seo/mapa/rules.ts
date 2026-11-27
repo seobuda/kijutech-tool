@@ -52,6 +52,10 @@ export type TopicMetrics = {
   aviso?: string | null;
   interanualPct?: number | null;
   mesesFuertes?: string | null;
+  /** Parte 7: volumen mensual (Google Ads) e intención y tipo de página por la SERP de su búsqueda principal. */
+  volumen?: number | null;
+  intencion?: string | null;
+  tipoPagina?: string | null;
 };
 export type TopicDraft = {
   topicKey: string;

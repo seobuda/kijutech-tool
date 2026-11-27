@@ -512,6 +512,13 @@
       "when": 1796710000000,
       "tag": "0072_seo_cambios_dinero",
       "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1796720000000,
+      "tag": "0073_seo_demanda",
+      "breakpoints": true
     }
   ]
 }

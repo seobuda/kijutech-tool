@@ -4184,6 +4184,8 @@ export const seoRankChecks = pgTable(
     aioCites: boolean('aio_cites'),
     features: text('features').array(),
     top10: text('top10').array(),
+    // URLs del top 10 (0073, parte 7): validar grupos por URL y el tipo de página.
+    top10Urls: text('top10_urls').array(),
     costUsd: decimal('cost_usd', { precision: 10, scale: 5 }),
     error: text('error'),
     postedAt: timestamp('posted_at'),
@@ -4393,6 +4395,50 @@ export const seoMoneyPages = pgTable(
   (table) => [uniqueIndex('seo_money_pages_unique').on(table.projectId, table.urlHash), index('seo_money_pages_active_idx').on(table.projectId, table.active)]
 );
 export type SeoMoneyPage = typeof seoMoneyPages.$inferSelect;
+
+// SEO parte 7 (0073): demanda por búsqueda (volumen, intención por la SERP, ideas y su estado). docs/DISENO-SEO-DEMANDA.md.
+export const seoDemand = pgTable(
+  'seo_demand',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    keyword: varchar('keyword', { length: 200 }).notNull(),
+    keywordKey: varchar('keyword_key', { length: 200 }).notNull(),
+    language: varchar('language', { length: 5 }).notNull().default('es'),
+    volume: integer('volume'),
+    cpc: real('cpc'),
+    competition: varchar('competition', { length: 10 }),
+    monthly: jsonb('monthly').$type<{ month: string; volume: number }[]>(),
+    volumeAt: timestamp('volume_at'),
+    // mapa (búsqueda principal de un tema) | idea (ideas de palabras)
+    origin: varchar('origin', { length: 10 }).notNull(),
+    // auto | nueva | seguida | descartada
+    status: varchar('status', { length: 12 }).notNull().default('auto'),
+    seed: varchar('seed', { length: 200 }),
+    topicKey: varchar('topic_key', { length: 80 }),
+    rankKeywordId: uuid('rank_keyword_id').references(() => seoRankKeywords.id, { onDelete: 'set null' }),
+    // local | transaccional | informacional | mixta
+    intent: varchar('intent', { length: 15 }),
+    // servicio | articulo | directorio | mixto
+    pageType: varchar('page_type', { length: 15 }),
+    top10Urls: text('top10_urls').array(),
+    serpAt: timestamp('serp_at'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('seo_demand_unique').on(table.projectId, table.keywordKey, table.language),
+    index('seo_demand_project_idx').on(table.projectId, table.origin, table.status),
+    check('seo_demand_origin_check', sql`${table.origin} IN ('mapa', 'idea')`),
+    check('seo_demand_status_check', sql`${table.status} IN ('auto', 'nueva', 'seguida', 'descartada')`),
+  ]
+);
+export type SeoDemand = typeof seoDemand.$inferSelect;
 
 export const seoReviews = pgTable(
   'seo_reviews',

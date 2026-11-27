@@ -30,6 +30,7 @@ import { runNap } from '@/lib/seo/local/nap';
 import { runHackeo } from '@/lib/seo/vigilancia/hackeo';
 import { registerDineroConfirm, runDinero } from '@/lib/seo/cambios/dinero';
 import { purgeChangeLog } from '@/lib/seo/cambios/registro';
+import { runDemanda } from '@/lib/seo/demanda/demanda';
 import {
   DETECTORES_SOURCE,
   SEO_PROCESSES,
@@ -369,6 +370,7 @@ export function registerVigilancia(): void {
   run('seo.local', (t, p) => runLocal(t, p, false), 300);
   run('seo.geogrid', (t, p) => runGeogrid(t, p), 300);
   run('seo.nap', runNap, 180);
+  run('seo.demanda', runDemanda, 600);
   // Parte 6 (6b): páginas de dinero. Registro propio (necesita el id del trabajo para el lote del registro de cambios).
   registerJobKind({ kind: 'seo.dinero', timeoutS: 600, maxConcurrent: 2, maxAttempts: 2, run: async (ctx, payload) => runDinero(ctx.tenantId, String(payload.projectId ?? ''), `dinero:${ctx.job.id}`, false, () => topPages(ctx.tenantId, String(payload.projectId ?? ''), 5), ctx.heartbeat) });
   registerProcess({ key: 'seo.dinero', scopeType: 'proyecto', label: `SEO: ${SEO_PROCESSES['seo.dinero'].label}`, defaultEveryMinutes: SEO_PROCESSES['seo.dinero'].every, enqueue: (_t, scopeId) => ({ kind: 'seo.dinero', payload: { projectId: scopeId }, priority: 6 }) });
