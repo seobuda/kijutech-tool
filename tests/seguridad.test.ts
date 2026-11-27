@@ -80,7 +80,7 @@ import { chatWithAgentAction, deleteAgentAction, deleteIntegrationAction, previe
 import { decideAgentToolAction, setToolAutonomyAction } from '@/lib/operaciones/agent-capabilities-actions';
 import { pinMoneyPageAction, unpinMoneyPageAction } from '@/lib/seo/cambios-actions';
 import { generateIdeasAction, runDemandNowAction, setIdeaStatusAction } from '@/lib/seo/demanda-actions';
-import { markBriefUsedAction, requestBriefAction, setBriefStatusAction } from '@/lib/seo/contenido-actions';
+import { markBriefUsedAction, requestBriefAction, retryBriefAction, setBriefStatusAction } from '@/lib/seo/contenido-actions';
 import { checkOldPhonesNowAction } from '@/lib/seo/local-actions';
 import ProjectsPage from '@/app/(dashboard)/dashboard/projects/page';
 import ArchivedProjectsPage from '@/app/(dashboard)/dashboard/projects/archived/page';
@@ -254,6 +254,7 @@ const ACCIONES_EDITOR: [string, () => unknown][] = [
   ['requestBriefAction (SEO: preparar brief)', () => requestBriefAction(ZERO, 'reforma cocina', null, null)],
   ['setBriefStatusAction (SEO: estado del brief)', () => setBriefStatusAction(ZERO, ZERO, 'listo')],
   ['markBriefUsedAction (SEO: brief publicado)', () => markBriefUsedAction(ZERO, ZERO, 'https://example.com/')],
+  ['retryBriefAction (SEO: reintentar brief)', () => retryBriefAction(ZERO, ZERO)],
   ['generateIdeasAction (SEO: buscar ideas)', () => generateIdeasAction(ZERO)],
   ['setIdeaStatusAction (SEO: seguir idea)', () => setIdeaStatusAction(ZERO, ZERO, 'seguida')],
   ['runDemandNowAction (SEO: demanda ahora)', () => runDemandNowAction(ZERO)],

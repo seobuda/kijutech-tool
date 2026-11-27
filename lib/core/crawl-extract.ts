@@ -266,7 +266,8 @@ export function extractMain(html: string): MainContent {
   const h2: string[] = [];
   const h3: string[] = [];
   const parts: string[] = [];
-  const visit = (n: Node) => {
+  const visit = (n: Node, depth: number) => {
+    if (depth > 400) return; // HTML patológico: sin desbordar la pila
     const tag = n.tagName;
     if (tag) {
       if (NOT_MAIN_TAGS.has(tag)) return;
@@ -281,9 +282,9 @@ export function extractMain(html: string): MainContent {
       }
     }
     if (n.nodeName === '#text' && n.value) parts.push(n.value);
-    for (const c of n.childNodes ?? []) visit(c);
+    for (const c of n.childNodes ?? []) visit(c, depth + 1);
   };
-  visit(doc);
+  visit(doc, 0);
   const text = clean(parts.join(' ')).slice(0, 200_000);
   return { h2, h3, words: text ? text.split(/\s+/).filter(Boolean).length : 0, text };
 }

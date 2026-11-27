@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge, Section } from '@/components/ui/page';
 import type { BriefView } from '@/lib/seo/contenido/briefs';
-import { markBriefUsedAction, requestBriefAction, setBriefStatusAction } from '@/lib/seo/contenido-actions';
+import { markBriefUsedAction, requestBriefAction, retryBriefAction, setBriefStatusAction } from '@/lib/seo/contenido-actions';
 
 const STATUS: Record<string, { label: string; tone: 'neutral' | 'info' | 'success' | 'outline' | 'danger' | 'warning' }> = {
   preparando: { label: 'Preparando…', tone: 'info' },
@@ -128,6 +128,16 @@ export function BriefsPanel({ projectId, briefs, canEdit, topics }: { projectId:
                 {isOpen && (
                   <div className="flex flex-col gap-3 border-t px-3 py-3 text-sm">
                     {b.error && <p className="text-muted-foreground">{b.error}</p>}
+                    {canEdit && b.status === 'fallido' && (
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="outline" disabled={pending} onClick={() => act(() => retryBriefAction(projectId, b.id))}>
+                          Reintentar
+                        </Button>
+                        <Button size="sm" variant="ghost" disabled={pending} onClick={() => act(() => setBriefStatusAction(projectId, b.id, 'archivado'))}>
+                          Archivar
+                        </Button>
+                      </div>
+                    )}
                     {b.status !== 'preparando' && b.status !== 'fallido' && (
                       <>
                         <p className="text-muted-foreground">

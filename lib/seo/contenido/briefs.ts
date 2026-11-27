@@ -32,13 +32,46 @@ export class BriefError extends Error {
   }
 }
 
+/** Lee como mucho «max» bytes del cuerpo (en streaming: una web hostil no llena la memoria). */
+async function readCapped(res: Response, max: number): Promise<Uint8Array> {
+  const reader = res.body?.getReader();
+  if (!reader) return new Uint8Array();
+  const chunks: Uint8Array[] = [];
+  let n = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    n += value.byteLength;
+    if (n >= max) {
+      void reader.cancel().catch(() => undefined);
+      break;
+    }
+  }
+  return Buffer.concat(chunks).subarray(0, max);
+}
+
 async function readHtml(url: string, ms = 15_000): Promise<string | null> {
   try {
     const r = await fetchPublic(url, { headers: { 'User-Agent': UA, Accept: 'text/html' }, signal: AbortSignal.timeout(ms) });
-    if ('error' in r || !r.res.ok || !/html/i.test(r.res.headers.get('content-type') ?? '')) return null;
-    return new TextDecoder('utf-8', { fatal: false }).decode((await r.res.arrayBuffer()).slice(0, 600_000));
+    if ('error' in r) return null;
+    if (!r.res.ok || !/html/i.test(r.res.headers.get('content-type') ?? '')) {
+      void r.res.body?.cancel().catch(() => undefined);
+      return null;
+    }
+    return new TextDecoder('utf-8', { fatal: false }).decode(await readCapped(r.res, 600_000));
   } catch {
     return null;
+  }
+}
+
+/** Solo http(s) en el puerto normal y de la web del proyecto. */
+function ownPage(u: string, home: string | null): boolean {
+  try {
+    const x = new URL(u);
+    return Boolean(home) && /^https?:$/.test(x.protocol) && (x.port === '' || x.port === '80' || x.port === '443') && sameSite(u, home!);
+  } catch {
+    return false;
   }
 }
 
@@ -47,7 +80,7 @@ async function robotsAllows(url: string): Promise<boolean> {
     const u = new URL(url);
     const r = await fetchPublic(`${u.origin}/robots.txt`, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(5_000) });
     if ('error' in r || !r.res.ok) return true;
-    const txt = new TextDecoder().decode((await r.res.arrayBuffer()).slice(0, 200_000));
+    const txt = new TextDecoder().decode(await readCapped(r.res, 200_000));
     return isAllowed(parseRobots(txt, 'KijutechBot'), u.pathname + u.search);
   } catch {
     return true;
@@ -60,7 +93,7 @@ export async function requestBrief(tenantId: string, projectId: string, input: {
   let target: string | null = null;
   if (input.targetUrl) {
     const home = await projectWebUrl(tenantId, projectId);
-    if (!home || !sameSite(input.targetUrl, home)) throw new BriefError('La página de destino tiene que ser de la web del proyecto.');
+    if (!ownPage(input.targetUrl, home)) throw new BriefError('La página de destino tiene que ser de la web del proyecto.');
     target = input.targetUrl.slice(0, 2000);
   }
   const [b] = await db.insert(seoBriefs).values({ tenantId, projectId, keyword, topicKey: input.topicKey?.slice(0, 80) ?? null, targetUrl: target, createdBy: by.slice(0, 120) }).returning({ id: seoBriefs.id });
@@ -100,7 +133,12 @@ export async function buildBrief(ctx: Pick<JobContext, 'heartbeat'>, tenantId: s
     const html = await readHtml(u);
     await ctx.heartbeat();
     if (!html) continue;
-    const m = extractMain(html);
+    let m: ReturnType<typeof extractMain>;
+    try {
+      m = extractMain(html);
+    } catch {
+      continue; // una web rara no tumba el brief
+    }
     if (m.words < 100) continue; // pintada con JavaScript o vacía
     comp.push({ url: u, h2: m.h2, h3: m.h3, words: m.words });
   }
@@ -155,9 +193,13 @@ export async function buildBrief(ctx: Pick<JobContext, 'heartbeat'>, tenantId: s
   if (target) {
     const html = await readHtml(target);
     if (html) {
-      const m = extractMain(html);
-      const pg = extractPage(html, target);
-      score = scorePage({ title: pg.title, h1: pg.h1[0] ?? null, text: m.text, words: m.words }, { query: b.keyword, subtopics: subs, words });
+      try {
+        const m = extractMain(html);
+        const pg = extractPage(html, target);
+        score = scorePage({ title: pg.title, h1: pg.h1[0] ?? null, text: m.text, words: m.words }, { query: b.keyword, subtopics: subs, words });
+      } catch {
+        score = null;
+      }
     }
   }
   const data = {
@@ -182,16 +224,16 @@ export async function buildBrief(ctx: Pick<JobContext, 'heartbeat'>, tenantId: s
 }
 
 export async function setBriefStatus(tenantId: string, projectId: string, id: string, status: 'borrador' | 'listo' | 'archivado'): Promise<boolean> {
-  const r = await db.update(seoBriefs).set({ status, updatedAt: new Date() }).where(and(eq(seoBriefs.id, id), eq(seoBriefs.projectId, projectId), eq(seoBriefs.tenantId, tenantId), inArray(seoBriefs.status, ['borrador', 'listo', 'archivado']))).returning({ id: seoBriefs.id });
+  const r = await db.update(seoBriefs).set({ status, updatedAt: new Date() }).where(and(eq(seoBriefs.id, id), eq(seoBriefs.projectId, projectId), eq(seoBriefs.tenantId, tenantId), inArray(seoBriefs.status, ['borrador', 'listo', 'archivado', 'fallido']))).returning({ id: seoBriefs.id });
   return r.length > 0;
 }
 
 /** Publicado: se registra la intervención (hecha hoy) para que la parte 8 mida si funcionó. */
-export async function markBriefUsed(tenantId: string, projectId: string, id: string, publishedUrl: string, by: string): Promise<void> {
+export async function markBriefUsed(tenantId: string, projectId: string, id: string, publishedUrl: string, by: string): Promise<boolean> {
   const [b] = await db.select().from(seoBriefs).where(and(eq(seoBriefs.id, id), eq(seoBriefs.projectId, projectId), eq(seoBriefs.tenantId, tenantId))).limit(1);
   if (!b || !['borrador', 'listo'].includes(b.status)) throw new BriefError('Brief no encontrado o aún preparándose.');
   const home = await projectWebUrl(tenantId, projectId);
-  if (!home || !sameSite(publishedUrl, home)) throw new BriefError('La URL publicada tiene que ser de la web del proyecto.');
+  if (!ownPage(publishedUrl, home)) throw new BriefError('La URL publicada tiene que ser de la web del proyecto.');
   const [p] = await db.select({ clientId: projects.clientId }).from(projects).where(eq(projects.id, projectId)).limit(1);
   if (p?.clientId) {
     const data = (b.data ?? {}) as { related?: string[] };
@@ -200,10 +242,21 @@ export async function markBriefUsed(tenantId: string, projectId: string, id: str
     await markInterventionDone(tenantId, 'seo.brief', b.id, new Date());
   }
   await db.update(seoBriefs).set({ status: 'usado', publishedUrl: publishedUrl.slice(0, 2000), updatedAt: new Date() }).where(eq(seoBriefs.id, b.id));
+  return Boolean(p?.clientId);
+}
+
+/** Volver a preparar un brief fallido. */
+export async function retryBrief(tenantId: string, projectId: string, id: string): Promise<boolean> {
+  const r = await db.update(seoBriefs).set({ status: 'preparando', error: null, updatedAt: new Date() }).where(and(eq(seoBriefs.id, id), eq(seoBriefs.projectId, projectId), eq(seoBriefs.tenantId, tenantId), eq(seoBriefs.status, 'fallido'))).returning({ id: seoBriefs.id });
+  if (!r.length) return false;
+  await enqueueJob({ tenantId, kind: 'seo.brief.build', payload: { briefId: id, projectId }, scopeType: 'proyecto', scopeId: projectId, priority: 4, dedupeKey: `seo.brief:${id}:${Date.now()}` });
+  return true;
 }
 
 export type BriefView = { id: string; keyword: string; status: string; targetUrl: string | null; publishedUrl: string | null; error: string | null; data: Record<string, unknown>; createdAt: string; createdBy: string | null };
 export async function listBriefs(tenantId: string, projectId: string): Promise<BriefView[]> {
+  // Un brief «preparando» de hace más de 15 min se quedó a medias (tiempo agotado o reinicio): pasa a fallido.
+  await db.update(seoBriefs).set({ status: 'fallido', error: 'Se cortó a medias: vuelve a intentarlo.', updatedAt: new Date() }).where(and(eq(seoBriefs.projectId, projectId), eq(seoBriefs.status, 'preparando'), sql`${seoBriefs.updatedAt} < now() - interval '15 minutes'`));
   const rows = await db.select().from(seoBriefs).where(and(eq(seoBriefs.tenantId, tenantId), eq(seoBriefs.projectId, projectId))).orderBy(desc(seoBriefs.createdAt)).limit(100);
   return rows.map((r) => ({ id: r.id, keyword: r.keyword, status: r.status, targetUrl: r.targetUrl, publishedUrl: r.publishedUrl, error: r.error, data: r.data ?? {}, createdAt: r.createdAt.toISOString(), createdBy: r.createdBy }));
 }

@@ -7,7 +7,7 @@ import { db } from '@/lib/db/drizzle';
 import { projects } from '@/lib/db/schema';
 import { requirePermission } from '@/lib/auth/permissions';
 import { publicError } from '@/lib/errors';
-import { BriefError, markBriefUsed, requestBrief, setBriefStatus } from '@/lib/seo/contenido/briefs';
+import { BriefError, markBriefUsed, requestBrief, retryBrief, setBriefStatus } from '@/lib/seo/contenido/briefs';
 
 type Ok = { ok: true; message?: string } | { ok: false; error: string };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -49,11 +49,23 @@ export async function markBriefUsedAction(projectId: string, id: string, publish
   try {
     const user = await requirePermission('edit');
     if (!(await ownProject(user.tenantId, projectId)) || !UUID.test(id)) return { ok: false, error: 'No encontrado' };
-    await markBriefUsed(user.tenantId, projectId, id, String(publishedUrl ?? '').trim(), user.name || user.email);
+    const measured = await markBriefUsed(user.tenantId, projectId, id, String(publishedUrl ?? '').trim(), user.name || user.email);
     revalidatePath(PATH(projectId));
-    return { ok: true, message: 'Hecho: se medirá si funcionó (Plan → Resultados, a partir de 4 semanas).' };
+    return { ok: true, message: measured ? 'Hecho: se medirá si funcionó (Plan → Resultados, a partir de 4 semanas).' : 'Guardado. El proyecto no tiene cliente, así que no se puede medir: elige el cliente en el proyecto.' };
   } catch (e) {
     if (e instanceof BriefError) return { ok: false, error: e.userMessage };
     return { ok: false, error: publicError(e, 'No se pudo guardar') };
+  }
+}
+
+export async function retryBriefAction(projectId: string, id: string): Promise<Ok> {
+  try {
+    const user = await requirePermission('edit');
+    if (!(await ownProject(user.tenantId, projectId)) || !UUID.test(id)) return { ok: false, error: 'No encontrado' };
+    if (!(await retryBrief(user.tenantId, projectId, id))) return { ok: false, error: 'Solo se pueden reintentar los que fallaron' };
+    revalidatePath(PATH(projectId));
+    return { ok: true, message: 'Preparando de nuevo.' };
+  } catch (e) {
+    return { ok: false, error: publicError(e, 'No se pudo reintentar') };
   }
 }
