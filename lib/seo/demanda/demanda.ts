@@ -69,15 +69,18 @@ export async function runDemanda(tenantId: string, projectId: string, heartbeat:
   if (src.volumes) {
     const want = [...new Map(topics.slice(0, MAX_VOLUME_TOPICS).flatMap((t) => t.queries.slice(0, 3)).filter((q) => q.length <= 80 && q.trim().split(/\s+/).length <= 10).map((q) => [keywordKey(q), q])).values()].filter((q) => !fresh(byKey.get(keywordKey(q))?.volumeAt));
     if (want.length && (await canSpend(projectId, VOLUME_COST)).ok) {
-      // Un fallo del volumen no tumba la pasada (la SERP y los hallazgos siguen).
+      // Un fallo del proveedor no tumba la pasada (la SERP y los hallazgos siguen); un fallo de la base, sí (se ve).
+      let r: Awaited<ReturnType<NonNullable<typeof src.volumes>>> | null = null;
       try {
-        const r = await src.volumes(tenantId, want.slice(0, 1000), loc.name, 'es');
+        r = await src.volumes(tenantId, want.slice(0, 1000), loc.name, 'es');
+      } catch (e) {
+        console.error('[seo] demanda: volumen:', e instanceof Error ? e.message : e);
+        parts.push('volumen: el proveedor falló');
+      }
+      if (r) {
         await recordDataSpend(tenantId, projectId, 'serp', 'demanda: volumen de los temas', r.costUsd || VOLUME_COST);
         for (const q of want.slice(0, 1000)) await upsertDemand(tenantId, projectId, q, { volume: r.volumes.get(q.toLowerCase()) ?? 0, volumeAt: new Date() });
         parts.push(`volumen de ${Math.min(want.length, 1000)} búsquedas`);
-      } catch (e) {
-        console.error('[seo] demanda: volumen:', e instanceof Error ? e.message : e);
-        parts.push('volumen: no se pudo pedir');
       }
     }
   }

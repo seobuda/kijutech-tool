@@ -122,9 +122,9 @@ export function publicFetch(url: string, init: PublicFetchInit = {}): Promise<Re
           if (Array.isArray(v)) v.forEach((x) => headers.append(k, x));
           else headers.set(k, String(v));
         }
-        const status = res.statusCode ?? 0;
+        const status = status0;
         // Response no admite cuerpo con 204/304 ni estados fuera de 200-599.
-        const noBody = status === 204 || status === 304 || (init.method ?? 'GET').toUpperCase() === 'HEAD';
+        const noBody = noBody0;
         const body = noBody ? null : (Readable.toWeb(stream as Readable) as unknown as ReadableStream);
         if (noBody) res.resume();
         try {
