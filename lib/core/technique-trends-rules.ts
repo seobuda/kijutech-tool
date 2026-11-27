@@ -28,8 +28,11 @@ export function randomEffects(obs: Obs[]): { mu: number; se: number; tau2: numbe
   return { mu: obs.reduce((a, o, i) => a + ws[i] * o.y, 0) / sws, se: Math.sqrt(1 / sws), tau2 };
 }
 
-export type Trend = { technique: string; metric: string; taxonomyVersion: number; n: number; clients: number; funciono: number; effectPct: number | null; lowPct: number | null; highPct: number | null; label: 'pocos casos' | 'tendencia' | 'aprendizaje'; clicksEffectLog: number | null; clicksSe: number | null };
+export type Trend = { technique: string; metric: string; taxonomyVersion: number; n: number; clients: number; funciono: number; effectPct: number | null; lowPct: number | null; highPct: number | null; label: 'pocos casos' | 'tendencia' | 'aprendizaje'; clicksEffectLog: number | null; clicksSe: number | null; clicksN: number; clicksClients: number };
 const pct = (x: number) => Math.round((Math.exp(x) - 1) * 1000) / 10;
+/** t de Student al 95 % (dos colas) para k grupos (k − 1 grados de libertad); 1,96 con muchos. */
+const T95 = [12.71, 4.3, 3.18, 2.78, 2.57, 2.45, 2.36, 2.31, 2.26, 2.23, 2.2, 2.18, 2.16, 2.14, 2.13, 2.12, 2.11, 2.1, 2.09, 2.09];
+const tCrit = (k: number) => (k <= 1 ? T95[0] : k - 2 < T95.length ? T95[k - 2] : 1.96);
 
 /** Agrega por técnica + métrica + versión: un punto por intervención, válido, sin solapes ni Estrategia; media por cliente. */
 export function techniqueTrends(list: InterventionLite[]): Trend[] {
@@ -58,11 +61,13 @@ export function techniqueTrends(list: InterventionLite[]): Trend[] {
       // Media por cliente (comparten web y control: no son independientes).
       return [...byClient.values()].map((os) => {
         const y = os.reduce((a, o) => a + o.y, 0) / os.length;
-        const v = os.reduce((a, o) => a + Math.max(SE_FLOOR, o.se) ** 2, 0) / os.length ** 2;
+        // Sin dividir por n: las intervenciones de un cliente no son independientes (no premia a quien tiene más).
+        const v = os.reduce((a, o) => a + Math.max(SE_FLOOR, o.se) ** 2, 0) / os.length;
         return { y, v };
       });
     };
     const main = randomEffects(perClient((r) => ({ y: r.c.effectLog!, se: r.c.se ?? SE_FLOOR })));
+    const clkRows = g.filter((r) => r.c.clicksValid && typeof r.c.clicksEffectLog === 'number');
     const clk = randomEffects(perClient((r) => (r.c.clicksValid && typeof r.c.clicksEffectLog === 'number' ? { y: r.c.clicksEffectLog, se: r.c.clicksSe ?? SE_FLOOR } : null)));
     const clients = new Set(g.map((r) => r.i.clientId)).size;
     const n = g.length;
@@ -75,11 +80,14 @@ export function techniqueTrends(list: InterventionLite[]): Trend[] {
       clients,
       funciono: g.filter((r) => (r.c.effectLog ?? 0) > Math.log(1.15) && (r.c.effectLog ?? 0) / Math.max(SE_FLOOR, r.c.se ?? SE_FLOOR) >= 2).length,
       effectPct: main ? pct(main.mu) : null,
-      lowPct: main ? pct(main.mu - 1.96 * Math.sqrt(main.se ** 2 + main.tau2)) : null,
-      highPct: main ? pct(main.mu + 1.96 * Math.sqrt(main.se ** 2 + main.tau2)) : null,
+      // Intervalo del efecto medio (con t de Student si hay pocos clientes).
+      lowPct: main ? pct(main.mu - tCrit(clients) * main.se) : null,
+      highPct: main ? pct(main.mu + tCrit(clients) * main.se) : null,
       label,
       clicksEffectLog: clk ? clk.mu : null,
-      clicksSe: clk ? clk.se : null
+      clicksSe: clk ? clk.se : null,
+      clicksN: clkRows.length,
+      clicksClients: new Set(clkRows.map((r) => r.i.clientId)).size
     });
   }
   return out.sort((a, b) => b.n - a.n);
@@ -93,7 +101,10 @@ export const TRIGGERED_BY_DROP = new Set(['titulo_reescrito', 'meta_descripcion'
  * [0,8, 1,25]. Sin aprendizaje (lo normal durante meses), 1. Solo ordena dentro de cada prioridad.
  */
 export function planFactors(trends: Trend[]): Map<string, number> {
-  const learned = trends.filter((t) => t.label === 'aprendizaje' && t.clicksEffectLog !== null && !TRIGGERED_BY_DROP.has(t.technique));
+  // Una entrada por técnica (la de más casos de clics) y con los mínimos sobre los puntos de clics válidos.
+  const best = new Map<string, Trend>();
+  for (const t of trends) if (!best.has(t.technique) || t.clicksN > best.get(t.technique)!.clicksN) best.set(t.technique, t);
+  const learned = [...best.values()].filter((t) => t.clicksN >= 50 && t.clicksClients >= 10 && t.clicksEffectLog !== null && !TRIGGERED_BY_DROP.has(t.technique));
   const out = new Map<string, number>();
   if (!learned.length) return out;
   const mean = learned.reduce((a, t) => a + t.clicksEffectLog!, 0) / learned.length;

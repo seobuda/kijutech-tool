@@ -129,7 +129,8 @@ export async function listPlanItems(tenantId: string, projectId: string): Promis
     .select()
     .from(seoPlanItems)
     .where(and(eq(seoPlanItems.projectId, projectId), eq(seoPlanItems.tenantId, tenantId)))
-    .orderBy(asc(seoPlanItems.priority), sql`${seoPlanItems.score} DESC`);
+    // Parte 11: dentro de cada prioridad, el factor aprendido de la técnica (1 sin datos suficientes).
+    .orderBy(asc(seoPlanItems.priority), sql`${seoPlanItems.score} * coalesce((${seoPlanItems.evidence}->>'factorTecnica')::float, 1) DESC`);
 }
 
 export type ApproveOptions = {

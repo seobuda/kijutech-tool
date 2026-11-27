@@ -54,6 +54,20 @@ describe('tendencias por técnica', () => {
     expect(f.get('enlazado_interno')!).toBeLessThanOrEqual(1.25);
     expect(f.has('titulo_reescrito')).toBe(false);
   });
+  it('heterogeneidad: τ² > 0 con efectos dispersos', () => {
+    const r = randomEffects([
+      { y: 0.0, v: 0.01 },
+      { y: 0.6, v: 0.01 },
+      { y: 0.3, v: 0.01 }
+    ])!;
+    // Q = 18, c = 200 − 300/300 = 200 → τ² = (18 − 2) / 200 ≈ 0,08 (a mano, con pesos 100).
+    expect(r.tau2).toBeCloseTo(0.08, 2);
+    expect(r.mu).toBeCloseTo(0.3);
+  });
+  it('sin clics válidos suficientes, no hay factor', () => {
+    const many = Array.from({ length: 50 }, (_, i) => iv(`x${i}`, `c${i % 10}`, 'enlazado_interno', 0.4, {}, { clicksValid: i < 10 }));
+    expect(planFactors(techniqueTrends(many)).size).toBe(0);
+  });
   it('el factor ordena dentro de la prioridad, nunca la cambia', () => {
     const findings = [
       { id: '1', kind: 'seo.h1_missing', severity: 'aviso', url: 'https://w.es/a', query: null, value: null, evidence: {} },
@@ -62,5 +76,7 @@ describe('tendencias por técnica', () => {
     const base = buildPlan(findings, new Map(), null);
     const boosted = buildPlan(findings, new Map(), null, {}, new Map([[base[base.length - 1].technique, 1.25]]));
     expect(boosted.map((d) => d.priority)).toEqual(base.map((d) => d.priority));
+    // Con la misma prioridad, el potenciado pasa delante.
+    if (base[0].priority === base[base.length - 1].priority) expect(boosted[0].technique).toBe(base[base.length - 1].technique);
   });
 });
