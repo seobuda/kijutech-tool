@@ -31,6 +31,7 @@ import { runHackeo } from '@/lib/seo/vigilancia/hackeo';
 import { registerDineroConfirm, runDinero } from '@/lib/seo/cambios/dinero';
 import { purgeChangeLog } from '@/lib/seo/cambios/registro';
 import { runDemanda } from '@/lib/seo/demanda/demanda';
+import { runDiagnostico } from '@/lib/seo/medir/diagnostico';
 import {
   DETECTORES_SOURCE,
   SEO_PROCESSES,
@@ -275,6 +276,7 @@ export async function runDetectores(tenantId: string, projectId: string): Promis
   const parts: string[] = [];
   const prop = await mainProperty(tenantId, projectId);
   const found: Parameters<typeof syncFindings>[3] = [];
+  let hackFound = 0;
   if (prop?.lastDate) {
     // El mapa de palabras trae al alcance, CTR bajo, canibalización y temas sin página: se rehace (trabajo propio).
     await enqueueKeywordMap(tenantId, projectId);
@@ -308,11 +310,18 @@ export async function runDetectores(tenantId: string, projectId: string): Promis
     // Parte 6: señales de web hackeada (fuente propia; un fallo aquí no tumba el resto de detectores).
     const h = await runHackeo(tenantId, projectId, prop).catch((e) => {
       console.error('[seo] detectores: hackeo:', e instanceof Error ? e.message : e);
-      return 'señales de hackeo: no se pudo mirar';
+      return { text: 'señales de hackeo: no se pudo mirar', found: 0 };
     });
-    if (h) parts.push(h);
+    if (h) parts.push(h.text);
+    hackFound = h?.found ?? 0;
+    // Parte 8: diagnóstico de caídas en capas, al final (usa lo que acaban de decidir los demás detectores).
+    const d = await runDiagnostico(tenantId, projectId, prop).catch((e) => {
+      console.error('[seo] detectores: diagnóstico:', e instanceof Error ? e.message : e);
+      return null;
+    });
+    if (d) parts.push(d);
   } else parts.push('sin Search Console asignado o sin datos descargados');
-  return { status: found.length ? 'aviso' : 'ok', summary: parts.join(' · ') };
+  return { status: found.length || hackFound ? 'aviso' : 'ok', summary: parts.join(' · ') };
 }
 
 // --- Alta de los procesos de cada proyecto ----------------------------------------------------------------------------

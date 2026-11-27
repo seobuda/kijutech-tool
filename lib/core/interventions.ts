@@ -9,7 +9,7 @@ import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { clients, interventions, type Intervention, type InterventionHypothesis } from '@/lib/db/schema';
 import { workSource } from '@/lib/core/capabilities';
-import { ensureSchedule, registerJobKind, registerProcess } from '@/lib/core/jobs';
+import { ensureSchedule, ensureScheduleIfMissing, registerJobKind, registerProcess } from '@/lib/core/jobs';
 import { normalizeTechnique, TAXONOMY_VERSION, TECHNIQUE_BY_KEY, verifyPlan, type TechniqueDomain } from '@/lib/core/techniques';
 
 export const INTERVENTIONS_SYNC = 'core.interventions.sync';
@@ -119,6 +119,10 @@ export async function syncInterventionStatus(tenantId: string): Promise<{ checke
       }
     }
   }
+  // Parte 8: con alguna hecha, el proceso diario que mide si funcionaron (se da de alta una vez).
+  // (también si ya había hechas de antes: se comprueba barato una vez por pasada)
+  const [anyDone] = done ? [{ id: 'x' }] : await db.select({ id: interventions.id }).from(interventions).where(and(eq(interventions.tenantId, tenantId), eq(interventions.status, 'hecha'))).limit(1);
+  if (anyDone) await ensureScheduleIfMissing(tenantId, 'core.interventions.measure', '', 1440);
   return { checked: open.length, done };
 }
 

@@ -14,6 +14,8 @@ import { whyLine } from '@/lib/seo/plan/rules';
 import { techniqueLabel } from '@/lib/core/techniques';
 import { ProjectSeoNav } from '../seo-nav';
 import { PlanPanel, type PlanContext, type PlanItemView } from './plan-panel';
+import { ResultadosPanel, type ResultView } from './resultados-panel';
+import { listProjectInterventions } from '@/lib/core/interventions';
 
 export default async function PlanPage({ params }: { params: Promise<{ projectId: string }> }) {
   const user = await requirePagePermission('view');
@@ -28,6 +30,28 @@ export default async function PlanPage({ params }: { params: Promise<{ projectId
   if (!p) notFound();
   const [items, canEdit, sched] = await Promise.all([listPlanItems(user.tenantId, projectId), checkPermission('edit').then((r) => r.ok), planSchedule(user.tenantId, projectId)]);
   const monthOf = new Map(sched.items.map((i) => [i.id, i.month]));
+  // Parte 8: resultado de cada intervención (lo mide el núcleo cada día).
+  const ints = (await listProjectInterventions(user.tenantId, projectId, 300)).filter((i) => i.domain === 'seo' && i.status !== 'cancelada');
+  const results: ResultView[] = ints.map((i) => {
+    const o = (i.outcome ?? {}) as { verdict?: string; effectPct?: number; reasons?: string[]; effective?: { source?: string }; done?: { status?: string }; checkpoints?: { days: number; metric?: string; reasons?: string[]; incrementalClicks?: number | null }[] };
+    const last = o.checkpoints?.[o.checkpoints.length - 1];
+    return {
+      id: i.id,
+      technique: i.technique,
+      techniqueLabel: techniqueLabel(i.technique),
+      urls: i.urls,
+      status: i.status,
+      doneAt: i.doneAt?.toISOString() ?? null,
+      verdict: o.verdict ?? null,
+      effectPct: typeof o.effectPct === 'number' ? o.effectPct : null,
+      metric: last?.metric ?? (i.hypothesis?.metric as string | undefined) ?? null,
+      reasons: last?.reasons ?? o.reasons ?? [],
+      effectiveSource: o.effective?.source ?? null,
+      done: o.done?.status ?? null,
+      incrementalClicks: last?.incrementalClicks ?? null,
+      days: last?.days ?? null
+    };
+  });
   const maxMonth = Math.max(0, ...sched.items.map((i) => i.month));
   const view: PlanItemView[] = items.map((i) => {
     const ev = i.evidence as { impressions?: number; gainPerMonth?: number; valor?: number | null; severity?: string; overHours?: boolean };
@@ -84,6 +108,7 @@ export default async function PlanPage({ params }: { params: Promise<{ projectId
       />
       <ProjectSeoNav projectId={projectId} active="plan" />
       <PlanPanel projectId={projectId} items={view} canEdit={canEdit} ctx={ctx} />
+      <ResultadosPanel results={results} />
     </PageContainer>
   );
 }

@@ -186,6 +186,18 @@ export const SEO_SALUD_PROCESS_MAP: ProcessStep[] = [
     tables: ['seo_demand', 'seo_topics', 'seo_topic_queries', 'seo_rank_keywords', 'seo_data_spend', 'findings', 'client_competitors']
   },
   {
+    id: 'diagnostico',
+    lane: 'Vigilancia continua',
+    name: 'Diagnóstico de caídas de visitas (por capas)',
+    description: 'Al final de los detectores semanales: si los clics de 28 días (con las búsquedas anónimas) caen un 20 % o más frente a los 28 anteriores y frente al año anterior (si hay datos), busca las causas por capas con evidencia que empezó cerca de la caída: demanda, técnica, indexación, cambios en la web, posiciones y CTR. Un aviso con la foto de las capas.',
+    status: 'built',
+    file: 'lib/seo/medir/diagnostico.ts',
+    when: 'Con los detectores (proceso «seo.detectores», cada 7 días por defecto).',
+    ai: 'Nada: textos con plantillas.',
+    code: 'gsc_daily_totals; ventana cerrada 2 días antes del último dato (los últimos son provisionales); no decide si los datos tienen más de 4 días; mínimo 200 clics en el periodo anterior; histéresis (abre con −20 %, sigue abierto mientras esté peor que −10 %); un aviso por episodio. Reglas en diagnostico-rules.ts. Además, evidence.ts da al núcleo la fecha real de cada intervención (registro de cambios, por el campo de su técnica). Fuente «seo.vigilancia:diagnostico».',
+    tables: ['gsc_daily_totals', 'findings', 'seo_change_log']
+  },
+  {
     id: 'gasto-datos',
     lane: 'Vigilancia continua',
     name: 'Gasto en datos de pago por proyecto',

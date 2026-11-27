@@ -79,3 +79,46 @@
 
 ## Auditoría independiente
 _(pendiente)_
+
+**Hecha** por un subagente Opus 5.5 con esfuerzo alto. **Veredicto: la dirección es buena, pero no estaba lista.**
+
+**Graves:**
+1. El núcleo leería tablas de SEO (`seo_change_log`, `seo_speed_checks`). Hace falta una capacidad por dominio que el módulo registre.
+2. El signo de «posición» está invertido: con `direction` «sube», una mejora de posición es un número que baja.
+3. Hay regresión a la media en las páginas que acaban de caer (`recuperar_pagina`, «al alcance»): saldrían como «funcionó» casi siempre. Hacen falta un control con tendencia previa parecida y una prueba de tendencias paralelas.
+4. Faltaba el CTR. Además, la posición media mezcla búsquedas. Hace falta una cesta fija de búsquedas, ponderada por las impresiones del periodo anterior.
+
+**Importantes:**
+- La fecha real es un **intervalo** (entre rastreos): hay que excluirlo de las ventanas, más 7 días de reindexación, y filtrar por el campo que toca la técnica.
+- Las técnicas de toda la web o de la ficha y el mapa no se miden con GSC por página: son «no medibles» por esta vía.
+- El control es «el resto de la web», sin las páginas tratadas, con otras intervenciones o con cambios registrados.
+- Una página nueva tiene un valor previo de 0: no se puede dividir.
+- El umbral necesita una serie semanal (4 semanas o más antes y después), una prueba estadística y mínimos por métrica. «No funcionó» exige el mismo umbral, en contra.
+- Las búsquedas anónimas no están en `gsc_daily`: los totales salen de `gsc_daily_totals`.
+- Contaminación: guardar las intervenciones que se solapan (`confounders`).
+- **Diagnóstico de caídas:**
+  - umbrales: un mínimo de 200 clics, y la caída debe darse frente al mes anterior y también frente al año anterior;
+  - tiempos: cerrar la ventana 2 días antes del último dato y no ejecutar con datos de más de 4 días;
+  - qué cuenta como causa: solo la evidencia que empezó cerca de la caída, y la demanda primero;
+  - orden: va al final de los detectores;
+  - repetición: clave por episodio, con histéresis (abre con −20 % y cierra por encima de −10 %).
+- `outcome` debe fusionar con lo que ya había (`checkpoints`) y guardar el efecto en logaritmo con su error, para la parte 11.
+
+## Decisión final, rehecha (sin migración)
+- **Núcleo:**
+  - `registerInterventionEvidence(domain, { effective, isDone })` en `capabilities.ts`;
+  - reglas puras `lib/core/measure-rules.ts`: serie semanal, DiD en logaritmo, prueba t, tendencias paralelas, normalización «sube = mejora» y técnicas no medibles;
+  - `lib/core/measure.ts`: proceso diario `core.interventions.measure`.
+- **Cómo se mide:**
+  - métricas: clics e impresiones por página; posición y CTR por una cesta fija de búsquedas;
+  - control: el resto de la web;
+  - ventanas: 4 a 8 semanas antes y después, sin el intervalo dudoso más 7 días;
+  - mínimos: 30 clics antes para clics, 300 impresiones para impresiones y 100 impresiones de la cesta para posición y CTR;
+  - veredicto: |efecto| ≥ 15 % y t ≥ 2 en la dirección prevista da `funcionó`; lo mismo en contra da `no_funcionó`; si no, `no_concluyente`. Si las tendencias previas no son paralelas, `no_concluyente`.
+  - `outcome.checkpoints` a los 28, 56 y 90 días tras la fecha real.
+- **SEO:** proveedor de evidencia `lib/seo/medir/evidence.ts`:
+  - `effective`: el registro de cambios filtrado por el campo de la técnica;
+  - `isDone`: los hallazgos ligados resueltos o el cambio registrado.
+- **Diagnóstico** (`lib/seo/medir/diagnostico.ts` + reglas): al final de los detectores, con las condiciones de arriba. Hallazgo `seo.traffic_drop_diagnosed` (importante), fuente `seo.vigilancia:diagnostico`, con una foto de las capas en la evidencia.
+- **Pantalla:** Plan → «Resultados», con cada intervención medida y su veredicto, más el total por técnica, indicado como «tendencia».
+- **Hecho sin encargo:** queda para después (`requestRef` nulo).

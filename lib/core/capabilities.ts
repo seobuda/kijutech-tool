@@ -468,6 +468,23 @@ export function workSource(): WorkSource | null {
   return GK.__kijuWorkSource ?? null;
 }
 
+// --- Evidencia de una intervención (SEO parte 8, 27 nov 2026) ------------------------------------------------------
+// Para medir «¿funcionó?» el núcleo necesita la fecha REAL del cambio en la web y si está hecho; eso lo sabe el módulo
+// (SEO: su registro de cambios). Cada dominio registra su proveedor; sin proveedor, el núcleo usa la fecha del encargo.
+export type InterventionEvidence = {
+  /** Intervalo en que se hizo el cambio en esas URLs (desde «since»), o null si no consta. */
+  effective: (tenantId: string, projectId: string, urls: string[], technique: string, since: Date) => Promise<{ from: Date; to: Date; source: string } | null>;
+  /** ¿Consta hecho? (hallazgos resueltos, cambio registrado…). */
+  isDone: (tenantId: string, projectId: string, urls: string[], technique: string, since: Date) => Promise<'hecho' | 'no_hecho' | 'sin_datos'>;
+};
+const GIE = globalThis as unknown as { __kijuInterventionEvidence?: Map<string, InterventionEvidence> };
+export function registerInterventionEvidence(domain: string, e: InterventionEvidence): void {
+  (GIE.__kijuInterventionEvidence ??= new Map()).set(domain, e);
+}
+export function interventionEvidence(domain: string): InterventionEvidence | null {
+  return GIE.__kijuInterventionEvidence?.get(domain) ?? null;
+}
+
 /** Quien preguntó recibe la respuesta (texto, o null si «No aplica») y devuelve la frase con la que contesta el bot. */
 export type TaskAnswerHandler = (tenantId: string, taskId: string, answer: string | null, by: string) => Promise<string>;
 export function registerTaskAnswerHandler(kind: string, fn: TaskAnswerHandler): void {

@@ -40,15 +40,16 @@ const decoded = (u: string) => {
 export type NewQuery = { query: string; impressions: number; urls: string[] };
 /**
  * Búsquedas NUEVAS (con impresiones en 28 días y ninguna en los 92 anteriores) que parecen basura. Salta con 3 o más, o con
- * 50 impresiones o más. Crítico si alguna de sus URLs no es de la web conocida (ni rastreada ni en el sitemap) o tiene una
- * ruta basura; si no (p. ej. una farmacia de verdad), aviso.
+ * 50 impresiones o más. Crítico si alguna de sus URLs no es de la web conocida (rastreo completo; null = no se sabe) o tiene
+ * una ruta basura; si no (p. ej. una farmacia de verdad), aviso.
  */
-export function hackedQueries(queries: NewQuery[], siteLangs: Set<string>, knownUrls: Set<string>): FindingInput[] {
+export function hackedQueries(queries: NewQuery[], siteLangs: Set<string>, knownUrls: Set<string> | null, keyOf: (u: string) => string = (u) => u.replace(/\/+$/, '')): FindingInput[] {
   const spam = queries.filter((q) => isSpamText(q.query, siteLangs));
   const imps = spam.reduce((s, q) => s + q.impressions, 0);
   if (spam.length < 3 && imps < 50) return [];
   const urls = [...new Set(spam.flatMap((q) => q.urls))];
-  const strange = urls.filter((u) => !knownUrls.has(u.replace(/\/+$/, '')) || isSpamText(decoded(u), siteLangs));
+  // Sin rastreo completo no se sabe qué es ajeno: solo cuenta la ruta basura.
+  const strange = urls.filter((u) => (knownUrls ? !knownUrls.has(keyOf(u)) : false) || isSpamText(decoded(u), siteLangs));
   return [
     {
       kind: 'seo.hacked_queries',
