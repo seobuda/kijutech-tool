@@ -71,3 +71,9 @@ export async function numberSetting(key: string, fallback: number): Promise<numb
   const n = Number(r?.v);
   return Number.isFinite(n) && n >= 0 ? n : fallback;
 }
+
+/** Devuelve un estimado apuntado antes de enviar cuando la petición falló sin cobrarse (error HTTP: no llegó a procesarse). */
+export async function refundDataSpend(tenantId: string, projectId: string, provider: string, operation: string, usd: number): Promise<void> {
+  if (!(usd > 0)) return;
+  await db.insert(seoDataSpend).values({ tenantId, projectId, provider: provider.slice(0, 30), operation: `${operation} (devuelto)`.slice(0, 60), costUsd: (-usd).toFixed(4) });
+}

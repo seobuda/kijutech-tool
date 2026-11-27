@@ -14,7 +14,7 @@ import { clientCompetitors, projects, seoAiChecks, seoAiQuestions, seoTopics } f
 import { serpSource, type AiAnswerAssistant } from '@/lib/core/capabilities';
 import { enqueueJob, registerJobKind } from '@/lib/core/jobs';
 import { syncFindings } from '@/lib/core/findings';
-import { canSpendOn, numberSetting, recordDataSpend } from '@/lib/seo/gasto';
+import { canSpendOn, numberSetting, recordDataSpend, refundDataSpend } from '@/lib/seo/gasto';
 import { confirmedFacts, projectBasics, projectLocation } from '@/lib/seo/posiciones/posiciones';
 import { AI_ASSISTANTS, AI_COST, DEFAULT_AI_PANEL_BUDGET_USD, excerpt, lostToCompetitionMonths, MAX_AI_QUESTIONS, proposeQuestions, questionKey, readAnswer, sampleOfDay } from '@/lib/seo/panel-ia/rules';
 
@@ -131,9 +131,11 @@ export async function runAiQuestion(tenantId: string, payload: Record<string, un
         .where(eq(seoAiChecks.id, row.id));
       done++;
     } catch (e) {
-      const cost = Number((e as { costUsd?: number }).costUsd ?? 0);
-      if (cost > estimate) await recordDataSpend(tenantId, projectId, 'serp', `${PANEL_IA_OP}: ${a} (ajuste)`, cost - estimate);
-      await db.update(seoAiChecks).set({ status: 'fallida', error: (e instanceof Error ? e.message : 'error').slice(0, 300), costUsd: estimate.toFixed(4), updatedAt: new Date() }).where(eq(seoAiChecks.id, row.id));
+      // Sin «costUsd» = error HTTP (no llegó a procesarse, no se cobra): se devuelve el estimado. Con él, se cobró.
+      const charged = (e as { costUsd?: number }).costUsd;
+      if (charged === undefined && e instanceof Error && /^DataForSEO( \(\d{3}\)|:)/.test(e.message)) await refundDataSpend(tenantId, projectId, 'serp', `${PANEL_IA_OP}: ${a}`, estimate);
+      else if (charged > estimate) await recordDataSpend(tenantId, projectId, 'serp', `${PANEL_IA_OP}: ${a} (ajuste)`, charged - estimate);
+      await db.update(seoAiChecks).set({ status: 'fallida', error: (e instanceof Error ? e.message : 'error').slice(0, 300), costUsd: (charged ?? 0).toFixed(4), updatedAt: new Date() }).where(eq(seoAiChecks.id, row.id));
       failed++;
     }
     await heartbeat();

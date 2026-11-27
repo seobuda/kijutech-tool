@@ -13,7 +13,7 @@ import { clientCompetitors, projects, seoLinkSnapshots } from '@/lib/db/schema';
 import { serpSource, type LinkSummary } from '@/lib/core/capabilities';
 import { disableSchedule, ensureScheduleIfMissing, listSchedulesForScope, pauseSchedule } from '@/lib/core/jobs';
 import { syncFindings } from '@/lib/core/findings';
-import { canSpendOn, numberSetting, recordDataSpend } from '@/lib/seo/gasto';
+import { canSpendOn, numberSetting, recordDataSpend, refundDataSpend } from '@/lib/seo/gasto';
 import { projectBasics } from '@/lib/seo/posiciones/posiciones';
 import { host } from '@/lib/seo/expediente/rules';
 import { filterGap } from '@/lib/seo/autoridad/rules';
@@ -65,8 +65,9 @@ async function spend<T extends { costUsd: number }>(tenantId: string, projectId:
     if (r.costUsd > estimate) await recordDataSpend(tenantId, projectId, 'serp', `${AUTORIDAD_OP}: ${label} (ajuste)`, r.costUsd - estimate);
     return r;
   } catch (e) {
-    const c = Number((e as { costUsd?: number }).costUsd ?? 0);
-    if (c > estimate) await recordDataSpend(tenantId, projectId, 'serp', `${AUTORIDAD_OP}: ${label} (ajuste)`, c - estimate);
+    const c = (e as { costUsd?: number }).costUsd;
+    if (c === undefined && e instanceof Error && /^DataForSEO( \(\d{3}\)|:)/.test(e.message)) await refundDataSpend(tenantId, projectId, 'serp', `${AUTORIDAD_OP}: ${label}`, estimate);
+    else if (c > estimate) await recordDataSpend(tenantId, projectId, 'serp', `${AUTORIDAD_OP}: ${label} (ajuste)`, c - estimate);
     throw e;
   }
 }

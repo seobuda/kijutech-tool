@@ -58,7 +58,7 @@ export default async function VivoPage({ params }: { params: Promise<{ projectId
       <ProjectSeoNav projectId={projectId} active="vivo" />
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Section title="Contactos por la web" description="Envíos de los formularios de su web (GoHighLevel). No cuenta llamadas ni WhatsApp. Oscuro: llegados desde Google.">
+        <Section title="Contactos por la web" description="Envíos de formularios de su web y de anuncios de Facebook (GoHighLevel). No cuenta llamadas ni WhatsApp. Oscuro: llegados desde Google.">
           {!leads?.connected ? (
             <EmptyState icon={Activity} title="GoHighLevel sin conectar" description="Conecta la subcuenta del cliente en su ficha → Webs y cuentas → Conexiones para ver aquí sus contactos." />
           ) : (

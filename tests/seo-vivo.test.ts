@@ -18,7 +18,7 @@ describe('informe mensual: texto determinista', () => {
   it('cifras con su comparación y sin atribuir causas', () => {
     const r = monthlyReportText(base);
     expect(r.subject).toBe('Taller Rius: resumen SEO de noviembre de 2026');
-    expect(r.body).toContain('Contactos por los formularios de la web: 12 (+20 % frente al mes anterior), de ellos 7 llegados desde Google');
+    expect(r.body).toContain('Contactos por formularios (web y anuncios): 12 (+20 % frente al mes anterior), de ellos 7 llegados desde Google');
     expect(r.body).toContain('Visitas desde Google: 400 (-20 % frente al mes anterior)');
     expect(r.body).toContain('9 están en la primera página');
     expect(r.body).toContain('en el 25 % de las respuestas');

@@ -26,7 +26,7 @@ export function monthlyReportText(r: ReportInput): { subject: string; body: stri
   L.push(`Hola,`, '', `Este es el resumen de ${r.monthLabel} del trabajo de posicionamiento de ${r.clientName}.`, '');
   L.push('QUÉ HA PASADO');
   if (r.leads.connected) {
-    L.push(`- Contactos por los formularios de la web: ${r.leads.month}${delta(r.leads.month, r.leads.prev)}${r.leads.organic ? `, de ellos ${r.leads.organic} llegados desde Google (búsqueda orgánica)` : ''}.`);
+    L.push(`- Contactos por formularios (web y anuncios): ${r.leads.month}${delta(r.leads.month, r.leads.prev)}${r.leads.organic ? `, de ellos ${r.leads.organic} llegados desde Google (búsqueda orgánica)` : ''}.`);
     if (r.leads.topPages.length) L.push(`- Páginas que más contactos han traído: ${r.leads.topPages.slice(0, 3).map((p) => `${p.url} (${p.n})`).join(', ')}.`);
   }
   if (r.gsc.clicks != null) L.push(`- Visitas desde Google: ${r.gsc.clicks}${delta(r.gsc.clicks, r.gsc.prevClicks)}${r.gsc.impressions != null ? `; apareció ${r.gsc.impressions} veces en los resultados` : ''}.`);
