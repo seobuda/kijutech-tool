@@ -6,7 +6,7 @@ import { notFound } from 'next/navigation';
 import { and, eq, inArray } from 'drizzle-orm';
 import { AlertTriangle, ArrowLeft, ArrowRight, CalendarCheck, Eye, LayoutDashboard, MapPin, Rocket, TrendingUp, Trophy } from 'lucide-react';
 import { db } from '@/lib/db/drizzle';
-import { clients, findings, projects } from '@/lib/db/schema';
+import { clients, findings, interventions, projects } from '@/lib/db/schema';
 import { requirePagePermission } from '@/lib/auth/permissions';
 import { Badge, PageContainer, PageHeader } from '@/components/ui/page';
 import { ProjectSeoNav } from '../seo-nav';
@@ -18,7 +18,6 @@ import { getGeogridView } from '@/lib/seo/local/geogrid-view';
 import { listMoneyPages } from '@/lib/seo/cambios/dinero';
 import { listChanges } from '@/lib/seo/cambios/registro';
 import { getVigilanciaView } from '@/lib/seo/vigilancia/view';
-import { listProjectInterventions } from '@/lib/core/interventions';
 import { SEO_KINDS } from '@/lib/seo/salud/kinds';
 
 const KIND_TITLE = new Map(SEO_KINDS.map((k) => [k.kind, k.title]));
@@ -46,18 +45,25 @@ export default async function ResumenPage({ params }: { params: Promise<{ projec
   if (!/^[0-9a-f-]{36}$/i.test(projectId)) notFound();
   const [p] = await db.select({ id: projects.id, name: projects.name, clientName: clients.name }).from(projects).leftJoin(clients, eq(clients.id, projects.clientId)).where(and(eq(projects.id, projectId), eq(projects.tenantId, user.tenantId))).limit(1);
   if (!p) notFound();
-  const safe = <T,>(x: Promise<T>, fallback: T) => x.catch(() => fallback);
+  // Un bloque que falla no tumba el resumen: se registra y la tarjeta dice «no disponible» (no un estado vacío falso).
+  const failed = new Set<string>();
+  const safe = <T,>(x: Promise<T>, fallback: T, name = '') =>
+    x.catch((e) => {
+      console.error(`[seo] resumen ${name}:`, e instanceof Error ? e.message : e);
+      if (name) failed.add(name);
+      return fallback;
+    });
   const [ready, sched, pos, local, grid, money, changes, vig, ints, open, planItems] = await Promise.all([
     safe(projectReadiness(user.tenantId, projectId), null),
-    safe(planSchedule(user.tenantId, projectId), null),
-    safe(getPositionsView(user.tenantId, projectId), null),
+    safe(planSchedule(user.tenantId, projectId), null, 'plan'),
+    safe(getPositionsView(user.tenantId, projectId), null, 'posiciones'),
     safe(getLocalView(user.tenantId, projectId), null),
     safe(getGeogridView(user.tenantId, projectId), null),
     safe(listMoneyPages(user.tenantId, projectId), []),
     safe(listChanges(user.tenantId, projectId), []),
     safe(getVigilanciaView(user.tenantId, projectId), null),
-    safe(listProjectInterventions(user.tenantId, projectId, 300), []),
-    db.select({ kind: findings.kind, severity: findings.severity }).from(findings).where(and(eq(findings.projectId, projectId), eq(findings.tenantId, user.tenantId), eq(findings.status, 'abierto'), inArray(findings.severity, ['critico', 'importante']))),
+    safe(db.select({ domain: interventions.domain, status: interventions.status, outcome: interventions.outcome }).from(interventions).where(and(eq(interventions.projectId, projectId), eq(interventions.tenantId, user.tenantId), eq(interventions.domain, 'seo'), eq(interventions.status, 'hecha'))), [], 'resultados'),
+    safe(db.select({ kind: findings.kind, severity: findings.severity }).from(findings).where(and(eq(findings.projectId, projectId), eq(findings.tenantId, user.tenantId), eq(findings.status, 'abierto'), inArray(findings.severity, ['critico', 'importante']))), [], 'hallazgos'),
     safe(listPlanItems(user.tenantId, projectId), [])
   ]);
   const base = `/dashboard/projects/${projectId}`;
@@ -70,7 +76,7 @@ export default async function ResumenPage({ params }: { params: Promise<{ projec
   const monthIds = new Set((sched?.items ?? []).filter((i) => i.month === 0).map((i) => i.id));
   const thisMonth = planItems.filter((i) => i.status === 'pendiente' && monthIds.has(i.id));
   // Resultados.
-  const done = ints.filter((i) => i.domain === 'seo' && i.status === 'hecha');
+  const done = ints;
   const verdict = (i: (typeof ints)[number]) => ((i.outcome ?? {}) as { verdict?: string }).verdict;
   const worked = done.filter((i) => verdict(i) === 'funciono').length;
   const measured = done.filter((i) => verdict(i) && verdict(i) !== 'no_medible').length;
@@ -101,7 +107,9 @@ export default async function ResumenPage({ params }: { params: Promise<{ projec
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <Card title="Lo urgente" icon={AlertTriangle} href={`${base}/salud`} cta="Ver los problemas">
-          {urgent.length ? (
+          {failed.has('hallazgos') ? (
+            <p className="text-muted-foreground">No disponible ahora mismo.</p>
+          ) : urgent.length ? (
             <>
               <p className="mb-2">
                 {crit ? <Badge tone="danger">{crit} crítico{crit === 1 ? '' : 's'}</Badge> : null} <Badge tone="warning">{open.length - crit} importante{open.length - crit === 1 ? '' : 's'}</Badge>
@@ -120,7 +128,9 @@ export default async function ResumenPage({ params }: { params: Promise<{ projec
         </Card>
 
         <Card title="Este mes" icon={CalendarCheck} href={`${base}/plan`} cta="Abrir el plan">
-          {thisMonth.length ? (
+          {failed.has('plan') ? (
+            <p className="text-muted-foreground">No disponible ahora mismo.</p>
+          ) : thisMonth.length ? (
             <>
               <p className="mb-2 text-muted-foreground">
                 {thisMonth.length} propuesta{thisMonth.length === 1 ? '' : 's'} · {Math.round(thisMonth.reduce((s, i) => s + Number(i.estHours), 0) * 10) / 10} h
@@ -139,7 +149,9 @@ export default async function ResumenPage({ params }: { params: Promise<{ projec
         </Card>
 
         <Card title="En Google" icon={TrendingUp} href={`${base}/posiciones`} cta="Ver posiciones">
-          {pos && pos.summary.tracked ? (
+          {failed.has('posiciones') ? (
+            <p className="text-muted-foreground">No disponible ahora mismo.</p>
+          ) : pos && pos.summary.tracked ? (
             <ul className="space-y-1">
               <li>
                 <strong>{pos.summary.top3}</strong> en el top 3 y <strong>{pos.summary.top10}</strong> en el top 10, de {pos.summary.tracked} búsquedas seguidas
@@ -207,7 +219,9 @@ export default async function ResumenPage({ params }: { params: Promise<{ projec
         </Card>
 
         <Card title="Qué ha funcionado" icon={Trophy} href={`${base}/plan?vista=resultados`} cta="Ver resultados">
-          {done.length ? (
+          {failed.has('resultados') ? (
+            <p className="text-muted-foreground">No disponible ahora mismo.</p>
+          ) : done.length ? (
             <p>
               {done.length} encargo{done.length === 1 ? '' : 's'} hecho{done.length === 1 ? '' : 's'} · {measured} medido{measured === 1 ? '' : 's'} · <strong>{worked}</strong> funcionaron
             </p>
