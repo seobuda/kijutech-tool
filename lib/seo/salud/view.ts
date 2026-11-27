@@ -136,7 +136,7 @@ export async function getSaludView(tenantId: string, projectId: string, override
 
   let tech: SaludView['tech'] = null;
   if (crawl?.status === 'hecho') {
-    const rows = await db.select({ facts: crawlPages.facts }).from(crawlPages).where(eq(crawlPages.runId, crawl.id)).limit(500);
+    const rows = await db.select({ facts: crawlPages.facts }).from(crawlPages).where(eq(crawlPages.runId, crawl.id));
     const t = detectTech(rows);
     if (t.cms || t.seoPlugins.length) tech = { ...t, seoPluginLabels: t.seoPlugins.map((s) => SEO_PLUGIN_LABEL[s] ?? s) };
   }

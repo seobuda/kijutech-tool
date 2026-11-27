@@ -56,7 +56,8 @@ export function soft404Site(rootUrl: string, probes: ProbeResult[]): FindingInpu
 
 // --- Restos de staging --------------------------------------------------------------------------------------------------
 
-const STAGING_HOSTS = /(^|\.)(localhost|127\.0\.0\.1|0\.0\.0\.0)$|\.local$|\.test$|\.(wpengine|wpenginepowered)\.com$|\.kinsta\.cloud$|\.wpcomstaging\.com$|\.cloudwaysapps\.com$|\.flywheelstaging\.com$|\.flywheelsites\.com$|\.pantheonsite\.io$|\.instawp\.xyz$|\.sg-host\.com$|\.hostingersite\.com$|\.myftpupload\.com$/;
+const LOCAL_HOSTS = /(^|\.)(localhost|127\.0\.0\.1|0\.0\.0\.0)$|\.local$|\.test$/;
+const STAGING_HOSTS = /\.(wpengine|wpenginepowered)\.com$|\.kinsta\.cloud$|\.wpcomstaging\.com$|\.cloudwaysapps\.com$|\.flywheelstaging\.com$|\.flywheelsites\.com$|\.pantheonsite\.io$|\.instawp\.xyz$|\.sg-host\.com$|\.hostingersite\.com$|\.myftpupload\.com$/;
 const STAGING_SUB = /^(staging\d*|stage|dev|test|pre|preprod|demo|beta)\./;
 const STAGING_DIR = /^\/(staging|wp-staging|stagingsite)\//;
 
@@ -64,7 +65,9 @@ const STAGING_DIR = /^\/(staging|wp-staging|stagingsite)\//;
 export function isStagingUrl(url: string, rootUrl: string): boolean {
   const h = hostOf(url);
   if (!h) return false;
-  if (STAGING_HOSTS.test(h)) return true;
+  // Hosting temporal: hace falta un subdominio propio (no la web del proveedor, p. ej. www.wpengine.com).
+  if (STAGING_HOSTS.test(h) && !/^www\./.test(h) && h.split('.').length >= 3) return true;
+  if (LOCAL_HOSTS.test(h)) return true;
   const root = hostOf(rootUrl).replace(/^www\./, '');
   if (root && STAGING_SUB.test(h) && h.endsWith(`.${root}`)) return true;
   if (root && h.replace(/^www\./, '') === root && STAGING_DIR.test(pathOf(url))) return true;
@@ -96,7 +99,7 @@ export function stagingLeftovers(rootUrl: string, pages: TecnicoPage[]): Finding
 // --- Nofollow interno ---------------------------------------------------------------------------------------------------
 
 /** Páginas a las que es normal (y en España, habitual) enlazar con nofollow: legales, cookies, carrito, cuenta, acceso. */
-const NOFOLLOW_OK = /(aviso-legal|avis-legal|legal|privacidad|privacitat|privadesa|privacy|cookies?|galetes|politica|condiciones|condicions|terminos|terms|carrito|cistella|cart|checkout|finalizar-compra|cuenta|compte|my-account|mi-cuenta|login|wp-login|wp-admin|acceder|registro|feed)/i;
+const NOFOLLOW_OK = /(^|\/)(aviso-legal|avis-legal|legal|nota-legal|privacidad|politica-de-privacidad|privacitat|privadesa|privacy|privacy-policy|cookies?|politica-de-cookies|galetes|condiciones|condicions|terminos|terms|carrito|cistella|cart|checkout|finalizar-compra|cuenta|mi-cuenta|compte|my-account|login|wp-login\.php|wp-admin|acceder|registro|feed)(\/|$)/i;
 
 /** Enlaces internos con nofollow hacia páginas indexables (sin las legales, carrito ni cuenta). Un hallazgo por rastreo. */
 export function internalNofollow(pages: AuditPage[], nofollowIn: Map<string, number>, isIndexable: (p: AuditPage) => boolean): FindingInput[] {
@@ -137,7 +140,7 @@ export function detectTech(pages: Pick<TecnicoPage, 'facts'>[]): Tech {
   const res = pages.flatMap((p) => p.facts?.res ?? []);
   const gens = pages.map((p) => p.facts?.gen).filter((g): g is string => Boolean(g));
   const sigs = new Set(pages.flatMap((p) => p.facts?.sig ?? []));
-  const gen = gens[0] ?? '';
+  const gen = gens.find((g) => /wordpress|joomla|drupal|prestashop|wix|shopify|squarespace|webflow/i.test(g)) ?? gens[0] ?? '';
   const has = (re: RegExp) => res.some((u) => re.test(u)) || re.test(gen);
   let cms: string | null = null;
   if (/wordpress/i.test(gen) || has(/\/wp-(content|includes)\//i)) cms = 'WordPress';
@@ -148,7 +151,8 @@ export function detectTech(pages: Pick<TecnicoPage, 'facts'>[]): Tech {
   else if (/joomla/i.test(gen) || has(/\/media\/(jui|system)\//i)) cms = 'Joomla';
   else if (/prestashop/i.test(gen) || has(/prestashop|\/themes\/[^/]+\/assets\/cache\//i)) cms = 'PrestaShop';
   else if (/drupal/i.test(gen) || has(/\/sites\/(default|all)\/(files|modules|themes)\//i)) cms = 'Drupal';
-  const version = gen.match(/(\d+\.\d+(\.\d+)?)/)?.[1] ?? null;
+  // La versión solo si el generator es del propio CMS (un «Elementor 3.18» no es la versión de WordPress).
+  const version = cms && gen.toLowerCase().includes(cms.toLowerCase()) ? (gen.match(/(\d+\.\d+(\.\d+)?)/)?.[1] ?? null) : null;
   const slugs = (re: RegExp) => [...new Set(res.map((u) => u.match(re)?.[1]?.toLowerCase()).filter((x): x is string => Boolean(x)))];
   const plugins = cms === 'WordPress' ? slugs(/\/wp-content\/plugins\/([a-z0-9_-]+)\//i).slice(0, 40) : [];
   const theme = cms === 'WordPress' ? (slugs(/\/wp-content\/themes\/([a-z0-9_-]+)\//i)[0] ?? null) : null;

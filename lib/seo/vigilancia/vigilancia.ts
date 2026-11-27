@@ -275,6 +275,7 @@ export async function runDetectores(tenantId: string, projectId: string): Promis
   const parts: string[] = [];
   const prop = await mainProperty(tenantId, projectId);
   const found: Parameters<typeof syncFindings>[3] = [];
+  let hackFound = 0;
   if (prop?.lastDate) {
     // El mapa de palabras trae al alcance, CTR bajo, canibalización y temas sin página: se rehace (trabajo propio).
     await enqueueKeywordMap(tenantId, projectId);
@@ -308,11 +309,12 @@ export async function runDetectores(tenantId: string, projectId: string): Promis
     // Parte 6: señales de web hackeada (fuente propia; un fallo aquí no tumba el resto de detectores).
     const h = await runHackeo(tenantId, projectId, prop).catch((e) => {
       console.error('[seo] detectores: hackeo:', e instanceof Error ? e.message : e);
-      return 'señales de hackeo: no se pudo mirar';
+      return { text: 'señales de hackeo: no se pudo mirar', found: 0 };
     });
-    if (h) parts.push(h);
+    if (h) parts.push(h.text);
+    hackFound = h?.found ?? 0;
   } else parts.push('sin Search Console asignado o sin datos descargados');
-  return { status: found.length ? 'aviso' : 'ok', summary: parts.join(' · ') };
+  return { status: found.length || hackFound ? 'aviso' : 'ok', summary: parts.join(' · ') };
 }
 
 // --- Alta de los procesos de cada proyecto ----------------------------------------------------------------------------

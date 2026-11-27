@@ -67,6 +67,7 @@ describe('staging', () => {
     expect(isStagingUrl('https://misitio.kinsta.cloud/', 'https://w.es/')).toBe(true);
     expect(isStagingUrl('https://staging.otra.es/', 'https://w.es/')).toBe(false);
     expect(isStagingUrl('https://www.w.es/servicios', 'https://w.es/')).toBe(false);
+    expect(isStagingUrl('https://www.wpengine.com/blog', 'https://w.es/')).toBe(false);
   });
   it('mira enlaces, recursos, canonical y JSON-LD', () => {
     const f = stagingLeftovers('https://w.es/', [
@@ -80,15 +81,16 @@ describe('staging', () => {
 
 describe('nofollow interno', () => {
   it('cuenta páginas indexables, no las legales', () => {
-    const pages = [page('https://w.es/servicios'), page('https://w.es/aviso-legal'), page('https://w.es/x', { robotsMeta: 'noindex' })];
+    const pages = [page('https://w.es/servicios'), page('https://w.es/aviso-legal'), page('https://w.es/x', { robotsMeta: 'noindex' }), page('https://w.es/asesoria-legal-empresas')];
     const m = new Map([
       ['https://w.es/servicios', 3],
       ['https://w.es/aviso-legal', 20],
-      ['https://w.es/x', 2]
+      ['https://w.es/x', 2],
+      ['https://w.es/asesoria-legal-empresas', 1]
     ]);
     const f = internalNofollow(pages, m, isIndexable);
     expect(f).toHaveLength(1);
-    expect(f[0].value).toBe(1);
+    expect(f[0].value).toBe(2);
   });
 });
 
@@ -109,6 +111,7 @@ describe('tecnología y plugins de SEO', () => {
     ]);
     expect(t.cms).toBe('WordPress');
     expect(t.version).toBe('6.6');
+    expect(detectTech([{ facts: { gen: 'Elementor 3.18', res: ['https://w.es/wp-content/plugins/elementor/a.js'] } }]).version).toBeNull();
     expect(t.theme).toBe('astra');
     expect(t.plugins).toContain('elementor');
     expect(t.seoPlugins).toEqual(['rankmath', 'yoast']);
@@ -137,6 +140,8 @@ describe('hackeo', () => {
     expect(hackedQueries(qs, es, known)[0].severity).toBe('aviso');
     expect(hackedQueries(qs, es, new Set())[0].severity).toBe('critico');
     expect(hackedQueries(qs.slice(0, 2), es, known)).toHaveLength(0);
+    // Sin rastreo completo no se sabe qué es ajeno: aviso.
+    expect(hackedQueries(qs, es, null)[0].severity).toBe('aviso');
   });
   it('páginas basura: hacen falta 2', () => {
     expect(hackedPages([{ url: 'https://w.es/cialis-online' }], es)).toHaveLength(0);
