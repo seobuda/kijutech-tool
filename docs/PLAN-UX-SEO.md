@@ -1,7 +1,7 @@
 # Plan de UX/UI del módulo SEO
 
 **Fecha:** 2026-11-27. **Origen:** Enric pidió revisar la estructura, la UX, la arquitectura, el diseño y los gráficos de SE Ranking, Semrush y Ahrefs (con las cuentas de la agencia abiertas en Chrome) y, con eso, mejorar el módulo SEO.
-**Estado:** propuesta **v2** (27 nov, tras la revisión independiente de Fable 5.2, §9). No se construye nada hasta que Enric la apruebe.
+**Estado:** **v2 aprobada por Enric** el 27 nov (tras la revisión independiente de Fable 5.2, §9). Fases 0 y 1 hechas el 27 nov (ESTADO §6.67). Portal del cliente y «explicado para el cliente», aparcados por Enric.
 
 ## 1. Lo que se vio en las tres herramientas
 

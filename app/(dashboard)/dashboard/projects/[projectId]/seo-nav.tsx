@@ -78,7 +78,7 @@ export async function ProjectSeoNav({ projectId, active }: { projectId: string; 
           Expediente y puesta en marcha
         </Link>
       </div>
-      <nav aria-label="Secciones del proyecto" className="flex gap-1 overflow-x-auto border-b">
+      <nav aria-label="Secciones del proyecto" className="flex gap-1 overflow-x-auto overflow-y-hidden border-b">
         {GROUPS.map((g) => (
           <Link
             key={g.key}
