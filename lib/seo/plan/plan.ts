@@ -339,19 +339,28 @@ export async function planSchedule(tenantId: string, projectId: string): Promise
   if (!project) throw new PlanError('Proyecto no encontrado');
   const items = await listPlanItems(tenantId, projectId);
   const start = monthStartMadrid();
-  const usedThisMonth = items.filter((i) => (i.status === 'aprobada' || i.status === 'hecha') && i.decidedAt && i.decidedAt >= start).reduce((a, i) => a + Number(i.estHours), 0);
+  const ws = workSource();
+  const refs = items.filter((i) => i.requestRef && (i.status === 'aprobada' || i.status === 'hecha')).map((i) => i.requestRef!);
+  const st = refs.length && ws?.requestStatus ? await ws.requestStatus(tenantId, refs).catch(() => []) : [];
+  const byRef = new Map(st.map((x) => [x.ref, x]));
+  // Atasco 3 de la simulación (27 nov 2026): lo consumido es el máximo entre lo estimado y lo fichado de verdad, y un
+  // encargo cancelado (borrado) no consume nada.
+  const usedThisMonth = items
+    .filter((i) => (i.status === 'aprobada' || i.status === 'hecha') && i.decidedAt && i.decidedAt >= start)
+    .reduce((a, i) => {
+      const s2 = i.requestRef ? byRef.get(i.requestRef) : undefined;
+      if (s2?.cancelled) return a;
+      return a + Math.max(Number(i.estHours), (s2?.spentMinutes ?? 0) / 60);
+    }, 0);
   const pending = items.filter((i) => i.status === 'pendiente');
   const sched = scheduleMonths(
     pending.map((i) => ({ id: i.id, estHours: Number(i.estHours), priority: i.priority, severity: (i.evidence as { severity?: string }).severity ?? null })),
     project.monthlyHours != null ? Number(project.monthlyHours) : null,
     usedThisMonth
   );
-  const ws = workSource();
   const options = project.clientId && ws?.taskOptions ? await ws.taskOptions(tenantId, project.clientId, 'seo').catch(() => null) : null;
   const days = options?.defaults.dueDays ?? 7;
   const due = new Date(Date.now() + Math.max(1, days) * 86_400_000);
-  const refs = items.filter((i) => i.requestRef && (i.status === 'aprobada' || i.status === 'hecha')).map((i) => i.requestRef!);
-  const st = refs.length && ws?.requestStatus ? await ws.requestStatus(tenantId, refs).catch(() => []) : [];
   return {
     monthlyHours: project.monthlyHours != null ? Number(project.monthlyHours) : null,
     usedThisMonth: Math.round(usedThisMonth * 10) / 10,

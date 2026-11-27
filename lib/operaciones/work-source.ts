@@ -22,6 +22,8 @@ import { getStructure, selectedSpaces, validClient } from '@/lib/operaciones/str
 import { syncToClickUp } from '@/lib/operaciones/sync';
 import { escapeHtml } from '@/lib/operaciones/telegram';
 import { getWorkTypes, validWorkTypeKey } from '@/lib/operaciones/work-types';
+import { taskExists } from '@/lib/operaciones/clickup';
+import { getClickUpToken } from '@/lib/operaciones/queries';
 
 /** Callback de los botones de una pregunta sobre un encargo: mq:w:<tipo>:<encargo> (escribir) y mq:n:… (no aplica). */
 export const TASK_QUESTION_CALLBACK_RE = /^mq:(w|n):([a-z]{2,10}):([0-9a-f-]{36})$/;
@@ -309,16 +311,75 @@ async function createChosenTask(
   };
 }
 
-/** Estado de varios encargos (registro de intervenciones del núcleo). Operaciones no tiene «cancelado»: un encargo
- * borrado simplemente no aparece. */
-async function requestStatus(tenantId: string, refs: string[]): Promise<RequestStatus[]> {
+/** Estado de varios encargos (registro de intervenciones del núcleo). Operaciones no tiene «cancelado»; desde el 27 nov
+ * (atasco 12 de la simulación SEO) se da por cancelado:
+ * - el encargo que ya no existe en Operaciones (se borró), y
+ * - el que sigue abierto pero cuya tarea de ClickUp ya no existe. No hay webhook ni la consulta agrupada devuelve las
+ *   borradas, así que se pregunta tarea a tarea, solo por las abiertas sin cambios desde hace 14 días, como mucho
+ *   DELETED_CHECKS_PER_CALL por llamada (la llamada es horaria) y recordando la respuesta 3 días (regla de ClickUp). */
+const DELETED_CHECKS_PER_CALL = 8;
+const DELETED_STALE_DAYS = 14;
+const EXISTS_TTL_MS = 3 * 86_400_000;
+const G_EXISTS = globalThis as unknown as { __kijuTaskExists?: Map<string, { exists: boolean; at: number }> };
+const existsCache = () => (G_EXISTS.__kijuTaskExists ??= new Map());
+
+async function deletedInClickUp(tenantId: string, rows: { taskId: string | null; workStatus: string; at: Date }[], ask: boolean): Promise<Set<string>> {
+  const cache = existsCache();
+  const now = Date.now();
+  const gone = new Set<string>();
+  const toCheck: string[] = [];
+  for (const r of rows) {
+    if (!r.taskId || r.workStatus === 'completado') continue;
+    const hit = cache.get(r.taskId);
+    if (hit && now - hit.at < EXISTS_TTL_MS) {
+      if (!hit.exists) gone.add(r.taskId);
+      continue;
+    }
+    if (now - r.at.getTime() >= DELETED_STALE_DAYS * 86_400_000) toCheck.push(r.taskId);
+  }
+  if (!toCheck.length || !ask) return gone;
+  const conn = await getClickUpToken(tenantId).catch(() => null);
+  if (!conn) return gone;
+  for (const id of toCheck.slice(0, DELETED_CHECKS_PER_CALL)) {
+    try {
+      const exists = await taskExists(conn.token, id);
+      cache.set(id, { exists, at: now });
+      if (!exists) gone.add(id);
+    } catch (e) {
+      // Un fallo pasajero no cancela nada: se vuelve a preguntar en la siguiente pasada.
+      console.error('[operaciones] ¿existe la tarea?', id, e instanceof Error ? e.message : e);
+      break;
+    }
+  }
+  return gone;
+}
+
+async function requestStatus(tenantId: string, refs: string[], opts?: { checkDeleted?: boolean }): Promise<RequestStatus[]> {
   const ids = [...new Set(refs.filter((r) => /^[0-9a-f-]{36}$/i.test(r)))].slice(0, 500);
   if (!ids.length) return [];
   const rows = await db
-    .select({ id: opsRequests.id, workStatus: opsRequests.workStatus, at: opsRequests.workStatusAt, assigneeName: opsRequests.assigneeName, dueDate: opsRequests.dueDate })
+    .select({ id: opsRequests.id, workStatus: opsRequests.workStatus, at: opsRequests.workStatusAt, assigneeName: opsRequests.assigneeName, dueDate: opsRequests.dueDate, taskId: opsRequests.clickupTaskId })
     .from(opsRequests)
     .where(and(eq(opsRequests.tenantId, tenantId), inArray(opsRequests.id, ids)));
-  return rows.map((r) => ({ ref: r.id, doneAt: r.workStatus === 'completado' ? r.at.toISOString() : null, cancelled: false, status: r.workStatus, assigneeName: r.assigneeName, dueDate: r.dueDate ? String(r.dueDate).slice(0, 10) : null }));
+  const gone = await deletedInClickUp(tenantId, rows, Boolean(opts?.checkDeleted)).catch(() => new Set<string>());
+  // Minutos reales fichados por encargo (atasco 3: el plan SEO consume el máximo entre lo estimado y lo real).
+  const spentRows = rows.length
+    ? await db
+        .select({ id: opsTaskTimes.requestId, m: sql<number>`coalesce(sum(${opsTaskTimes.workedMinutes}), 0)::int` })
+        .from(opsTaskTimes)
+        .where(and(eq(opsTaskTimes.tenantId, tenantId), isNull(opsTaskTimes.voidedAt), inArray(opsTaskTimes.requestId, rows.map((r) => r.id))))
+        .groupBy(opsTaskTimes.requestId)
+    : [];
+  const spent = new Map(spentRows.map((r) => [r.id, Number(r.m) || 0]));
+  const found = new Set(rows.map((r) => r.id));
+  const missing: RequestStatus[] = ids.filter((id) => !found.has(id)).map((id) => ({ ref: id, doneAt: null, cancelled: true, status: 'borrado', assigneeName: null, dueDate: null }));
+  return [
+    ...rows.map((r) => {
+      const deleted = Boolean(r.taskId && gone.has(r.taskId));
+      return { ref: r.id, doneAt: r.workStatus === 'completado' ? r.at.toISOString() : null, cancelled: deleted, status: deleted ? 'borrado en ClickUp' : r.workStatus, assigneeName: r.assigneeName, dueDate: r.dueDate ? String(r.dueDate).slice(0, 10) : null, spentMinutes: spent.get(r.id) ?? null };
+    }),
+    ...missing
+  ];
 }
 
 export const OPS_WORK_SOURCE: WorkSource = { completedSince, clientCompleted, workload, askAboutTask, clientOpen, effortByType, workTypes, createTask, taskOptions, requestStatus };

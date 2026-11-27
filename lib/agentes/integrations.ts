@@ -139,13 +139,14 @@ export async function testDataForSeo(creds: Record<string, string>): Promise<{ o
   }
 }
 
-export async function dataForSeoSerp(tenantId: string, keyword: string, location: string, language: string, depth: number): Promise<string> {
+export async function dataForSeoSerp(tenantId: string, keyword: string, location: string, language: string, depth: number, onCost?: (usd: number) => Promise<void>): Promise<string> {
   const creds = readCredentials(await getIntegration(tenantId, 'dataforseo'));
   type Item = { type: string; rank_absolute: number; title?: string; url?: string; domain?: string };
   const r = await dfs<{ cost?: number; tasks?: { result?: { items?: Item[]; se_results_count?: number }[] }[] }>(creds, '/serp/google/organic/live/advanced', [
     { keyword, location_name: location, language_code: language, depth }
   ]);
   const items = (r.tasks?.[0]?.result?.[0]?.items ?? []).filter((i) => i.type === 'organic').slice(0, depth);
+  if (onCost && typeof r.cost === 'number' && r.cost > 0) await onCost(r.cost).catch(() => undefined);
   await markIntegration(tenantId, 'dataforseo', true);
   return [`SERP de «${keyword}» (${location}, ${language}) · coste ${r.cost ?? '?'} $`, ...items.map((i) => `${i.rank_absolute}. ${i.domain ?? ''} — ${i.title ?? ''} ${i.url ?? ''}`)].join('\n');
 }
@@ -397,10 +398,11 @@ export async function dataForSeoBusinessInfo(tenantId: string, q: { keyword: str
   return { info: normalizeBusinessInfo(t?.result?.[0]?.items?.[0]), costUsd: cost };
 }
 
-export async function dataForSeoVolume(tenantId: string, keywords: string[], location: string, language: string): Promise<string> {
+export async function dataForSeoVolume(tenantId: string, keywords: string[], location: string, language: string, onCost?: (usd: number) => Promise<void>): Promise<string> {
   const creds = readCredentials(await getIntegration(tenantId, 'dataforseo'));
   type Res = { keyword: string; search_volume: number | null; competition: string | null; cpc: number | null };
   const r = await dfs<{ cost?: number; tasks?: { result?: Res[] }[] }>(creds, '/keywords_data/google_ads/search_volume/live', [{ keywords: keywords.slice(0, 100), location_name: location, language_code: language }]);
+  if (onCost && typeof r.cost === 'number' && r.cost > 0) await onCost(r.cost).catch(() => undefined);
   const rows = r.tasks?.[0]?.result ?? [];
   await markIntegration(tenantId, 'dataforseo', true);
   return [`Volúmenes (${location}, ${language}) · coste ${r.cost ?? '?'} $`, ...rows.map((x) => `- ${x.keyword}: ${x.search_volume ?? '—'} búsquedas/mes · competencia ${x.competition ?? '—'} · CPC ${x.cpc ?? '—'}`)].join('\n');

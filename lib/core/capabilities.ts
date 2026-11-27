@@ -433,7 +433,9 @@ export type WorkSource = {
    * pregunta cada hora para poner la fecha de «hecho» sin que la fuente de trabajo tenga que avisar (sirve igual con
    * ClickUp o con la herramienta propia que lo sustituya). Las referencias que no conoce no aparecen en la respuesta.
    */
-  requestStatus?: (tenantId: string, refs: string[]) => Promise<RequestStatus[]>;
+  /** `checkDeleted`: preguntar a la herramienta externa si las tareas abiertas siguen existiendo (solo el proceso horario;
+   * una pantalla nunca, para no llamar a ClickUp al pintarse). */
+  requestStatus?: (tenantId: string, refs: string[], opts?: { checkDeleted?: boolean }) => Promise<RequestStatus[]>;
 };
 export type OpenWorkItem = { ref: string; title: string; workType: string | null; status: string; dueDate: string | null };
 export type NewTaskInput = {
@@ -460,7 +462,7 @@ export type TaskOptions = {
   defaults: { listId: string | null; assigneeId: string | null; dueDays: number | null };
 };
 /** Estado de un encargo: hecho o no, y (si la fuente lo sabe) su estado, responsable y fecha. */
-export type RequestStatus = { ref: string; doneAt: string | null; cancelled: boolean; status?: string | null; assigneeName?: string | null; dueDate?: string | null };
+export type RequestStatus = { ref: string; doneAt: string | null; cancelled: boolean; status?: string | null; assigneeName?: string | null; dueDate?: string | null; /** Minutos reales fichados en el encargo (si la fuente los conoce). */ spentMinutes?: number | null };
 export function registerWorkSource(w: WorkSource): void {
   GK.__kijuWorkSource = w;
 }

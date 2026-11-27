@@ -603,6 +603,17 @@ export async function getTaskContext(token: string, taskId: string): Promise<Tas
   };
 }
 
+/** ¿Sigue existiendo la tarea? (atasco 12 de la simulación SEO, 27 nov 2026). 1 petición. Solo «no existe» cuando ClickUp
+ * responde 404 o «Task not found»; cualquier otro error (red, 401, 429) lanza, para no cancelar nada por un fallo pasajero. */
+export async function taskExists(token: string, taskId: string): Promise<boolean> {
+  const res = await cuFetch(`${BASE_URL}/task/${encodeURIComponent(taskId)}`, { headers: { Authorization: token }, cache: 'no-store' });
+  if (res.ok) return true;
+  if (res.status === 404) return false;
+  const err = await errorFrom(res);
+  if (/ITEM_013|not found/i.test(err.message)) return false;
+  throw err;
+}
+
 // Estados de una lista concreta (algunas listas no traen "statuses" en la consulta del espacio): 1 petición.
 export async function getListStatuses(token: string, listId: string): Promise<ClickUpStatus[]> {
   const list = await cu<{ statuses?: { status: string; type: string }[] }>(token, `/list/${listId}`);

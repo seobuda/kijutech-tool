@@ -7,7 +7,7 @@ import 'server-only';
 import { registerAssetDirectory, registerMetricSource, registerRetention, registerSerpSource, registerSpeedSource, registerBusinessSource, registerScheduled, registerTools, setAgentJobCreator, setInboundHandler, type AgentTool, type ToolContext } from '@/lib/core/capabilities';
 import { and, eq, lt } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { agtMessages } from '@/lib/db/schema';
+import { agtMessages, aiJobs } from '@/lib/db/schema';
 import { GOOGLE_METRIC_SOURCE, normalizeGoogleProperty } from '@/lib/agentes/metrics';
 import { findCoreClient, primaryAsset } from '@/lib/core/clients';
 import { handleInbound } from '@/lib/agentes/inbound';
@@ -85,6 +85,12 @@ const withClient = (ctx: ToolContext, kind: AssetKindG, explicit: string, client
     return `${r.who}${await fn(r.id)}`;
   });
 
+// Atasco 14 de la simulación SEO (27 nov 2026): lo que el agente gasta en DataForSEO cuenta en su presupuesto mensual
+// (agentMonthSpend suma ai_jobs con la función agt_<clave>), igual que la transcripción de audio.
+const toolSpend = (ctx: ToolContext, tool: string) => async (usd: number) => {
+  await db.insert(aiJobs).values({ tenantId: ctx.tenantId, function: `agt_${ctx.agentKey}`.slice(0, 50), status: 'completed', provider: 'dataforseo', model: tool.slice(0, 100), input: { tool }, estimatedCost: usd.toFixed(6), completedAt: new Date() });
+};
+
 export const INTEGRATION_TOOLS: AgentTool[] = [
   {
     name: 'seo_serp_google',
@@ -94,7 +100,7 @@ export const INTEGRATION_TOOLS: AgentTool[] = [
     risk: 'lectura',
     inputSchema: { type: 'object', properties: { keyword: { type: 'string' }, ubicacion: { type: 'string', description: 'Por defecto Spain' }, idioma: { type: 'string', description: 'Código, por defecto es' }, profundidad: { type: 'number', description: '10 a 100' } }, required: ['keyword'], additionalProperties: false },
     available: (t) => isConnected(t, 'dataforseo'),
-    run: (ctx, i) => guard(() => dataForSeoSerp(ctx.tenantId, s(i.keyword, 200), s(i.ubicacion, 80) || 'Spain', s(i.idioma, 5) || 'es', n(i.profundidad, 10, 10, 100)))
+    run: (ctx, i) => guard(() => dataForSeoSerp(ctx.tenantId, s(i.keyword, 200), s(i.ubicacion, 80) || 'Spain', s(i.idioma, 5) || 'es', n(i.profundidad, 10, 10, 100), toolSpend(ctx, 'seo_serp_google')))
   },
   {
     name: 'seo_volumen_keywords',
@@ -104,7 +110,7 @@ export const INTEGRATION_TOOLS: AgentTool[] = [
     risk: 'lectura',
     inputSchema: { type: 'object', properties: { keywords: { type: 'array', items: { type: 'string' } }, ubicacion: { type: 'string' }, idioma: { type: 'string' } }, required: ['keywords'], additionalProperties: false },
     available: (t) => isConnected(t, 'dataforseo'),
-    run: (ctx, i) => guard(() => dataForSeoVolume(ctx.tenantId, (Array.isArray(i.keywords) ? i.keywords : []).map((k) => s(k, 120)).filter(Boolean), s(i.ubicacion, 80) || 'Spain', s(i.idioma, 5) || 'es'))
+    run: (ctx, i) => guard(() => dataForSeoVolume(ctx.tenantId, (Array.isArray(i.keywords) ? i.keywords : []).map((k) => s(k, 120)).filter(Boolean), s(i.ubicacion, 80) || 'Spain', s(i.idioma, 5) || 'es', toolSpend(ctx, 'seo_volumen_keywords')))
   },
   {
     name: 'clarity_resumen',
