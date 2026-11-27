@@ -20,7 +20,7 @@ import { projectWebUrl } from '@/lib/seo/salud/audit';
 import { brandTokens, host, isBrandQuery, normText } from '@/lib/seo/expediente/rules';
 import { missingZonePages } from '@/lib/seo/local/citas-zonas-rules';
 import { canSpend, recordDataSpend } from '@/lib/seo/gasto';
-import { buildSeed, isImportant, keywordLanguage, kwKey, lostLocalPackState, MAX_KEYWORDS, pickLocation, rankDropState, readSerp, zoneTowns, type HistoryPoint } from '@/lib/seo/posiciones/rules';
+import { buildSeed, isImportant, keywordLanguage, kwKey, lostLocalPackState, MAX_KEYWORDS, keywordLocation, pickLocation, rankDropState, readSerp, zoneTowns, type HistoryPoint } from '@/lib/seo/posiciones/rules';
 
 export const POSICIONES_SOURCE = 'seo.posiciones:serp';
 const COLLECT = 'seo.posiciones.recoger';
@@ -155,9 +155,12 @@ export async function runPositions(tenantId: string, projectId: string, heartbea
   const kws = await db.select().from(seoRankKeywords).where(and(eq(seoRankKeywords.projectId, projectId), eq(seoRankKeywords.status, 'activa')));
   if (!kws.length) return { status: 'omitido', summary: 'Aún no hay búsquedas que seguir (hace falta Search Console con datos, o servicios y zona confirmados en el Expediente).' };
   const runId = randomUUID();
+  // Cada búsqueda desde su población si la nombra (si no, desde la del proyecto).
+  const towns = zoneTowns(facts.zona);
+  const locList = towns.length ? ((await serpSource()?.locations?.(tenantId, 'es').catch(() => [])) ?? []) : [];
   await db
     .insert(seoRankChecks)
-    .values(kws.map((k) => ({ tenantId, projectId, keywordId: k.id, runId, status: 'pendiente', locationName: loc.name, language: k.language, device: k.device })))
+    .values(kws.map((k) => ({ tenantId, projectId, keywordId: k.id, runId, status: 'pendiente', locationName: keywordLocation(k.keyword, towns, locList, loc.name), language: k.language, device: k.device })))
     .onConflictDoNothing();
   const budget = await canSpend(projectId, kws.length * COST_PER_TASK);
   if (!budget.ok) {
@@ -256,12 +259,14 @@ async function evaluateFindings(tenantId: string, projectId: string): Promise<vo
   const out: Parameters<typeof syncFindings>[3] = [];
   for (const k of kws.filter(isImportant)) {
     const hist = await db
-      .select({ position: seoRankChecks.position, localPack: seoRankChecks.localPack, localRank: seoRankChecks.localRank, status: seoRankChecks.status, url: seoRankChecks.url })
+      .select({ position: seoRankChecks.position, localPack: seoRankChecks.localPack, localRank: seoRankChecks.localRank, status: seoRankChecks.status, url: seoRankChecks.url, location: seoRankChecks.locationName })
       .from(seoRankChecks)
       .where(and(eq(seoRankChecks.keywordId, k.id), inArray(seoRankChecks.status, ['hecha', 'fallida', 'caducada'])))
       .orderBy(desc(seoRankChecks.createdAt))
       .limit(6);
-    const h: HistoryPoint[] = hist.map((x) => ({ position: x.position, localPack: Boolean(x.localPack), localRank: x.localRank, ok: x.status === 'hecha' }));
+    // Solo se compara con mediciones desde la misma ubicación (al pasar a medir por población no hay una caída falsa).
+    const sameLoc = hist.filter((x) => x.location === hist[0]?.location);
+    const h: HistoryPoint[] = sameLoc.map((x) => ({ position: x.position, localPack: Boolean(x.localPack), localRank: x.localRank, ok: x.status === 'hecha' }));
     const dropKey = `seo.rank_drop:${k.id}`;
     if (rankDropState(h, open.has(dropKey))) out.push({ kind: 'seo.rank_drop', dedupeKey: dropKey, query: k.keyword, url: hist.find((x) => x.url)?.url ?? null, metric: 'posicion', value: h.find((x) => x.ok)?.position ?? null, evidence: { history: h.filter((x) => x.ok).map((x) => x.position) } });
     const packKey = `seo.lost_local_pack:${k.id}`;

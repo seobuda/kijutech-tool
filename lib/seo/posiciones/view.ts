@@ -53,7 +53,9 @@ export async function getPositionsView(tenantId: string, projectId: string): Pro
   const rows: PositionRow[] = kws
     .filter((k) => k.status !== 'quitada')
     .map((k) => {
-      const done = (byKw.get(k.id) ?? []).filter((c) => c.status === 'hecha');
+      const all = (byKw.get(k.id) ?? []).filter((c) => c.status === 'hecha');
+      // Tendencia e historial solo con mediciones desde la misma ubicación que la última (sin flechas falsas al cambiar).
+      const done = all.filter((c) => c.locationName === all[0]?.locationName);
       const last = done[0];
       return {
         id: k.id,
@@ -85,7 +87,7 @@ export async function getPositionsView(tenantId: string, projectId: string): Pro
   const shareMap = visibilityShare(latestRunRows.filter((c) => c.status === 'hecha').map((c) => ({ volume: volOf.get(c.keywordId) ?? null, top10: c.top10 ?? [] })), domains);
   return {
     rows,
-    location: lastRun?.locationName ?? null,
+    location: new Set(latestRunRows.filter((c) => c.status === 'hecha').map((c) => c.locationName)).size > 1 ? 'varias (cada búsqueda desde su población)' : (lastRun?.locationName ?? null),
     lastCheck: lastRun?.checkedAt?.toISOString() ?? null,
     inProgress: checks.filter((c) => c.status === 'pendiente' || c.status === 'enviada').length,
     failedLast: latestRunRows.filter((c) => c.status === 'fallida' || c.status === 'caducada').length,

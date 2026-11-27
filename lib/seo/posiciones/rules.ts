@@ -115,6 +115,29 @@ export function pickLocation(towns: string[], list: { name: string; type: string
   return { name: 'Spain', approx: true };
 }
 
+/**
+ * Ubicación de UNA búsqueda (simulación del 27 nov, atasco 4): si nombra una población de la zona que está en la lista de
+ * ubicaciones como ciudad, se consulta desde esa población («reformas cocina terrassa» desde Terrassa); si no, desde la
+ * del proyecto. Mismo coste: una consulta por búsqueda.
+ */
+/** Sin artículos ni preposiciones (es y ca) y espacios simples: «Sant Cugat del Vallès» → «sant cugat valles». */
+const bare = (t: string) => ` ${normText(t).replace(/'/g, ' ')} `.replace(/ (del|de|la|las|los|el|els|les|l|d) /g, ' ').replace(/\s+/g, ' ').trim();
+export function keywordLocation(keyword: string, towns: string[], list: { name: string; type: string }[], fallback: string): string {
+  const kw = ` ${bare(keyword.replace(/-/g, ' '))} `;
+  const cities = list.filter((l) => /city|municipality/i.test(l.type)).map((l) => ({ name: l.name, key: bare(l.name.split(',')[0]) }));
+  for (const t of [...towns].sort((a, b) => b.length - a.length)) {
+    const full = bare(t);
+    if (!full) continue;
+    // La búsqueda puede nombrar la población entera o sin la comarca («sant cugat» por «Sant Cugat del Vallès»).
+    const words = full.split(' ');
+    const variants = [full, ...(words.length >= 3 ? [words.slice(0, 2).join(' ')] : [])];
+    if (!variants.some((v) => kw.includes(` ${v} `))) continue;
+    const city = cities.find((c) => c.key === full) ?? cities.find((c) => variants.includes(c.key));
+    if (city) return city.name;
+  }
+  return fallback;
+}
+
 // --- Lectura de una SERP para el cliente -----------------------------------------------------------------------------
 
 export type SerpForClient = {

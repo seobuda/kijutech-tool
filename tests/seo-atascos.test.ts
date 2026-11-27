@@ -1,6 +1,7 @@
 // Atascos de la simulación (27 nov): tipo de trabajo por técnica y el brief como texto para el encargo.
 import { describe, expect, it } from 'vitest';
 import { techniqueWorkType } from '@/lib/seo/plan/rules';
+import { keywordLocation } from '@/lib/seo/posiciones/rules';
 import { briefToText } from '@/lib/seo/contenido/brief-text';
 
 describe('tipo de trabajo del encargo', () => {
@@ -28,5 +29,22 @@ describe('brief como texto', () => {
     expect(t).toContain('- servicios: cocinas, baños');
     expect(t).toContain('«reforma de cocina»');
     expect(t).not.toMatch(/\n\n\n/);
+  });
+});
+
+describe('ubicación por búsqueda', () => {
+  const list = [
+    { name: 'Sabadell,Catalonia,Spain', type: 'City' },
+    { name: 'Terrassa,Catalonia,Spain', type: 'City' },
+    { name: 'Barcelona,Catalonia,Spain', type: 'Province' },
+    { name: 'Sant Cugat del Valles,Catalonia,Spain', type: 'City' },
+    { name: "L'Hospitalet de Llobregat,Catalonia,Spain", type: 'City' }
+  ];
+  it('la población de la búsqueda si está como ciudad; si no, la del proyecto', () => {
+    expect(keywordLocation('reformas cocina terrassa', ['Sabadell', 'Terrassa'], list, 'Sabadell,Catalonia,Spain')).toBe('Terrassa,Catalonia,Spain');
+    expect(keywordLocation('reformas cocina', ['Sabadell', 'Terrassa'], list, 'Sabadell,Catalonia,Spain')).toBe('Sabadell,Catalonia,Spain');
+    expect(keywordLocation('reformas girona', ['Girona'], list, 'Sabadell,Catalonia,Spain')).toBe('Sabadell,Catalonia,Spain');
+    expect(keywordLocation('fontanero sant cugat', ['Sant Cugat del Vallès'], list, 'X')).toBe('Sant Cugat del Valles,Catalonia,Spain');
+    expect(keywordLocation("fontanero l'hospitalet de llobregat", ["L'Hospitalet de Llobregat"], list, 'X')).toBe("L'Hospitalet de Llobregat,Catalonia,Spain");
   });
 });
