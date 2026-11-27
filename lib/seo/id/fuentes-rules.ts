@@ -7,7 +7,8 @@ export const LEVEL_LABEL: Record<SourceLevel, string> = { oficial: 'Oficial', re
 export const KIND_LABEL: Record<SourceKind, string> = { google_status: 'Panel de Google', rss: 'Blog / RSS', youtube: 'YouTube' };
 /** Elementos que se guardan como mucho de cada fuente en cada lectura. */
 export const MAX_ITEMS_PER_READ = 30;
-export const MAX_SOURCES = 60;
+/** Con 40 fuentes, de 4 en 4 y 20 s como mucho cada lectura: 200 s en el peor caso, dentro del tope del trabajo (420 s). */
+export const MAX_SOURCES = 40;
 
 export type DefaultSource = { key: string; label: string; kind: SourceKind; inputUrl: string; feedUrl: string; level: SourceLevel };
 

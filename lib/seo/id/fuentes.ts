@@ -32,14 +32,46 @@ export class SourceError extends Error {
 }
 const UA = { 'user-agent': 'KijutechBot/1.0 (+https://kijutech.com)' };
 const MAX_BODY = 3_000_000;
+/** Tiempo máximo para comprobar una fuente nueva (todas las pruebas juntas), para no dejar la pantalla esperando. */
+const RESOLVE_BUDGET_MS = 30_000;
 
 /** Lee una URL pública (con la protección de siempre contra direcciones internas) y devuelve su texto. */
 export async function readPublic(url: string, ms = 15_000): Promise<{ url: string; body: string; type: string }> {
   const r = await fetchPublic(url, { headers: UA, signal: AbortSignal.timeout(ms) });
   if ('error' in r) throw new SourceError(r.error);
-  if (!r.res.ok) throw new SourceError(r.res.status === 403 ? 'La web bloquea a los robots (403): no se puede leer automáticamente.' : `La web respondió con un error (HTTP ${r.res.status}).`);
-  const body = (await r.res.text()).slice(0, MAX_BODY);
+  if (!r.res.ok) {
+    await r.res.body?.cancel().catch(() => undefined);
+    throw new SourceError(r.res.status === 403 ? 'La web bloquea a los robots (403): no se puede leer automáticamente.' : `La web respondió con un error (HTTP ${r.res.status}).`);
+  }
+  // Revisor: se corta MIENTRAS se descarga (antes se leía entera y luego se recortaba: una respuesta enorme llenaba la memoria).
+  const body = await readCapped(r.res, MAX_BODY);
   return { url: r.url, body, type: r.res.headers.get('content-type') ?? '' };
+}
+
+async function readCapped(res: Response, max: number): Promise<string> {
+  if (!res.body) return '';
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    size += value.byteLength;
+    if (size >= max) {
+      await reader.cancel().catch(() => undefined);
+      break;
+    }
+  }
+  const all = new Uint8Array(Math.min(size, max));
+  let off = 0;
+  for (const c of chunks) {
+    const part = c.subarray(0, Math.max(0, all.length - off));
+    all.set(part, off);
+    off += part.byteLength;
+    if (off >= all.length) break;
+  }
+  return new TextDecoder('utf-8').decode(all);
 }
 
 let seeded = new Set<string>();
@@ -68,8 +100,18 @@ export type ResolvedSource = { kind: SourceKind; feedUrl: string; title: string 
 export async function resolveSource(raw: string): Promise<ResolvedSource> {
   const url = normalizeInput(raw);
   if (!url) throw new SourceError('Pega una dirección web (por ejemplo https://ahrefs.com/blog/ o un canal de YouTube).');
-  const tryFeed = async (feedUrl: string, kind: SourceKind): Promise<ResolvedSource | null> => {
-    const r = await readPublic(feedUrl).catch(() => null);
+  // Revisor: un tope para todo (antes hasta 10 lecturas de 15 s seguidas, unos 2,5 minutos con una web lenta).
+  const deadline = Date.now() + RESOLVE_BUDGET_MS;
+  const left = (cap: number) => {
+    const ms = Math.min(cap, deadline - Date.now());
+    if (ms < 1000) throw new SourceError('La web tarda demasiado en responder. Prueba con la dirección exacta de su RSS.');
+    return ms;
+  };
+  const tryFeed = async (feedUrl: string, kind: SourceKind, cap = 8_000): Promise<ResolvedSource | null> => {
+    const r = await readPublic(feedUrl, left(cap)).catch((e) => {
+      if (e instanceof SourceError && /tarda demasiado/.test(e.userMessage)) throw e;
+      return null;
+    });
     if (!r || !looksLikeFeed(r.body)) return null;
     const items = parseFeed(r.body);
     if (!items.length) return null;
@@ -79,7 +121,7 @@ export async function resolveSource(raw: string): Promise<ResolvedSource> {
   if (yt.isYoutube) {
     let id = yt.channelId;
     if (!id) {
-      const page = await readPublic(url);
+      const page = await readPublic(url, left(12_000));
       id = youtubeChannelFromHtml(page.body);
     }
     if (!id) throw new SourceError('No encuentro el canal de YouTube en esa página. Pega la URL del canal (…/@nombre o …/channel/UC…).');
@@ -87,7 +129,7 @@ export async function resolveSource(raw: string): Promise<ResolvedSource> {
     if (!r) throw new SourceError('El canal no tiene vídeos públicos que se puedan leer.');
     return r;
   }
-  const first = await readPublic(url);
+  const first = await readPublic(url, left(12_000));
   if (looksLikeFeed(first.body)) {
     const items = parseFeed(first.body);
     if (!items.length) throw new SourceError('El RSS está vacío o no se entiende.');
@@ -95,7 +137,7 @@ export async function resolveSource(raw: string): Promise<ResolvedSource> {
   }
   // Una web o un blog: el RSS que declara la página y, si no declara ninguno, las rutas típicas.
   for (const f of [...discoverFeedLinks(first.body, first.url), ...commonFeedGuesses(first.url)].slice(0, 9)) {
-    const r = await tryFeed(f, 'rss');
+    const r = await tryFeed(f, 'rss', 5_000);
     if (r) return r;
   }
   throw new SourceError('Esa web no publica RSS (ni lo declara ni está en las rutas habituales). Si tiene uno, pega su dirección directamente.');

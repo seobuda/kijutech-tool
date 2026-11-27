@@ -12,6 +12,8 @@ const date = (s: unknown): Date | null => {
   const d = new Date(s);
   return Number.isNaN(d.getTime()) ? null : d;
 };
+/** Solo enlaces web de verdad (revisor: un feed podría traer «javascript:» o rutas relativas). */
+const webUrl = (u: string): string | null => (/^https?:\/\/[^\s]+$/i.test(u.trim()) ? u.trim() : null);
 const stripTags = (s: string) =>
   s
     .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
@@ -73,7 +75,7 @@ export function parseRss(body: string): FeedItemInput[] {
     const summary = stripTags(get('description')).slice(0, 1500) || null;
     // Un cambio en la documentación o en cómo rastrea Google pesa más que una novedad general.
     const kind: FeedItemInput['kind'] = /(core update|spam update|ranking update)/i.test(title) ? 'core_update' : /(documentation|docs|guidance|structured data|crawl|index)/i.test(`${title} ${summary ?? ''}`) ? 'documentacion' : 'novedad';
-    out.push({ hash: sha(guid).slice(0, 40), url: link || null, title, summary, publishedAt: date(stripTags(get('pubDate'))), kind });
+    out.push({ hash: sha(guid).slice(0, 40), url: webUrl(link), title, summary, publishedAt: date(stripTags(get('pubDate'))), kind });
   }
   return out;
 }
@@ -89,7 +91,7 @@ export function parseAtom(body: string): FeedItemInput[] {
     const link = it.match(/<link\b[^>]*rel=["']alternate["'][^>]*href=["']([^"']+)["']/i)?.[1] ?? it.match(/<link\b[^>]*href=["']([^"']+)["']/i)?.[1] ?? '';
     const id = stripTags(get('id')) || link || title;
     const summary = (stripTags(get('summary')) || stripTags(get('media:description')) || stripTags(get('content'))).slice(0, 1500) || null;
-    out.push({ hash: sha(id).slice(0, 40), url: link || null, title, summary, publishedAt: date(stripTags(get('published')) || stripTags(get('updated'))), kind: 'novedad' });
+    out.push({ hash: sha(id).slice(0, 40), url: webUrl(link.replace(/&amp;/g, '&')), title, summary, publishedAt: date(stripTags(get('published')) || stripTags(get('updated'))), kind: 'novedad' });
   }
   return out;
 }

@@ -329,7 +329,7 @@ export const SEO_SALUD_PROCESS_MAP: ProcessStep[] = [
     file: 'lib/seo/id/fuentes.ts',
     when: 'Cada 3 horas («seo.id.watch»), de 4 en 4 fuentes; «Leer ahora» a mano. Resumen los lunes («seo.id.digest», solo lo oficial).',
     ai: 'Ninguna al leer (0 $). Solo el resumen semanal de lo oficial (prompt de la base de conocimiento).',
-    code: 'Nivel por fuente: lo oficial va a la bitácora de siempre (dominio «seo»: avisa de actualizaciones de Google y entra en el resumen); lo reputado o de la comunidad va aparte (dominio «seo_ext»), siempre como «novedad» (nunca avisa ni marca eventos) y se enseña como opinión. Como mucho 30 elementos por lectura y 60 fuentes por cuenta. Cada fuente guarda su última lectura, su error y lo guardado; si fallan todas, el trabajo falla y se ve en la salud de la cola. Las de serie no se borran (se pausan). Search Engine Land y Screaming Frog bloquean a los robots: no se incluyen.',
+    code: 'Nivel por fuente: lo oficial va a la bitácora de siempre (dominio «seo»: avisa de actualizaciones de Google y entra en el resumen); lo reputado o de la comunidad va aparte (dominio «seo_ext»), siempre como «novedad» (nunca avisa ni marca eventos) y se enseña como opinión. Como mucho 30 elementos por lectura (cortado a 3 MB al descargar) y 40 fuentes por cuenta; comprobar una nueva, 30 s como mucho. Solo el panel de incidencias y el blog de Search Central pueden avisar de una actualización de Google; enlaces solo http(s). Cada fuente guarda su última lectura, su error y lo guardado; si fallan todas, el trabajo falla y se ve en la salud de la cola. Las de serie no se borran (se pausan). Search Engine Land y Screaming Frog bloquean a los robots: no se incluyen.',
     tables: ['seo_sources', 'kb_feed_items']
   },
   {

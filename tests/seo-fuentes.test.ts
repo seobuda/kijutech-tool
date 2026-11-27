@@ -24,6 +24,12 @@ describe('fuentes: lectura de Atom y RSS', () => {
     expect(parseFeed(rss).map((i) => i.title)).toEqual(['Hola']);
     expect(feedTitle(rss)).toBe('Blog');
   });
+  it('revisor: solo enlaces http(s); «javascript:» o relativos se quedan sin enlace', () => {
+    const rss = '<rss><channel><item><title>Malo</title><link>javascript:alert(1)</link></item><item><title>Relativo</title><link>/post</link></item></channel></rss>';
+    expect(parseFeed(rss).map((i) => i.url)).toEqual([null, null]);
+    const atom = '<feed><entry><title>X</title><link rel="alternate" href="javascript:alert(1)"/><id>1</id></entry></feed>';
+    expect(parseFeed(atom)[0].url).toBeNull();
+  });
 });
 
 describe('fuentes: reconocer lo que se pega', () => {

@@ -26,8 +26,10 @@ export async function watchSeoSources(tenantId: string): Promise<{ read: number;
       const r = await readPublic(s.feedUrl, 20_000);
       const parsed = s.kind === 'google_status' ? parseStatusIncidents(r.body) : parseFeed(r.body);
       if (!parsed.length) throw new Error('La fuente no devolvió nada legible (¿ha cambiado de formato?)');
-      // Lo que no es oficial nunca cuenta como actualización ni incidencia de Google (no avisa ni marca eventos).
-      const items = parsed.slice(0, MAX_ITEMS_PER_READ).map((i) => (s.level === 'oficial' ? i : { ...i, kind: 'novedad' as const }));
+      // Solo el panel de incidencias y el blog de Search Central pueden decir «actualización o incidencia de Google» (avisan
+      // por Telegram y marcan eventos); en cualquier otra fuente, aunque sea oficial, un titular así es una novedad más.
+      const canAlert = s.kind === 'google_status' || s.key === 'search_central_blog';
+      const items = parsed.slice(0, MAX_ITEMS_PER_READ).map((i) => (canAlert || (i.kind !== 'core_update' && i.kind !== 'incidencia') ? i : { ...i, kind: 'novedad' as const }));
       read += items.length;
       const n = (await saveFeedItems(tenantId, feedDomain(s.level), s.key, items)).created.length;
       created += n;
@@ -63,7 +65,7 @@ let registered = false;
 export function registerSeoWatch(): void {
   if (registered) return;
   registered = true;
-  registerJobKind({ kind: ID_WATCH, timeoutS: 240, maxConcurrent: 1, maxAttempts: 2, run: async (ctx) => watchSeoSources(ctx.tenantId) });
+  registerJobKind({ kind: ID_WATCH, timeoutS: 420, maxConcurrent: 1, maxAttempts: 2, run: async (ctx) => watchSeoSources(ctx.tenantId) });
   registerJobKind({
     kind: ID_DIGEST,
     timeoutS: 240,
