@@ -6,7 +6,7 @@
 import 'server-only';
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { agtDepartments, agtTeamQuestions, clientMemory, clients, estSuggestions, kbArticles, opsAgentActions, opsInboundEmails, projects, seoPlanItems, type AgtTeamQuestion } from '@/lib/db/schema';
+import { agtDepartments, agtTeamQuestions, clientMemory, clients, estSuggestions, findings, kbArticles, opsAgentActions, opsInboundEmails, projects, seoLocalPlaces, seoPlanItems, type AgtTeamQuestion } from '@/lib/db/schema';
 import { listErrorGroups } from '@/lib/core/errors';
 import { getInbox, type InboxItem } from '@/lib/operaciones/inbox';
 import { getPendingEmailProposals, type PendingEmail } from '@/lib/operaciones/owner-queue';
@@ -61,7 +61,7 @@ const clip = (s: string | null | undefined, n = 160) => (s ? (s.length > n ? `${
 
 /** Todo lo que espera una decisión, ya ordenado (urgente primero; dentro, lo que más espera). */
 export async function getParaTi(tenantId: string): Promise<ParaTi> {
-  const [inbox, emails, agentRows, questions, kb, suggestions, memory, errors, deptRows, outgoing, seoPlans] = await Promise.all([
+  const [inbox, emails, agentRows, questions, kb, suggestions, memory, errors, deptRows, outgoing, seoPlans, seoEvents, seoPlaces] = await Promise.all([
     getInbox(tenantId),
     getPendingEmailProposals(tenantId),
     db
@@ -107,6 +107,22 @@ export async function getParaTi(tenantId: string): Promise<ParaTi> {
       .leftJoin(clients, eq(clients.id, projects.clientId))
       .where(and(eq(seoPlanItems.tenantId, tenantId), eq(seoPlanItems.status, 'pendiente')))
       .groupBy(seoPlanItems.projectId, projects.name, clients.name)
+      .limit(LIMIT),
+    // Simulación SEO del 27 nov (atasco 7): eventos, no solo propuestas. Críticos recientes y caída de visitas abiertos.
+    db
+      .select({ projectId: findings.projectId, project: projects.name, client: clients.name, kind: findings.kind, n: sql<number>`count(*)::int`, since: sql<Date>`min(${findings.firstSeen})` })
+      .from(findings)
+      .innerJoin(projects, eq(projects.id, findings.projectId))
+      .leftJoin(clients, eq(clients.id, projects.clientId))
+      .where(and(eq(findings.tenantId, tenantId), eq(findings.status, 'abierto'), sql`((${findings.severity} = 'critico' AND ${findings.firstSeen} > now() - interval '14 days') OR ${findings.kind} = 'seo.traffic_drop_diagnosed')`))
+      .groupBy(findings.projectId, projects.name, clients.name, findings.kind)
+      .limit(LIMIT),
+    // Ficha de Google del cliente propuesta y sin confirmar.
+    db
+      .select({ clientId: seoLocalPlaces.clientId, client: clients.name, title: seoLocalPlaces.title, since: seoLocalPlaces.createdAt })
+      .from(seoLocalPlaces)
+      .innerJoin(clients, eq(clients.id, seoLocalPlaces.clientId))
+      .where(and(eq(seoLocalPlaces.tenantId, tenantId), eq(seoLocalPlaces.role, 'cliente'), eq(seoLocalPlaces.status, 'propuesta')))
       .limit(LIMIT)
   ]);
 
@@ -129,6 +145,18 @@ export async function getParaTi(tenantId: string): Promise<ParaTi> {
   for (const k of kb) push({ key: `k-${k.id}`, kind: 'base', title: k.title, detail: null, clientName: null, since: k.createdAt, href: `/dashboard/conocimiento/${k.id}` });
   for (const s of suggestions) push({ key: `s-${s.id}`, kind: 'estratega', title: s.title, detail: null, clientName: s.client, since: s.createdAt, href: `/dashboard/clientes/${s.clientId}?tab=estrategia` });
   for (const p of seoPlans) push({ key: `p-${p.projectId}`, kind: 'seo', title: `${Number(p.n)} propuesta(s) para ${p.project}`, detail: `${Number(p.hours).toLocaleString('es-ES', { maximumFractionDigits: 1 })} h estimadas`, clientName: p.client, since: new Date(p.since), href: `/dashboard/projects/${p.projectId}/plan` });
+  for (const e of seoEvents) {
+    if (!e.projectId) continue;
+    const drop = e.kind === 'seo.traffic_drop_diagnosed';
+    const key = `se-${e.projectId}-${drop ? 'caida' : 'critico'}`;
+    const prev = entries.find((x) => x.key === key);
+    if (prev && !drop) {
+      prev.title = prev.title.replace(/^\d+/, (m) => String(Number(m) + Number(e.n)));
+      continue;
+    }
+    push({ key, kind: 'seo', title: drop ? `Caída de visitas en ${e.project}` : `${Number(e.n)} problema(s) crítico(s) en ${e.project}`, detail: drop ? 'Diagnóstico por capas en Salud' : 'Mira el Resumen del proyecto', clientName: e.client, since: new Date(e.since), href: `/dashboard/projects/${e.projectId}/${drop ? 'salud' : 'resumen'}`, urgent: true });
+  }
+  for (const pl of seoPlaces) push({ key: `sf-${pl.clientId}`, kind: 'seo', title: `Confirmar su ficha de Google: ${pl.title}`, detail: 'Sin confirmar no se vigila la ficha ni se mide el mapa', clientName: pl.client, since: pl.since, href: '/dashboard/projects' });
   for (const m of memory) push({ key: `m-${m.id}`, kind: 'fichas', title: clip(m.text, 140) ?? '', detail: m.kind, clientName: m.client, since: m.createdAt, href: `/dashboard/clientes/${m.clientId}?tab=memoria` });
   for (const g of errors) push({ key: `e-${g.id}`, kind: 'errores', title: g.title, detail: `${g.source}${g.area ? ` · ${g.area}` : ''} · ${g.occurrences} vez/veces`, clientName: null, since: g.firstSeen, href: `/dashboard/errores?id=${g.id}` });
 

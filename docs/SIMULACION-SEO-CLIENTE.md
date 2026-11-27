@@ -57,7 +57,7 @@ Encargo de Enric: simular un cliente real con todos sus datos y ver cómo trabaj
 | 4 | **Las tres poblaciones no se miden.** Hay una sola ubicación para las posiciones y el geo-grid cubre ±3 km. | `posiciones/rules.ts:103`, `geogrid-rules.ts:12` | Ubicación por búsqueda y una cuadrícula por población | M | Pendiente |
 | 5 | **Contenido desconectado.** («Encargar al redactor»: **hecho, 27 nov**.) El brief no crea encargo y la propuesta no enlaza con su brief. | `briefs.ts` | «Encargar al redactor» desde el brief y «Pedir brief» desde la propuesta | S-M | Pendiente |
 | 6 | **La puesta en marcha no lleva lo que bloquea:** ficha de Google, accesos, responsable, GA4. | `alta/rules.ts` | Añadir esos puntos | S | **Hecho (27 nov)** (ficha y accesos) |
-| 7 | **Para ti hace ruido y las tarjetas de proyecto no avisan.** | `lib/inicio/para-ti.ts:131` | Entradas por evento; semáforos en Proyectos | S-M | Pendiente |
+| 7 | **Para ti hace ruido y las tarjetas de proyecto no avisan.** (Eventos y semáforos: **hechos, 27 nov**.) | `lib/inicio/para-ti.ts:131` | Entradas por evento; semáforos en Proyectos | S-M | Pendiente |
 | 8 | **Dos cerebros:** el plan por reglas (proyecto) y el estratega Opus (cliente). | Estrategia y plan | Que el estratega ordene dentro del plan SEO (protocolo de decisión) | M-L | Pendiente (decisión) |
 | 9 | **El cliente queda fuera del bucle:** reseñas, accesos y explicaciones van por WhatsApp; no hay informe. | SEO no usa `createClientMessage` | «Preparar correo al cliente» con aprobación; parte 12 | S-M / L | Pendiente (parte 12 necesita GoHighLevel) |
 | 10 | **El jefe de operaciones no ve SEO.** (`seo_proyecto`: **hecho, 27 nov**.) | `agentes/store.ts:85` | Herramienta `seo_proyecto` por capacidad | S-M | Pendiente |
