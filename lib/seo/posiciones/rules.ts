@@ -115,6 +115,22 @@ export function pickLocation(towns: string[], list: { name: string; type: string
   return { name: 'Spain', approx: true };
 }
 
+/**
+ * Ubicación de UNA búsqueda (simulación del 27 nov, atasco 4): si nombra una población de la zona que está en la lista de
+ * ubicaciones como ciudad, se consulta desde esa población («reformas cocina terrassa» desde Terrassa); si no, desde la
+ * del proyecto. Mismo coste: una consulta por búsqueda.
+ */
+export function keywordLocation(keyword: string, towns: string[], list: { name: string; type: string }[], fallback: string): string {
+  const kw = ` ${normText(keyword).replace(/-/g, ' ')} `;
+  for (const t of [...towns].sort((a, b) => b.length - a.length)) {
+    const nt = normText(t);
+    if (!nt || !kw.includes(` ${nt} `)) continue;
+    const loc = pickLocation([t], list);
+    if (!loc.approx) return loc.name;
+  }
+  return fallback;
+}
+
 // --- Lectura de una SERP para el cliente -----------------------------------------------------------------------------
 
 export type SerpForClient = {
