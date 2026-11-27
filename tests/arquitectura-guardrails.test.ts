@@ -203,6 +203,8 @@ const CORE_TABLES = new Set([
   // Conexiones del cliente y sus leads (27 nov 2026, migración 0075; Enric eligió «WordPress en el núcleo»): WordPress
   // para borradores y GoHighLevel para leads; los usarán también Webs y Ads.
   'client_connections', 'client_leads',
+  // Uso de las pantallas (27 nov 2026, migración 0077; plan de UX del SEO v2 aprobado por Enric): línea base del rediseño.
+  'app_usage_events',
   // Restos de la plantilla, pendientes de borrar con una migración (ESTADO §16).
   'teams', 'team_members', 'invitations', 'activity_logs'
 ]);

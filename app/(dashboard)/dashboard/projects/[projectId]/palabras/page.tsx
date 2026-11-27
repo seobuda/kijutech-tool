@@ -1,7 +1,7 @@
 // Proyecto → Palabras (Hito 2 SEO, 24 nov 2026). El mapa de palabras sobre Search Console: cada tema con su página (o
 // «página nueva»), sus cifras de 90 días y su tendencia; la parte de clics anónimos y la canibalización.
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { and, asc, desc, eq, inArray, lte, sql } from 'drizzle-orm';
 import { ArrowLeft, KeyRound } from 'lucide-react';
 import { db } from '@/lib/db/drizzle';
@@ -14,17 +14,18 @@ import { competitorComparison } from '@/lib/seo/competencia/competencia';
 import { PalabrasPanel, type OpportunityView, type TopicView } from './palabras-panel';
 import { DemandaPanel } from './demanda-panel';
 import { pickView, SubNav } from '../sub-nav';
-import { BriefsPanel } from './briefs-panel';
-import { listBriefs } from '@/lib/seo/contenido/briefs';
 import { getDemandView } from '@/lib/seo/demanda/demanda';
 
 const OPP_KINDS = ['seo.topic_new_page', 'seo.topic_unclear_page', 'seo.striking_distance', 'seo.low_ctr'];
 
 export default async function PalabrasPage({ params, searchParams }: { params: Promise<{ projectId: string }>; searchParams: Promise<{ vista?: string }> }) {
-  const vista = pickView((await searchParams).vista, ['temas', 'demanda', 'briefs'] as const);
+  const raw = (await searchParams).vista;
   const user = await requirePagePermission('view');
   const { projectId } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(projectId)) notFound();
+  // Los briefs tienen su propia página desde el plan de UX v2 (Trabajo → Briefs y artículos).
+  if (raw === 'briefs') redirect(`/dashboard/projects/${projectId}/briefs`);
+  const vista = pickView(raw, ['temas', 'demanda'] as const);
   const [p] = await db
     .select({ id: projects.id, name: projects.name, clientId: projects.clientId, clientName: clients.name })
     .from(projects)
@@ -108,8 +109,7 @@ export default async function PalabrasPage({ params, searchParams }: { params: P
     queries: (byTopic.get(t.id) ?? []).slice(0, 25).map((q) => ({ query: q.query, clicks: q.clicks, impressions: q.impressions, position: q.position }))
   }));
   const job = lastJobs[0];
-  const [demand, briefs] = await Promise.all([getDemandView(user.tenantId, projectId), listBriefs(user.tenantId, projectId)]);
-  const briefTopics = topics.filter((t) => t.status === 'activo' && (byTopic.get(t.id) ?? []).length).map((t) => ({ topicKey: t.topicKey, name: t.name, url: t.url, query: [...(byTopic.get(t.id) ?? [])].sort((a, b) => b.impressions - a.impressions)[0].query }));
+  const demand = await getDemandView(user.tenantId, projectId);
   return (
     <PageContainer>
       <Link href="/dashboard/projects" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
@@ -132,8 +132,7 @@ export default async function PalabrasPage({ params, searchParams }: { params: P
         active={vista}
         items={[
           { key: 'temas', label: 'Temas, oportunidades y competencia', count: opps.length },
-          { key: 'demanda', label: 'Demanda e ideas', count: demand.ideas.filter((i) => i.status === 'nueva').length },
-          { key: 'briefs', label: 'Briefs de contenido', count: briefs.filter((b) => b.status === 'borrador' || b.status === 'listo').length }
+          { key: 'demanda', label: 'Demanda e ideas', count: demand.ideas.filter((i) => i.status === 'nueva').length }
         ]}
       />
       {vista === 'temas' && (
@@ -152,7 +151,6 @@ export default async function PalabrasPage({ params, searchParams }: { params: P
       />
       )}
       {vista === 'demanda' && <DemandaPanel projectId={projectId} view={demand} canEdit={canEdit} />}
-      {vista === 'briefs' && <BriefsPanel projectId={projectId} briefs={briefs} canEdit={canEdit} topics={briefTopics} />}
     </PageContainer>
   );
 }
