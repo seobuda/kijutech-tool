@@ -7,7 +7,7 @@ import { db } from '@/lib/db/drizzle';
 import { projects } from '@/lib/db/schema';
 import { requirePermission } from '@/lib/auth/permissions';
 import { publicError } from '@/lib/errors';
-import { BriefError, markBriefUsed, requestBrief, retryBrief, setBriefStatus } from '@/lib/seo/contenido/briefs';
+import { BriefError, briefToTask, markBriefUsed, requestBrief, retryBrief, setBriefStatus } from '@/lib/seo/contenido/briefs';
 
 type Ok = { ok: true; message?: string } | { ok: false; error: string };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -67,5 +67,18 @@ export async function retryBriefAction(projectId: string, id: string): Promise<O
     return { ok: true, message: 'Preparando de nuevo.' };
   } catch (e) {
     return { ok: false, error: publicError(e, 'No se pudo reintentar') };
+  }
+}
+
+export async function briefToTaskAction(projectId: string, id: string): Promise<Ok> {
+  try {
+    const user = await requirePermission('edit');
+    if (!(await ownProject(user.tenantId, projectId)) || !UUID.test(id)) return { ok: false, error: 'No encontrado' };
+    const r = await briefToTask(user.tenantId, projectId, id, user.name || user.email);
+    revalidatePath(PATH(projectId));
+    return r.ok ? { ok: true, message: r.message } : { ok: false, error: r.message };
+  } catch (e) {
+    if (e instanceof BriefError) return { ok: false, error: e.userMessage };
+    return { ok: false, error: publicError(e, 'No se pudo crear el encargo') };
   }
 }

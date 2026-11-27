@@ -99,6 +99,18 @@ const RECIPES: Record<string, Recipe> = {
 };
 
 /** Qué técnica resuelve cada tipo de hallazgo de Salud técnica. */
+/**
+ * Tipo de trabajo del encargo según la técnica (simulación del 27 nov, atasco 3): así Operaciones mide cuánto tarda el
+ * equipo de verdad en cada tipo. Claves por defecto de Operaciones; si la cuenta no tiene esa clave, se deja vacío.
+ */
+const NEW_PAGE = new Set(['nueva_landing_servicio', 'nueva_landing_zona', 'pagina_zona', 'pagina_demanda', 'nueva_pagina_tema']);
+const WRITING = new Set(['contenido_nuevo', 'contenido_ampliado', 'contenido_actualizado', 'reforzar_pagina_tema']);
+export function techniqueWorkType(technique: string): string {
+  if (NEW_PAGE.has(technique)) return 'landing';
+  if (WRITING.has(technique)) return 'articulo';
+  return 'cambio_web';
+}
+
 export const KIND_TECHNIQUE: Record<string, string> = {
   'seo.http_5xx': 'error_servidor_corregido',
   'seo.http_4xx': 'error_servidor_corregido',

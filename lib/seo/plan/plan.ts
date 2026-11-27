@@ -23,7 +23,7 @@ import { enqueueKeywordMap } from '@/lib/seo/mapa/mapa';
 import { SEO_KINDS } from '@/lib/seo/salud/kinds';
 import { LOCAL_SOURCE } from '@/lib/seo/local/rules';
 import { VIGILANCIA_SOURCES } from '@/lib/seo/vigilancia/rules';
-import { buildPlan, scheduleMonths, type PlanFinding, type PlanSeverity } from '@/lib/seo/plan/rules';
+import { techniqueWorkType, buildPlan, scheduleMonths, type PlanFinding, type PlanSeverity } from '@/lib/seo/plan/rules';
 import { accountTechniqueTrends } from '@/lib/core/technique-trends';
 import { planFactors } from '@/lib/core/technique-trends-rules';
 
@@ -186,11 +186,14 @@ export async function approvePlanItem(tenantId: string, projectId: string, itemI
   }
   const hyp = completeHypothesis(item.technique, item.hypothesis ?? undefined);
   const full = [description, hyp.verify ? `\n**Cómo verificaremos:** ${hyp.verify.how}` : '', o.note?.trim() ? `\n**Nota de ${by}:** ${o.note.trim().slice(0, 1000)}` : '', `\n_Plan de mejora SEO del proyecto ${project.name} (${estHours} h estimadas)._`].filter(Boolean).join('\n');
+  // Tipo de trabajo según la técnica (si la cuenta lo tiene): Operaciones aprende cuánto tarda de verdad.
+  const types = new Set((await ws.workTypes?.(tenantId).catch(() => []) ?? []).map((t) => t.key));
+  const wt = techniqueWorkType(item.technique);
   const r = await ws.createTask(tenantId, {
     clientId: project.clientId,
     title,
     description: full,
-    workType: null,
+    workType: types.has(wt) ? wt : null,
     requestedBy: by,
     projectId,
     listId: o.listId || null,

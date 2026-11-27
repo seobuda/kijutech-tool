@@ -9,7 +9,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge, Section } from '@/components/ui/page';
 import type { BriefView } from '@/lib/seo/contenido/briefs';
-import { markBriefUsedAction, requestBriefAction, retryBriefAction, setBriefStatusAction } from '@/lib/seo/contenido-actions';
+import { briefToTaskAction, markBriefUsedAction, requestBriefAction, retryBriefAction, setBriefStatusAction } from '@/lib/seo/contenido-actions';
+import { briefToText, type BriefData } from '@/lib/seo/contenido/brief-text';
 
 const STATUS: Record<string, { label: string; tone: 'neutral' | 'info' | 'success' | 'outline' | 'danger' | 'warning' }> = {
   preparando: { label: 'Preparando…', tone: 'info' },
@@ -30,35 +31,8 @@ const path = (u: string) => {
     return u;
   }
 };
-const val = (v: unknown) => (Array.isArray(v) ? v.join(', ') : typeof v === 'string' ? v : '');
 
-/** El brief como texto (para pegar en el encargo o pasar al redactor). */
-function briefText(b: BriefView): string {
-  const d = b.data as D;
-  const lines = [
-    `BRIEF: ${b.keyword}`,
-    d.intent ? `Intención: ${INTENT[d.intent] ?? d.intent}${d.pageType ? ` · tipo de página que gana: ${d.pageType}` : ''}` : '',
-    d.volume ? `Búsquedas al mes: ${d.volume}` : '',
-    d.words ? `Extensión orientativa: unas ${d.words} palabras (lo que trae la competencia; no rellenar)` : '',
-    d.target ? `Página: ${d.target}` : 'Página nueva',
-    '',
-    'Búsquedas relacionadas:',
-    ...(d.related ?? []).map((q) => `- ${q}`),
-    '',
-    'Subtemas que trata la competencia:',
-    ...(d.subtopics ?? []).map((s) => `- ${s.label} (${s.sites} webs)`),
-    '',
-    'Preguntas:',
-    ...(d.questions ?? []).map((q) => `- ${q}`),
-    '',
-    'Datos propios del cliente (lo que la competencia no tiene):',
-    ...Object.entries(d.client ?? {}).filter(([, v]) => val(v)).map(([k, v]) => `- ${k}: ${val(v)}`),
-    '',
-    'Enlazar desde:',
-    ...(d.links ?? []).map((l) => `- ${l.from} con el texto «${l.anchor}»`)
-  ];
-  return lines.filter((l, i, a) => !(l === '' && a[i - 1] === '')).join('\n');
-}
+const briefText = (b: BriefView) => briefToText(b.keyword, b.data as BriefData);
 
 export function BriefsPanel({ projectId, briefs, canEdit, topics }: { projectId: string; briefs: BriefView[]; canEdit: boolean; topics: { topicKey: string; name: string; url: string | null; query: string }[] }) {
   const router = useRouter();
@@ -197,6 +171,16 @@ export function BriefsPanel({ projectId, briefs, canEdit, topics }: { projectId:
                             {copied === b.id ? <Check className="size-3.5" /> : <ClipboardCopy className="size-3.5" />}
                             {copied === b.id ? 'Copiado' : 'Copiar como texto'}
                           </Button>
+                          {canEdit && (b.status === 'borrador' || b.status === 'listo') && !(b.data as { request?: { ref?: string } }).request?.ref && (
+                            <Button size="sm" disabled={pending} onClick={() => act(() => briefToTaskAction(projectId, b.id))} title="Crea el encargo en ClickUp con este brief dentro (lista, responsable y fecha según la ficha del cliente)">
+                              Encargar al redactor
+                            </Button>
+                          )}
+                          {(b.data as { request?: { url?: string | null } }).request?.url && (
+                            <a href={(b.data as { request: { url: string } }).request.url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline">
+                              Ver el encargo
+                            </a>
+                          )}
                           {canEdit && b.status === 'borrador' && (
                             <Button size="sm" variant="outline" disabled={pending} onClick={() => act(() => setBriefStatusAction(projectId, b.id, 'listo'))}>
                               Marcar listo
