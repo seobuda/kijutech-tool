@@ -3,7 +3,8 @@ import 'server-only';
 // SEO · Señales de web hackeada (parte 6, tanda 6a). Va con los detectores semanales (proceso «seo.detectores»), con su
 // propia fuente («seo.vigilancia:hackeo») y lista de tipos. Lee Search Console del núcleo (gsc_daily, gsc_queries,
 // gsc_pages) y el último rastreo. Si falta el histórico de Search Console, no decide nada (no toca lo que había).
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { alertSeo } from '@/lib/seo/avisos';
 import { db } from '@/lib/db/drizzle';
 import { crawlPages, crawlRuns, findings } from '@/lib/db/schema';
 import { syncFindings } from '@/lib/core/findings';
@@ -82,6 +83,12 @@ export async function runHackeo(tenantId: string, projectId: string, prop: Prop 
     WHERE d.property_id = ${prop.id} AND d.date BETWEEN ${from}::date AND ${to}::date AND (p.url ~* ${SQL_SPAM} OR p.url ~* '%E[3-9]%')
     GROUP BY p.url LIMIT 2000`)) as unknown as { url: string }[];
   const found = [...hackedQueries(queries, langs, known ? new Set([...known]) : null, keyOf), ...hackedPages([...[...gscPages].map((g) => ({ url: g.url })), ...pages.map((p) => ({ url: p.url, title: p.title }))], langs)];
+  const critical = found.filter((f) => f.severity === 'critico');
+  const wasOpen = critical.length ? await db.select({ id: findings.id }).from(findings).where(and(eq(findings.projectId, projectId), inArray(findings.kind, HACKEO_KINDS), eq(findings.status, 'abierto'), eq(findings.severity, 'critico'))).limit(1) : [];
   await syncFindings(tenantId, projectId, HACKEO_SOURCE, found, HACKEO_KINDS);
+  // Aviso solo al abrirse (no cada semana mientras dure): es urgente y nadie lo vería sin abrir el proyecto.
+  if (critical.length && !wasOpen.length) {
+    await alertSeo(tenantId, projectId, `seo.hackeo:${projectId}:${new Date().toISOString().slice(0, 10)}`, 'posible web hackeada', critical.map((f) => (f.kind === 'seo.hacked_pages' ? `${f.value} páginas basura en la web` : `${f.value} búsquedas basura nuevas en Google`)));
+  }
   return { text: found.length ? `señales de hackeo: ${found.length}` : 'sin señales de hackeo', found: found.length };
 }

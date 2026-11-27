@@ -72,7 +72,11 @@ export async function regeneratePlan(tenantId: string, projectId: string): Promi
     impressionsByUrl(tenantId, projectId)
   ]);
   // Lo que ya está en una propuesta decidida (aprobada, hecha o descartada) no se vuelve a proponer.
-  const covered = new Set(items.filter((i) => i.status !== 'pendiente' && i.status !== 'caducada').flatMap((i) => i.findingIds));
+  // Simulación del 27 nov: una propuesta «hecha» cuyos hallazgos siguen abiertos 14 días después NO los cubre: se vuelven
+  // a proponer (marcados «verificación fallida»). La reauditoría mensual los habría cerrado si se arreglaron.
+  const VERIFY_MS = 14 * 86_400_000;
+  const unverified = (i: (typeof items)[number]) => i.status === 'hecha' && Date.now() - i.updatedAt.getTime() > VERIFY_MS;
+  const covered = new Set(items.filter((i) => i.status !== 'pendiente' && i.status !== 'caducada' && !unverified(i)).flatMap((i) => i.findingIds));
   // Las búsquedas y temas del mapa traen sus impresiones y su valor de negocio en la evidencia.
   const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
   // Las URLs de un grupo de páginas puerta no se proponen además como duplicadas (misma técnica, tarea doble).
