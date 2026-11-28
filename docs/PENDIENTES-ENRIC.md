@@ -208,3 +208,15 @@ Incluye el paso A (propiedades de Google por cliente) y los pasos B1, B2 y B3 (s
   (las decisiones van agrupadas en paquetes; esta semana solo hace falta el **paquete A**). Ya **no hay token de desarrollador**
   (Google lo retiró el 9 sep 2026): el acceso se pide desde un proyecto de Google Cloud (nivel Explorer, normalmente automático) y
   se añade una cuenta de servicio a la MCC. Pendiente de probarlo de verdad.
+  - **Paso 1 construido en `feature/ads-paso1` (28 nov, sin fusionar):** cuando tengas la clave, pégala en Google Ads →
+    Ajustes y pulsa «Probar conexión». Para el **paquete A** hace falta:
+    1. Crear la cuenta de servicio en un proyecto de Google Cloud y descargar su clave JSON. **Si la consola no te deja
+       crear la clave**, es la política `iam.disableServiceAccountKeyCreation` (activa por defecto en organizaciones
+       creadas desde mayo de 2024): como administrador de la organización, crea una excepción **solo para ese proyecto**.
+       Si no se puede, el plan de reserva es un refresh token OAuth propio de Ads con un buzón de la agencia (diseño §1, D).
+    2. Añadir el correo de la cuenta de servicio a la MCC **con acceso de lectura** (lo haces tú: cambiar accesos de la
+       MCC es línea roja para la herramienta). La clave de lectura nunca se sube de rol; la escritura irá con otra.
+    3. Si Google pidiera aún el *developer token*, pégalo también en Ajustes (es opcional).
+  - **Avisos a Eury:** hoy los avisos de Ads solo pueden llegarte a ti (`notifyOwner`). Para que lleguen a Eury hace falta
+    una capacidad nueva del núcleo (`notifyMember`): es tocar el núcleo y necesita tu OK antes de la semana de uso real.
+  - **Modo simulado (`SIM`):** sirve para desarrollo; no lo actives en producción (llenaría Cartera de cuentas inventadas).
