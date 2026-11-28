@@ -137,7 +137,7 @@ export const ADS_PROCESS_MAP: ProcessStep[] = [
     lane: 'Vigilar',
     name: 'Evaluación y ciclo de vida de los hallazgos',
     description:
-      'Trabajo «ads.evaluar» por cuenta: foto de lo descargado, salud de sus fuentes y reglas. Las horarias (1, 2, 3, 4 y 15) en cada evaluación; las diarias (6, 8, 11 y 12) una vez al día tras la descarga de la mañana o si la última vez no se pudieron comprobar. Guarda el resultado de cada regla (la cabecera de Hoy cuenta los «no comprobado») y los hallazgos.',
+      'Trabajo «ads.evaluar» por cuenta: foto de lo descargado, salud de sus fuentes y reglas. Las horarias (1, 2, 3, 4 y 15) en cada evaluación; las diarias (6, 8, 11 y 12) solo cuando sus fuentes traen datos nuevos (métricas o cambios: cada 6 h y a las 06:30), al cambiar de día o si la última vez no se pudieron comprobar. Guarda el resultado de cada regla (la cabecera de Hoy cuenta los «no comprobado») y los hallazgos.',
     status: 'built',
     file: 'lib/ads/findings.ts',
     when: 'Al terminar cada descarga de métricas, latido o páginas (encolada, una abierta por cuenta); «Evaluar ahora» en Ajustes. La MCC entera (hallazgo 15 de agencia), cada hora desde el planificador «google ads».',

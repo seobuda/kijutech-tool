@@ -69,7 +69,11 @@ export type FindingDraft = {
   confidence: 'alta' | 'media' | 'baja';
 };
 
-export type RuleResult = { outcome: Outcome; reason: string | null; findings: FindingDraft[]; dataThrough: string | null };
+/**
+ * `uncheckedCauses`: causas que esta vez no se pudieron comprobar dentro de una regla que sí se evaluó (p. ej. una acción
+ * con clics fuera de banda): su hallazgo vivo no se resuelve, queda «sin comprobar desde…» (revisor, 28 nov).
+ */
+export type RuleResult = { outcome: Outcome; reason: string | null; findings: FindingDraft[]; dataThrough: string | null; uncheckedCauses?: string[] };
 
 export type ScheduleSlot = { day: string; startHour: number; startMinute: number; endHour: number; endMinute: number };
 export type CampaignIn = {
@@ -125,6 +129,8 @@ export type AccountInput = {
   health: Partial<Record<AdsSource, SourceHealth>>;
   /** Lo que hay que saber de las fuentes para la regla 15 (con su última vez bien y su error). */
   sourceDetail?: Partial<Record<AdsSource, { lastOkAt: string | null; lastError: string | null; critical: boolean }>>;
+  /** Desde cuándo se ve la cuenta (una recién dada de alta aún no tiene datos: no es «fuente caída»). */
+  firstSeenAt?: Date | null;
   t: Thresholds;
 };
 
@@ -270,7 +276,12 @@ export function estimateK(days: { x: number; e: number }[], fallback: number): n
 // --- Regla 15: nuestra fuente sin datos (MED-00) ------------------------------------------------------------------------
 
 export function ruleSourceHealth(a: AccountInput): RuleResult {
-  const bad = CORE_SOURCES.filter((s) => (a.health[s] ?? 'sin_datos') !== 'sana');
+  // «Sin datos» en una cuenta vista hace menos de 24 h es que está arrancando (sus primeros trabajos aún no terminaron).
+  const starting = Boolean(a.firstSeenAt && a.now.getTime() - a.firstSeenAt.getTime() < 24 * 3_600_000);
+  const bad = CORE_SOURCES.filter((s) => {
+    const h = a.health[s] ?? 'sin_datos';
+    return h !== 'sana' && !(h === 'sin_datos' && starting);
+  });
   const critical = CORE_SOURCES.filter((s) => a.sourceDetail?.[s]?.critical);
   if (!bad.length && !critical.length) return { outcome: 'ok', reason: null, findings: [], dataThrough: a.today };
   const lines = [...new Set([...bad, ...critical])].map((s) => {
@@ -583,6 +594,7 @@ export function ruleMeasurementBroken(a: AccountInput): RuleResult {
   const findings: FindingDraft[] = [];
   const thin: string[] = [];
   const offBand: string[] = [];
+  const unchecked: string[] = [];
   for (const act of primary) {
     const conv = (day: string) => convIdx.get(`${act.resourceName}|${day}`) ?? 0;
     // Días seguidos a cero hasta ayer (solo días cubiertos: un día sin cubrir corta la racha).
@@ -603,6 +615,7 @@ export function ruleMeasurementBroken(a: AccountInput): RuleResult {
     const label = act.name ?? act.resourceName;
     if (baseDays.length < 50 || convBase < a.t.medicionMinConversiones || clicksBase <= 0) {
       thin.push(`${label} (${Math.round(convBase)} en 8 semanas)`);
+      unchecked.push(`medicion:${a.accountId}:${act.resourceName}`.slice(0, 300));
       continue;
     }
     if (run === 0) continue;
@@ -614,6 +627,7 @@ export function ruleMeasurementBroken(a: AccountInput): RuleResult {
     // Solo si los clics están en su banda habitual: si no, la causa es de entrega (reglas 1 y 4), no de medición.
     if (meanRun < meanBase * 0.5 || meanRun > meanBase * 2) {
       offBand.push(label);
+      unchecked.push(`medicion:${a.accountId}:${act.resourceName}`.slice(0, 300));
       continue;
     }
     const mu = clicksRun * rate;
@@ -643,8 +657,8 @@ export function ruleMeasurementBroken(a: AccountInput): RuleResult {
     }
   }
   const notes = [thin.length ? `sin datos para afirmar: ${thin.join(', ')}` : '', offBand.length ? `clics fuera de su banda (causa de entrega): ${offBand.join(', ')}` : ''].filter(Boolean);
-  if (!findings.length && thin.length === primary.length) return { outcome: 'ok', reason: `sin datos para afirmar: menos de ${a.t.medicionMinConversiones} conversiones en 8 semanas`, findings: [], dataThrough: yesterday };
-  return { outcome: findings.length ? 'hallazgo' : 'ok', reason: notes.join('; ') || null, findings, dataThrough: yesterday };
+  if (!findings.length && thin.length === primary.length) return { outcome: 'ok', reason: `sin datos para afirmar: menos de ${a.t.medicionMinConversiones} conversiones en 8 semanas`, findings: [], dataThrough: yesterday, uncheckedCauses: unchecked };
+  return { outcome: findings.length ? 'hallazgo' : 'ok', reason: notes.join('; ') || null, findings, dataThrough: yesterday, uncheckedCauses: unchecked };
 }
 
 // --- Regla 8: ritmo de gasto -------------------------------------------------------------------------------------------
@@ -660,7 +674,8 @@ export function daysInMonth(day: string): number {
  * PRESUPUESTOS diarios (un compartido cuenta una vez) por los días del mes en que alguna de sus campañas está activa.
  */
 export function monthReference(a: Pick<AccountInput, 'goal' | 'budgets' | 'campaigns' | 'today'>): { amount: number; mode: 'acuerdo' | 'presupuestos' } | null {
-  if (a.goal?.budgetUsual && a.goal.budgetUsual > 0) return { amount: a.goal.budgetUsual, mode: 'acuerdo' };
+  // Solo el acordado con el cliente: el provisional es un supuesto calculado por la herramienta (revisor, 28 nov).
+  if (a.goal?.kind === 'acordado' && a.goal.budgetUsual && a.goal.budgetUsual > 0) return { amount: a.goal.budgetUsual, mode: 'acuerdo' };
   const first = `${a.today.slice(0, 8)}01`;
   const n = daysInMonth(a.today);
   let total = 0;
@@ -767,6 +782,7 @@ function pausedEvent(changes: ChangeIn[], campaignNativeId: string): ChangeIn | 
 export function rulePausedContributor(a: AccountInput, changeDayOf: (d: Date) => string): RuleResult {
   const findings: FindingDraft[] = [];
   const notes: string[] = [];
+  const unchecked: string[] = [];
   for (const c of a.campaigns) {
     const ended = c.status === 'ENABLED' && c.endDate && c.endDate < a.today;
     if (c.status !== 'PAUSED' && !ended) continue;
@@ -795,6 +811,7 @@ export function rulePausedContributor(a: AccountInput, changeDayOf: (d: Date) =>
     for (let d = from; d <= to; d = addDays(d, 1)) if (a.covered.has(d)) coveredDays++;
     if (coveredDays < 55) {
       notes.push(`${c.name ?? c.nativeId}: faltan días de los 60 previos a la pausa`);
+      unchecked.push(`pausado:${a.accountId}:${c.nativeId}`);
       continue;
     }
     let mine = 0;
@@ -822,7 +839,7 @@ export function rulePausedContributor(a: AccountInput, changeDayOf: (d: Date) =>
       })
     );
   }
-  return { outcome: findings.length ? 'hallazgo' : 'ok', reason: notes.length ? notes.join('; ') : null, findings, dataThrough: addDays(a.today, -1) };
+  return { outcome: findings.length ? 'hallazgo' : 'ok', reason: notes.length ? notes.join('; ') : null, findings, dataThrough: addDays(a.today, -1), uncheckedCauses: unchecked };
 }
 
 // --- Regla 11: cambio ajeno en algo con gasto (PRO-08) -----------------------------------------------------------------

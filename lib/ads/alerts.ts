@@ -43,10 +43,20 @@ export async function runAdsAlerts(tenantId: string, now: Date = new Date()): Pr
   const tech = pending.filter((f) => f.recipient === 'tecnico');
   const gestor = pending.filter((f) => f.recipient !== 'tecnico');
   let sent = 0;
-  for (const f of tech) {
+  // Técnicos: una causa = un aviso. Si cae la MCC entera (agencia), las cuentas sin datos son esa misma causa: no avisan
+  // por separado. Varias a la vez van en un solo mensaje (revisor, 28 nov).
+  const agencyDown = (await listFindings(tenantId)).some((f) => f.causeKey === 'fuente:mcc' && f.status === 'abierto');
+  const techSend = agencyDown ? tech.filter((f) => f.causeKey === 'fuente:mcc') : tech;
+  const techSkip = tech.filter((f) => !techSend.includes(f));
+  if (techSend.length === 1) {
+    const f = techSend[0];
     await out.notifyOwner(tenantId, `ads:${f.kind}:${f.causeKey}:${f.episodeStartedAt.toISOString()}`, alertHtml(f), undefined, { bot: SYSTEM_BOT });
-    await updateFinding(tenantId, f.id, { notifiedAt: now, notifyState: 'encolado' });
+  } else if (techSend.length > 1) {
+    const html = `<b>Google Ads · ${techSend.length} cuentas sin datos al día</b>\n${techSend.slice(0, 15).map((f) => `• ${esc(f.accountName ?? '')}: ${esc(f.title)}`).join('\n')}${techSend.length > 15 ? `\n…y ${techSend.length - 15} más` : ''}\nMientras tanto sus reglas dicen «no comprobado». Detalle en Google Ads → Hoy.`;
+    await out.notifyOwner(tenantId, `ads:tecnico:${techSend[0].causeKey}:${techSend[0].episodeStartedAt.toISOString()}:${techSend.length}`, html, undefined, { bot: SYSTEM_BOT });
   }
+  for (const f of techSend) await updateFinding(tenantId, f.id, { notifiedAt: now, notifyState: 'encolado' });
+  for (const f of techSkip) await updateFinding(tenantId, f.id, { notifiedAt: now, notifyState: 'agrupado' });
   const plan = alertPlan(gestor, sentToday, settings.maxInterruptionsPerDay);
   for (const f of plan.send) {
     await out.notifyOwner(tenantId, `ads:${f.kind}:${f.causeKey}:${f.episodeStartedAt.toISOString()}`, alertHtml(f));

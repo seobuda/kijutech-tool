@@ -192,11 +192,11 @@ export type PortfolioRow = {
   goalKind: 'acordado' | 'provisional' | null;
 };
 
-export async function portfolioView(tenantId: string, now: Date = new Date()): Promise<{ rows: PortfolioRow[]; coverage: CoverageSummary; currencies: string[] }> {
+export async function portfolioView(tenantId: string, now: Date = new Date(), onlyAccountId?: string): Promise<{ rows: PortfolioRow[]; coverage: CoverageSummary; currencies: string[] }> {
   const settings = await getSettingsRow(tenantId);
   const sim = settings?.authMode === 'sim';
   const coverage = await coverageSummary(tenantId, now);
-  const accounts = (await accountViews(tenantId)).filter((a) => a.tracked);
+  const accounts = (await accountViews(tenantId)).filter((a) => a.tracked && (!onlyAccountId || a.id === onlyAccountId));
   const ids = accounts.map((a) => a.id);
   const minToday = zonedParts(now, DEFAULT_TZ).date;
   const daily = await fs.dailyTotalsByAccount(ids, addDays(minToday, -125), addDays(minToday, 1));
@@ -210,7 +210,8 @@ export async function portfolioView(tenantId: string, now: Date = new Date()): P
   const reviews = await fs.lastReviews(tenantId);
   const rows: PortfolioRow[] = accounts.map((a) => {
     const acc = coverage.accounts.find((c) => c.accountId === a.id) as AccountCoverage | undefined;
-    const tz = DEFAULT_TZ;
+    // El día y el mes en la zona de cada cuenta, como las reglas (revisor, 28 nov).
+    const tz = a.timeZone || DEFAULT_TZ;
     const today = zonedParts(now, tz).date;
     const yesterday = addDays(today, -1);
     const mine = daily.filter((d) => d.accountId === a.id);
@@ -291,7 +292,7 @@ export async function accountDetail(tenantId: string, accountId: string, now: Da
   const sim = settings?.authMode === 'sim';
   const account = (await accountViews(tenantId)).find((a) => a.id === accountId);
   if (!account) return null;
-  const portfolio = await portfolioView(tenantId, now);
+  const portfolio = await portfolioView(tenantId, now, accountId);
   const goalRow = account.clientId ? await fs.latestGoal(tenantId, account.clientId) : null;
   const camps = await db.select({ nativeId: adsCampaigns.nativeId, name: adsCampaigns.name }).from(adsCampaigns).where(eq(adsCampaigns.accountId, accountId));
   const campName = new Map(camps.map((c) => [c.nativeId, c.name]));

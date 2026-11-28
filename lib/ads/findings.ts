@@ -4,8 +4,8 @@ import 'server-only';
 // guardado por la descarga. Por cada cuenta:
 //   1. Foto de la cuenta (lo descargado) y salud de sus fuentes (MED-00).
 //   2. Cada regla con su comprobación previa (fuentes sanas y ventana cubierta). Las «horarias» (interrupciones y rechazo)
-//      van en cada evaluación; las «diarias» (medición, ritmo, pausado, cambio ajeno) una vez al día tras la descarga de la
-//      mañana, o de nuevo si la última vez no se pudieron comprobar.
+//      van en cada evaluación; las «diarias» (medición, ritmo, pausado, cambio ajeno) solo cuando sus fuentes traen datos
+//      nuevos (métricas o cambios, cada 6 h y a las 06:30), al cambiar de día o si la última vez no se pudieron comprobar.
 //   3. Resultado de cada regla en ads_rule_runs (la cabecera de Hoy cuenta los «no comprobado»).
 //   4. Ciclo de vida (§6.3): un hallazgo solo se resuelve si su regla se evaluó con fuentes sanas y ya no lo ve; con «no
 //      comprobado» se queda como estaba («sin comprobar desde…»). Una causa = un hallazgo vivo (índice único); cada
@@ -72,14 +72,20 @@ export async function buildAccountInput(tenantId: string, acc: AdsAccount, now: 
     goal: goal ? { kind: goal.kind as 'provisional' | 'acordado', cplMax: goal.cplMax ? Number(goal.cplMax) : null, budgetUsual: goal.budgetUsual ? Number(goal.budgetUsual) : null } : null,
     health,
     sourceDetail: detail,
+    firstSeenAt: acc.firstSeenAt,
     t: thresholdsOf(settings)
   };
 }
 
-/** ¿Toca la evaluación diaria de esta regla? (nunca hoy, o hoy antes de las 06:00, o la última vez «no comprobado»). */
-function dailyDue(last: fs.RuleRunRow | undefined, now: Date, tz: string): boolean {
+/**
+ * ¿Toca la evaluación de esta regla diaria? Nunca evaluada, «no comprobado» la última vez, día nuevo (tras las 06:00), o
+ * alguna de sus fuentes trajo datos después de la última evaluación (si no, una evaluación encolada por otra fuente,
+ * p. ej. las páginas, la dejaría calculada con los datos de ayer todo el día).
+ */
+function dailyDue(last: fs.RuleRunRow | undefined, now: Date, tz: string, sourcesOkAt: Date | null): boolean {
   if (!last) return true;
   if (last.outcome === 'no_comprobado') return true;
+  if (sourcesOkAt && sourcesOkAt > last.evaluatedAt) return true;
   const l = zonedParts(last.evaluatedAt, tz);
   const n = zonedParts(now, tz);
   if (l.date !== n.date) return true;
@@ -158,7 +164,7 @@ async function applyResults(tenantId: string, acc: AdsAccount | null, results: M
   for (const f of live) {
     const r = results.get(f.kind as FindingKind);
     if (!r) continue;
-    if (r.outcome === 'no_comprobado') {
+    if (r.outcome === 'no_comprobado' || r.uncheckedCauses?.includes(f.causeKey)) {
       if (!f.uncheckedSince) await fs.updateFinding(tenantId, f.id, { uncheckedSince: now });
       continue;
     }
@@ -192,13 +198,18 @@ export async function evaluateAccount(tenantId: string, accountId: string, opts:
   const results = new Map<FindingKind, RuleResult>();
 
   if (!acc.tracked) {
-    // Solo el estado de la cuenta (una cuenta que Google suspende deja de seguirse en «descubrir»).
+    // Solo el estado de la cuenta (una cuenta que Google suspende deja de seguirse en «descubrir»). Lo demás de una cuenta
+    // que ya no se sigue se cierra: nadie lo va a comprobar (revisor, 28 nov).
     results.set('cuenta_no_sirve', ruleAccountCannotServe(input));
+    await fs.closeAccountFindings(tenantId, acc.id, now, 'cuenta_no_sirve');
   } else {
     results.set('fuente_sin_datos', ruleSourceHealth(input));
     const changeDayOf = (d: Date) => zonedParts(d, tz).date;
     for (const def of ruleDefs(changeDayOf)) {
-      if (opts.mode !== 'todas' && def.cadence === 'diaria' && !dailyDue(runs.get(def.kind), now, tz)) continue;
+      if (opts.mode !== 'todas' && def.cadence === 'diaria') {
+        const okAt = states.filter((s) => s.scopeKey === acc.id && def.sources.includes(s.source as AdsSource) && s.lastOkAt).map((s) => s.lastOkAt!.getTime());
+        if (!dailyDue(runs.get(def.kind), now, tz, okAt.length ? new Date(Math.max(...okAt)) : null)) continue;
+      }
       results.set(def.kind, runRule(def, input));
     }
   }

@@ -83,6 +83,12 @@ export async function setProvisionalGoal(tenantId: string, user: Who, accountId:
   const currencies = [...new Set(accounts.map((a) => a.currency).filter(Boolean))];
   if (currencies.length > 1) throw new AdsDecisionError(`Las cuentas de este cliente usan monedas distintas (${currencies.join(', ')}): no se pueden sumar.`);
   const t = today(now);
+  // Sin los 90 días descargados y completos (histórico aún bajando, huecos), el supuesto quedaría congelado y sesgado.
+  const winTo = addDays(t, -8);
+  const winFrom = addDays(winTo, -89);
+  const cov = await fs.coveredDaysByAccount(accounts.map((a) => a.id), winFrom, winTo);
+  const short = accounts.filter((a) => (cov.get(a.id)?.size ?? 0) < 85);
+  if (short.length) throw new AdsDecisionError(`Faltan días descargados y completos de los 90 que se usan (${short.map((a) => a.name ?? a.customerId).join(', ')}): espera a que termine el histórico.`);
   const rows = await fs.dailyTotalsByAccount(accounts.map((a) => a.id), addDays(t, -100), t);
   const g = provisionalGoal(rows, t);
   if (!g.ok) throw new AdsDecisionError(g.error);

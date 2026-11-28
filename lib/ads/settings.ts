@@ -213,7 +213,7 @@ export async function saveAlertSettings(tenantId: string, input: AlertInput, by:
   if (input.thresholds && typeof input.thresholds === 'object') {
     thresholds = mergeThresholds((row.state as { thresholds?: unknown }).thresholds);
     for (const [k, v] of Object.entries(input.thresholds)) {
-      if (!(k in THRESHOLD_LIMITS)) continue;
+      if (!Object.hasOwn(THRESHOLD_LIMITS, k)) continue;
       const key = k as keyof Thresholds;
       const num = Number(v);
       const lim = THRESHOLD_LIMITS[key];

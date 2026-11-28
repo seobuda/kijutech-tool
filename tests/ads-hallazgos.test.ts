@@ -252,6 +252,8 @@ describe('ads paso 2: medición rota (binomial negativa, 5.1)', () => {
     const r = ruleMeasurementBroken(scenario({ convPerDay: [2, 1, 3, 2, 2, 1, 3], zeroDays: 8, clicksRecent: 5 }));
     expect(r.findings).toHaveLength(0);
     expect(r.reason).toMatch(/fuera de su banda/);
+    // Y un hallazgo vivo de esa acción no se resuelve a ciegas: queda «sin comprobar».
+    expect(r.uncheckedCauses).toEqual([`medicion:acc:${ACTION}`]);
   });
 
   it('pocos días a cero no bastan', () => {
@@ -274,6 +276,8 @@ describe('ads paso 2: ritmo, pausas y cambios ajenos', () => {
   it('la referencia sin acuerdo es la suma de presupuestos por los días activos del mes', () => {
     expect(monthReference(base(10))).toEqual({ amount: 300, mode: 'presupuestos' });
     expect(monthReference(base(10, { kind: 'acordado', cplMax: null, budgetUsual: 250 }))).toEqual({ amount: 250, mode: 'acuerdo' });
+    // El provisional es un supuesto de la herramienta, no un acuerdo: no cuenta como presupuesto acordado.
+    expect(monthReference(base(10, { kind: 'provisional', cplMax: 20, budgetUsual: 250 }))).toEqual({ amount: 300, mode: 'presupuestos' });
   });
 
   it('pasarse avisa; quedarse corto solo avisa si hay un presupuesto acordado', () => {
@@ -321,6 +325,11 @@ describe('ads paso 2: ritmo, pausas y cambios ajenos', () => {
     const r = ruleSourceHealth(input({ health: { ...SANA, latido: 'caida' } }));
     expect(r.findings[0]).toMatchObject({ kind: 'fuente_sin_datos', recipient: 'tecnico', channel: 'interrupcion' });
     expect(ruleSourceHealth(input()).findings).toHaveLength(0);
+    // Una cuenta recién dada de alta sin datos todavía está arrancando: no es una fuente caída.
+    const now = new Date(`${TODAY}T14:00:00Z`);
+    expect(ruleSourceHealth(input({ health: { ...SANA, cambios: 'sin_datos' }, firstSeenAt: new Date(now.getTime() - 3_600_000) })).findings).toHaveLength(0);
+    expect(ruleSourceHealth(input({ health: { ...SANA, cambios: 'sin_datos' }, firstSeenAt: new Date(now.getTime() - 48 * 3_600_000) })).findings).toHaveLength(1);
+    expect(ruleSourceHealth(input({ health: { ...SANA, cambios: 'caida' }, firstSeenAt: new Date(now.getTime() - 3_600_000) })).findings).toHaveLength(1);
   });
 });
 
@@ -457,6 +466,18 @@ describe('ads paso 2: evaluación completa en modo simulado (base de datos real,
     await evaluateAll(tid, { mode: 'todas' });
     expect((await findings()).length).toBe(before);
   }, 120_000);
+
+  it('las reglas diarias solo se repiten cuando sus fuentes traen datos nuevos', async () => {
+    const store = await import('@/lib/ads/store');
+    const { evaluateAccount } = await import('@/lib/ads/findings');
+    const acc5 = await accountId('9990000005');
+    const first = (await evaluateAccount(tid, acc5)) as { evaluated: string[] };
+    expect(first.evaluated).toContain('rechazo_con_gasto'); // horaria: siempre
+    expect(first.evaluated).not.toContain('medicion_rota'); // diaria: nada nuevo desde la última
+    await store.markSyncOk(tid, acc5, 'metricas');
+    const second = (await evaluateAccount(tid, acc5)) as { evaluated: string[] };
+    expect(second.evaluated).toContain('medicion_rota');
+  }, 60_000);
 
   it('modo sombra y simulado: no se envía nada', async () => {
     const { runAdsAlerts } = await import('@/lib/ads/alerts');

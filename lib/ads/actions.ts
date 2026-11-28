@@ -11,7 +11,7 @@ import { testConnection } from '@/lib/ads/access';
 import { AdsSettingsError, connectionFor, removeCredentials, saveAlertSettings, saveCredentials, saveDeveloperToken, saveGeneral, type AlertInput, type GeneralInput } from '@/lib/ads/settings';
 import { AdsDecisionError, respondToFinding, reviewAccount, setProvisionalGoal } from '@/lib/ads/decisions';
 import { evaluateAll } from '@/lib/ads/findings';
-import { latestGoal } from '@/lib/ads/findings-store';
+import { closeAccountFindings, latestGoal } from '@/lib/ads/findings-store';
 import { clientBelongs, getAccount, setClientLevel, updateAccount } from '@/lib/ads/store';
 import { ADS_JOB, enqueueAccountSyncs, syncSchedules } from '@/lib/ads/sync';
 import { enqueueJob } from '@/lib/core/jobs';
@@ -140,6 +140,8 @@ export async function setAdsAccountTrackedAction(accountId: string, tracked: boo
     if (!acc) return { ok: false, error: 'Esa cuenta no existe.' };
     if (tracked && acc.status !== 'ENABLED') return { ok: false, error: 'Esa cuenta no está activa en Google Ads (cancelada o suspendida): no se puede seguir.' };
     await updateAccount(user.tenantId, acc.id, { tracked: Boolean(tracked) });
+    // Paso 2: lo vivo de una cuenta que se deja de seguir se cierra (nadie lo va a comprobar).
+    if (!tracked) await closeAccountFindings(user.tenantId, acc.id, new Date());
     await syncSchedules(user.tenantId);
     refresh();
     return { ok: true };

@@ -283,7 +283,7 @@ async function adsAttention(tenantId: string): Promise<{ accountId: string; acco
     .from(adsFindings)
     .innerJoin(adsAccounts, eq(adsAccounts.id, adsFindings.accountId))
     .leftJoin(clients, eq(clients.id, adsAccounts.clientId))
-    .where(and(eq(adsFindings.tenantId, tenantId), eq(adsAccounts.simulated, false), inArray(adsFindings.status, ['abierto', 'silenciado']), sql`((${adsFindings.status} = 'abierto' AND ${adsFindings.channel} = 'interrupcion') OR ${adsFindings.silencedUntil} < now())`))
+    .where(and(eq(adsFindings.tenantId, tenantId), eq(adsAccounts.simulated, false), eq(adsAccounts.tracked, true), inArray(adsFindings.status, ['abierto', 'silenciado']), sql`((${adsFindings.status} = 'abierto' AND ${adsFindings.channel} = 'interrupcion') OR ${adsFindings.silencedUntil} < now())`))
     .groupBy(adsAccounts.id, adsAccounts.name, clients.name)
     .limit(LIMIT);
   return rows.map((r) => ({ ...r, n: Number(r.n), since: new Date(r.since) }));

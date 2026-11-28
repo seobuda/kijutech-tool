@@ -30,6 +30,7 @@ export type AdsAccountView = {
   lastDay: string | null;
   cost30: number;
   lastCoverage: string | null;
+  timeZone: string | null;
 };
 
 export async function accountViews(tenantId: string): Promise<AdsAccountView[]> {
@@ -60,7 +61,8 @@ export async function accountViews(tenantId: string): Promise<AdsAccountView[]> 
       firstDay: t?.firstDay ?? null,
       lastDay: t?.lastDay ?? null,
       cost30: t?.cost30 ?? 0,
-      lastCoverage: t?.lastCoverage ?? null
+      lastCoverage: t?.lastCoverage ?? null,
+      timeZone: a.timeZone
     };
   });
 }

@@ -163,9 +163,20 @@ export async function pendingInterruptions(tenantId: string): Promise<(FindingRo
     .select({ f: adsFindings, simulated: adsAccounts.simulated, accountName: adsAccounts.name })
     .from(adsFindings)
     .leftJoin(adsAccounts, eq(adsAccounts.id, adsFindings.accountId))
-    .where(and(eq(adsFindings.tenantId, tenantId), eq(adsFindings.status, 'abierto'), eq(adsFindings.channel, 'interrupcion'), isNull(adsFindings.notifyState)))
+    // De agencia (sin cuenta) o de cuentas seguidas; las de una cuenta que se dejó de seguir no avisan.
+    .where(and(eq(adsFindings.tenantId, tenantId), eq(adsFindings.status, 'abierto'), eq(adsFindings.channel, 'interrupcion'), isNull(adsFindings.notifyState), or(isNull(adsFindings.accountId), eq(adsAccounts.tracked, true), eq(adsFindings.kind, 'cuenta_no_sirve'))))
     .orderBy(asc(adsFindings.firstSeenAt));
   return rows.map((r) => ({ ...r.f, simulated: r.simulated, accountName: r.accountName }));
+}
+
+/** Cierra (resuelto) los hallazgos vivos de una cuenta que deja de seguirse, salvo los de `exceptKind`. */
+export async function closeAccountFindings(tenantId: string, accountId: string, now: Date, exceptKind?: string): Promise<number> {
+  const rows = await db
+    .update(adsFindings)
+    .set({ status: 'resuelto', resolvedAt: now, lastCheckedAt: now })
+    .where(and(eq(adsFindings.tenantId, tenantId), eq(adsFindings.accountId, accountId), inArray(adsFindings.status, ['abierto', 'silenciado']), exceptKind ? sql`${adsFindings.kind} <> ${exceptKind}` : sql`true`))
+    .returning({ id: adsFindings.id });
+  return rows.length;
 }
 
 // --- Respuestas del gestor ---------------------------------------------------------------------------------------------
