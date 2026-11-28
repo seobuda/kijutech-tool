@@ -7,12 +7,13 @@ const now = new Date('2026-11-28T12:00:00Z');
 const daysAgo = (d: number) => new Date(now.getTime() - d * 86_400_000);
 
 describe('D0: descarga de Search Console atascada', () => {
-  it('normal: horas o pocos días avanzando; atascada: 5 días sin avanzar 2, o 14 en total', () => {
+  it('normal: horas o pocos días avanzando; atascada: 5 días o más y sin avanzar en 2', () => {
     expect(gscStuck({ downloading: true, assignedAt: daysAgo(1), lastSyncAt: daysAgo(0.1) }, now)).toBe(false);
     expect(gscStuck({ downloading: true, assignedAt: daysAgo(6), lastSyncAt: daysAgo(0.5) }, now)).toBe(false);
     expect(gscStuck({ downloading: true, assignedAt: daysAgo(6), lastSyncAt: daysAgo(3) }, now)).toBe(true);
     expect(gscStuck({ downloading: true, assignedAt: daysAgo(6), lastSyncAt: null }, now)).toBe(true);
-    expect(gscStuck({ downloading: true, assignedAt: daysAgo(15), lastSyncAt: daysAgo(0.1) }, now)).toBe(true);
+    // Revisor: una propiedad antigua reasignada que sí avanza no está atascada.
+    expect(gscStuck({ downloading: true, assignedAt: daysAgo(30), lastSyncAt: daysAgo(0.1) }, now)).toBe(false);
     expect(gscStuck({ downloading: false, assignedAt: daysAgo(30), lastSyncAt: null }, now)).toBe(false);
   });
   it('la etapa de datos pasa a error y espera a un administrador', () => {

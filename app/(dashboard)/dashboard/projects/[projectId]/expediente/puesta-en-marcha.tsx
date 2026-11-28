@@ -37,7 +37,7 @@ export function PuestaEnMarcha({ projectId, items, done, total, canEdit, audited
         canEdit ? (
           <span className="flex flex-wrap gap-2">
             {!audited && (
-              <Button size="sm" className="bg-brand text-white hover:bg-brand/90" disabled={pending} onClick={() => act(() => startAnalysisAction(projectId), 'Análisis en marcha: rastreo, auditoría, expediente, mapa y propuesta de la IA, por etapas (de 10 a 40 minutos según la web). Lo sigues arriba del Resumen.')}>
+              <Button size="sm" className="bg-brand text-white hover:bg-brand/90" disabled={pending} onClick={() => act(() => startAnalysisAction(projectId), 'Análisis abierto. Arriba del Resumen ves qué etapa va y si falta algo para seguir (por ejemplo, Search Console o las horas al mes); si no falta nada, rastrea la web y sigue solo (de 10 a 40 minutos).')}>
                 {pending ? <Loader2 className="size-3.5 animate-spin" /> : <Rocket className="size-3.5" />}
                 Empezar análisis
               </Button>

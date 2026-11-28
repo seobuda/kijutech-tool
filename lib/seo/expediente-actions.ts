@@ -13,7 +13,6 @@ import { updateCoreClient } from '@/lib/core/clients';
 import { enqueueDossier } from '@/lib/seo/expediente/collect';
 import { ATENCION_OPTIONS, DOSSIER_FIELD_SET, normPhone } from '@/lib/seo/expediente/rules';
 import { enqueueProposal } from '@/lib/seo/alta/alta';
-import { SaludError, startProjectAudit } from '@/lib/seo/salud/audit';
 
 type Ok = { ok: true } | { ok: false; error: string; needsReplace?: string };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

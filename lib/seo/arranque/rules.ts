@@ -78,13 +78,13 @@ export const SKIPPABLE = new Set<string>([...BLOCKING.map((k) => `conn:${k}`), '
 
 /**
  * Pendiente de D0 (revisor): la descarga del histórico de Search Console que no termina. Atascada si lleva 5 días o más
- * desde que se asignó y no ha avanzado en 2 días, o 14 días en total (una descarga normal tarda horas).
+ * desde que se asignó y no ha avanzado en 2 días (una descarga normal tarda horas; la fecha es la del alta de la propiedad).
  */
 export function gscStuck(i: { downloading: boolean; assignedAt: Date | null; lastSyncAt: Date | null }, now = new Date()): boolean {
   if (!i.downloading || !i.assignedAt) return false;
   const days = (now.getTime() - i.assignedAt.getTime()) / 86_400_000;
   const idle = i.lastSyncAt ? (now.getTime() - i.lastSyncAt.getTime()) / 86_400_000 : days;
-  return days >= 14 || (days >= 5 && idle >= 2);
+  return days >= 5 && idle >= 2;
 }
 
 export type Facts = {
