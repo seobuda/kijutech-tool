@@ -401,6 +401,7 @@ export function ctlAiMax(a: AuditInput): AuditResult {
   const regulated = a.ficha ? regulatedSector(a.ficha.sector) : null;
   const lines: string[] = [];
   const worse: string[] = [];
+  const young: string[] = [];
   for (const id of affected) {
     const m = byId.get(id);
     const day = m?.acaMigrationAt ?? m?.broadMatchMigrationAt ?? null;
@@ -408,12 +409,15 @@ export function ctlAiMax(a: AuditInput): AuditResult {
       const cpl = cplAround(a, id, day, a.t.auditAiMaxFactorCpl);
       const bad = cpl.worse;
       if (bad) worse.push(id);
+      if (cpl.afterDays < 14) young.push(id);
       lines.push(`${cname(a, id)}: Google la migró el ${day}. CPL de los 28 días antes ${cpl.before === null ? 'sin conversiones' : money(cpl.before, a.currency)}; después (${cpl.afterDays} días) ${cpl.after === null ? 'sin conversiones' : money(cpl.after, a.currency)}${bad ? ' — peor' : ''}.`);
     } else lines.push(`${cname(a, id)}: AI Max activo (sin fecha de migración: lo encendió alguien o no se pudo leer).`);
   }
   if (regulated === null) lines.push('Sin ficha: no se sabe si el sector es regulado.');
   lines.push('Los términos que AI Max añade (marca a genérico, genérico a competidor) se revisan en el lote de términos (paso 4).', ...migNote);
   const isBad = worse.length > 0 || regulated === true;
+  // Migración de menos de 14 días: aún no hay ventana para juzgarla (si no, al cumplirlos saldría un falso «reapareció»).
+  if (!isBad && young.length) return unchecked('ai_max', `migrada hace menos de 14 días (${young.map((id) => cname(a, id)).join(', ')}): aún no hay ventana para comparar el CPL`, lines);
   if (!isBad) return result('ai_max', 'bien', `${plural(affected.size, 'campaña', 'campañas')} con AI Max sin señal de empeorar`, { lines, campaignNativeIds: [...affected] });
   if (regulated) lines.unshift('Sector regulado: AI Max genera textos y términos que nadie revisa antes de salir (12.3).');
   const cost = costByCampaign(a, 30);

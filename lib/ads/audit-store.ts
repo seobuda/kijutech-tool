@@ -31,8 +31,8 @@ const n = (v: unknown) => (v === null || v === undefined ? 0 : Number(v));
 
 // --- Datos de la auditoría --------------------------------------------------------------------------------------------
 
-export async function auditDataRows(accountId: string): Promise<AdsAuditDataRow[]> {
-  return db.select().from(adsAuditData).where(eq(adsAuditData.accountId, accountId));
+export async function auditDataRows(tenantId: string, accountId: string): Promise<AdsAuditDataRow[]> {
+  return db.select().from(adsAuditData).where(and(eq(adsAuditData.tenantId, tenantId), eq(adsAuditData.accountId, accountId)));
 }
 
 /** Guarda un grupo. Si falló, se conserva el dato anterior pero queda marcado «no ok» (los controles no afirman nada). */
@@ -47,8 +47,9 @@ export async function saveAuditData(tenantId: string, accountId: string, kind: s
 
 // --- Foto de la cuenta para los controles -------------------------------------------------------------------------------
 
-export async function loadAuditBase(accountId: string, from: string, changesSince: Date): Promise<Pick<AuditInput, 'campaigns' | 'daily' | 'covered' | 'actions' | 'conversions' | 'landing' | 'changes'>> {
-  const camps = await db.select().from(adsCampaigns).where(eq(adsCampaigns.accountId, accountId));
+export async function loadAuditBase(tenantId: string, accountId: string, from: string, changesSince: Date): Promise<Pick<AuditInput, 'campaigns' | 'daily' | 'covered' | 'actions' | 'conversions' | 'landing' | 'changes'>> {
+  // Defensa en profundidad: la cuenta debe ser de esta cuenta de la herramienta (quien llama ya la leyó con su tenant).
+  const camps = await db.select().from(adsCampaigns).where(and(eq(adsCampaigns.tenantId, tenantId), eq(adsCampaigns.accountId, accountId)));
   const nativeOf = new Map(camps.map((c) => [c.id, c.nativeId]));
   const daily = await db
     .select({ campaignId: adsDailyCampaign.campaignId, day: adsDailyCampaign.day, cost: adsDailyCampaign.cost, clicks: adsDailyCampaign.clicks, conversions: adsDailyCampaign.conversions })

@@ -137,6 +137,6 @@ export async function auditView(tenantId: string, accountId: string, now: Date =
         }
       : null,
     report: audit ? auditReportText({ accountName: acc.name ?? acc.customerId, date: audit.createdAt.toISOString().slice(0, 10), currency: acc.currency, items: items.map((i) => ({ control: i.control, status: i.status, needsConfirmation: i.needsConfirmation, title: i.title, lines: i.lines, todo: i.todo, exposure: i.exposure, response: i.responseLabel })) }) : '',
-    data: (await aud.auditDataRows(accountId)).map((d) => ({ kind: d.kind, ok: d.ok, error: d.error, syncedAt: d.syncedAt.toISOString() }))
+    data: (await aud.auditDataRows(tenantId, accountId)).map((d) => ({ kind: d.kind, ok: d.ok, error: d.error, syncedAt: d.syncedAt.toISOString() }))
   };
 }

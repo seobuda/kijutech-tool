@@ -47,8 +47,8 @@ export function registerAdsCapabilities(): void {
   registerJobKind({ kind: ADS_JOB.cambios, timeoutS: 300, maxConcurrent: 2, maxAttempts: 3, run: async (ctx, p) => summary(await syncChanges(ctx.tenantId, accountOf(p), { signal: ctx.signal, heartbeat: ctx.heartbeat })) });
   registerJobKind({ kind: ADS_JOB.latido, timeoutS: 120, maxConcurrent: 3, maxAttempts: 2, run: async (ctx, p) => summary(await thenEvaluate(ctx.tenantId, accountOf(p), () => syncHourly(ctx.tenantId, accountOf(p), { signal: ctx.signal, heartbeat: ctx.heartbeat }))) });
   registerJobKind({ kind: ADS_JOB.landing, timeoutS: 300, maxConcurrent: 2, maxAttempts: 1, run: async (ctx, p) => summary(await thenEvaluate(ctx.tenantId, accountOf(p), () => checkLandings(ctx.tenantId, accountOf(p)))) });
-  // Paso 3: auditoría de higiene (la primera vez crea la de entrada; después, vigilancia diaria). `fresh` = «Repetir».
-  registerJobKind({ kind: ADS_JOB.auditar, timeoutS: 300, maxConcurrent: 2, maxAttempts: 2, run: async (ctx, p) => summary(await runAudit(ctx.tenantId, accountOf(p), { fresh: p.fresh === true, userId: typeof p.userId === 'number' ? p.userId : null, signal: ctx.signal })) });
+  // Paso 3: auditoría de higiene (la primera vez crea la de entrada; después, vigilancia diaria). `fresh` = «Repetir». Un solo intento y de uno en uno: un reintento de «Repetir» no debe crear otra auditoría.
+  registerJobKind({ kind: ADS_JOB.auditar, timeoutS: 300, maxConcurrent: 1, maxAttempts: 1, run: async (ctx, p) => summary(await runAudit(ctx.tenantId, accountOf(p), { fresh: p.fresh === true, userId: typeof p.userId === 'number' ? p.userId : null, signal: ctx.signal })) });
   registerJobKind({ kind: ADS_JOB.evaluar, timeoutS: 180, maxConcurrent: 2, maxAttempts: 2, run: async (ctx, p) => summary(await evaluateAccount(ctx.tenantId, accountOf(p), { mode: p.mode === 'todas' ? 'todas' : 'auto' })) });
   // Histórico: tramos de 90 días mientras quede tiempo; si no termina, se encola la continuación.
   registerJobKind({

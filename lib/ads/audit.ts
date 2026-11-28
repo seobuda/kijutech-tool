@@ -61,7 +61,7 @@ export async function refreshAuditData(tenantId: string, acc: AdsAccount, conn: 
   const now = ctx.now ?? new Date();
   const today = zonedParts(now, acc.timeZone || DEFAULT_TZ).date;
   const period = { from: addDays(today, -30), to: addDays(today, -1) };
-  const last = new Map((await aud.auditDataRows(acc.id)).map((r) => [r.kind, r]));
+  const last = new Map((await aud.auditDataRows(tenantId, acc.id)).map((r) => [r.kind, r]));
   const run: Run = (q) => runQuery(conn, acc.customerId, q, { now, signal: ctx.signal });
   const fetched: string[] = [];
   const failed: string[] = [];
@@ -141,9 +141,9 @@ export function fichaValue(f: Ficha, fact: FichaFact): string {
 export async function buildAuditInput(tenantId: string, acc: AdsAccount, now: Date): Promise<AuditInput> {
   const tz = acc.timeZone || DEFAULT_TZ;
   const today = zonedParts(now, tz).date;
-  const base = await aud.loadAuditBase(acc.id, addDays(today, -125), new Date(now.getTime() - 35 * 86_400_000));
+  const base = await aud.loadAuditBase(tenantId, acc.id, addDays(today, -125), new Date(now.getTime() - 35 * 86_400_000));
   const data: AuditInput['data'] = {};
-  for (const r of await aud.auditDataRows(acc.id)) {
+  for (const r of await aud.auditDataRows(tenantId, acc.id)) {
     if (!(r.kind in AUDIT_DATA_KINDS)) continue;
     (data as Record<string, DataSlot<AuditDataKind>>)[r.kind] = { ok: r.ok, error: r.error, syncedAt: r.syncedAt, from: r.dataFrom, to: r.dataTo, rows: (r.data ?? null) as AuditData[AuditDataKind] | null };
   }
@@ -176,7 +176,7 @@ export async function runAudit(tenantId: string, accountId: string, opts: { now?
   const pulled = await refreshAuditData(tenantId, acc, conn, { now, signal: opts.signal, all: opts.fresh });
   if (pulled.skipped && !pulled.fetched.length) {
     // Cupo agotado antes de pedir nada: si ya hay datos guardados, se sigue con ellos (dirán su edad); si no, se espera.
-    const have = await aud.auditDataRows(acc.id);
+    const have = await aud.auditDataRows(tenantId, acc.id);
     if (!have.length) return { skipped: pulled.skipped };
   }
   const input = await buildAuditInput(tenantId, acc, now);
@@ -248,7 +248,11 @@ export async function runAudit(tenantId: string, accountId: string, opts: { now?
   }
   const all = await aud.listItems(tenantId, current.id);
   const summary = auditSummary(all.map((i) => ({ control: i.control, status: i.status as AuditResult['status'], needsConfirmation: i.needsConfirmation })));
-  await aud.updateAudit(tenantId, current.id, { summary: { ...summary, lastVigilanceAt: now.toISOString() } });
+  // La línea base se congela la primera vez que se puede (si la auditoría se creó antes de terminar el histórico); después
+  // ya no cambia.
+  const base = results.find((r) => r.control === 'linea_base');
+  const frozen = current.baseline && Object.keys(current.baseline).length > 0;
+  await aud.updateAudit(tenantId, current.id, { summary: { ...summary, lastVigilanceAt: now.toISOString() }, ...(!frozen && base?.status === 'bien' ? { baseline: base.data } : {}) });
   return { accountId: acc.id, mode: 'vigilancia', auditId: current.id, fetched: pulled.fetched, failed: pulled.failed, summary, fixed, regressed };
 }
 
@@ -292,6 +296,7 @@ export async function respondToAuditItem(tenantId: string, user: Who, itemId: st
 export async function markAuditRead(tenantId: string, user: Who, auditId: string, now: Date = new Date()): Promise<void> {
   const a = await aud.getAudit(tenantId, auditId);
   if (!a) throw new AdsAuditError('Esa auditoría ya no existe.');
+  if (a.supersededAt) throw new AdsAuditError('Esa auditoría ya se repitió: marca como leída la vigente.');
   await aud.updateAudit(tenantId, auditId, { readAt: now, readBy: user.id });
 }
 

@@ -14,6 +14,7 @@ import {
   auditReportText,
   auditSummary,
   classifyTerm,
+  ctlAiMax,
   cplAround,
   ctlAutoApplied,
   ctlBaseline,
@@ -205,6 +206,9 @@ describe('ads paso 3: controles puros', () => {
     // Después con 10 conversiones (CPL 28, 1,4 ×): puede ser ruido con tan pocos datos.
     expect(cplAround({ today: TODAY, daily: [...days(-28, -1, 0.5), ...days(0, 27, 10 / 28)] }, '1', MIG, 1.3).worse).toBe(false);
     expect(poissonCdf(0, 0)).toBe(1);
+    // Migrada hace 5 días: aún no hay ventana; «no comprobado» (no «bien»), para que luego no salga un falso «reapareció».
+    const recent = ctlAiMax(input({ data: { automatizacion: slot<'automatizacion'>([{ nativeId: '1', aiMax: true, textAutomation: null, imageAutomation: null }]), migraciones: slot<'migraciones'>([{ nativeId: '1', acaMigrationAt: addDays(TODAY, -5), broadMatchMigrationAt: null }]) } }));
+    expect(recent.status).toBe('no_comprobado');
   });
 
   it('zona real y línea base', () => {
