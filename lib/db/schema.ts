@@ -5690,3 +5690,121 @@ export const adsAccountReviews = pgTable(
   },
   (table) => [index('ads_account_reviews_account_idx').on(table.accountId, table.reviewedAt)]
 );
+
+// --- Google Ads, paso 3 (28 nov 2026, migración 0085; docs/ads/DISENO-TECNICO-ADS.md §13): auditoría de higiene de
+// entrada por cuenta y su vigilancia diaria. Todo es lectura de Google Ads.
+
+/** Datos de la auditoría que se piden aparte (consultas aisladas: un campo mal escrito solo afecta a sus controles). */
+export const adsAuditData = pgTable(
+  'ads_audit_data',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => adsAccounts.id, { onDelete: 'cascade' }),
+    kind: varchar('kind', { length: 24 }).notNull(),
+    ok: boolean('ok').notNull().default(false),
+    error: text('error'),
+    syncedAt: timestamp('synced_at').notNull().defaultNow(),
+    dataFrom: date('data_from'),
+    dataTo: date('data_to'),
+    data: jsonb('data').$type<unknown>().notNull().default([])
+  },
+  (table) => [unique('ads_audit_data_unique').on(table.accountId, table.kind), index('ads_audit_data_tenant_idx').on(table.tenantId)]
+);
+export type AdsAuditDataRow = typeof adsAuditData.$inferSelect;
+
+/** Auditoría de entrada de una cuenta (EST-07), con su fecha. Repetirla deja la anterior como sustituida. */
+export const adsAudits = pgTable(
+  'ads_audits',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => adsAccounts.id, { onDelete: 'cascade' }),
+    kind: varchar('kind', { length: 12 }).notNull().default('entrada'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    createdBy: integer('created_by').references(() => users.id, { onDelete: 'set null' }),
+    dataThrough: date('data_through'),
+    baseline: jsonb('baseline').$type<Record<string, unknown>>().notNull().default({}),
+    summary: jsonb('summary').$type<Record<string, unknown>>().notNull().default({}),
+    readAt: timestamp('read_at'),
+    readBy: integer('read_by').references(() => users.id, { onDelete: 'set null' }),
+    supersededAt: timestamp('superseded_at')
+  },
+  (table) => [index('ads_audits_account_idx').on(table.tenantId, table.accountId, table.createdAt), check('ads_audits_kind_check', sql`${table.kind} IN ('entrada')`)]
+);
+export type AdsAuditRow = typeof adsAudits.$inferSelect;
+
+/** Un control dentro de una auditoría: resultado de entrada (inmutable), el de la vigilancia y la respuesta del gestor. */
+export const adsAuditItems = pgTable(
+  'ads_audit_items',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    auditId: uuid('audit_id')
+      .notNull()
+      .references(() => adsAudits.id, { onDelete: 'cascade' }),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => adsAccounts.id, { onDelete: 'cascade' }),
+    control: varchar('control', { length: 32 }).notNull(),
+    tanda: integer('tanda').notNull(),
+    risk: varchar('risk', { length: 4 }).notNull().default('R1'),
+    initialStatus: varchar('initial_status', { length: 14 }).notNull(),
+    status: varchar('status', { length: 14 }).notNull(),
+    needsConfirmation: boolean('needs_confirmation').notNull().default(false),
+    title: varchar('title', { length: 300 }).notNull(),
+    evidence: jsonb('evidence').$type<Record<string, unknown>>().notNull().default({}),
+    exposure: decimal('exposure', { precision: 14, scale: 2 }),
+    currency: varchar('currency', { length: 3 }),
+    prediction: jsonb('prediction').$type<Record<string, unknown>>(),
+    checkedAt: timestamp('checked_at').notNull().defaultNow(),
+    fixedAt: timestamp('fixed_at'),
+    regressedAt: timestamp('regressed_at'),
+    regressionCount: integer('regression_count').notNull().default(0),
+    regressionCause: text('regression_cause'),
+    response: varchar('response', { length: 20 }),
+    responseReason: text('response_reason'),
+    respondedBy: integer('responded_by').references(() => users.id, { onDelete: 'set null' }),
+    respondedAt: timestamp('responded_at'),
+    history: jsonb('history').$type<Record<string, unknown>[]>().notNull().default([])
+  },
+  (table) => [
+    unique('ads_audit_items_unique').on(table.auditId, table.control),
+    index('ads_audit_items_account_idx').on(table.tenantId, table.accountId),
+    check('ads_audit_items_status_check', sql`${table.status} IN ('bien', 'mal', 'no_comprobado') AND ${table.initialStatus} IN ('bien', 'mal', 'no_comprobado')`),
+    check('ads_audit_items_response_check', sql`${table.response} IS NULL OR ${table.response} IN ('hecho', 'cliente_lo_quiere', 'no_aplica', 'mas_tarde')`)
+  ]
+);
+export type AdsAuditItemRow = typeof adsAuditItems.$inferSelect;
+
+/** Fecha de confirmación de cada dato de la ficha que usa Ads (NEG-07). Candidata al núcleo junto a ads_goals. */
+export const adsClientFacts = pgTable(
+  'ads_client_facts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    fact: varchar('fact', { length: 20 }).notNull(),
+    confirmedAt: timestamp('confirmed_at').notNull().defaultNow(),
+    confirmedBy: integer('confirmed_by').references(() => users.id, { onDelete: 'set null' }),
+    valueSnapshot: text('value_snapshot')
+  },
+  (table) => [
+    unique('ads_client_facts_unique').on(table.clientId, table.fact),
+    check('ads_client_facts_fact_check', sql`${table.fact} IN ('marca', 'zona', 'telefono', 'horario', 'competidores', 'sector', 'servicios')`)
+  ]
+);
