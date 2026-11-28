@@ -33,7 +33,7 @@ export const SEO_SALUD_PROCESS_MAP: ProcessStep[] = [
     id: 'alta-puesta-en-marcha',
     lane: 'Alta del proyecto',
     name: 'Puesta en marcha del proyecto',
-    description: 'Lista de 11 puntos con lo que necesita el proyecto para el informe, las posiciones, el local y la medición: web, Search Console con datos, auditoría, mapa, a qué se dedica, servicios, zona, cómo atiende, idiomas, competencia (3 o más) y un contacto con correo que reciba los informes. «Ponerlo en marcha» lanza el rastreo y lo demás va encadenado.',
+    description: 'Lista de 11 puntos con lo que necesita el proyecto para el informe, las posiciones, el local y la medición: web, Search Console con datos, auditoría, mapa, a qué se dedica, servicios, zona, cómo atiende, idiomas, competencia (3 o más) y un contacto con correo que reciba los informes. «Empezar análisis» (el mismo botón que el análisis inicial del Resumen, desde el 28 nov) lanza el rastreo y lo demás va por etapas.',
     status: 'built',
     file: 'app/(dashboard)/dashboard/projects/[projectId]/expediente/puesta-en-marcha.tsx',
     when: 'Arriba del Expediente de cada proyecto.',

@@ -76,9 +76,22 @@ export const CONN_LABEL: Record<ConnKey, string> = {
 export const BLOCKING: ConnKey[] = ['web', 'search_console', 'horas'];
 export const SKIPPABLE = new Set<string>([...BLOCKING.map((k) => `conn:${k}`), 'stage:web', 'stage:negocio', 'stage:datos', 'stage:mapa', 'stage:mercado']);
 
+/**
+ * Pendiente de D0 (revisor): la descarga del histórico de Search Console que no termina. Atascada si lleva 5 días o más
+ * desde que se asignó y no ha avanzado en 2 días (una descarga normal tarda horas; la fecha es la del alta de la propiedad).
+ */
+export function gscStuck(i: { downloading: boolean; assignedAt: Date | null; lastSyncAt: Date | null }, now = new Date()): boolean {
+  if (!i.downloading || !i.assignedAt) return false;
+  const days = (now.getTime() - i.assignedAt.getTime()) / 86_400_000;
+  const idle = i.lastSyncAt ? (now.getTime() - i.lastSyncAt.getTime()) / 86_400_000 : days;
+  return days >= 5 && idle >= 2;
+}
+
 export type Facts = {
   web: { url: string | null };
   gsc: GscClass;
+  /** La descarga del histórico de Search Console no termina (gscStuck). */
+  gscStuck?: boolean;
   monthlyHours: number | null;
   analytics: boolean;
   isLocal: boolean;
@@ -160,6 +173,7 @@ export function evaluate(f: Facts): StageRow[] {
   // Datos propios
   if (!ready('datos')) set(wait('datos'));
   else if (f.gsc === 'con_datos') set({ key: 'datos', status: 'hecho', note: 'Search Console con datos.' });
+  else if (f.gsc === 'sin_descargar' && f.gscStuck) set({ key: 'datos', status: 'error', note: 'La descarga del histórico de Search Console no termina (lleva días sin avanzar). Revisa la conexión en la ficha del cliente o en Rendimiento; si sigue igual, avisa a Sistema.', who: 'admin' });
   else if (f.gsc === 'sin_descargar') set({ key: 'datos', status: 'en_curso', note: 'Descargando el histórico de Search Console.' });
   else if (f.gsc === 'error') set({ key: 'datos', status: 'error', note: 'Search Console sin permiso: añade la cuenta de servicio como usuario.', who: 'admin' });
   else set({ key: 'datos', status: 'sin_datos', note: `${GSC_CLASS_LABEL[f.gsc]}: se sigue sin historial y el plan saldrá preliminar.` });
