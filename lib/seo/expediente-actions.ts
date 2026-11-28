@@ -152,16 +152,3 @@ export async function proposeFichaAction(projectId: string): Promise<Ok> {
   }
 }
 
-/** «Ponerlo en marcha»: lanza el rastreo; lo demás (auditoría, expediente, mapa, propuesta de la IA) va encadenado solo. */
-export async function startProjectSetupAction(projectId: string): Promise<Ok> {
-  try {
-    const user = await requirePermission('edit');
-    const p = await ownProject(user.tenantId, projectId);
-    if (!p) return { ok: false, error: 'Proyecto no encontrado' };
-    await startProjectAudit(user.tenantId, projectId);
-    revalidatePath(PATH(projectId));
-    return { ok: true };
-  } catch (e) {
-    return { ok: false, error: e instanceof SaludError ? e.userMessage : publicError(e, 'No se pudo poner en marcha') };
-  }
-}

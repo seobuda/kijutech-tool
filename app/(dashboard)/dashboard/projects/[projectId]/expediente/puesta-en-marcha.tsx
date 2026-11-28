@@ -2,14 +2,16 @@
 
 // Proyecto → Expediente → Puesta en marcha (alta de la cartera, 26 nov 2026): lo que le falta al proyecto para que
 // funcionen el informe, las posiciones, el local y la medición, con lo que hace el sistema solo y lo que confirma una
-// persona. «Ponerlo en marcha» lanza el rastreo; la auditoría, el expediente, el mapa y la propuesta de la IA van solos.
+// persona. «Empezar análisis» es el mismo botón que arriba del Resumen (pendiente de D0, 28 nov: antes eran dos caminos):
+// abre el análisis inicial, que rastrea la web y sigue solo por etapas (auditoría, expediente, mapa, propuesta de la IA…).
 import { useTransition, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { CheckCircle2, Circle, Loader2, Rocket, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge, Section } from '@/components/ui/page';
 import type { ReadyItem } from '@/lib/seo/alta/rules';
-import { proposeFichaAction, startProjectSetupAction } from '@/lib/seo/expediente-actions';
+import { proposeFichaAction } from '@/lib/seo/expediente-actions';
+import { startAnalysisAction } from '@/lib/seo/arranque-actions';
 
 export function PuestaEnMarcha({ projectId, items, done, total, canEdit, audited, proposing }: { projectId: string; items: ReadyItem[]; done: number; total: number; canEdit: boolean; audited: boolean; proposing: boolean }) {
   const router = useRouter();
@@ -35,9 +37,9 @@ export function PuestaEnMarcha({ projectId, items, done, total, canEdit, audited
         canEdit ? (
           <span className="flex flex-wrap gap-2">
             {!audited && (
-              <Button size="sm" className="bg-brand text-white hover:bg-brand/90" disabled={pending} onClick={() => act(() => startProjectSetupAction(projectId), 'En marcha: rastreo, auditoría, expediente, mapa y propuesta de la IA, en ese orden (de 10 a 40 minutos según la web).')}>
+              <Button size="sm" className="bg-brand text-white hover:bg-brand/90" disabled={pending} onClick={() => act(() => startAnalysisAction(projectId), 'Análisis en marcha: rastreo, auditoría, expediente, mapa y propuesta de la IA, por etapas (de 10 a 40 minutos según la web). Lo sigues arriba del Resumen.')}>
                 {pending ? <Loader2 className="size-3.5 animate-spin" /> : <Rocket className="size-3.5" />}
-                Ponerlo en marcha
+                Empezar análisis
               </Button>
             )}
             {audited && (

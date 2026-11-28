@@ -141,7 +141,7 @@ export function readiness(s: ReadyState): { items: ReadyItem[]; done: number; to
   const items: ReadyItem[] = [
     { key: 'web', label: 'Web en el alcance del proyecto', ok: s.web, auto: false, hint: 'Edita el proyecto y marca la web del cliente.' },
     { key: 'gsc', label: 'Search Console asignado y con datos', ok: s.gscAssigned && s.gscHasData, auto: !s.gscAssigned ? false : true, hint: s.gscAssigned ? 'Asignado: la primera descarga tarda unas horas.' : 'Edita el proyecto y marca su propiedad de Search Console.' },
-    { key: 'auditoria', label: 'Primera auditoría hecha', ok: s.audited, auto: true, hint: 'Pulsa «Ponerlo en marcha»: rastrea la web y lo demás va solo.' },
+    { key: 'auditoria', label: 'Primera auditoría hecha', ok: s.audited, auto: true, hint: 'Pulsa «Empezar análisis»: rastrea la web y lo demás va solo, por etapas.' },
     { key: 'mapa', label: 'Mapa de palabras hecho', ok: s.mapBuilt, auto: true, hint: 'Se hace solo tras la auditoría si hay datos de Search Console.' },
     { key: 'negocio', label: 'A qué se dedica (confirmado)', ok: s.negocio, auto: false, hint: 'La IA lo propone tras la auditoría: confírmalo abajo.' },
     { key: 'servicios', label: 'Servicios (confirmados)', ok: s.servicios, auto: false, hint: 'La IA los propone tras la auditoría: confírmalos abajo y pásalos a la ficha.' },

@@ -19,7 +19,7 @@ import { enqueueProposal } from '@/lib/seo/alta/alta';
 import { enqueueKeywordMap } from '@/lib/seo/mapa/mapa';
 import { enqueueCompetitors } from '@/lib/seo/competencia/competencia';
 import { canSpend } from '@/lib/seo/gasto';
-import { actionsFor, connections, evaluate, gscClass, MAX_ATTEMPTS, progress, SETTLED, SKIPPABLE, type Facts } from '@/lib/seo/arranque/rules';
+import { actionsFor, connections, evaluate, gscClass, gscStuck, MAX_ATTEMPTS, progress, SETTLED, SKIPPABLE, type Facts } from '@/lib/seo/arranque/rules';
 
 export class SetupError extends Error {
   constructor(public userMessage: string) {
@@ -61,6 +61,7 @@ export async function gatherFacts(tenantId: string, projectId: string, skipped: 
     impressions90 = Number(r?.imp90 ?? 0);
   }
   const gsc = gscClass({ assigned: Boolean(prop), status: prop?.status ?? null, lastDate: prop?.lastDate ?? null, backfillDone: Boolean((prop?.syncState as { backfillDone?: boolean } | null)?.backfillDone), firstImpressionDate, impressions90 });
+  const gscStuckNow = gscStuck({ downloading: gsc === 'sin_descargar', assignedAt: prop?.createdAt ?? null, lastSyncAt: prop?.lastSyncAt ?? null });
   const confirmed = (field: string) => facts.some((f) => f.field === field && f.status !== 'descartado' && (f.status === 'confirmado' || f.source === 'ficha'));
   const proposed = (field: string) => facts.some((f) => f.field === field && f.status !== 'descartado');
   const isLocal = proposed('zona') || Number(places[0]?.n ?? 0) > 0;
@@ -70,6 +71,7 @@ export async function gatherFacts(tenantId: string, projectId: string, skipped: 
   return {
     web: { url: web },
     gsc,
+    gscStuck: gscStuckNow,
     monthlyHours: p.monthlyHours != null ? Number(p.monthlyHours) : null,
     analytics: (assets as { kind: string; access: string }[]).some((a) => a.kind === 'analytics' && a.access !== 'no'),
     isLocal,
