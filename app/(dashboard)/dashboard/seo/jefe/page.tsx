@@ -58,7 +58,7 @@ export default async function JefeRendimientoPage() {
           <Stat label="Planes aprobados" value={honestRate(m.plans.approved, m.plans.approved + m.plans.rejected)} hint="de los decididos" />
           <Stat label="Tu nota en sombra (1-5)" value={m.plans.shadowAvg != null ? String(m.plans.shadowAvg) : '—'} hint={`${m.plans.shadowScored} plan(es) puntuados${m.plans.shadowScored < 5 ? ' · pocos para fiarse' : ''}`} />
           <Stat label="Orden según el puntuador" value={m.plans.scoreAvg != null ? `${m.plans.scoreAvg}/100` : '—'} hint="media; avisa, no veta" />
-          <Stat label="Evidencias inventadas por plan" value={m.plans.rejectedEvidenceAvg != null ? String(m.plans.rejectedEvidenceAvg) : '—'} hint="descartadas por el código (media)" />
+          <Stat label="Evidencias descartadas por plan" value={m.plans.rejectedEvidenceAvg != null ? String(m.plans.rejectedEvidenceAvg) : '—'} hint="descartadas por el código (media)" />
           <Stat label="Cambios del chat aceptados" value={honestRate(m.changes.accepted, m.changes.decided)} />
           <Stat label="Estrategias del trimestre aprobadas" value={honestRate(m.cycles.approved, m.cycles.decided)} />
           <Stat label="Revisiones propuestas" value={String(m.revisions.proposed)} hint={`${m.revisions.generated} generadas`} />

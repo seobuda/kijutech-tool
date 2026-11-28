@@ -67,17 +67,24 @@ export async function decideRevision(tenantId: string, projectId: string, id: st
   if (!accept && why.length < 5) throw new PlanError('Escribe por qué no hace falta revisarlo: el Jefe lo tendrá en cuenta.');
   const [p] = await db.select().from(seoJefeProposals).where(and(eq(seoJefeProposals.id, id), eq(seoJefeProposals.tenantId, tenantId), eq(seoJefeProposals.projectId, projectId), eq(seoJefeProposals.kind, 'revision'))).limit(1);
   if (!p || p.status !== 'pendiente') throw new PlanError('Esa propuesta ya no está pendiente: recarga la página.');
-  let version: number | null = null;
-  // Primero la versión nueva (si los topes no la dejan, la propuesta sigue pendiente y se ve el motivo).
-  if (accept) {
-    const [base] = await db.select({ horizon: seoMasterPlans.horizonMonths }).from(seoMasterPlans).where(eq(seoMasterPlans.id, p.basePlanId ?? '00000000-0000-0000-0000-000000000000')).limit(1);
-    version = (await requestMasterPlan(tenantId, projectId, by, base?.horizon ?? 12)).version;
-  }
-  const r = await db
+  // Revisor: primero se reclama la propuesta (dos admins a la vez no generan dos versiones ni pagan dos veces).
+  const claimed = await db
     .update(seoJefeProposals)
-    .set({ status: accept ? 'aprobada' : 'rechazada', decidedBy: by.slice(0, 120), decisionReason: why.slice(0, 2000) || null, decidedAt: new Date(), edits: version != null ? { version } : null })
+    .set({ status: accept ? 'aprobada' : 'rechazada', decidedBy: by.slice(0, 120), decisionReason: why.slice(0, 2000) || null, decidedAt: new Date() })
     .where(and(eq(seoJefeProposals.id, id), eq(seoJefeProposals.status, 'pendiente')))
     .returning({ id: seoJefeProposals.id });
-  if (!r.length) throw new PlanError('Esa propuesta ya no está pendiente: recarga la página.');
+  if (!claimed.length) throw new PlanError('Esa propuesta ya no está pendiente: recarga la página.');
+  let version: number | null = null;
+  if (accept) {
+    try {
+      const [base] = await db.select({ horizon: seoMasterPlans.horizonMonths }).from(seoMasterPlans).where(eq(seoMasterPlans.id, p.basePlanId ?? '00000000-0000-0000-0000-000000000000')).limit(1);
+      version = (await requestMasterPlan(tenantId, projectId, by, base?.horizon ?? 12)).version;
+      await db.update(seoJefeProposals).set({ edits: { version } }).where(eq(seoJefeProposals.id, id));
+    } catch (e) {
+      // Si los topes no dejan generarla, la propuesta vuelve a pendiente y se ve el motivo.
+      await db.update(seoJefeProposals).set({ status: 'pendiente', decidedBy: null, decisionReason: null, decidedAt: null }).where(eq(seoJefeProposals.id, id));
+      throw e;
+    }
+  }
   return { version };
 }

@@ -45,7 +45,7 @@ export async function jefeMetrics(tenantId: string): Promise<JefeMetrics> {
       .where(and(eq(aiJobs.tenantId, tenantId), gte(aiJobs.createdAt, since90), sql`(${aiJobs.function} LIKE 'seo_jefe_%' OR ${aiJobs.function} IN ('agt_jefe_seo', 'agt_jefe_seo_resumen'))`))
       .groupBy(aiJobs.function),
     db
-      .select({ created: projects.createdAt, approved: sql<Date>`min(${seoMasterPlans.decidedAt})` })
+      .select({ days: sql<number>`extract(epoch from (min(${seoMasterPlans.decidedAt}) - ${projects.createdAt})) / 86400` })
       .from(seoMasterPlans)
       .innerJoin(projects, eq(projects.id, seoMasterPlans.projectId))
       .where(and(eq(seoMasterPlans.tenantId, tenantId), inArray(seoMasterPlans.status, ['aprobado', 'sustituido']), isNotNull(seoMasterPlans.decidedAt)))
@@ -77,7 +77,7 @@ export async function jefeMetrics(tenantId: string): Promise<JefeMetrics> {
       byFunction: costs.map((c) => ({ fn: c.fn, usd: Math.round(Number(c.usd) * 100) / 100, calls: c.calls })).sort((a, b) => b.usd - a.usd)
     },
     daysToApprovedPlan: (() => {
-      const ds = firstApproved.filter((r) => r.approved).map((r) => Math.round((new Date(r.approved).getTime() - r.created.getTime()) / 86_400_000));
+      const ds = firstApproved.map((r) => Math.round(Number(r.days))).filter((d) => Number.isFinite(d));
       return { n: ds.length, median: median(ds) };
     })()
   };
