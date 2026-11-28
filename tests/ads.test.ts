@@ -61,7 +61,7 @@ import {
 import { AdsApiError, runQuery, signServiceAccountJwt, translateApiError } from '@/lib/ads/client';
 import { simQuery, SIM_MCC } from '@/lib/ads/sim';
 import { connectionFor, publicSettings, saveCredentials, saveGeneral } from '@/lib/ads/settings';
-import { linkAccountsToClients, runFullSync, syncSchedules } from '@/lib/ads/sync';
+import { linkAccountsToClients, runFullSync, syncHistoryChunk, syncSchedules } from '@/lib/ads/sync';
 import { coverageSummary, adsHealth, sourceHealthFor } from '@/lib/ads/health';
 import * as store from '@/lib/ads/store';
 import { createCoreClient, saveAsset } from '@/lib/core/clients';
@@ -405,6 +405,18 @@ describe('ads: descarga completa en modo simulado (base de datos real, cuenta de
     await db.update(adsApiUsage).set({ operations: 0 }).where(and(eq(adsApiUsage.tenantId, tid), eq(adsApiUsage.day, day)));
     expect(new AdsApiError('cupo_propio', 'x').retryable).toBe(false);
   });
+
+  it('si se suben los meses de histórico, el histórico terminado se reabre y baja lo que falta', async () => {
+    const acc = (await store.listAccounts(tid, { trackedOnly: true })).find((a) => a.customerId === '9990000001')!;
+    const before = (await store.getSyncState(tid, acc.id, 'historico'))!.cursor as { oldest: string; done: boolean };
+    expect(before.done).toBe(true);
+    await saveGeneral(tid, { historyMonths: 11 }, 'prueba');
+    let r = (await syncHistoryChunk(tid, acc.id)) as { done: boolean };
+    for (let i = 0; i < 5 && !r.done; i++) r = (await syncHistoryChunk(tid, acc.id)) as { done: boolean };
+    const after = (await store.getSyncState(tid, acc.id, 'historico'))!.cursor as { oldest: string; done: boolean; months: number };
+    expect(after).toMatchObject({ done: true, months: 11 });
+    expect(after.oldest < before.oldest).toBe(true);
+  }, 60_000);
 
   it('vínculo con la ficha: 10 dígitos, conflicto si dos fichas la reclaman y el manual se respeta', async () => {
     const real = await store.upsertAccount(tid, { customerId: '1234567890', name: 'Real', currency: 'EUR', timeZone: 'Europe/Madrid', status: 'ENABLED', isTest: false, simulated: false });

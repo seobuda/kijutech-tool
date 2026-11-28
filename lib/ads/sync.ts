@@ -81,10 +81,17 @@ async function tracked<T>(tenantId: string, accountId: string | null, source: Ad
   try {
     return await fn();
   } catch (e) {
-    const msg = e instanceof AdsApiError ? e.message : e instanceof Error ? e.message : String(e);
+    // Lo que se guarda (y ve un lector en la pantalla) es solo el mensaje en español de Google Ads; un error interno
+    // (base de datos, código) se guarda con un texto genérico y el detalle va al registro de errores (revisor, 28 nov).
+    const msg = e instanceof AdsApiError ? e.message : 'Error interno de la descarga (detalle en el registro de errores).';
+    if (!(e instanceof AdsApiError)) reportError({ source: 'ads', area: source, tenantId, message: `Google Ads: error interno en la descarga de ${source}`, error: e, severity: 'error' });
+    // El cupo agotado no es un fallo de la fuente: no suma fallos seguidos (si no, todo saldría «caído»).
+    if (e instanceof AdsApiError && (e.code === 'cupo_dia' || e.code === 'cupo_propio')) {
+      await store.markSyncNote(tenantId, accountId, source, msg);
+      return { skipped: msg };
+    }
     const failures = await store.markSyncFail(tenantId, accountId, source, msg);
-    if (e instanceof AdsApiError && (e.code === 'cupo_dia' || e.code === 'cupo_propio')) return { skipped: msg };
-    if (failures >= 3) reportError({ source: 'ads', area: source, tenantId, message: `Google Ads: falla la descarga de ${source} (${failures} veces seguidas)`, error: msg, severity: 'aviso' });
+    if (failures >= 3 && e instanceof AdsApiError) reportError({ source: 'ads', area: source, tenantId, message: `Google Ads: falla la descarga de ${source} (${failures} veces seguidas)`, error: msg, severity: 'aviso' });
     throw e;
   }
 }
@@ -162,12 +169,15 @@ export async function syncSchedules(tenantId: string): Promise<void> {
     }
     if (follow) {
       const h = await store.getSyncState(tenantId, acc.id, 'historico');
-      if (!(h?.cursor as { done?: boolean } | undefined)?.done) await enqueueHistory(tenantId, acc.id);
+      const cur = (h?.cursor ?? {}) as { done?: boolean; months?: number };
+      if (!cur.done || (row?.historyMonths ?? 37) > (cur.months ?? 0)) await enqueueHistory(tenantId, acc.id);
     }
   }
 }
 
 export async function enqueueHistory(tenantId: string, accountId: string): Promise<void> {
+  // Una sola cadena del histórico por cuenta (la continuación lleva otra clave): si hay una abierta, no se encola otra.
+  if (await store.hasOpenJob(tenantId, ADS_JOB.historico, accountId)) return;
   await enqueueJob({ tenantId, kind: ADS_JOB.historico, payload: { accountId }, scopeType: 'cuenta', scopeId: accountId, priority: 8, dedupeKey: `${ADS_JOB.historico}:${accountId}` });
 }
 
@@ -257,8 +267,6 @@ async function pullRange(tenantId: string, acc: AdsAccount, conn: AdsConnection,
   await store.ensureConversionActionStubs(tenantId, acc.id, conv.map((c) => c.conversionAction));
   await store.upsertDailyConversion(tenantId, acc.id, conv, ids);
   const control = parseCustomerDaily(await run(Q.customerDaily(from, to)));
-  // Las dos respuestas llegaron: una campaña con fila guardada que ya no sale ese día es 0 (Google corrige días recientes).
-  await store.clearMissingDaily(acc.id, from, to, new Set(daily.map((d) => `${d.nativeId}|${d.day}`)), ids);
   const syncedAt = ctx.now ?? new Date();
   const tz = tzOf(acc);
   const sums = new Map<string, { cost: number; impressions: number }>();
@@ -268,18 +276,24 @@ async function pullRange(tenantId: string, acc: AdsAccount, conn: AdsConnection,
     s.impressions += d.impressions;
   }
   const ctl = new Map(control.map((c) => [c.day, c]));
+  const controlAnswered = control.length > 0;
   const coverage = [];
   const complete: string[] = [];
   for (let day = from; day <= to; day = addDays(day, 1)) {
     const rows = sums.get(day) ?? { cost: 0, impressions: 0 };
     rows.cost = Math.round(rows.cost * 100) / 100;
-    // Sin fila de control ese día: la cuenta entera no tuvo impresiones (la consulta respondió).
-    const c = ctl.get(day) ?? { cost: 0, impressions: 0 };
+    // Sin fila de control ese día: solo cuenta como «cero» si el control respondió con filas para otros días de la ventana
+    // (si vino vacío entero, no se distingue «sin impresiones» de «respuesta vacía»: el día queda sin comprobar).
+    const real = ctl.get(day);
+    const c = real ?? (controlAnswered ? { cost: 0, impressions: 0 } : null);
     const v = coverageVerdict({ day, timeZone: tz, syncedAt, control: c, rows });
-    coverage.push({ day, complete: v.complete, controlCost: c.cost, controlImpressions: c.impressions, rowsCost: rows.cost, rowsImpressions: rows.impressions, note: v.note });
+    coverage.push({ day, complete: v.complete, controlCost: c?.cost ?? null, controlImpressions: c?.impressions ?? null, rowsCost: rows.cost, rowsImpressions: rows.impressions, note: v.note ?? (real ? null : 'sin fila de control: la cuenta no tuvo impresiones') });
     if (v.complete) complete.push(day);
   }
   await store.upsertCoverage(tenantId, acc.id, coverage);
+  // Solo en los días comprobados (control cuadrado): una campaña con fila guardada que ya no sale ese día es 0 (Google
+  // corrige días recientes). Si el control no cuadra, no se borra nada (revisor, 28 nov).
+  await store.clearMissingDaily(acc.id, complete, new Set(daily.map((d) => `${d.nativeId}|${d.day}`)), ids);
   return { rows: daily.length, complete };
 }
 
@@ -305,7 +319,9 @@ export async function syncHistoryChunk(tenantId: string, accountId: string, ctx:
     const { conn, historyMonths } = await needConn(tenantId);
     const acc = await needAccount(tenantId, accountId);
     const state = await store.getSyncState(tenantId, accountId, 'historico');
-    const cursor = (state?.cursor ?? {}) as { nextTo?: string; done?: boolean; oldest?: string; chunks?: number };
+    let cursor = (state?.cursor ?? {}) as { nextTo?: string; done?: boolean; oldest?: string; chunks?: number; months?: number };
+    // Si se sube «meses de histórico» después de terminar, se reabre desde donde se quedó (revisor, 28 nov).
+    if (cursor.done && cursor.oldest && historyMonths > (cursor.months ?? 0)) cursor = { ...cursor, done: false, nextTo: addDays(cursor.oldest, -1) };
     if (cursor.done) return { done: true, chunks: cursor.chunks ?? 0 };
     const today = zonedParts(ctx.now ?? new Date(), tzOf(acc)).date;
     // Lo de los últimos 10 días lo trae la descarga de métricas; el histórico empieza justo antes.
@@ -313,14 +329,14 @@ export async function syncHistoryChunk(tenantId: string, accountId: string, ctx:
     const chunks = historyChunks(addDays(today, -10), historyMonths);
     const oldest = chunks[chunks.length - 1].from;
     if (latest < oldest) {
-      await store.markSyncOk(tenantId, accountId, 'historico', { cursor: { ...cursor, done: true, oldest } });
+      await store.markSyncOk(tenantId, accountId, 'historico', { cursor: { ...cursor, done: true, oldest, months: historyMonths } });
       return { done: true, chunks: cursor.chunks ?? 0 };
     }
     const from = addDays(latest, -89) < oldest ? oldest : addDays(latest, -89);
     const r = await pullRange(tenantId, acc, conn, from, latest, ctx);
     // No se para en un tramo vacío (un cliente de temporada puede tener meses parados): solo al llegar a history_months.
     const done = from <= oldest;
-    const next = { nextTo: addDays(from, -1), done, oldest, chunks: (cursor.chunks ?? 0) + 1 };
+    const next = { nextTo: addDays(from, -1), done, oldest, chunks: (cursor.chunks ?? 0) + 1, months: historyMonths };
     await store.markSyncOk(tenantId, accountId, 'historico', { cursor: next, lastDataDate: from });
     return { done, chunks: next.chunks, rows: r.rows };
   });

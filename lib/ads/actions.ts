@@ -8,7 +8,7 @@ import { requirePermission } from '@/lib/auth/permissions';
 import { publicError } from '@/lib/errors';
 import { AdsApiError } from '@/lib/ads/client';
 import { testConnection } from '@/lib/ads/access';
-import { AdsSettingsError, removeCredentials, saveCredentials, saveDeveloperToken, saveGeneral, type GeneralInput } from '@/lib/ads/settings';
+import { AdsSettingsError, connectionFor, removeCredentials, saveCredentials, saveDeveloperToken, saveGeneral, type GeneralInput } from '@/lib/ads/settings';
 import { clientBelongs, getAccount, setClientLevel, updateAccount } from '@/lib/ads/store';
 import { ADS_JOB, enqueueAccountSyncs, syncSchedules } from '@/lib/ads/sync';
 import { enqueueJob } from '@/lib/core/jobs';
@@ -96,6 +96,9 @@ export async function testAdsConnectionAction(): Promise<Ok<{ message: string; a
 export async function startAdsSyncNowAction(): Promise<Ok<{ queued: number }>> {
   try {
     const user = await requirePermission('admin');
+    const { conn, reason, row } = await connectionFor(user.tenantId);
+    if (!conn) return { ok: false, error: reason ?? 'Google Ads no está configurado.' };
+    if (!row?.syncEnabled) return { ok: false, error: 'Activa antes la descarga.' };
     await enqueueJob({ tenantId: user.tenantId, kind: ADS_JOB.descubrir, scopeType: 'cuenta', scopeId: null, priority: 4, dedupeKey: `${ADS_JOB.descubrir}:ahora` });
     const n = await enqueueAccountSyncs(user.tenantId);
     refresh();
@@ -132,6 +135,7 @@ export async function setAdsAccountTrackedAction(accountId: string, tracked: boo
     const user = await requirePermission('admin');
     const acc = await getAccount(user.tenantId, String(accountId ?? ''));
     if (!acc) return { ok: false, error: 'Esa cuenta no existe.' };
+    if (tracked && acc.status !== 'ENABLED') return { ok: false, error: 'Esa cuenta no está activa en Google Ads (cancelada o suspendida): no se puede seguir.' };
     await updateAccount(user.tenantId, acc.id, { tracked: Boolean(tracked) });
     await syncSchedules(user.tenantId);
     refresh();

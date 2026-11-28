@@ -267,6 +267,15 @@ export function snapshotHash(snapshot: unknown): string {
 
 export type ServiceAccountKey = { clientEmail: string; privateKey: string; privateKeyId: string; tokenUri: string; projectId: string | null };
 
+function isGoogleTokenUri(v: string): boolean {
+  try {
+    const u = new URL(v);
+    return u.protocol === 'https:' && u.hostname === 'oauth2.googleapis.com';
+  } catch {
+    return false;
+  }
+}
+
 export function parseServiceAccountKey(text: string): { ok: true; key: ServiceAccountKey } | { ok: false; error: string } {
   const raw = String(text ?? '').trim();
   if (!raw) return { ok: false, error: 'Pega el contenido del archivo JSON de la cuenta de servicio.' };
@@ -285,7 +294,7 @@ export function parseServiceAccountKey(text: string): { ok: true; key: ServiceAc
   if (!/^[^@\s]+@[^@\s]+\.iam\.gserviceaccount\.com$/.test(clientEmail)) return { ok: false, error: 'Falta el correo de la cuenta de servicio (client_email).' };
   if (!/-----BEGIN PRIVATE KEY-----[\s\S]+-----END PRIVATE KEY-----/.test(privateKey)) return { ok: false, error: 'Falta la clave privada (private_key).' };
   if (!privateKeyId) return { ok: false, error: 'Falta el identificador de la clave (private_key_id).' };
-  if (!/^https:\/\/oauth2\.googleapis\.com\//.test(tokenUri)) return { ok: false, error: 'La dirección del token (token_uri) no es la de Google.' };
+  if (!isGoogleTokenUri(tokenUri)) return { ok: false, error: 'La dirección del token (token_uri) no es la de Google.' };
   return { ok: true, key: { clientEmail, privateKey, privateKeyId, tokenUri, projectId: typeof j.project_id === 'string' ? j.project_id : null } };
 }
 

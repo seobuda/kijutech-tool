@@ -104,7 +104,7 @@ export async function upsertAccount(
   if (existing) {
     const [row] = await db
       .update(adsAccounts)
-      .set({ name: a.name, currency: a.currency, timeZone: a.timeZone, status: a.status, isTest: a.isTest, simulated: a.simulated, lastSeenAt: new Date(), updatedAt: new Date(), ...(a.status !== 'ENABLED' ? { tracked: false } : {}) })
+      .set({ name: a.name, currency: a.currency, timeZone: a.timeZone, status: a.status, isTest: a.isTest, simulated: a.simulated, lastSeenAt: new Date(), updatedAt: new Date(), ...(a.status !== 'ENABLED' ? { tracked: false } : existing.status !== 'ENABLED' ? { tracked: true } : {}) })
       .where(eq(adsAccounts.id, existing.id))
       .returning();
     return { account: row, created: false };
@@ -210,6 +210,17 @@ export async function markSyncFail(tenantId: string, accountId: string | null, s
   const failures = (prev?.consecutiveFailures ?? 0) + 1;
   await upsertSync(tenantId, accountId, source, { lastAttemptAt: new Date(), consecutiveFailures: failures, lastError: error.slice(0, 1000) });
   return failures;
+}
+
+/** Anota un intento sin contarlo como fallo (cupo agotado). */
+export async function markSyncNote(tenantId: string, accountId: string | null, source: AdsSource, note: string): Promise<void> {
+  await upsertSync(tenantId, accountId, source, { lastAttemptAt: new Date(), lastError: note.slice(0, 1000) });
+}
+
+/** ¿Hay un trabajo de esa clase abierto para esa cuenta? (para no encolar dos cadenas del histórico). */
+export async function hasOpenJob(tenantId: string, kind: string, scopeId: string): Promise<boolean> {
+  const rows = await db.execute<{ n: number }>(sql`SELECT count(*)::int AS n FROM jobs WHERE tenant_id = ${tenantId} AND kind = ${kind} AND scope_id = ${scopeId} AND status IN ('pendiente', 'en_curso')`);
+  return Number([...rows][0]?.n ?? 0) > 0;
 }
 
 export async function setSyncCursor(tenantId: string, accountId: string, source: AdsSource, cursor: Record<string, unknown>): Promise<void> {
@@ -390,11 +401,12 @@ export async function upsertDailyCampaign(tenantId: string, accountId: string, r
  * Para un día con filas resincronizadas, una campaña que tenía fila y ya no sale tiene 0 (Google corrige días recientes):
  * se borra su fila de ese día dentro de la ventana pedida. Solo días con la consulta de control respondida.
  */
-export async function clearMissingDaily(accountId: string, from: string, to: string, seenKeys: Set<string>, ids: Map<string, string>): Promise<void> {
+export async function clearMissingDaily(accountId: string, days: string[], seenKeys: Set<string>, ids: Map<string, string>): Promise<void> {
+  if (!days.length) return;
   const existing = await db
     .select({ id: adsDailyCampaign.id, campaignId: adsDailyCampaign.campaignId, day: adsDailyCampaign.day })
     .from(adsDailyCampaign)
-    .where(and(eq(adsDailyCampaign.accountId, accountId), gte(adsDailyCampaign.day, from), sql`${adsDailyCampaign.day} <= ${to}`));
+    .where(and(eq(adsDailyCampaign.accountId, accountId), inArray(adsDailyCampaign.day, days)));
   const back = new Map([...ids.entries()].map(([n, id]) => [id, n]));
   const stale = existing.filter((r) => !seenKeys.has(`${back.get(r.campaignId)}|${r.day}`)).map((r) => r.id);
   for (const part of chunk(stale)) await db.delete(adsDailyCampaign).where(inArray(adsDailyCampaign.id, part));
