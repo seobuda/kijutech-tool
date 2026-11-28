@@ -33,7 +33,8 @@ const appCode = () => codeFiles().filter((f) => !rel(f).startsWith('tests/'));
 // ---------------------------------------------------------------------------------------------------------------
 
 // Módulos: cada uno es dueño de sus datos y no conoce a los demás; se hablan a través del núcleo.
-const MODULES = ['operaciones', 'agentes', 'estrategia', 'rendimiento', 'seo'];
+// 'ads' (Google Ads, desde el 28 nov 2026): registrado antes de existir para que SEO y Ads no se importen entre sí.
+const MODULES = ['operaciones', 'agentes', 'estrategia', 'rendimiento', 'seo', 'ads'];
 // Núcleo e infraestructura común: cualquiera puede usarlos, pero ellos no dependen de ningún módulo.
 const CORE = ['core', 'auth', 'db', 'ai', 'projects', 'errors.ts', 'utils.ts'];
 // Capa de aplicación: une varios módulos a propósito (arranque, vistas que leen de varios, el Mapa Visual).
@@ -186,7 +187,7 @@ describe('barreras de arquitectura: acciones del servidor', () => {
 // ---------------------------------------------------------------------------------------------------------------
 
 // Prefijos de módulo y de las piezas del núcleo que tienen familia propia (IA, conocimiento, errores).
-const TABLE_PREFIXES = ['ops_', 'seo_', 'ai_', 'agt_', 'kb_', 'perf_', 'est_', 'sys_'];
+const TABLE_PREFIXES = ['ops_', 'seo_', 'ads_', 'ai_', 'agt_', 'kb_', 'perf_', 'est_', 'sys_'];
 // Tablas del núcleo sin prefijo. Añadir una aquí es decidir que es núcleo (y el núcleo necesita aprobación).
 const CORE_TABLES = new Set([
   'tenants', 'users', 'roles', 'user_roles', 'projects', 'modules', 'project_modules', 'auth_login_attempts',
