@@ -5091,3 +5091,602 @@ export const seoSources = pgTable(
   ]
 );
 export type SeoSourceRow = typeof seoSources.$inferSelect;
+
+// --- Módulo Google Ads (28 nov 2026, migración 0084; docs/ads/DISENO-TECNICO-ADS.md v2) --------------------------------
+// Paso 1: ajustes, cuentas de la MCC, estado de la descarga, cupo, estructura, métricas diarias y por hora, cobertura por
+// día (cero frente a «sin dato»), fotos de estado y políticas, URL de destino e historial de cambios. Paso 2 (vacías por
+// ahora): objetivos, nivel del cliente, hallazgos, respuestas, resultado de cada regla y revisiones. Todo es lectura.
+
+export type AdsSettingsState = {
+  lastMorningSync?: string;
+  lastTest?: { at: string; ok: boolean; message: string; accounts?: number };
+};
+
+export const adsSettings = pgTable(
+  'ads_settings',
+  {
+    tenantId: uuid('tenant_id')
+      .primaryKey()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    mccCustomerId: varchar('mcc_customer_id', { length: 10 }),
+    authMode: varchar('auth_mode', { length: 20 }).notNull().default('none'),
+    credentialsEncrypted: text('credentials_encrypted'),
+    credentialsIv: varchar('credentials_iv', { length: 64 }),
+    credentialsHint: varchar('credentials_hint', { length: 200 }),
+    credentialsAddedAt: timestamp('credentials_added_at'),
+    developerTokenEncrypted: text('developer_token_encrypted'),
+    developerTokenIv: varchar('developer_token_iv', { length: 64 }),
+    apiVersion: varchar('api_version', { length: 8 }).notNull().default('v26'),
+    apiVersionSunset: date('api_version_sunset'),
+    syncEnabled: boolean('sync_enabled').notNull().default(false),
+    dailyOpsBudget: integer('daily_ops_budget').notNull().default(2500),
+    historyMonths: integer('history_months').notNull().default(37),
+    aiMonthlyCapUsd: decimal('ai_monthly_cap_usd', { precision: 10, scale: 2 }).notNull().default('25'),
+    alertsEnabled: boolean('alerts_enabled').notNull().default(false),
+    alertHours: varchar('alert_hours', { length: 11 }).notNull().default('09:00-19:00'),
+    alertDays: varchar('alert_days', { length: 20 }).notNull().default('1,2,3,4,5'),
+    maxInterruptionsPerDay: integer('max_interruptions_per_day').notNull().default(2),
+    agencyEmailDomains: jsonb('agency_email_domains').$type<string[]>().notNull().default([]),
+    agencyUserEmails: jsonb('agency_user_emails').$type<string[]>().notNull().default([]),
+    state: jsonb('state').$type<AdsSettingsState>().notNull().default({}),
+    updatedBy: varchar('updated_by', { length: 120 }),
+    updatedAt: timestamp('updated_at').notNull().defaultNow()
+  },
+  (table) => [check('ads_settings_auth_mode_check', sql`${table.authMode} IN ('none', 'service_account', 'sim')`)]
+);
+export type AdsSettingsRow = typeof adsSettings.$inferSelect;
+
+export const adsAccounts = pgTable(
+  'ads_accounts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    platform: varchar('platform', { length: 10 }).notNull().default('google'),
+    customerId: varchar('customer_id', { length: 10 }).notNull(),
+    name: varchar('name', { length: 255 }),
+    currency: varchar('currency', { length: 3 }),
+    timeZone: varchar('time_zone', { length: 64 }),
+    status: varchar('status', { length: 20 }),
+    isTest: boolean('is_test').notNull().default(false),
+    simulated: boolean('simulated').notNull().default(false),
+    tracked: boolean('tracked').notNull().default(true),
+    clientId: uuid('client_id').references(() => clients.id, { onDelete: 'set null' }),
+    linkedBy: varchar('linked_by', { length: 10 }),
+    linkNote: text('link_note'),
+    autoTagging: boolean('auto_tagging'),
+    firstSeenAt: timestamp('first_seen_at').notNull().defaultNow(),
+    lastSeenAt: timestamp('last_seen_at').notNull().defaultNow(),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow()
+  },
+  (table) => [
+    unique('ads_accounts_customer_unique').on(table.tenantId, table.platform, table.customerId),
+    index('ads_accounts_tenant_idx').on(table.tenantId, table.tracked),
+    index('ads_accounts_client_idx').on(table.clientId),
+    check('ads_accounts_linked_by_check', sql`${table.linkedBy} IS NULL OR ${table.linkedBy} IN ('ficha', 'manual')`)
+  ]
+);
+export type AdsAccount = typeof adsAccounts.$inferSelect;
+
+export const adsClients = pgTable(
+  'ads_clients',
+  {
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    level: varchar('level', { length: 1 }),
+    updatedBy: varchar('updated_by', { length: 120 }),
+    updatedAt: timestamp('updated_at').notNull().defaultNow()
+  },
+  (table) => [
+    primaryKey({ name: 'ads_clients_pk', columns: [table.tenantId, table.clientId] }),
+    check('ads_clients_level_check', sql`${table.level} IS NULL OR ${table.level} IN ('A', 'B', 'C')`)
+  ]
+);
+
+export const adsSyncState = pgTable(
+  'ads_sync_state',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    scopeKey: varchar('scope_key', { length: 64 }).notNull().default(''),
+    accountId: uuid('account_id').references(() => adsAccounts.id, { onDelete: 'cascade' }),
+    source: varchar('source', { length: 20 }).notNull(),
+    lastOkAt: timestamp('last_ok_at'),
+    lastAttemptAt: timestamp('last_attempt_at'),
+    lastDataDate: date('last_data_date'),
+    cursor: jsonb('cursor').$type<Record<string, unknown>>().notNull().default({}),
+    expectedEveryMinutes: integer('expected_every_minutes').notNull().default(360),
+    consecutiveFailures: integer('consecutive_failures').notNull().default(0),
+    lastError: text('last_error'),
+    updatedAt: timestamp('updated_at').notNull().defaultNow()
+  },
+  (table) => [
+    unique('ads_sync_state_unique').on(table.tenantId, table.scopeKey, table.source),
+    check('ads_sync_state_source_check', sql`${table.source} IN ('descubrir', 'estructura', 'metricas', 'historico', 'cambios', 'latido', 'landing')`)
+  ]
+);
+export type AdsSyncStateRow = typeof adsSyncState.$inferSelect;
+
+export const adsApiUsage = pgTable(
+  'ads_api_usage',
+  {
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    day: date('day').notNull(),
+    operations: integer('operations').notNull().default(0),
+    errors: integer('errors').notNull().default(0),
+    lastError: text('last_error'),
+    updatedAt: timestamp('updated_at').notNull().defaultNow()
+  },
+  (table) => [primaryKey({ name: 'ads_api_usage_pk', columns: [table.tenantId, table.day] })]
+);
+
+export const adsBudgets = pgTable(
+  'ads_budgets',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => adsAccounts.id, { onDelete: 'cascade' }),
+    nativeId: varchar('native_id', { length: 24 }).notNull(),
+    name: varchar('name', { length: 255 }),
+    amount: decimal('amount', { precision: 14, scale: 2 }),
+    period: varchar('period', { length: 20 }),
+    explicitlyShared: boolean('explicitly_shared').notNull().default(false),
+    deliveryMethod: varchar('delivery_method', { length: 20 }),
+    status: varchar('status', { length: 20 }),
+    referenceCount: integer('reference_count'),
+    firstSeenAt: timestamp('first_seen_at').notNull().defaultNow(),
+    lastSeenAt: timestamp('last_seen_at').notNull().defaultNow()
+  },
+  (table) => [unique('ads_budgets_unique').on(table.accountId, table.nativeId)]
+);
+
+export type AdsScheduleSlot = { day: string; startHour: number; startMinute: number; endHour: number; endMinute: number };
+
+export const adsCampaigns = pgTable(
+  'ads_campaigns',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => adsAccounts.id, { onDelete: 'cascade' }),
+    platform: varchar('platform', { length: 10 }).notNull().default('google'),
+    nativeId: varchar('native_id', { length: 24 }).notNull(),
+    name: varchar('name', { length: 255 }),
+    channelType: varchar('channel_type', { length: 40 }),
+    channelSubtype: varchar('channel_subtype', { length: 40 }),
+    status: varchar('status', { length: 20 }),
+    servingStatus: varchar('serving_status', { length: 20 }),
+    primaryStatus: varchar('primary_status', { length: 30 }),
+    biddingStrategyType: varchar('bidding_strategy_type', { length: 40 }),
+    biddingStrategyNativeId: varchar('bidding_strategy_native_id', { length: 24 }),
+    budgetNativeId: varchar('budget_native_id', { length: 24 }),
+    targetCpa: decimal('target_cpa', { precision: 14, scale: 2 }),
+    targetRoas: decimal('target_roas', { precision: 10, scale: 4 }),
+    startDate: date('start_date'),
+    endDate: date('end_date'),
+    adSchedule: jsonb('ad_schedule').$type<AdsScheduleSlot[] | null>(),
+    attrs: jsonb('attrs').$type<Record<string, unknown>>().notNull().default({}),
+    firstSeenAt: timestamp('first_seen_at').notNull().defaultNow(),
+    lastSeenAt: timestamp('last_seen_at').notNull().defaultNow()
+  },
+  (table) => [unique('ads_campaigns_unique').on(table.accountId, table.nativeId), index('ads_campaigns_tenant_idx').on(table.tenantId, table.accountId)]
+);
+export type AdsCampaign = typeof adsCampaigns.$inferSelect;
+
+export const adsConfigVersions = pgTable(
+  'ads_config_versions',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => adsAccounts.id, { onDelete: 'cascade' }),
+    entityType: varchar('entity_type', { length: 24 }).notNull(),
+    entityNativeId: varchar('entity_native_id', { length: 200 }).notNull(),
+    validFrom: timestamp('valid_from').notNull().defaultNow(),
+    validTo: timestamp('valid_to'),
+    snapshot: jsonb('snapshot').$type<Record<string, unknown>>().notNull(),
+    hash: varchar('hash', { length: 64 }).notNull()
+  },
+  (table) => [
+    uniqueIndex('ads_config_versions_current').on(table.accountId, table.entityType, table.entityNativeId).where(sql`${table.validTo} IS NULL`),
+    index('ads_config_versions_entity_idx').on(table.accountId, table.entityType, table.entityNativeId, table.validFrom),
+    check('ads_config_versions_type_check', sql`${table.entityType} IN ('cuenta', 'campana', 'presupuesto', 'estrategia', 'accion_conversion')`)
+  ]
+);
+
+export const adsConversionActions = pgTable(
+  'ads_conversion_actions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => adsAccounts.id, { onDelete: 'cascade' }),
+    resourceName: varchar('resource_name', { length: 200 }).notNull(),
+    nativeId: varchar('native_id', { length: 24 }),
+    ownerCustomerId: varchar('owner_customer_id', { length: 10 }),
+    name: varchar('name', { length: 255 }),
+    category: varchar('category', { length: 40 }),
+    type: varchar('type', { length: 60 }),
+    status: varchar('status', { length: 20 }),
+    primaryForGoal: boolean('primary_for_goal'),
+    includeInConversions: boolean('include_in_conversions'),
+    countingType: varchar('counting_type', { length: 30 }),
+    attrs: jsonb('attrs').$type<Record<string, unknown>>().notNull().default({}),
+    firstSeenAt: timestamp('first_seen_at').notNull().defaultNow(),
+    lastSeenAt: timestamp('last_seen_at').notNull().defaultNow()
+  },
+  (table) => [unique('ads_conversion_actions_unique').on(table.accountId, table.resourceName)]
+);
+
+export const adsDailyCampaign = pgTable(
+  'ads_daily_campaign',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => adsAccounts.id, { onDelete: 'cascade' }),
+    campaignId: uuid('campaign_id')
+      .notNull()
+      .references(() => adsCampaigns.id, { onDelete: 'cascade' }),
+    platform: varchar('platform', { length: 10 }).notNull().default('google'),
+    day: date('day').notNull(),
+    cost: decimal('cost', { precision: 14, scale: 2 }).notNull(),
+    impressions: bigint('impressions', { mode: 'number' }).notNull(),
+    clicks: bigint('clicks', { mode: 'number' }).notNull(),
+    conversions: decimal('conversions', { precision: 14, scale: 4 }),
+    conversionsValue: decimal('conversions_value', { precision: 14, scale: 2 }),
+    allConversions: decimal('all_conversions', { precision: 14, scale: 4 }),
+    conversionsByConvDate: decimal('conversions_by_conv_date', { precision: 14, scale: 4 }),
+    ext: jsonb('ext').$type<Record<string, unknown>>().notNull().default({}),
+    syncedAt: timestamp('synced_at').notNull().defaultNow()
+  },
+  (table) => [unique('ads_daily_campaign_unique').on(table.campaignId, table.day), index('ads_daily_campaign_account_idx').on(table.accountId, table.day)]
+);
+
+export const adsDailyConversion = pgTable(
+  'ads_daily_conversion',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => adsAccounts.id, { onDelete: 'cascade' }),
+    campaignId: uuid('campaign_id')
+      .notNull()
+      .references(() => adsCampaigns.id, { onDelete: 'cascade' }),
+    conversionAction: varchar('conversion_action', { length: 200 }).notNull(),
+    day: date('day').notNull(),
+    conversions: decimal('conversions', { precision: 14, scale: 4 }),
+    allConversions: decimal('all_conversions', { precision: 14, scale: 4 }),
+    conversionsValue: decimal('conversions_value', { precision: 14, scale: 2 }),
+    conversionsByConvDate: decimal('conversions_by_conv_date', { precision: 14, scale: 4 }),
+    allConversionsByConvDate: decimal('all_conversions_by_conv_date', { precision: 14, scale: 4 }),
+    syncedAt: timestamp('synced_at').notNull().defaultNow()
+  },
+  (table) => [unique('ads_daily_conversion_unique').on(table.campaignId, table.conversionAction, table.day), index('ads_daily_conversion_account_idx').on(table.accountId, table.day)]
+);
+
+export const adsDailyCoverage = pgTable(
+  'ads_daily_coverage',
+  {
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => adsAccounts.id, { onDelete: 'cascade' }),
+    day: date('day').notNull(),
+    syncedAt: timestamp('synced_at').notNull().defaultNow(),
+    complete: boolean('complete').notNull().default(false),
+    controlCost: decimal('control_cost', { precision: 14, scale: 2 }),
+    controlImpressions: bigint('control_impressions', { mode: 'number' }),
+    rowsCost: decimal('rows_cost', { precision: 14, scale: 2 }),
+    rowsImpressions: bigint('rows_impressions', { mode: 'number' }),
+    note: text('note')
+  },
+  (table) => [primaryKey({ name: 'ads_daily_coverage_pk', columns: [table.accountId, table.day] }), index('ads_daily_coverage_tenant_idx').on(table.tenantId, table.day)]
+);
+
+export const adsHourlyCampaign = pgTable(
+  'ads_hourly_campaign',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => adsAccounts.id, { onDelete: 'cascade' }),
+    campaignId: uuid('campaign_id')
+      .notNull()
+      .references(() => adsCampaigns.id, { onDelete: 'cascade' }),
+    day: date('day').notNull(),
+    hour: smallint('hour').notNull(),
+    impressions: bigint('impressions', { mode: 'number' }).notNull(),
+    clicks: bigint('clicks', { mode: 'number' }).notNull(),
+    cost: decimal('cost', { precision: 14, scale: 2 }).notNull(),
+    conversions: decimal('conversions', { precision: 14, scale: 4 }),
+    syncedAt: timestamp('synced_at').notNull().defaultNow()
+  },
+  (table) => [
+    unique('ads_hourly_campaign_unique').on(table.campaignId, table.day, table.hour),
+    index('ads_hourly_campaign_account_idx').on(table.accountId, table.day),
+    check('ads_hourly_campaign_hour_check', sql`${table.hour} BETWEEN 0 AND 23`)
+  ]
+);
+
+export const adsCampaignStatusDaily = pgTable(
+  'ads_campaign_status_daily',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => adsAccounts.id, { onDelete: 'cascade' }),
+    campaignId: uuid('campaign_id')
+      .notNull()
+      .references(() => adsCampaigns.id, { onDelete: 'cascade' }),
+    day: date('day').notNull(),
+    status: varchar('status', { length: 20 }),
+    primaryStatus: varchar('primary_status', { length: 30 }),
+    primaryStatusReasons: jsonb('primary_status_reasons').$type<string[]>().notNull().default([]),
+    servingStatus: varchar('serving_status', { length: 20 }),
+    biddingStatus: varchar('bidding_status', { length: 40 }),
+    budgetAmount: decimal('budget_amount', { precision: 14, scale: 2 }),
+    observations: integer('observations').notNull().default(1),
+    worstPrimaryStatus: varchar('worst_primary_status', { length: 30 }),
+    updatedAt: timestamp('updated_at').notNull().defaultNow()
+  },
+  (table) => [unique('ads_campaign_status_daily_unique').on(table.campaignId, table.day), index('ads_campaign_status_daily_account_idx').on(table.accountId, table.day)]
+);
+
+export const adsAdGroupPolicyDaily = pgTable(
+  'ads_ad_group_policy_daily',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => adsAccounts.id, { onDelete: 'cascade' }),
+    campaignId: uuid('campaign_id').references(() => adsCampaigns.id, { onDelete: 'cascade' }),
+    entityKind: varchar('entity_kind', { length: 12 }).notNull().default('ad_group'),
+    adGroupNativeId: varchar('ad_group_native_id', { length: 24 }).notNull(),
+    name: varchar('name', { length: 255 }),
+    adGroupStatus: varchar('ad_group_status', { length: 20 }),
+    day: date('day').notNull(),
+    adsTotal: integer('ads_total').notNull().default(0),
+    adsApproved: integer('ads_approved').notNull().default(0),
+    adsLimited: integer('ads_limited').notNull().default(0),
+    adsDisapproved: integer('ads_disapproved').notNull().default(0),
+    keywordsDisapproved: integer('keywords_disapproved').notNull().default(0),
+    updatedAt: timestamp('updated_at').notNull().defaultNow()
+  },
+  (table) => [
+    unique('ads_ad_group_policy_daily_unique').on(table.accountId, table.entityKind, table.adGroupNativeId, table.day),
+    check('ads_ad_group_policy_daily_kind_check', sql`${table.entityKind} IN ('ad_group', 'asset_group')`)
+  ]
+);
+
+export const adsChangeEvents = pgTable(
+  'ads_change_events',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => adsAccounts.id, { onDelete: 'cascade' }),
+    eventResourceName: varchar('event_resource_name', { length: 300 }).notNull(),
+    changeAt: timestamp('change_at', { withTimezone: true }).notNull(),
+    changeAtLocal: varchar('change_at_local', { length: 32 }).notNull(),
+    userEmail: varchar('user_email', { length: 255 }),
+    clientType: varchar('client_type', { length: 60 }),
+    actorClass: varchar('actor_class', { length: 12 }).notNull().default('desconocido'),
+    resourceType: varchar('resource_type', { length: 60 }),
+    changedResource: varchar('changed_resource', { length: 300 }),
+    campaignNativeId: varchar('campaign_native_id', { length: 24 }),
+    operation: varchar('operation', { length: 20 }),
+    changedFields: jsonb('changed_fields').$type<string[]>().notNull().default([]),
+    oldValue: jsonb('old_value').$type<Record<string, unknown> | null>(),
+    newValue: jsonb('new_value').$type<Record<string, unknown> | null>(),
+    createdAt: timestamp('created_at').notNull().defaultNow()
+  },
+  (table) => [
+    unique('ads_change_events_unique').on(table.accountId, table.eventResourceName),
+    index('ads_change_events_account_idx').on(table.accountId, table.changeAt.desc()),
+    check('ads_change_events_actor_check', sql`${table.actorClass} IN ('agencia', 'cliente', 'google', 'herramienta', 'desconocido')`)
+  ]
+);
+
+export const adsLandingUrls = pgTable(
+  'ads_landing_urls',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => adsAccounts.id, { onDelete: 'cascade' }),
+    urlNormalized: text('url_normalized').notNull(),
+    url: text('url').notNull(),
+    origins: jsonb('origins').$type<string[]>().notNull().default([]),
+    campaignNativeIds: jsonb('campaign_native_ids').$type<string[]>().notNull().default([]),
+    cost7d: decimal('cost_7d', { precision: 14, scale: 2 }),
+    clicks7d: bigint('clicks_7d', { mode: 'number' }),
+    firstSeenAt: timestamp('first_seen_at').notNull().defaultNow(),
+    lastSeenAt: timestamp('last_seen_at').notNull().defaultNow(),
+    lastCheckAt: timestamp('last_check_at'),
+    lastCheckStatus: varchar('last_check_status', { length: 40 }),
+    lastCheckOk: boolean('last_check_ok'),
+    consecutiveFailures: integer('consecutive_failures').notNull().default(0)
+  },
+  (table) => [unique('ads_landing_urls_unique').on(table.accountId, table.urlNormalized)]
+);
+
+export const adsGoals = pgTable(
+  'ads_goals',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    version: integer('version').notNull(),
+    kind: varchar('kind', { length: 12 }).notNull().default('provisional'),
+    cplMax: decimal('cpl_max', { precision: 14, scale: 2 }),
+    budgetMin: decimal('budget_min', { precision: 14, scale: 2 }),
+    budgetUsual: decimal('budget_usual', { precision: 14, scale: 2 }),
+    budgetMax: decimal('budget_max', { precision: 14, scale: 2 }),
+    capacityPerWeek: integer('capacity_per_week'),
+    calendar: jsonb('calendar').$type<Record<string, unknown>>().notNull().default({}),
+    rules: jsonb('rules').$type<Record<string, unknown>>().notNull().default({}),
+    dataQuality: jsonb('data_quality').$type<Record<string, unknown>>().notNull().default({}),
+    agreedBy: varchar('agreed_by', { length: 120 }),
+    validFrom: date('valid_from').notNull(),
+    frozenBaselineFrom: date('frozen_baseline_from'),
+    frozenBaselineTo: date('frozen_baseline_to'),
+    notes: text('notes'),
+    createdBy: integer('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at').notNull().defaultNow()
+  },
+  (table) => [unique('ads_goals_version_unique').on(table.clientId, table.version), check('ads_goals_kind_check', sql`${table.kind} IN ('provisional', 'acordado')`)]
+);
+
+export const adsFindings = pgTable(
+  'ads_findings',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    accountId: uuid('account_id').references(() => adsAccounts.id, { onDelete: 'cascade' }),
+    campaignId: uuid('campaign_id').references(() => adsCampaigns.id, { onDelete: 'set null' }),
+    scope: varchar('scope', { length: 10 }).notNull().default('cuenta'),
+    kind: varchar('kind', { length: 32 }).notNull(),
+    causeKey: varchar('cause_key', { length: 300 }).notNull(),
+    episodeStartedAt: timestamp('episode_started_at').notNull().defaultNow(),
+    channel: varchar('channel', { length: 12 }).notNull(),
+    recipient: varchar('recipient', { length: 10 }).notNull().default('gestor'),
+    severity: varchar('severity', { length: 10 }).notNull().default('media'),
+    title: varchar('title', { length: 300 }).notNull(),
+    evidence: jsonb('evidence').$type<Record<string, unknown>>().notNull().default({}),
+    exposure: decimal('exposure', { precision: 14, scale: 2 }),
+    currency: varchar('currency', { length: 3 }),
+    confidence: varchar('confidence', { length: 10 }),
+    status: varchar('status', { length: 12 }).notNull().default('abierto'),
+    firstSeenAt: timestamp('first_seen_at').notNull().defaultNow(),
+    lastSeenAt: timestamp('last_seen_at').notNull().defaultNow(),
+    lastCheckedAt: timestamp('last_checked_at'),
+    uncheckedSince: timestamp('unchecked_since'),
+    resolvedAt: timestamp('resolved_at'),
+    silencedUntil: timestamp('silenced_until'),
+    notifiedAt: timestamp('notified_at'),
+    notifyState: varchar('notify_state', { length: 12 })
+  },
+  (table) => [
+    uniqueIndex('ads_findings_open_cause').on(table.tenantId, table.causeKey).where(sql`${table.status} IN ('abierto', 'silenciado')`),
+    index('ads_findings_account_idx').on(table.tenantId, table.accountId, table.status),
+    check('ads_findings_scope_check', sql`${table.scope} IN ('cuenta', 'campana', 'agencia')`),
+    check(
+      'ads_findings_kind_check',
+      sql`${table.kind} IN ('cuenta_no_sirve', 'rechazo_con_gasto', 'landing_caida', 'campana_parada_desbocada', 'lead_no_llega', 'pausado_aportaba', 'llamadas', 'ritmo_gasto', 'termino_come_gasto', 'lote_terminos', 'cambio_ajeno', 'medicion_rota', 'caida_leads', 'lanzamiento', 'fuente_sin_datos')`
+    ),
+    check('ads_findings_channel_check', sql`${table.channel} IN ('interrupcion', 'parte', 'lote', 'revision')`),
+    check('ads_findings_recipient_check', sql`${table.recipient} IN ('gestor', 'tecnico')`),
+    check('ads_findings_status_check', sql`${table.status} IN ('abierto', 'resuelto', 'silenciado', 'descartado')`)
+  ]
+);
+
+export const adsFindingResponses = pgTable(
+  'ads_finding_responses',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    findingId: uuid('finding_id')
+      .notNull()
+      .references(() => adsFindings.id, { onDelete: 'cascade' }),
+    userId: integer('user_id').references(() => users.id, { onDelete: 'set null' }),
+    response: varchar('response', { length: 24 }).notNull(),
+    reason: text('reason'),
+    until: date('until'),
+    createdAt: timestamp('created_at').notNull().defaultNow()
+  },
+  (table) => [
+    index('ads_finding_responses_finding_idx').on(table.findingId, table.createdAt),
+    check('ads_finding_responses_check', sql`${table.response} IN ('hecho', 'lo_hago_yo', 'esperando_cliente', 'cliente_lo_quiere', 'ya_lo_sabia', 'no_es_problema', 'posponer', 'encargar')`)
+  ]
+);
+
+export const adsRuleRuns = pgTable(
+  'ads_rule_runs',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    scopeKey: varchar('scope_key', { length: 64 }).notNull().default(''),
+    accountId: uuid('account_id').references(() => adsAccounts.id, { onDelete: 'cascade' }),
+    rule: varchar('rule', { length: 40 }).notNull(),
+    evaluatedAt: timestamp('evaluated_at').notNull().defaultNow(),
+    outcome: varchar('outcome', { length: 14 }).notNull(),
+    reason: text('reason'),
+    dataThrough: date('data_through')
+  },
+  (table) => [unique('ads_rule_runs_unique').on(table.tenantId, table.scopeKey, table.rule), check('ads_rule_runs_outcome_check', sql`${table.outcome} IN ('ok', 'hallazgo', 'no_comprobado')`)]
+);
+
+export const adsAccountReviews = pgTable(
+  'ads_account_reviews',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => adsAccounts.id, { onDelete: 'cascade' }),
+    reviewedBy: integer('reviewed_by').references(() => users.id, { onDelete: 'set null' }),
+    note: text('note'),
+    reviewedAt: timestamp('reviewed_at').notNull().defaultNow(),
+    nextReviewOn: date('next_review_on')
+  },
+  (table) => [index('ads_account_reviews_account_idx').on(table.accountId, table.reviewedAt)]
+);

@@ -1,0 +1,45 @@
+{
+  "_nota": "Escrita a mano desde la documentación pública de la API de Google Ads (v26, REST searchStream). NO está grabada de una cuenta real: la sustituye la primera respuesta real de la prueba de acceso (paquete A). Hasta entonces no cuenta como GOO-07 hecho.",
+  "body": [
+    {
+      "results": [
+        {
+          "campaign": {
+            "resourceName": "customers/4445556666/campaigns/111",
+            "id": "111",
+            "name": "Búsqueda",
+            "status": "ENABLED",
+            "servingStatus": "SERVING",
+            "primaryStatus": "LIMITED",
+            "primaryStatusReasons": [
+              "BUDGET_CONSTRAINED"
+            ],
+            "advertisingChannelType": "SEARCH",
+            "biddingStrategyType": "MAXIMIZE_CONVERSIONS",
+            "campaignBudget": "customers/4445556666/campaignBudgets/900",
+            "maximizeConversions": {
+              "targetCpaMicros": "35000000"
+            },
+            "startDate": "2024-03-01",
+            "endDate": "2037-12-30"
+          }
+        },
+        {
+          "campaign": {
+            "resourceName": "customers/4445556666/campaigns/222",
+            "id": "222",
+            "name": "Cartera",
+            "status": "PAUSED",
+            "servingStatus": "SERVING",
+            "primaryStatus": "PAUSED",
+            "advertisingChannelType": "SEARCH",
+            "biddingStrategyType": "TARGET_CPA",
+            "biddingStrategy": "customers/4445556666/biddingStrategies/555",
+            "campaignBudget": "customers/4445556666/campaignBudgets/901"
+          }
+        }
+      ],
+      "requestId": "doc-2"
+    }
+  ]
+}

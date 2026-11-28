@@ -14,6 +14,7 @@ import { registerOperacionesPromptEvals } from '@/lib/operaciones/prompt-evals';
 import { registerSeoJefePromptEvals } from '@/lib/seo/jefe/plan-evals';
 import { registerPlatformCapabilities } from '@/lib/core/platform';
 import { registerSeoCapabilities } from '@/lib/seo/register';
+import { registerAdsCapabilities } from '@/lib/ads/register';
 
 let wired = false;
 export function wireApp(): void {
@@ -21,6 +22,7 @@ export function wireApp(): void {
   wired = true;
   registerPlatformCapabilities(); // cimientos (23 nov 2026): cola de trabajos, mensajes a clientes, Search Console, rastreador
   registerSeoCapabilities(); // Hito 1 SEO (23 nov 2026): hallazgos de Salud técnica y la auditoría en la cola
+  registerAdsCapabilities(); // Google Ads paso 1 (28 nov 2026): descarga de solo lectura en la cola y MED-00 en Salud
   registerOperacionesCapabilities();
   registerAgentesCapabilities();
   registerRendimientoCapabilities();

@@ -1,0 +1,76 @@
+{
+  "_nota": "Escrita a mano desde la documentación pública de la API de Google Ads (v26, REST searchStream). NO está grabada de una cuenta real: la sustituye la primera respuesta real de la prueba de acceso (paquete A). Hasta entonces no cuenta como GOO-07 hecho.",
+  "body": [
+    {
+      "results": [
+        {
+          "customerClient": {
+            "resourceName": "customers/1112223333/customerClients/1112223333",
+            "id": "1112223333",
+            "descriptiveName": "MCC Agencia",
+            "currencyCode": "EUR",
+            "timeZone": "Europe/Madrid",
+            "status": "ENABLED",
+            "manager": true,
+            "testAccount": false,
+            "level": "0"
+          }
+        },
+        {
+          "customerClient": {
+            "resourceName": "customers/1112223333/customerClients/4445556666",
+            "id": "4445556666",
+            "descriptiveName": "Cliente Uno",
+            "currencyCode": "EUR",
+            "timeZone": "Europe/Madrid",
+            "status": "ENABLED",
+            "manager": false,
+            "testAccount": false,
+            "level": "1"
+          }
+        },
+        {
+          "customerClient": {
+            "resourceName": "customers/1112223333/customerClients/7778889999",
+            "id": "7778889999",
+            "descriptiveName": "Cliente Cancelado",
+            "currencyCode": "EUR",
+            "timeZone": "Europe/Madrid",
+            "status": "CANCELED",
+            "manager": false,
+            "testAccount": false,
+            "level": "1"
+          }
+        },
+        {
+          "customerClient": {
+            "resourceName": "customers/1112223333/customerClients/1231231234",
+            "id": "1231231234",
+            "descriptiveName": "Sub MCC",
+            "currencyCode": "EUR",
+            "timeZone": "Europe/Madrid",
+            "status": "ENABLED",
+            "manager": true,
+            "testAccount": false,
+            "level": "1"
+          }
+        },
+        {
+          "customerClient": {
+            "resourceName": "customers/1112223333/customerClients/3213214321",
+            "id": "3213214321",
+            "descriptiveName": "Prueba",
+            "currencyCode": "USD",
+            "timeZone": "America/New_York",
+            "status": "ENABLED",
+            "manager": false,
+            "testAccount": true,
+            "level": "1"
+          }
+        }
+      ],
+      "fieldMask": "customerClient.id,customerClient.descriptiveName,customerClient.currencyCode,customerClient.timeZone,customerClient.status,customerClient.manager,customerClient.testAccount,customerClient.level",
+      "requestId": "doc-1"
+    }
+  ]
+}

@@ -30,6 +30,7 @@ import {
   Hammer,
   BarChart3,
   Compass,
+  Megaphone,
   NotebookText,
   Circle,
   ArrowLeft,
@@ -65,6 +66,7 @@ const ICONS: Record<string, LucideIcon> = {
   Hammer,
   BarChart3,
   Compass,
+  Megaphone,
   NotebookText,
   Circle,
 };

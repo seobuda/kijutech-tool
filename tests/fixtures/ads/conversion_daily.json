@@ -1,0 +1,43 @@
+{
+  "_nota": "Escrita a mano desde la documentación pública de la API de Google Ads (v26, REST searchStream). NO está grabada de una cuenta real: la sustituye la primera respuesta real de la prueba de acceso (paquete A). Hasta entonces no cuenta como GOO-07 hecho.",
+  "body": [
+    {
+      "results": [
+        {
+          "campaign": {
+            "resourceName": "customers/4445556666/campaigns/111",
+            "id": "111"
+          },
+          "segments": {
+            "date": "2026-11-20",
+            "conversionAction": "customers/4445556666/conversionActions/1"
+          },
+          "metrics": {
+            "conversions": 2,
+            "allConversions": 2,
+            "conversionsValue": 0,
+            "conversionsByConversionDate": 2,
+            "allConversionsByConversionDate": 2
+          }
+        },
+        {
+          "campaign": {
+            "resourceName": "customers/4445556666/campaigns/111",
+            "id": "111"
+          },
+          "segments": {
+            "date": "2026-11-20",
+            "conversionAction": "customers/1112223333/conversionActions/777"
+          },
+          "metrics": {
+            "conversions": 0.5,
+            "allConversions": 0.5,
+            "conversionsByConversionDate": 0,
+            "allConversionsByConversionDate": 0
+          }
+        }
+      ],
+      "requestId": "doc-4"
+    }
+  ]
+}

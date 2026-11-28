@@ -82,6 +82,7 @@ import { pinMoneyPageAction, unpinMoneyPageAction } from '@/lib/seo/cambios-acti
 import { generateIdeasAction, runDemandNowAction, setIdeaStatusAction } from '@/lib/seo/demanda-actions';
 import { briefToTaskAction, markBriefUsedAction, requestBriefAction, retryBriefAction, setBriefStatusAction } from '@/lib/seo/contenido-actions';
 import { checkOldPhonesNowAction } from '@/lib/seo/local-actions';
+import { linkAdsAccountAction, removeAdsCredentialsAction, saveAdsCredentialsAction, saveAdsDeveloperTokenAction, saveAdsSettingsAction, setAdsAccountTrackedAction, setAdsClientLevelAction, startAdsSyncNowAction, testAdsConnectionAction } from '@/lib/ads/actions';
 import ProjectsPage from '@/app/(dashboard)/dashboard/projects/page';
 import ArchivedProjectsPage from '@/app/(dashboard)/dashboard/projects/archived/page';
 import NewProjectPage from '@/app/(dashboard)/dashboard/projects/new/page';
@@ -196,6 +197,16 @@ const ACCIONES_ADMIN: [string, () => unknown][] = [
   ['errorBriefAction (errores: texto para arreglar)', () => errorBriefAction(ZERO)],
   ['saveClickUpToken (tokens)', () => saveClickUpToken('')],
   ['savePerfSettingsAction (avisos de rendimiento)', () => savePerfSettingsAction({ alertPct: 50 })],
+  // Google Ads (paso 1, 28 nov 2026): credenciales, conexión, descarga, vínculos y nivel, todo de administración.
+  ['saveAdsCredentialsAction (Google Ads: credencial)', () => saveAdsCredentialsAction('')],
+  ['removeAdsCredentialsAction (Google Ads: quitar credencial)', () => removeAdsCredentialsAction()],
+  ['saveAdsDeveloperTokenAction (Google Ads: token de desarrollador)', () => saveAdsDeveloperTokenAction('x')],
+  ['saveAdsSettingsAction (Google Ads: ajustes)', () => saveAdsSettingsAction({ dailyOpsBudget: 1 })],
+  ['testAdsConnectionAction (Google Ads: probar conexión)', () => testAdsConnectionAction()],
+  ['startAdsSyncNowAction (Google Ads: descargar ahora)', () => startAdsSyncNowAction()],
+  ['linkAdsAccountAction (Google Ads: vincular cuenta)', () => linkAdsAccountAction(ZERO, null)],
+  ['setAdsAccountTrackedAction (Google Ads: seguir cuenta)', () => setAdsAccountTrackedAction(ZERO, false)],
+  ['setAdsClientLevelAction (Google Ads: nivel del cliente)', () => setAdsClientLevelAction(ZERO, 'A')],
   ['setClientPlanAction (estrategia: plan del cliente)', () => setClientPlanAction(ZERO, null)],
   ['saveClientOverrideAction (estrategia: frecuencias del cliente)', () => saveClientOverrideAction(ZERO, 'salud', null)],
   ['pauseClientAction (estrategia: pausa)', () => pauseClientAction(ZERO, null)],

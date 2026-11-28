@@ -8,6 +8,7 @@ import { CLIENTES_PROCESS_MAP } from '@/lib/core/clients-process-map';
 import { PLATAFORMA_PROCESS_MAP } from '@/lib/core/platform-process-map';
 import { SEO_SALUD_PROCESS_MAP } from '@/lib/seo/salud/process-map';
 import { RENDIMIENTO_PROCESS_MAP } from '@/lib/rendimiento/process-map';
+import { ADS_PROCESS_MAP } from '@/lib/ads/process-map';
 import { ESTRATEGIA_PROCESS_MAP } from '@/lib/estrategia/process-map';
 import { ERRORES_PROCESS_MAP } from '@/lib/core/errors-process-map';
 import { CONOCIMIENTO_PROCESS_MAP } from '@/lib/core/knowledge-process-map';
@@ -269,6 +270,27 @@ const CORE_NODES: SystemNode[] = [
     }
   },
   {
+    id: 'ads',
+    name: 'Google Ads',
+    description:
+      'Vigilancia de las cuentas de Google Ads de los clientes desde la MCC de la agencia, solo lectura. Paso 1 construido (28 nov 2026): conexión con cuenta de servicio (o modo simulado), descarga de cuentas, estructura, métricas con cobertura por día, histórico de 37 meses, historial de cambios con su autor, latido horario y salud de nuestras fuentes (MED-00). Paso 2 (Cartera, Hoy con hallazgos y avisos en sombra) diseñado.',
+    status: 'in_progress',
+    icon: 'Megaphone',
+    detailMapId: 'ads',
+    group: 'infrastructure',
+    technicalDetail: {
+      summary:
+        'Módulo propio (lib/ads, tablas ads_*, migración 0084). No importa ningún otro módulo: la cola de trabajos, el registro de errores, Salud y la ficha del cliente los da el núcleo. Un solo archivo habla con la API de Google Ads y no tiene ninguna función de escritura.',
+      stack: ['API de Google Ads (searchStream, GAQL) con cuenta de servicio y JWT propio', 'Cola de trabajos y planificador del núcleo', 'Cifrado AES-256-GCM de las credenciales'],
+      keyDecisions: [
+        'Cero frente a «sin dato»: un día solo cuenta si cerró y el total de la cuenta cuadra con la suma de campañas',
+        'MED-00 antes que cualquier regla: lo no comprobado se dice, nunca pasa por «bien»',
+        'Latido horario para que las interrupciones lleguen en horas, no al día siguiente',
+        'Todo lectura: la escritura en cuentas reales es línea roja (otra cuenta de servicio, decisión aparte)'
+      ]
+    }
+  },
+  {
     id: 'integraciones',
     name: 'Integraciones',
     description: 'Las conexiones con el exterior: ClickUp (caché y contador de peticiones), Telegram y la IA, con el prompt que usa cada función.',
@@ -410,7 +432,7 @@ export function getSystemMap(): SystemNode[] {
 }
 
 // Todos los mapas de detalle conocidos (el Server Component los resuelve y los pasa al cliente).
-export const PROCESS_MAP_IDS = ['clustering', 'competitor_analysis', 'security', 'agentes', 'clientes', 'plataforma', 'rendimiento', 'estrategia', 'errores', 'conocimiento', 'seo_salud', ...Object.keys(OPS_MAPS)];
+export const PROCESS_MAP_IDS = ['clustering', 'competitor_analysis', 'security', 'agentes', 'clientes', 'plataforma', 'rendimiento', 'estrategia', 'errores', 'conocimiento', 'seo_salud', 'ads', ...Object.keys(OPS_MAPS)];
 
 export function getProcessMap(detailMapId: string): ProcessStep[] {
   switch (detailMapId) {
@@ -430,6 +452,8 @@ export function getProcessMap(detailMapId: string): ProcessStep[] {
       return SEO_SALUD_PROCESS_MAP;
     case 'rendimiento':
       return RENDIMIENTO_PROCESS_MAP;
+    case 'ads':
+      return ADS_PROCESS_MAP;
     case 'estrategia':
       return ESTRATEGIA_PROCESS_MAP;
     case 'errores':

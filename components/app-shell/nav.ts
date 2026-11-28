@@ -42,6 +42,7 @@ import {
   Timer,
   UserRound,
   Rss,
+  Megaphone,
   type LucideIcon
 } from 'lucide-react';
 
@@ -185,6 +186,7 @@ export const NAV: NavGroup[] = [
           { href: '/dashboard/rendimiento', label: 'Rendimiento web', icon: LineChart, keywords: 'search console analytics business profile ficha google clics sesiones llamadas métricas histórico informe mensual caídas' },
           { href: '/dashboard/estrategia', label: 'Estrategia', icon: Compass, keywords: 'objetivos planes seguimiento palabras clave salud web velocidad oportunidades señales frecuencias calendario google updates estratega' },
           { href: '/dashboard/projects', label: 'Proyectos SEO', icon: FolderKanban, prefix: true, keywords: 'seo keywords clusters' },
+          { href: '/dashboard/ads', label: 'Google Ads', icon: Megaphone, prefix: true, keywords: 'google ads sem campañas anuncios ppc mcc cuentas gasto cpl cobertura descarga' },
           { href: '/dashboard/clientes/preguntas', label: 'Banco de preguntas', icon: MessageCircleQuestion, keywords: 'preguntas cuestionario cliente onboarding briefing correo plantilla' }
         ]
       },
@@ -294,6 +296,8 @@ const SEGMENT_LABELS: Record<string, string> = {
   rendimiento: 'Rendimiento web',
   estrategia: 'Estrategia',
   projects: 'Proyectos SEO',
+  ads: 'Google Ads',
+  ajustes: 'Ajustes',
   preguntas: 'Banco de preguntas',
   // Pestañas SEO del proyecto (Hito 1 y 2).
   salud: 'Salud técnica',

@@ -146,13 +146,29 @@ for (const t of ['seo_dossier_facts', 'seo_plan_items', 'seo_reviews', 'seo_topi
   else if (!saludSrc.includes(`'${t}'`)) fail(`La tabla «${t}» (SEO v2) no aparece en el mapa de SEO (Salud técnica).`);
 }
 
+// 5k. Módulo Google Ads (lib/ads/process-map.ts, 28 nov 2026): archivos, todas sus tablas ads_*, todos sus tipos de
+// trabajo de la cola (ADS_JOB de lib/ads/sync.ts, citados como «ads.x») y la tarea del planificador.
+const adsSrc = read('lib/ads/process-map.ts');
+for (const f of uniq(all(/file: '([^']+)'/g, adsSrc))) if (!fs.existsSync(path.join(root, f))) fail(`El mapa de Google Ads cita un archivo que no existe: ${f}`);
+const adsTables = uniq(all(/pgTable\(\s*'(ads_\w+)'/g, schemaSrc));
+if (adsTables.length < 10) fail('No se encuentran las tablas ads_* en el esquema.');
+for (const t of adsTables) if (!adsSrc.includes(`'${t}'`)) fail(`La tabla «${t}» (módulo Google Ads) no aparece en el mapa de Google Ads.`);
+for (const t of listOf(/tables: \[([^\]]*)\]/g, adsSrc)) if (!adsTables.includes(t) && !coreClientTables.includes(t)) fail(`El mapa de Google Ads cita la tabla «${t}», que no existe en el esquema.`);
+const adsSync = read('lib/ads/sync.ts');
+const adsJobKinds = uniq(all(/^\s+\w+: '(ads\.[a-z_]+)'/gm, adsSync.slice(adsSync.indexOf('export const ADS_JOB'), adsSync.indexOf('} as const'))));
+if (adsJobKinds.length < 5) fail('No se encuentran los tipos de trabajo de Google Ads (ADS_JOB en lib/ads/sync.ts).');
+for (const k of adsJobKinds) if (!adsSrc.includes(`«${k}»`)) fail(`El trabajo «${k}» de la cola no aparece en el mapa de Google Ads.`);
+if (!/registerScheduled\(ADS_SCHEDULED_TASK/.test(read('lib/ads/register.ts')) || !/ADS_SCHEDULED_TASK = 'google ads'/.test(read('lib/ads/register.ts'))) fail('La tarea del planificador de Google Ads no está registrada (lib/ads/register.ts).');
+if (!adsSrc.includes('planificador «google ads»')) fail('La tarea del planificador «google ads» no aparece en el mapa de Google Ads.');
+if (!/registerAdsCapabilities\(\)/.test(read('lib/app-wiring.ts'))) fail('El módulo Google Ads no se conecta en wireApp() (lib/app-wiring.ts).');
+
 function schemaSrcForAgt() {
   return read('lib/db/schema.ts');
 }
 
 // 6. Enlaces entre mapas
 const mapIds = all(/^ {2}(\w+): [A-Z_]+,$/gm, mapSrc.slice(mapSrc.indexOf('export const OPS_MAPS')));
-const known = new Set([...mapIds, 'clustering', 'competitor_analysis', 'security', 'agentes', 'clientes', 'plataforma', 'rendimiento', 'estrategia', 'errores', 'conocimiento', 'seo_salud']);
+const known = new Set([...mapIds, 'clustering', 'competitor_analysis', 'security', 'agentes', 'clientes', 'plataforma', 'rendimiento', 'estrategia', 'errores', 'conocimiento', 'seo_salud', 'ads']);
 for (const id of uniq([...all(/detailMapId: '(\w+)'/g, mapSrc), ...all(/detailMapId: '(\w+)'/g, registrySrc)])) {
   if (!known.has(id)) fail(`detailMapId «${id}» no corresponde a ningún mapa registrado en OPS_MAPS.`);
 }

@@ -164,7 +164,7 @@ describe('auditoría de lo que se ha cerrado', () => {
     for (const f of walk(path.join(ROOT, 'app'), (x) => x.endsWith('.tsx'))) {
       const lines = read(f).split('\n');
       lines.forEach((line, i) => {
-        if (/(apiKeyEncrypted|embeddingApiKeyEncrypted|botTokenEncrypted|apiKeyIv|botTokenIv)\b/.test(line)) {
+        if (/(apiKeyEncrypted|embeddingApiKeyEncrypted|botTokenEncrypted|apiKeyIv|botTokenIv|credentialsEncrypted|credentialsIv|developerTokenEncrypted|developerTokenIv)\b/.test(line)) {
           // la expresión puede ocupar varias líneas: se mira también el entorno inmediato
           const ventana = lines.slice(Math.max(0, i - 1), i + 3).join(' ');
           if (!/Boolean\(|decrypt\(/.test(ventana)) fallos.push(`${rel(f)}:${i + 1}`);

@@ -1,0 +1,30 @@
+{
+  "_nota": "Escrita a mano desde la documentación pública de la API de Google Ads (v26, REST searchStream). NO está grabada de una cuenta real: la sustituye la primera respuesta real de la prueba de acceso (paquete A). Hasta entonces no cuenta como GOO-07 hecho.",
+  "body": {
+    "error": {
+      "code": 429,
+      "message": "Resource has been exhausted (e.g. check quota).",
+      "status": "RESOURCE_EXHAUSTED",
+      "details": [
+        {
+          "@type": "type.googleapis.com/google.ads.googleads.v26.errors.GoogleAdsFailure",
+          "errors": [
+            {
+              "errorCode": {
+                "quotaError": "RESOURCE_TEMPORARILY_EXHAUSTED"
+              },
+              "message": "Too many requests.",
+              "details": {
+                "quotaErrorDetails": {
+                  "rateScope": "DEVELOPER",
+                  "rateName": "Number of operations for basic access",
+                  "retryDelay": "7s"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

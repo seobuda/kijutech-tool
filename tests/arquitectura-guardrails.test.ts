@@ -168,6 +168,29 @@ describe('barreras de arquitectura: ClickUp', () => {
 });
 
 // ---------------------------------------------------------------------------------------------------------------
+// 3b. Google Ads: un solo cliente de la API (28 nov 2026)
+// ---------------------------------------------------------------------------------------------------------------
+
+const ADS_CLIENT = 'lib/ads/client.ts';
+
+describe('barreras de arquitectura: Google Ads', () => {
+  it('solo el cliente de Ads habla con la API de Google Ads', () => {
+    // El cliente lleva el contador del cupo diario, los reintentos y los errores en español, y no tiene ninguna función
+    // de escritura: cualquier otro camino a la API se saltaría todo eso.
+    expect(read(path.join(ROOT, ADS_CLIENT))).toMatch(/googleads\.googleapis\.com/);
+    const fallos = appCode()
+      .filter((f) => rel(f) !== ADS_CLIENT && /googleads\.googleapis\.com/i.test(read(f)))
+      .map(rel);
+    expect(fallos).toEqual([]);
+  });
+
+  it('el cliente de Ads solo consulta (searchStream): ninguna llamada de escritura', () => {
+    // Línea roja: escribir en cuentas reales de Google Ads (diseño §0). Ni mutate ni subida de conversiones.
+    expect(read(path.join(ROOT, ADS_CLIENT))).not.toMatch(/:mutate|Mutate|uploadClickConversions|uploadCallConversions|uploadConversionAdjustments/);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------
 // 4. Archivos 'use server'
 // ---------------------------------------------------------------------------------------------------------------
 

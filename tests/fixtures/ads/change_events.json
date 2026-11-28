@@ -1,0 +1,45 @@
+{
+  "_nota": "Escrita a mano desde la documentación pública de la API de Google Ads (v26, REST searchStream). NO está grabada de una cuenta real: la sustituye la primera respuesta real de la prueba de acceso (paquete A). Hasta entonces no cuenta como GOO-07 hecho.",
+  "body": [
+    {
+      "results": [
+        {
+          "changeEvent": {
+            "resourceName": "customers/4445556666/changeEvents/1732700000000000~1~0",
+            "changeDateTime": "2026-10-25 02:30:00.123456",
+            "userEmail": "gestor@kijutech.com",
+            "clientType": "GOOGLE_ADS_WEB_CLIENT",
+            "changeResourceType": "CAMPAIGN_BUDGET",
+            "changeResourceName": "customers/4445556666/campaignBudgets/900",
+            "campaign": "customers/4445556666/campaigns/111",
+            "resourceChangeOperation": "UPDATE",
+            "changedFields": "amountMicros",
+            "oldResource": {
+              "campaignBudget": {
+                "amountMicros": "30000000"
+              }
+            },
+            "newResource": {
+              "campaignBudget": {
+                "amountMicros": "40000000"
+              }
+            }
+          }
+        },
+        {
+          "changeEvent": {
+            "resourceName": "customers/4445556666/changeEvents/1732700000000000~2~0",
+            "changeDateTime": "2026-11-20 10:00:00",
+            "userEmail": "",
+            "clientType": "GOOGLE_ADS_RECOMMENDATIONS_SUBSCRIPTION",
+            "changeResourceType": "AD_GROUP_CRITERION",
+            "changeResourceName": "customers/4445556666/adGroupCriteria/1~2",
+            "resourceChangeOperation": "CREATE",
+            "changedFields": "keyword.text,keyword.matchType"
+          }
+        }
+      ],
+      "requestId": "doc-5"
+    }
+  ]
+}
