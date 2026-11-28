@@ -1,7 +1,7 @@
-# Diseño técnico del módulo Google Ads (pasos 1 y 2)
+# Diseño técnico del módulo Google Ads (pasos 1, 2 y 3)
 
-**Fecha:** 28 nov 2026 · **Versión:** 2 (auditoría R5 aplicada; tabla de seguimiento al final) · **Estado:** paso 1 en
-construcción en `feature/ads-paso1`; paso 2 diseñado · **Base:** `docs/ads/INVESTIGACION-GOOGLE-ADS.md` v3 (apartados
+**Fecha:** 28 nov 2026 · **Versión:** 3 (paso 3 en §13; auditoría R5 aplicada, tabla de seguimiento al final) · **Estado:** pasos
+1 y 2 en `main`; paso 3 en `feature/ads-paso3` · **Base:** `docs/ads/INVESTIGACION-GOOGLE-ADS.md` v3 (apartados
 5.1, 7, 8, 9 y 13.2) · **Auditoría:** `docs/ads/investigacion/revision/R5-auditoria-diseno-tecnico.md` (3 graves, 12
 importantes, 16 menores) · **Encargo:** Enric, 28 nov: «Empieza a construir toda la herramienta, tienes permiso para todo
 lo referente a este módulo».
@@ -18,7 +18,7 @@ Pasos 1 y 2 del orden de construcción (13.2):
   objetivo o frente a su línea base, medición rota («rota» / «sin datos para afirmar»), lo pausado que aportaba leads, el
   cambio ajeno y el último cambio con su autor.
 
-Los pasos 3 en adelante tendrán su propio documento. **Los pasos 3-4 (términos, palabras, nivel de calidad) sí necesitarán
+El paso 3 (auditoría de higiene) está en §13; los siguientes tendrán su propio apartado. **Los pasos 3-4 (términos, palabras, nivel de calidad) sí necesitarán
 el acceso Basic** (9.1): «cabe en Explorer» vale solo para los pasos 1-2.
 
 **Lo que sigue siendo línea roja aunque Enric haya dado permiso general al módulo** (CLAUDE.md, «si roza una línea roja,
@@ -381,7 +381,181 @@ aplicar 0084 en local.
 - Caducidad de certificado y dominio a 14 días (PRO-06): paso 2 o 5.
 - Todo lo marcado [verificar en v26] en la auditoría R5.
 
-## Auditoría R5: qué se hizo con cada hallazgo
+## 13. Paso 3: auditoría de higiene de las cuentas y vigilancia de que no vuelva
+
+**Fecha:** 28 nov 2026 · **Rama:** `feature/ads-paso3` · **Base:** investigación 13.2 (fila del paso 3), 3 (EST-07,
+EST-01, EST-02, EST-04, EST-06, TER-04, TER-11, GOO-01, GOO-06, LAN-06, LLA-02, INF-05, GOO-03, NEG-07, APR-01), 7.1 (guion
+de revisión y lista cerrada) y 9.2-9.5. Todo sigue siendo **lectura**: la herramienta no tiene ni una función que escriba
+en Google Ads; «qué hacer» es un texto para aplicarlo a mano.
+
+### 13.1 Qué es y qué no es
+
+- **Una auditoría de entrada por cuenta** (EST-07), guardada con su fecha, con el resultado de cada control: **bien**,
+  **mal** o **no comprobado** (y «confirmar con el responsable» cuando depende de un dato de la ficha sin confirmar, NEG-07).
+  Se hace sola la primera vez que una cuenta tiene sus datos (estructura y métricas sanas) y se puede **repetir** a mano
+  (cuenta heredada, cambio grande). Las anteriores se conservan.
+- **Vigilancia diaria** (EST-06): cada día se vuelven a calcular los controles sobre los datos nuevos. Lo que estaba mal y
+  pasa a bien queda «corregido» con su fecha; lo que estaba bien (o se corrigió) y vuelve a estar mal queda «reapareció».
+- **No es una lista de avisos ni crea hallazgos visibles.** La lista cerrada de 15 (7.1) no crece: la auditoría vive en el
+  **paso 4 del guion de revisión** («¿dónde se va el dinero sin resultado?», 3 elementos, no 30) dentro de la pantalla
+  Cuenta, **por tandas** (EST-07: 0 propiedad y línea base; 1 datos y riesgo; 2 gasto recortable sin riesgo; 3 aprendizaje y
+  estructura; 4 pruebas, que en este paso no tiene controles). Un fallo que **reaparece** por un cambio del cliente o de
+  Google entra como **evidencia dentro del hallazgo n.º 11** («cambio ajeno»), que ya existe; si no hay cambio ajeno que lo
+  explique, se ve en la revisión («reapareció», sin aviso).
+- En Cartera, una columna «Auditoría»: sin auditar / por leer (con cuántos «mal») / leída, y «reapareció» si algo volvió.
+- **Informe** (INF-05): la misma auditoría en texto por tandas, con el gasto expuesto en la moneda de la cuenta, para
+  copiarlo (botón «Copiar informe»). No se envía a nadie: mandarlo al cliente sería un efecto hacia fuera (línea roja).
+
+### 13.2 Los controles (18), sus datos y sus umbrales de partida
+
+Umbrales editables en Ajustes → Avisos y umbrales (mismo mecanismo que los del paso 2, en `ads_settings.state.thresholds`).
+Todo en la moneda de la cuenta y con 30 días cerrados salvo que se diga otra cosa. «Ficha» = datos del cliente que la
+auditoría usa y que deben estar confirmados (13.5). **R** = riesgo de la acción propuesta (definición de 3).
+
+| Tanda | Control (clave) | Capacidad | Datos (API v26) | Regla de partida | R |
+|---|---|---|---|---|---|
+| 0 | Propiedad y accesos (`propiedad_accesos`) | EST-07 t0 | La API no da propiedad de la cuenta, del perfil de pagos, de GA4, de Tag Manager ni de la ficha (9.2) | Lista para comprobar a mano; la herramienta añade los usuarios ajenos a la agencia que cambiaron algo en 30 días. «No comprobado» hasta que el gestor responde «hecho» | R0 |
+| 0 | Línea base congelada (`linea_base`) | EST-07 t0 | `ads_daily_campaign` + cobertura (paso 1) | 90 días previos cerrados: gasto, clics, conversiones y CPL, congelados en la auditoría. Con < 80 días cubiertos, «no comprobado» | R0 |
+| 1 | Conversiones de entrada (`conversiones`) | EST-01 (medición mínima) | `customer.auto_tagging_enabled`, `ads_conversion_actions` (paso 1) | Autoetiquetado apagado; ninguna acción principal; acciones principales de categoría débil (`PAGE_VIEW`, `ENGAGEMENT`, `DOWNLOAD`…) contando en «Conversiones» | R3 |
+| 1 | Lo que caduca en febrero de 2027 (`caduca_feb_2027`) | 9.5 | `ad_group.type` (`SEARCH_DYNAMIC_ADS`), `ad_group_ad.ad.type` (`CALL_AD`), `campaign.network_settings.target_content_network` | Hay grupos DSA (migran solos a AI Max), anuncios solo de llamada (dejan de servir) o búsqueda con expansión a Display (desaparece el reparto fijo) | R2 |
+| 1 | AI Max y migraciones de Google (`ai_max`) | GOO-03 | `campaign.ai_max_setting.enable_ai_max` [verificar], migración de recursos automáticos y de concordancia amplia (`campaign.aca_migration_date_time`?, `broad_match_migration_date_time`?) [**no verificado**], historial de cambios de Google | Campaña con AI Max o migrada por Google: fecha y CPL de los 28 días antes y después. «Mal» si la migró Google (no la agencia) y el CPL de después es > 1,3 × el de antes, o si el sector es regulado | R2 |
+| 1 | Textos automáticos (`textos_automaticos`) | EST-01, GOO-03, ANU-06 | `campaign.asset_automation_settings` (tipo y estado) [verificar] | Textos o imágenes automáticos activos en **sector regulado** (ficha): «mal» (12.3: apagados por defecto). En otro sector, «bien» con la nota de revisar las guías | R1 |
+| 2 | Socios de búsqueda (`socios_busqueda`) | EST-01 | `campaign.network_settings.target_search_network`; coste y conversiones por `segments.ad_network_type` | Activos sin datos que los avalen: con < 3 conversiones de socios en 30 días o CPL de socios > 1,2 × el de Google | R2 |
+| 2 | Display dentro de Search (`display_en_busqueda`) | EST-01 | `target_content_network` en campañas `SEARCH`; red `CONTENT` | Activo en una campaña de búsqueda (con su gasto y conversiones en Display) | R2 |
+| 2 | «Presencia o interés» (`presencia_interes`) | EST-01 | `campaign.geo_target_type_setting.positive_geo_target_type` | `PRESENCE_OR_INTEREST` en negocio local (ficha: zona) | R2 |
+| 2 | Exclusiones de contenido (`exclusiones_contenido`) | EST-01 | `customer_negative_criterion` (tipo; etiquetas de contenido, aplicaciones, ubicaciones) [verificar] | Hay gasto en Display, vídeo o PMax y la cuenta no excluye aplicaciones ni contenido infantil o sensible | R1 |
+| 2 | Zona real (`zona_real`) | EST-02 | `user_location_view.targeting_location` + coste; `campaign_criterion` de ubicación y radio y sus nombres (`geo_target_constant`) | Coste de personas fuera de la zona segmentada > 10 %. Las zonas segmentadas que la ficha no nombra salen como evidencia, no como fallo (comparar nombres de sitios da falsos positivos) | R2 |
+| 2 | Lugares fuera de la zona en los términos (`lugares_fuera_zona`) | TER-04 | `search_term_view` (30 días, los 1.000 de más gasto) [Basic]; lista propia de municipios y provincias (`lib/ads/places-es.ts`) | Término que nombra un lugar que la zona de la ficha no atiende (ni el lugar ni su provincia), con gasto. Zona «toda España» → no aplica | R1 |
+| 2 | Marca, genérico y competencia (`marca_generico`) | TER-11, EST-04 | Términos; marca (nombre y alias) y competidores confirmados de la ficha | Marca > 10 % del gasto de las campañas que no son de marca; marca sin campaña propia; términos de competidor con gasto sin decidir | R2 |
+| 2 | Redes de Performance Max (`pmax_redes`) | GOO-01 | PMax por `segments.ad_network_type` | Display + vídeo ≥ un tercio del gasto de PMax con menos de la mitad de esa parte de las conversiones. La marca dentro de PMax necesita las categorías de términos (`campaign_search_term_insight`): **pendiente**, se dice «sin comprobar» en la evidencia | R2 |
+| 2 | Páginas elegidas por Google (`paginas_elegidas`) | LAN-06 | `ads_landing_urls` (paso 1: configuradas frente a `expanded_landing_page_view`, 7 días) | > 20 % del gasto en páginas que nadie configuró, o cualquier gasto en blog, aviso legal, empleo o privacidad | R2 |
+| 3 | Recomendaciones aplicadas solas (`autoaplicadas`) | EST-01, EST-06 | `recommendation_subscription` (tipo y estado) [verificar]; historial de cambios con `GOOGLE_ADS_RECOMMENDATIONS_SUBSCRIPTION` | Alguna suscripción activa, o cambios aplicados por ella en 30 días | R1 |
+| 3 | Recomendaciones cribadas (`recomendaciones`) | GOO-06 | `recommendation` (tipo y campaña), `customer.optimization_score` | Separa higiene útil (recursos que faltan, conflictos, seguimiento) de lo que sirve al gasto (subir presupuesto, amplia, socios, Display). «Mal» si hay útiles pendientes; las del gasto salen como «descartar con motivo» | R1 |
+| 3 | Recurso de llamada (`recurso_llamada`) | LLA-02 | `campaign_asset` y `customer_asset` de tipo `CALL` con `asset.call_asset.*` [verificar]; teléfono de los locales de la ficha | Negocio con teléfono en la ficha sin recurso de llamada; número distinto del de la ficha; informes de llamadas apagados | R1 |
+
+Lo de la tanda 4 (pruebas) no tiene controles en este paso: 5.6 y el paso 7.
+
+### 13.3 Descarga (solo lectura; protocolo de decisión)
+
+**Problema.** Los controles necesitan campos que nadie ha probado contra la v26 (AI Max, migraciones, automatización de
+recursos, suscripciones de recomendaciones, exclusiones de cuenta). Si un nombre de campo está mal, Google rechaza **toda
+la consulta**.
+
+**Puntos de vista.** *Arquitecto:* no meter campos sin probar en las consultas diarias de los pasos 1-2 (estructura,
+métricas), de las que dependen las cuatro interrupciones. *Especialista en Google Ads:* la higiene cambia poco (diaria
+basta para la configuración; semanal para términos, ubicación y redes). *Costes:* el cupo diario es compartido con la
+vigilancia del paso 2.
+
+**Alternativas.** (A) Ampliar las consultas existentes con los campos nuevos: menos operaciones, pero un campo mal escrito
+tumba la estructura diaria y con ella las interrupciones. (B) **Consultas propias de la auditoría, una por grupo de datos,
+en un proceso aparte** (`ads.auditar`), cada una con su error aislado: si una falla, solo sus controles dicen «no
+comprobado» con el error literal. (C) No descargar nada y auditar solo con lo del paso 1: se pierden 12 de los 18
+controles. **Decisión: B.** Reversible (un proceso y una tabla aditiva); no hace falta auditoría con Opus.
+
+**Proceso `ads.auditar`** (por cuenta, cada 24 h; también al terminar el histórico de una cuenta nueva y con «Pasar la
+auditoría ahora»). Refresca cada grupo según su edad y guarda el resultado en `ads_audit_data` (cuenta × grupo, con
+`ok`, error y fecha):
+
+| Grupo | Consulta(s) | Refresco | Operaciones |
+|---|---|---|---|
+| `campanas` | `campaign` con `network_settings`, `geo_target_type_setting`, `dynamic_search_ads_setting` | 1 día | 1 |
+| `automatizacion` | `campaign` con `ai_max_setting`, fechas de migración y `asset_automation_settings` [no verificado] | 1 día | 1 |
+| `tipos_anuncio` | `ad_group_ad` con `ad_group.type` y `ad_group_ad.ad.type` | 1 día | 1 |
+| `suscripciones` | `recommendation_subscription` | 1 día | 1 |
+| `exclusiones` | `customer_negative_criterion` | 1 día | 1 |
+| `llamadas` | `campaign_asset` y `customer_asset` de tipo `CALL` | 1 día | 2 |
+| `redes` | `campaign` × `segments.ad_network_type`, 30 días | 7 días | 1 |
+| `ubicacion_usuario` | `user_location_view`, 30 días | 7 días | 1 |
+| `objetivos_geo` | `campaign_criterion` (ubicación y radio) + `geo_target_constant` de esos ids | 7 días | 2 |
+| `terminos` | `search_term_view`, 30 días, `metrics.cost_micros > 0`, 1.000 por gasto | 7 días | 1 |
+| `recomendaciones` | `recommendation` + `customer.optimization_score` | 7 días | 2 |
+
+Cupo: la primera vez ~14 operaciones por cuenta; después ~7 al día + ~7 a la semana → 25 cuentas ≈ **200 al día**, que se
+suman a las ~1.175 del paso 2 (≈ 1.375, bajo el tope propio de 2.500). El cupo agotado para el proceso sin contarlo como
+fallo (igual que la descarga). Los términos piden **Basic** en la práctica (9.1).
+
+**Modo simulado.** `sim.ts` responde a las consultas nuevas con un caso de cada control: socios activos sin conversiones
+(Fontanería), Display en Búsqueda y textos automáticos en sector sanitario y suscripción a recomendaciones (Clínica),
+«presencia o interés» y 22 % fuera de zona y un grupo DSA (Abogados), PMax con Display y vídeo desproporcionados y sin
+exclusiones de contenido (Reformas, que además tiene el autoetiquetado apagado desde el paso 1), migración a AI Max
+(Academia), anuncio solo de llamada y teléfono distinto del de la ficha (Fontanería), términos con otra ciudad y con
+marca y competidor. Las cuentas simuladas tienen una **ficha simulada** con fechas de confirmación (una vieja, para
+NEG-07); nunca se vinculan a clientes reales (§3.4).
+
+### 13.4 Tablas (migración aditiva `0085_ads_auditoria.sql`)
+
+| Tabla | Granularidad | Columnas principales |
+|---|---|---|
+| `ads_audit_data` | cuenta × grupo | `kind`, `ok`, `error`, `synced_at`, `data_from`, `data_to`, `data` jsonb. Único `(account_id, kind)` |
+| `ads_audits` | auditoría (cuenta × fecha) | `kind` (`entrada`), `created_at`, `created_by` (null = automática), `data_through`, `baseline` jsonb (línea base congelada), `summary` jsonb (cuántos bien/mal/no comprobado por tanda), `read_at`, `read_by`, `superseded_at` (al repetirla) |
+| `ads_audit_items` | control dentro de una auditoría | `control`, `tanda`, `risk`, `initial_status` (el de la auditoría, inmutable), `status` (el de la vigilancia), `needs_confirmation`, `title`, `evidence` jsonb (líneas, datos, «qué hacer», enlace), `exposure` + `currency`, `prediction` jsonb (APR-01, solo R2 y R3 en «mal»), `checked_at`, `fixed_at`, `regressed_at`, `regression_count`, `regression_cause`, `response` (`hecho`/`cliente_lo_quiere`/`no_aplica`/`mas_tarde`), `response_reason`, `responded_by`, `responded_at`, `history` jsonb (respuestas y decisiones con la predicción aprobada). Único `(audit_id, control)` |
+| `ads_client_facts` | cliente × dato de la ficha (NEG-07) | `fact` (`marca`, `zona`, `telefono`, `horario`, `competidores`, `sector`, `servicios`), `confirmed_at`, `confirmed_by`, `value_snapshot` (lo que decía la ficha al confirmarlo). Único `(client_id, fact)`. **Candidato al núcleo** junto a `ads_goals` |
+
+Sin tocar tablas existentes ni sus CHECK (la fuente `auditoria` no se añade a `ads_sync_state`, cuyo CHECK habría que
+cambiar: el estado de cada grupo vive en `ads_audit_data`).
+
+### 13.5 Frescura de la ficha (NEG-07; protocolo de decisión)
+
+**Problema.** TER-04, EST-02, TER-11, LLA-02 y los textos automáticos heredan los errores de una ficha que nadie mantenga.
+La ficha del núcleo (`clients`, `client_locations`, `client_competitors`) no guarda **cuándo se confirmó** cada dato.
+
+**Alternativas.** (A) Columnas de confirmación en las tablas del núcleo: es tocar el núcleo por una necesidad que hoy solo
+tiene Ads. (B) **Tabla del módulo `ads_client_facts`** (cliente × dato, con fecha, quién y lo que decía): aditiva, no toca
+el núcleo, se puede subir al núcleo después con una migración aditiva y un cambio de lectura. (C) Usar
+`clients.updated_at`: cambia con cualquier edición y no dice qué dato se confirmó. **Decisión: B**, candidata al núcleo
+(apuntado en 12). Barata de deshacer: sin auditoría con Opus.
+
+**Regla.** Un control que depende de un dato sin confirmar o confirmado hace más de `fichaMesesFrescura` (6) meses no
+baja a «bien»: si encuentra algo, queda **«mal · confirmar con el responsable»** (no entra en los 3 del guion hasta que se
+confirme) y la sección enseña el dato, su fecha y el botón «Confirmar» (permiso de edición) junto al enlace a la ficha. Sin
+cliente vinculado (y sin ficha simulada) esos controles dicen «no comprobado: la cuenta no tiene ficha».
+
+### 13.6 Predicción previa (APR-01; protocolo de decisión)
+
+Cada control en «mal» con acción **R2 o R3** lleva su predicción, calculada por código con los datos de la evidencia:
+hipótesis, métrica, efecto esperado con intervalo (p. ej. «gasto −45 a −60 € al mes; conversiones 0 a −1»), ventana (28
+días) y criterio de vuelta atrás. Al responder «hecho», la predicción queda **aprobada** con quién y cuándo en `history`
+(el registro de decisiones); «el cliente lo quiere así» y «no aplica» piden motivo y quedan como **no-acción** registrada.
+Las R1 no llevan predicción individual (investigación 3, APR-01).
+
+**Alternativa descartada:** registrar en `lib/core/interventions.ts` (núcleo). Exige un cliente (las simuladas no tienen)
+y una técnica de la taxonomía del núcleo, que aún no tiene técnicas de Ads: añadirlas es tocar el núcleo. Se unifica
+cuando llegue la evaluación de predicciones (APR-02) con su propio protocolo. Reversible.
+
+### 13.7 Pantalla (dentro del guion de revisión)
+
+En `cuentas/[accountId]`, sección **«4 · ¿Dónde se va el dinero sin resultado?»**:
+
+- Cabecera: fecha de la auditoría, «leída» o «Marcar auditoría leída», «Pasar la auditoría ahora» / «Repetir», «Copiar
+  informe». Sin auditoría: estado vacío que explica cuándo se hará sola y el botón.
+- **Los 3 primeros** controles en «mal» confirmados (por tanda, después por gasto expuesto), con su evidencia, **qué hacer**
+  (texto para aplicarlo a mano en Google Ads), la predicción si es R2 y las respuestas del gestor. Los «reapareció» van
+  primero.
+- «Ver la auditoría completa» (desplegable, por tandas): todos los controles, también lo que está **bien** (EST-07: «decir
+  también lo que está bien») y lo **no comprobado** con su motivo.
+- «Datos de la ficha que usa la auditoría»: cada dato, su fecha de confirmación y «Confirmar».
+- Responder pide permiso de edición; marcar leída, confirmar y pasar la auditoría también (`edit`). Nada escribe en Google.
+
+### 13.8 Vigilancia: cuándo «reapareció» y a dónde va
+
+- Cada `ads.auditar` recalcula los controles y actualiza los de la última auditoría: `mal → bien` = **corregido**
+  (`fixed_at`); `bien → mal` (corregido antes o bien desde la entrada) = **reapareció** (`regressed_at`, +1 a
+  `regression_count`). «No comprobado» no cambia nada (no se acusa a ciegas, como en §6.3).
+- Si en los 30 días anteriores hay un cambio del **cliente** o de **Google** en una campaña afectada (o en la cuenta), la
+  causa queda escrita («cambio de dueno@… el 27 nov») y el hallazgo 11 de ese autor lleva una línea «deshace una
+  corrección de la auditoría: X reapareció». Si no, se ve solo en la revisión.
+
+### 13.9 Lo no verificado (paso 3)
+
+- Los nombres de campo de AI Max, las fechas de migración, `asset_automation_settings`, `recommendation_subscription` y
+  `customer_negative_criterion` en la v26: escritos desde la investigación (04, 10), **sin probar**. Por eso van en consultas
+  aisladas.
+- Que `search_term_view` y `user_location_view` respondan en Explorer o pidan Basic (9.1).
+- La lista de lugares de TER-04 es propia y corta (capitales, provincias y ciudades grandes): el paso 4 la sustituye por la
+  lista completa de municipios.
+- Los umbrales (10 %, 1,2 ×, un tercio, 20 %) son valores de partida de la investigación; se calibran con las 25 cuentas.
+
+
 
 | Hallazgo | Qué decía | Qué se hizo |
 |---|---|---|
