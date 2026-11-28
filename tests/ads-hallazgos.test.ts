@@ -429,6 +429,10 @@ describe('ads paso 2: evaluación completa en modo simulado (base de datos real,
     await saveGeneral(tid, { syncEnabled: true, historyMonths: 4, agencyEmailDomains: ['kijutech.com'] }, 'prueba');
     const s = await runFullSync(tid);
     expect(s.errors).toEqual([]);
+    // Se apaga la descarga para que el trabajador de la app (si está en marcha) no descargue esta cuenta de prueba a la vez.
+    await saveGeneral(tid, { syncEnabled: false }, 'prueba');
+    const { syncSchedules } = await import('@/lib/ads/sync');
+    await syncSchedules(tid);
     const r = await evaluateAll(tid, { mode: 'todas' });
     expect(r).toHaveLength(5);
     const runs = await db.select().from(adsRuleRuns).where(eq(adsRuleRuns.tenantId, tid));
@@ -471,6 +475,7 @@ describe('ads paso 2: evaluación completa en modo simulado (base de datos real,
     const store = await import('@/lib/ads/store');
     const { evaluateAccount } = await import('@/lib/ads/findings');
     const acc5 = await accountId('9990000005');
+    await evaluateAccount(tid, acc5);
     const first = (await evaluateAccount(tid, acc5)) as { evaluated: string[] };
     expect(first.evaluated).toContain('rechazo_con_gasto'); // horaria: siempre
     expect(first.evaluated).not.toContain('medicion_rota'); // diaria: nada nuevo desde la última

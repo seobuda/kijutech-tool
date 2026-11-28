@@ -412,6 +412,21 @@ export async function clearMissingDaily(accountId: string, days: string[], seenK
   for (const part of chunk(stale)) await db.delete(adsDailyCampaign).where(inArray(adsDailyCampaign.id, part));
 }
 
+/**
+ * Lo mismo para las conversiones por acción (paso 2): en un día comprobado, una fila guardada (campaña × acción) que ya no
+ * sale es 0 (Google corrigió o la acción dejó de contar). Sin esto, la regla de medición rota vería conversiones viejas.
+ */
+export async function clearMissingConversions(accountId: string, days: string[], seenKeys: Set<string>, ids: Map<string, string>): Promise<void> {
+  if (!days.length) return;
+  const existing = await db
+    .select({ id: adsDailyConversion.id, campaignId: adsDailyConversion.campaignId, action: adsDailyConversion.conversionAction, day: adsDailyConversion.day })
+    .from(adsDailyConversion)
+    .where(and(eq(adsDailyConversion.accountId, accountId), inArray(adsDailyConversion.day, days)));
+  const back = new Map([...ids.entries()].map(([n, id]) => [id, n]));
+  const stale = existing.filter((r) => !seenKeys.has(`${back.get(r.campaignId)}|${r.action}|${r.day}`)).map((r) => r.id);
+  for (const part of chunk(stale)) await db.delete(adsDailyConversion).where(inArray(adsDailyConversion.id, part));
+}
+
 export async function upsertDailyConversion(tenantId: string, accountId: string, rows: DailyConversionRow[], ids: Map<string, string>): Promise<number> {
   const now = new Date();
   const values = rows

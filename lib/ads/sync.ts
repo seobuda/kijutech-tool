@@ -301,6 +301,7 @@ async function pullRange(tenantId: string, acc: AdsAccount, conn: AdsConnection,
   // Solo en los días comprobados (control cuadrado): una campaña con fila guardada que ya no sale ese día es 0 (Google
   // corrige días recientes). Si el control no cuadra, no se borra nada (revisor, 28 nov).
   await store.clearMissingDaily(acc.id, complete, new Set(daily.map((d) => `${d.nativeId}|${d.day}`)), ids);
+  await store.clearMissingConversions(acc.id, complete, new Set(conv.map((c) => `${c.campaignNativeId}|${c.conversionAction}|${c.day}`)), ids);
   return { rows: daily.length, complete };
 }
 
