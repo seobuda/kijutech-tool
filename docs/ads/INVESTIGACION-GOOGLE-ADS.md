@@ -1,22 +1,43 @@
 # Investigación Google Ads: cómo debe ser el agente de Kijutech
 
-**Versión 2 · 28 nov 2026** · **Estado:** documento de conclusiones para debatir con Enric (no es un diseño aprobado).
-**Base:** los 11 informes de `docs/ads/investigacion/bruto/` (01 a 10 y 09b, unas 85.000 palabras), `HUECOS.md`, el PDF de
-contraste de otra IA, `docs/ESTADO.md` y **tres revisiones críticas** de `docs/ads/investigacion/revision/`: R1 (consultor
-de cuentas), R2 (operativa de agencia) y R3 (paid media y negocio).
+**Versión 3 (final de la investigación) · 28 nov 2026** · **Estado:** documento de conclusiones para debatir con Enric (no
+es un diseño aprobado ni un diseño técnico: las tablas `ads_*` se diseñan después).
 
-**Qué es la versión 2.** Los tres revisores recibieron el encargo de tirar abajo la v1. Encontraron errores reales
+**Cómo se hizo.** (1) **11 informes en bruto** en **dos tandas** de investigación (`docs/ads/investigacion/bruto/`, 01 a 10
+y 09b, unas 85.000 palabras; la segunda tanda cubrió los huecos de `HUECOS.md`). (2) Una **síntesis** (v1), contrastada con
+el PDF de otra IA y con `docs/ESTADO.md`. (3) **Tres revisiones expertas** con el encargo de tirarla abajo
+(`docs/ads/investigacion/revision/`): R1 (consultor de cuentas), R2 (operativa de agencia) y R3 (paid media y negocio), que
+dieron la v2. (4) Una **auditoría independiente con Opus** (R4), que contrastó 42 afirmaciones con su fuente, rehízo los
+cálculos y buscó fallos de integración con el proyecto; de ella sale esta v3.
+
+**Qué es la versión 3.** La auditoría dio por buena la dirección (35 de 42 afirmaciones coinciden con su fuente, 7 con un
+matiz perdido, ninguna contradicha) y encontró dos fallos graves y diez importantes, todos corregidos aquí:
+
+- la regla bayesiana de términos, mirada cada semana, habría negativizado la mitad de los términos buenos. Está rehecha con
+  margen y **simulada con miradas semanales** (apartado 5.3);
+- el vigilante no sabía cuándo estaba ciego. Hay una capacidad nueva, **MED-00**, que suspende lo que depende de una fuente
+  nuestra caída (apartados 3.B y 4.2);
+- las cifras de «días sin convertir» eran optimistas (apartado 5.1); el orden de construcción dejaba piezas sin paso y no
+  decía cuánto cuesta (13.2); el objetivo provisional era circular (2.2); varias decisiones que son efectos hacia fuera no
+  estaban marcadas como línea roja (13.1); y no se usaba lo que el núcleo ya tiene ni se contaba con que el SEO está
+  congelado (8.4);
+- las 28 decisiones van ahora en **cinco paquetes**; esta semana solo hace falta contestar el **paquete A**.
+
+Cada hallazgo de R4, con su decisión, está en el apartado 15.5.
+
+**Qué fue la versión 2.** Los tres revisores recibieron el encargo de tirar abajo la v1. Encontraron errores reales
 (diagnósticos al revés, un método que no existe cuando las conversiones son cero, umbrales que con Smart Bidding son ruido
 permanente, un ejemplo mal calculado, promesas del resumen que el propio apartado de estadística desmentía) y tres huecos
 grandes: no había objetivo de negocio por cliente, no había pantallas ni día de trabajo, y la protección de datos estaba
-tratada por encima. Esta versión los integra en el cuerpo del documento. Cada crítica, con su decisión (aceptada, en parte
+tratada por encima. La v2 los integró en el cuerpo del documento. Cada crítica, con su decisión (aceptada, en parte
 o rechazada) y el motivo, está en el **apartado 15**.
 
 **Cómo leerlo.** Las citas entre paréntesis remiten al informe interno, p. ej. «(05)» = `bruto/05-auditoria-diagnostico.md`;
 las URL clave están en el apartado 14. **[opinión]** es criterio propio de quien firma, no un hecho. **[no verificado]**
 viene de fuentes secundarias o no se pudo comprobar. **[estimación]** es una cifra de oficio de un revisor, sin medir. La
 estrella ★ señala lo que ninguna herramienta analizada hace bien según lo investigado. «PDF» remite al mapa de auditorías
-del informe de contraste. «rev. R1/R2/R3» marca lo cambiado por una revisión.
+del informe de contraste. «rev. R1/R2/R3» marca lo cambiado por una revisión y «rev. R4», lo cambiado por la auditoría.
+«Verificado» significa siempre «coincide con el informe en bruto que lo cita», no «comprobado en Google».
 
 **Aviso de alcance.** Nada de lo que aquí se propone toca cuentas reales todavía. Cambiar pujas, presupuestos o anuncios en
 cuentas de clientes es una línea roja del proyecto: el agente nace en **solo lectura** y cada paso hacia la escritura es una
@@ -29,11 +50,14 @@ decisión de Enric (apartado 13).
 **Lo que sabemos**
 
 1. **El trabajo del mejor consultor ya no es mover pujas.** La máquina de Google ejecuta; el experto define el objetivo de
-   negocio, le da datos buenos, vigila y corrige (01). Lo que hace hoy Eury (términos, pausas, CPL) es la capa más
-   automatizable: según Optmyzr, el 90 % de los **cambios manuales** del mercado son de ese tipo (09b).
-2. **«2-3 días sin convertir» es mala regla para casi todas vuestras campañas.** Con medio lead al día, tres días a cero
-   pasan el 22 % de las veces por azar. Y en campañas de 6 leads al mes ninguna estadística avisa a tiempo: ahí lo que
-   protege es comprobar cada día que el formulario y el teléfono funcionan.
+   negocio, le da datos buenos, vigila y corrige (01). Lo que hace hoy Eury con los términos es la capa más
+   automatizable: según Optmyzr, cerca del 90 % de los **cambios manuales** del mercado son de segmentación (palabras clave
+   y negativas), y la tarea que más se repite es el presupuesto (09b). Las pausas y la vigilancia del CPL no entran en esa
+   cifra.
+2. **«2-3 días sin convertir» es mala regla para casi todas vuestras campañas.** Con medio lead al día, **casi todos los
+   meses verás tres días seguidos a cero por puro azar** (98 de cada 100 meses, cálculo del apartado 5.1). Y en campañas de
+   6 leads al mes ninguna estadística avisa antes de dos a cinco semanas: ahí lo que protege es comprobar cada día que el
+   formulario y el teléfono funcionan.
 3. **Los fallos más caros no se ven desde las métricas de campaña:** el lead que no llega al cliente, el teléfono que nadie
    coge, la campaña pausada y olvidada, la tarjeta rechazada. La v1 fallaba 10 de 26 casos de este tipo; ahora son el examen
    de aceptación.
@@ -41,17 +65,21 @@ decisión de Enric (apartado 13).
    la ventaja posible. **Pero no sabemos en cuántas de las 25 cuentas existen esos cruces:** nadie ha contado cuántas tienen
    el CRM con etapas marcadas o la landing en la web que rastreamos.
 5. **El acceso a la API parece más fácil de lo que creíamos** (sin token de desarrollador; subida de leads por otra API).
-   Es lo que dice la documentación de septiembre de 2026; **nadie lo ha probado**. Media hora lo confirma.
+   Es lo que dice la documentación de septiembre de 2026; **nadie lo ha probado**. Media hora lo confirma si no aparece
+   ninguno de los dos problemas de alta conocidos (apartado 9.1); si aparece, son días.
+6. **Un vigilante tiene que saber cuándo está ciego** (nuevo en la v3). Si falla nuestra conexión con Google, con el CRM o
+   con el rastreador, la pantalla no puede decir «todo bien»: dice «no comprobado» y no acusa a la web del cliente de algo
+   que se ha roto en nuestro lado (MED-00).
 
 **Lo que cambia respecto a la v1**
 
-| La v1 decía | La v2 dice |
+| La v1 decía | Esta versión dice |
 |---|---|
-| 120 capacidades | El número no es un activo. Unas 150 por dentro; **12-15 tipos de aviso** a la vista y cinco pantallas |
+| 120 capacidades | El número no es un activo. Unas 150 por dentro; **15 tipos de aviso** a la vista, en lista cerrada (apartado 7.1), y cinco pantallas |
 | Si la medición no aprueba, el agente calla | Tres estados (rota, dudosa, sana): nunca calla lo que es cierto sin la conversión |
 | Todo cuelga del «CPA objetivo» | Todo cuelga de un **acuerdo de objetivos por cliente**: coste máximo por lead calculado desde el margen, capacidad del cliente y calendario |
 | Coste por venta por término; el sector entero como referencia; en meses sabremos qué funciona | Por campaña y servicio, donde el cliente marque sus leads; el sector solo con 3 o más cuentas; algo útil en uno o dos años |
-| Solo lectura durante cinco fases | Solo lectura, pero con salida lista para pegar y cierre automático; y dos decisiones tuyas adelantadas |
+| Solo lectura durante cinco fases | Solo lectura, pero con salida lista para pegar y cierre automático; y las decisiones de escritura acotada (paquete C), adelantadas |
 | Primero medición y diagnóstico | Primero lo que no se recupera después y lo que quita trabajo la primera semana |
 
 **Qué construiríamos** [opinión]
@@ -60,7 +88,8 @@ decisión de Enric (apartado 13).
 2. **Un almacén propio** con lo que Google borra o no guarda, y desde el primer día la captura del identificador de clic.
 3. **Un puesto de trabajo para Eury**: pantalla Cartera (las 25 cuentas de un vistazo), pantalla Hoy (como mucho 2
    interrupciones al día y 5 decisiones por la mañana), lote semanal de términos y guion de revisión de cuenta.
-4. **Un vigilante de hechos**: pago, rechazos, web, formulario, entrega del lead, llamadas, pausas olvidadas.
+4. **Un vigilante de hechos**: pago, rechazos, web, formulario, entrega del lead, llamadas, pausas olvidadas. Y que sabe
+   cuándo le faltan sus propios datos, para no afirmar lo que no ha podido comprobar.
 5. **Un diagnóstico con el porqué**, que dice también lo que descartó y lo que no pudo mirar. Antes de avisar, dos semanas
    en sombra.
 6. **Calidad del lead y previsión**, donde haya datos; y lo estadístico entre cuentas, al final.
@@ -68,23 +97,29 @@ decisión de Enric (apartado 13).
 **Para qué** [pregunta abierta]. Con unos 200 € de cuota media por cuenta, este módulo solo se justifica si mueve uno de
 cuatro números: horas por cuenta, cuentas por gestor, bajas al año o ingreso por cuenta. Hoy no hay línea base de ninguno.
 
+**Cuánto cuesta** [estimación propia, sin medir; detalle en 13.2]. Unas 40 jornadas de desarrollo (entre 36 y 46),
+con un punto de parada tras el paso 4: si las horas de Eury no bajan, no se sigue. De tu tiempo, 3-4 horas a la semana los
+dos primeros meses y 1,5-2 después (los «30 minutos» de la v2 se quedaban cortos). De IA, del orden de 10-20 $ al mes en
+régimen, frente a los 80 $ al mes que hoy tiene toda la agencia: cabe, pero con un tope propio en la pasarela.
+
 **Por qué puede ser mejor que Optmyzr, Adalysis, Opteo y TrueClicks** [hipótesis de producto, no hecho: compara nuestro
 objetivo con su presente]. Conoce el negocio (objetivo, capacidad, zona, lo que el cliente no hace), ve fuera de Google Ads
 (web, formulario, CRM, ficha), da una alerta por causa con lo descartado, y dice «no lo sé» cuando no lo sabe. No será
 mejor en lo que ellas ya hacen bien y barato: por eso la parte de términos se construye delgada.
 
-**Las ocho decisiones que más pesan** (las 28, con recomendación, en el apartado 13.1)
+**Lo que tienes que decidir: cinco paquetes, una pregunta cada uno** (detalle y las 28 decisiones, en el apartado 13.1).
+⛔ = toca una línea roja del proyecto: no se hace nada hasta tu respuesta.
 
-| # | Decisión | Mi recomendación |
-|---|---|---|
-| 1 | Probar el acceso: crear el proyecto de Google Cloud y leer una cuenta | Esta semana |
-| 2 | ¿Qué número de agencia perseguimos? | Horas por cuenta primero; bajas después |
-| 3 | Medir una semana real de Eury e inventariar las 25 cuentas | Antes de escribir código |
-| 6 | Pactar un objetivo por cliente (coste máximo por lead, presupuesto, capacidad) | Empezar por los clientes principales; provisional en el resto |
-| 8 | Capturar ya el identificador de clic y la etapa del lead (necesita permiso de cada cliente y consulta legal) | Sí: es lo único que no se puede recuperar después |
-| 9 | Aplicar con un clic las negativas que Eury apruebe | Sí, al empezar el paso de términos |
-| 10 | Pausa de emergencia automática si la página de destino está caída | Sí, solo en ese caso |
-| 17-18 | ¿Quién hace de sénior y quién cubre a Eury? | Tú a corto plazo; nombrar suplente |
+| Paquete | Pregunta única | Mi recomendación | Cuándo |
+|---|---|---|---|
+| **A. Arrancar** (sin código, sin tocar cuentas) | ¿Me das el visto bueno para la semana de arranque: probar el acceso a la API leyendo una cuenta, medir una semana real de Eury, rellenar el inventario de las 25 cuentas, fijar el nivel A, B o C de cada una y dejar un objetivo provisional congelado por cliente? | **Sí** | **Esta semana** |
+| **B. Rumbo** | ¿Qué número perseguimos primero (horas por cuenta, bajas o ingreso por cuenta) y cobramos por cuota fija o por porcentaje de la inversión? | Horas primero, bajas después; cuota fija | Antes del paso 2 |
+| **C. Escritura acotada** ⛔ | ¿Qué puede cambiar la herramienta en cuentas reales? Cinco casillas: negativas con un clic, pausa por página caída, tope de gasto en un script de la MCC, buzón de avisos en cada cuenta, acceso de TrueClicks | Sí a las cinco, cada una con su límite | Antes del paso 4 |
+| **D. Datos de clientes** ⛔ | ¿Encargo la consulta legal única y, cuando conteste, empezamos a capturar el identificador de clic y a pedir a los clientes que marquen sus leads? | Sí; es lo único que no se recupera después | La consulta, cuanto antes; el resto, tras ella |
+| **E. Personas** | ¿Quién hace de sénior, quién cubre a Eury, qué deja de hacer Eury, y lo hablamos con él antes de diseñarlo? | Tú de sénior a corto plazo; nombrar suplente; retirar el ritual L-X-V por escrito | Antes de encender avisos |
+
+**Lo que necesito de ti esta semana: solo el paquete A.** Una respuesta, no veintiocho. Los demás no bloquean nada hasta
+la fecha de su columna.
 
 ---
 
@@ -109,7 +144,7 @@ mejor en lo que ellas ya hacen bien y barato: por eso la parte de términos se c
 | Tema | Posturas | Nuestra decisión [opinión] |
 |---|---|---|
 | **Performance Max en leads** | A favor con matices: Gales, Hopkins. En contra o con cautela: Williams («nunca peor que en 2025»), Rooijmans («maximiza tu gasto, no tu beneficio»), Lolk (01) | No recomendar PMax de leads hasta que Search convierta, haya ≥30 leads cualificados al mes y la conversión venga del CRM (Ani, ppc.io; 01, 05). El agente lo trata como «segunda fase» y audita marca, canales y URL. Los 30 al mes son criterio de expertos, no un mínimo de Google. **Una PMax heredada que funciona se audita y se compara; no se desmonta por regla** |
-| **AI Max** | Google: +14 % conversiones (y +27 % en campañas de exacta y frase). smec (250+ campañas): +13 % de valor, CPA +16 %, ROAS mediano 0 % con rango de +42 % a −35 %. Geddes: se apunta conversiones de tus exactas (01, 07, 09b) | Los informes internos se contradicen (el 03 habla de «ROAS ~35 % menor»; es el extremo del rango, no la mediana). Postura: nunca por defecto; solo como experimento 50/50 en no marca rentable y no limitada por presupuesto, midiendo lead cualificado |
+| **AI Max** | Google: +14 % conversiones (y +27 % en campañas de exacta y frase). smec (250+ campañas, **todas de retail**): +13 % de valor, CPA +16 %, ROAS mediano 0 % con rango de +42 % a −35 %; en leads no hay cifras. Geddes: se apunta conversiones de tus exactas (01, 07, 09b) | Los informes internos se contradicen (el 03 habla de «ROAS ~35 % menor»; es el extremo del rango, no la mediana). Postura: nunca por defecto; solo como experimento 50/50 en no marca rentable y no limitada por presupuesto, midiendo lead cualificado |
 | **Concordancia amplia** | Google la recomienda; Optmyzr 2023: exacta gana en ROAS en el 72,5 % de cuentas (01) | Amplia para descubrir, con negativas y conversión de calidad; exacta como grupo de control. En cuentas pequeñas, frase y exacta primero |
 | **Poner objetivo (tCPA/tROAS) o no** | Optmyzr 2024: los objetivos empeoran más veces que mejoran. smec: el objetivo es una barandilla (01, 09b) | Desde el 17 ago 2026 el objetivo es un mando de volumen fiable: poner el que el negocio puede pagar (el CPL máximo del apartado 2.2), no el que «pide Google» (caso Rooijmans: bajar el tCPA de 300 a 220 hundió los leads de 20-30 a 6; 07) |
 | **¿Cambiar presupuesto u objetivo reinicia el aprendizaje?** | Google: no dispara el estado «Aprendiendo» (09). Practicantes: cada cambio grande desestabiliza (05, 08) | Ambas son ciertas: no cambia el estado formal, pero el rendimiento oscila. Regla: cambios ≤ ±20 %, uno cada 10-14 días, evaluar tras 2 ciclos de conversión o 2 semanas |
@@ -155,8 +190,8 @@ campañas de poco gasto, y decir también lo que está bien (Lolk, 01).
 
 Dato de contexto: con 25 cuentas, solo la parte semanal hecha a mano son 15-30 horas (estimación propia del informe 05, sin
 fuente publicada), coherente con los «3 días de revisión» del brief. No sirve para prometer ahorro: antes de construir hay que medir una
-semana real de Eury (apartado 13.2). Las agencias encuestadas llevan de media 35 clientes por
-gestor y el 55 % hace el control de presupuesto a mano (07).
+semana real de Eury (apartado 13.2). Las agencias encuestadas (Fluency, más de 75 agencias de EE. UU.) llevan de media 35
+clientes por gestor y el 55 % hace el control de presupuesto a mano (07).
 
 ---
 
@@ -213,9 +248,21 @@ Cuatro precisiones [criterio propio]:
    varias veces; en reformas, un servicio distinto cambia el valor por diez. Por eso la economía es **por servicio**.
 3. Restar la cuota por lead es correcto, pero es un número que se mueve (más leads, menos cuota por lead). Se recalcula con
    el volumen de los últimos 90 días y se enseña aparte.
-4. Muchos clientes no sabrán su margen ni su tasa de cierre. Entonces el acuerdo arranca con un **objetivo provisional**
-   (la mediana del CPL de los últimos 90 días), marcado como «supuesto», y el agente lo dice cada vez que lo usa. Un
-   objetivo provisional visible es mejor que uno inventado con apariencia de exacto.
+4. Muchos clientes no sabrán su margen ni su tasa de cierre. Entonces el acuerdo arranca con un **objetivo provisional**,
+   marcado como «supuesto», y el agente lo dice cada vez que lo usa. Un objetivo provisional visible es mejor que uno
+   inventado con apariencia de exacto.
+
+**El objetivo provisional, sin trampa** (rev. R4). Tal como estaba en la v2 era circular: si el objetivo es la mediana del
+CPL de la propia cuenta, «CPL frente a objetivo» sale centrado en cero por construcción y nunca detecta una cuenta que paga
+de más de forma estructural; y si se recalcula cada 90 días, el objetivo empeora al mismo paso que la cuenta. Reglas:
+
+- Es la mediana del CPL de los 90 días **previos a la fecha del acuerdo**, y queda **congelada**: no se recalcula sola.
+- Mientras sea provisional, la pantalla Cartera no enseña «CPL frente a objetivo» sino **«CPL frente a su propia línea
+  base»**, con la etiqueta «sin objetivo de negocio».
+- Los umbrales «k × CPL» de esa cuenta son reglas **relativas a su pasado**, no «colgadas del negocio», y el hallazgo lo
+  dice.
+- Una cuenta con objetivo provisional **no puede ser de nivel A**.
+- A los 90 días sin acuerdo real se abre un pendiente para quien habla con el cliente (y otro cada 90).
 
 ### 2.3 Capacidad y lo que pasa después del clic
 
@@ -253,8 +300,11 @@ De ahí salen las reglas de honestidad que la v1 dejaba a medias:
 ### 2.5 Los cuatro números de la agencia
 
 La cuenta que la v1 no hacía (R3). Con las cifras del brief (más de 5.000 € al mes, más de 25 cuentas) la cuota media ronda
-los **200 € por cuenta y mes**. Si la revisión manual ocupa los «3 días» del brief, son del orden de 60-120 horas al mes
-[estimación sin fuente], es decir, unos 40-80 € de ingreso por hora antes de cualquier otro coste. Construir un módulo de
+los **200 € por cuenta y mes**. Los «3 días» de revisión del brief admiten dos lecturas (rev. R4): si son 3 días **por
+semana**, son del orden de 60-120 horas al mes y unos 40-80 € de ingreso por hora antes de cualquier otro coste; si son 3
+días **al mes**, son unas 24 horas y unos 200 € por hora, y el argumento económico cambia (hay menos horas que ahorrar y
+pesan más las bajas y el ingreso por cuenta). Las dos cifras son estimaciones sin fuente: lo resuelve la semana de
+medición (paquete A). Construir un módulo de
 este tamaño para proteger 5.000 € al mes solo tiene sentido si mueve alguno de estos cuatro números:
 
 | Número | Qué significaría mejorarlo |
@@ -319,8 +369,8 @@ pactar los acuerdos de objetivos y conseguir que el cliente devuelva el dato.
 **Cuántas son y cuántas se ven.** Son unas 150 capacidades en 18 familias. La cifra **no es un activo**: cada capacidad es
 una fuente posible de avisos, y un catálogo largo es un pasivo para quien revisa la cola. Tres reglas lo acotan:
 
-1. **Como mucho 12-15 tipos de hallazgo visibles** en el lanzamiento (apartado 7). El resto trabaja por dentro, como
-   evidencia de un hallazgo o dentro del guion de revisión de cuenta.
+1. **Quince tipos de hallazgo visibles** en el lanzamiento, en lista cerrada (apartado 7.1): uno nuevo sustituye a otro,
+   no se suma. El resto trabaja por dentro, como evidencia de un hallazgo o dentro del guion de revisión de cuenta.
 2. **Apagadas por defecto en cuentas con menos de 15 leads al mes** (probablemente la mayoría; lo dirá el inventario): PRO-04,
    DIA-03, los porcentajes de DIA-02, TER-09, TER-10, PUJ-05, PUJ-07, LAN-02, LAN-07, ANU-02, ANU-04, GOO-02, ESC-06 y
    APR-05. Se encienden por cuenta cuando hay volumen para que digan algo.
@@ -353,6 +403,7 @@ Familia nueva en la v2 (crítica de R3, aceptada). El detalle y la fórmula est�
 
 | ID | Qué detecta o hace | Datos y fuente | Regla o método | Frec. | Motor | Acción propuesta | Riesgo | Fuente · PDF |
 |---|---|---|---|---|---|---|---|---|
+| MED-00 ★ | **Salud de nuestras propias fuentes**: saber cuándo el vigilante está ciego (nuevo en la v3; va en el paso 1) | Estado de sincronización (apartado 8.2) por cuenta y por fuente: API de Google Ads, GoHighLevel, GA4, Search Console, GBP, rastreador y vigilancia de caídas, buzón de avisos (MED-14) | Para cada fuente, **hora del último dato bueno** frente a su frescura esperada (valores de partida editables: Ads 2 h en horario de anuncios, CRM 6 h, rastreador y caídas 2 h, GA4 y Search Console 48 h). «Dato bueno» no es «no dio error»: cada fuente lleva una **consulta de control** que siempre debe devolver algo (la cuenta existe, el CRM lista sus embudos), para distinguir «cero leads» de «no pude preguntar». Cada regla declara de qué fuentes depende; con una fuente atrasada, sus reglas **se suspenden** y su resultado es **«no comprobado»**, nunca «bien» ni «roto». En concreto, MED-02, MED-03 (b) y (c), MED-13, MED-17, LLA-03 y NEG-03 no se emiten si el CRM no ha dado datos buenos; PRO-06 y MED-18, si el rastreador no ha corrido. Se apoya en lo que ya existe: `registerHealthCheck` de `lib/core/capabilities.ts` (sale en Salud del sistema) y el registro de errores `sys_error_*` con su Técnico de mantenimiento | H | C | La cabecera de Hoy lo dice («comprobadas 23 de 25; 2 sin datos de GoHighLevel desde las 06:00»). Una caída de la API de Google Ads o del rastreador es interrupción para el **responsable técnico**, no para el gestor | R0 | R4 (G2) |
 | MED-01 | **Examen de medición** con **tres estados** por cuenta (rota, dudosa, sana; ver debajo de la tabla), no una nota con aprobado | `conversion_action`, `campaign_conversion_goal`, `customer.auto_tagging_enabled` | Cada acción primaria es un lead distinto y ninguna cuenta dos veces el mismo evento (formulario, llamada desde el anuncio, llamada desde la web y WhatsApp pueden ser cuatro primarias legítimas); leads con recuento «Una»; una sola fuente primaria por evento. Las acciones creadas solas o heredadas (campañas Smart, «acciones locales» de la ficha de Google, eventos de GA4 importados automáticamente) y las conversiones tras ver nunca son primarias sin decisión expresa. El clic en teléfono o WhatsApp solo deja de ser primaria **cuando existe una señal mejor del mismo evento** | D + E | C | Estado y lista de arreglos. El estado limita **solo lo que depende de la conversión** (pujas, objetivos, presupuesto, escalado, pausas por CPA); nunca calla lo que es cierto sin ella (zona, redes, URL rotas, rechazos, términos fuera de servicio, ritmo de gasto) | R0 (arreglos: R3, por tandas) | 05 §2.2, 06 §1 · P01 · rev. R1, R2, R3 |
 | MED-02 ★ | **Conciliación Ads ↔ CRM** por tipo de acción (formularios con formularios, llamadas con llamadas) | `metrics.conversions_by_conversion_date` por acción; leads de GoHighLevel (canal, UTM, página) | Prueba de recuento (¿la diferencia supera lo que da el azar con este volumen?), no un cociente fijo: con 10 leads a la semana, 12 frente a 10 no es señal. **Ads > CRM:** primero comprobar la entrega del lead (webhook caído, correo en spam): es urgente, es un lead pagado que el cliente no ha visto; solo después, doble conteo. **Ads < CRM:** consentimiento o etiqueta. Límite: la atribución de canal del CRM pierde llamadas | D (cuenta) · S (campaña) | C | Aviso con la hipótesis en ese orden y la prueba a hacer | R0 | 06 §1.7-1.8 · X02 · rev. R1 |
 | MED-03 ★ | **Medición rota, entrega rota o caída real** | Conversiones por acción; sesiones GA4; leads del CRM **de todos los canales**; llamadas; registro de cambios de la web y vigilancia de caídas (módulo SEO, vía núcleo) | Tres firmas. (a) Ads a cero y CRM normal: etiqueta. (b) Ads normal y CRM a cero: entrega. (c) Los dos a cero con sesiones normales: mirar los leads de otros canales y las llamadas; si también están a cero, formulario o web rotos; si siguen llegando, oferta o tráfico. Siempre con el filtro de recuento de PRO-03 | D; cada hora solo a nivel de cuenta y en horario de anuncios | C → So | Tarea a web; propuesta de exclusión de datos (PUJ-08); no tocar pujas | R0 | 05 §4.3, 10 §4.1 · P01 · rev. R1 |
@@ -366,11 +417,11 @@ Familia nueva en la v2 (crítica de R3, aceptada). El detalle y la fórmula est�
 | MED-11 | **Prueba de punta a punta** hecha por una persona, y etiqueta presente en todas las landings | Rastreador; tarea humana guiada | Formulario y llamada de prueba; la página de gracias dispara una vez. Es la versión completa y manual de MED-18 | T + E | C | Tarea con lista de pasos | R0 | 05 M15-M16 |
 | MED-12 | **Salud y acceso de la cuenta** | `customer.status`, usuarios con acceso, `campaign.primary_status_reasons`, presupuesto de cuenta, fechas de fin; estado de verificación del anunciante [recurso por comprobar en v26] | La API no tiene recurso de «alertas de cuenta»: el corte se infiere con **impresiones por hora de toda la cuenta en horario de servicio** (3-4 horas a cero frente a su línea base), no esperando al «gasto a cero» del día. Usuarios desconocidos o de agencias anteriores (también es señal de riesgo de baja: AGE-02). El aviso **antes** del corte solo lo da MED-14 | H (horario de anuncios) | C | Aviso inmediato | R0 | 04 §2.13, 05 §2.1 · P03 · rev. R1 |
 | MED-13 | **Formularios de Google sin entregar** | Envíos de recursos de formulario en Ads; leads recibidos en el CRM por esa vía | Cualquier diferencia entre enviados y recibidos. Los leads de un formulario de Google dejan de poder descargarse a los 30 días [según R1; comprobar en la ayuda de Google] | D | C | Aviso urgente: es un lead pagado que el cliente no ha visto | R0 | R1 (F2) |
-| MED-14 | **Avisos de Google por correo** (pago rechazado, verificación del anunciante con fecha límite, aviso de suspensión, rechazos) | Un buzón de la agencia dado de alta como usuario con notificaciones en cada cuenta; lo lee el agente de correo que ya existe | Clasificar cada correo de Google por tipo y urgencia. Es el único camino que avisa **antes** del corte. Requiere decisión de Enric y, donde la cuenta es del cliente, su permiso | E | C → Hk | Aviso inmediato con la fecha límite | R0 | R1 (F3) |
+| MED-14 | **Avisos de Google por correo** (pago rechazado, verificación del anunciante con fecha límite, aviso de suspensión, rechazos) | Un buzón de la agencia dado de alta como usuario con notificaciones en cada cuenta; lo lee el agente de correo que ya existe | Clasificar cada correo de Google por tipo y urgencia **con reglas** (remitente y asunto son fijos); Haiku solo para el correo que no encaje en ninguna. Es el único camino que avisa **antes** del corte, y el único en cuentas de pago con tarjeta (apartado 9.2). Dar de alta el buzón cambia los accesos de la cuenta: **línea roja** (paquete C) y, donde la cuenta es del cliente, su permiso | E | C (Hk solo en lo que no encaje) | Aviso inmediato con la fecha límite | R0 | R1 (F3) |
 | MED-15 | **El identificador de clic sobrevive al viaje** | Rastreador: cada URL final pedida con un identificador de prueba; plantilla de seguimiento y sufijo de la cuenta | El identificador y los UTM llegan a la página final tras las redirecciones; plantilla y sufijo coherentes en toda la cuenta, sin UTM escritas a mano distintas por anuncio | S + E | C | Tarea a web; corregir plantilla | R0 / R1 | R1 (F7) |
 | MED-16 | **Cambio en las etiquetas o en el formulario** | Rastreador: versión publicada del contenedor de etiquetas [viabilidad por comprobar] y huella del marcado del formulario (identificadores, acción, campos) en cada landing con gasto | Un cambio es un **evento fechado** para el árbol, igual que el banner de cookies. Es la causa nº 1 de medición rota | D | C | Evento para el diagnóstico; lanza MED-04 y MED-18 | R0 | R1 (F8) |
 | MED-17 ★ | **Latido de leads por todos los canales** | Leads del CRM de todas las fuentes (pago, orgánico, directo) | Si la web no recibe ningún formulario de ninguna fuente en un plazo anormal para ella, el formulario está roto. Es el mismo dato que alimenta «leads totales del negocio» (apartado 2.4) | D | C | Aviso; tarea a web | R0 | R1 (F12), R3 §4.4 |
-| MED-18 ★ | **Prueba activa del formulario** y señales adelantadas, para las cuentas donde «días sin convertir» llega tarde | Rastreador; GA4 (sesiones e inicios de formulario por landing) | A diario, sin enviar nada: la landing carga, el formulario existe y su punto de envío responde; sesiones e inicios de formulario frente a su línea base (tienen 10-50 veces más volumen que los leads). Envío real de un lead de prueba marcado: solo donde el cliente lo acepte (crea un contacto en su CRM) | D | C | Aviso; tarea a web | R0 | R2 §6.7 |
+| MED-18 ★ | **Prueba activa del formulario** y señales adelantadas, para las cuentas donde «días sin convertir» llega tarde | Rastreador; GA4 (sesiones e inicios de formulario por landing) | A diario, sin enviar nada: la landing carga, el formulario existe y su punto de envío responde; sesiones e inicios de formulario frente a su línea base (tienen 10-50 veces más volumen que los leads). Envío real de un lead de prueba marcado: crea un contacto en el CRM del cliente, así que es un efecto hacia fuera: **línea roja** (paquete D) y solo donde el cliente lo acepte | D | C | Aviso; tarea a web | R0 | R2 §6.7 |
 
 **Los tres estados de la medición** (sustituyen a la «nota mínima» de la v1, que habría dejado mudo al agente en más de la
 mitad de las cuentas; críticas R1 y R2, aceptadas):
@@ -380,6 +431,13 @@ mitad de las cuentas; críticas R1 y R2, aceptadas):
 | **Rota** | No llegan conversiones, doble conteo evidente, entrega del lead caída | Solo protección (web, gasto, rechazos) y el arreglo de medición |
 | **Dudosa** | Demasiadas primarias, clic de teléfono como primaria sin señal mejor, sin conciliar con el CRM | Protección, términos por intención y por zona, higiene, ritmo de gasto. **No** escalado, **no** cambios de objetivo, **no** pausas por «no convierte» |
 | **Sana** | Pasa MED-01 y concilia con el CRM | Todo |
+
+Dos precisiones de la v3 (rev. R4). **Una:** la conciliación con el CRM (MED-02) no existe hasta el paso 5 del orden de
+construcción; si «sin conciliar» contara como «dudosa», las 25 cuentas saldrían en ámbar durante semanas y la columna se
+aprendería a ignorar. Hasta entonces la columna de Cartera distingue **«rota»** de **«sin conciliar todavía»** (gris, no
+ámbar), y «dudosa» solo sale por un motivo que se pueda señalar (demasiadas primarias, clic de teléfono como única señal).
+**Dos:** el estado de la medición habla de la cuenta del cliente; si lo que falla es nuestra propia lectura, no es
+«rota»: es «no comprobado» (MED-00).
 
 **Plan de saneamiento.** Arreglar la medición es R3 en cada cuenta: cambia lo que aprende la puja y **hace «caer» las
 conversiones del informe del cliente** (se dejan de contar clics de teléfono). Por eso: orden por nivel de cliente; 2-3
@@ -392,6 +450,12 @@ preguntando por qué han bajado sus resultados.
 
 Familia nueva en la v2 (crítica de R1, aceptada). En negocio local, entre la mitad y tres cuartos de los leads son llamadas
 [estimación de oficio de R1, sin fuente]; la v1 las despachaba en una fila mensual.
+
+**De qué depende esta familia** (rev. R4). Descansa en un recurso de la API que está sin verificar en la v26, y muchos
+negocios no usan los números de seguimiento de Google sino los de su CRM o de su proveedor de telefonía. Por eso la prueba
+de acceso (decisión 1) incluye «leer el detalle de llamadas de una cuenta» y el inventario (decisión 4) pregunta quién da
+el número de seguimiento: Google, GoHighLevel u otro. Si el recurso no existe en la API, LLA-01 y LLA-03 se apoyan solo en
+las llamadas del CRM, y en las cuentas donde tampoco estén ahí, la familia no existe y se dice.
 
 | ID | Qué detecta o hace | Datos y fuente | Regla o método | Frec. | Motor | Acción propuesta | Riesgo | Fuente · PDF |
 |---|---|---|---|---|---|---|---|---|
@@ -413,28 +477,28 @@ Familia nueva en la v2 (crítica de R1, aceptada). En negocio local, entre la mi
 | PRO-08 | **Historial de cambios guardado, vigilado y con autor clasificado** | `change_event` (30 días, con usuario y valor antes y después), `change_status` (90 días) | Guardar cada noche. Cada usuario se etiqueta como **agencia, cliente, Google o herramienta** (scripts y reglas del gestor anterior incluidos). Todo cambio de «cliente» o «Google» en entidades con gasto avisa el mismo día. Otras señales: ráfaga de cambios, usuario nuevo. Sirve además para cerrar solas las propuestas que el gestor aplica a mano (apartado 7.2). El informe 04 dice que no cubre Google Ads Editor ni negativas de la MCC; un revisor lo duda: **comprobar con una cuenta real** | D | C | Aviso; contexto para el diagnóstico | R0 | 01 §2.14, 04 §2.7, 10 §4.4 · rev. R1, R2 |
 | PRO-09 ★ | **Causa común entre cuentas** | Anomalías del día de todas las cuentas | Si una fracción alta de cuentas (o de un sector, o de una zona) se desvía el mismo día: una alerta de agencia, no 15 | D | C | Aviso único | R0 | 05 §4.3 |
 | PRO-10 | **Clics sin sesión** | Clics de Ads frente a sesiones GA4 y Clarity por hora y zona | Picos de clics sin sesión; la API no da las IP. Se usa como evidencia en la rama «gasto ↑ sin conversiones» y para excluir zonas; **no** como expediente de reembolso (Google casi nunca devuelve) | S | C | Exclusión de zona | R0 / R1 | 03 §3.1, 09b §3 · rev. R1 |
-| PRO-11 | **Freno de emergencia fuera de nuestro servidor** | Script en la MCC | Tope de gasto diario que funciona aunque la herramienta caiga | H | C | Pausa y aviso | R2 | 04 §6 |
-| PRO-12 ★ | **Gobierno de las alertas** | Todas las anteriores | Una alerta por causa **y por cliente**; una sola por causa común; presupuesto de atención **por persona y sumando todos los módulos**, con canales y silencios definidos (apartado 7.3); respuestas que enseñan (apartado 7.4) | D | C | — | R0 | 05 §6.3, 08 §3.4 · rev. R1, R2 |
+| PRO-11 | **Freno de emergencia fuera de nuestro servidor** | Script en la MCC | Tope de gasto diario que funciona aunque la herramienta caiga. Es código que corre dentro de cuentas reales y **pausa campañas**: línea roja con decisión propia (10b, paquete C); no se instala sin ella | H | C | Pausa y aviso | R2 ⛔ | 04 §6 · rev. R4 |
+| PRO-12 ★ | **Gobierno de las alertas** | Todas las anteriores | Una alerta por causa **y por cliente**; una sola por causa común; presupuesto de atención **por persona y sumando todos los módulos**, con canales y silencios definidos (apartado 7.3); respuestas que enseñan (apartado 7.4). El tope dentro de Ads es del módulo; el tope global cambia la cola de avisos de Operaciones y es un cambio del núcleo (protocolo de decisión, apartado 8.4) | D | C | — | R0 | 05 §6.3, 08 §3.4 · rev. R1, R2, R4 |
 | PRO-13 | **Lo pausado que debería estar activo** | Estado de campañas, grupos y palabras; historial de cambios; fechas de fin | Entidad pausada o con fecha de fin vencida que en los 60 días previos aportaba más del 10 % de los leads de la cuenta. Aviso a los 3 días, con quién la pausó. Toda pausa que proponga el agente lleva fecha de revisión obligatoria | D | C | Aviso; propuesta de reactivación | R0 / R2 | R1 (F4) |
 
 ### 3.E Diagnóstico de causa raíz (detalle en el apartado 4)
 
 | ID | Qué detecta o hace | Datos y fuente | Regla o método | Frec. | Motor | Acción propuesta | Riesgo | Fuente · PDF |
 |---|---|---|---|---|---|---|---|---|
-| DIA-01 ★ | **Árbol de causa raíz unificado** | Todo el almacén más núcleo (web, SEO, CRM, GBP, ficha) | Los **hechos duros** (pago, suspensión, rechazo, URL o certificado caídos, etiqueta ausente, entrega del lead) se comprueban siempre, a diario, haya o no anomalía y aunque sea festivo. El filtro «¿es real?» solo se aplica a las anomalías estadísticas. Después: medición → cambios (con filtro de peso) → entrega → descomposición → validación (apartado 4.2) | D (hechos) · E (resto) | C | Diagnóstico con evidencia | R0 | 05 §4.3, 10 §4.5 · P04 · rev. R1 |
+| DIA-01 ★ | **Árbol de causa raíz unificado** | Todo el almacén más núcleo (web, SEO, CRM, GBP, ficha) | Los **hechos duros** (pago, suspensión, rechazo, URL o certificado caídos, etiqueta ausente, entrega del lead) se comprueban siempre, a diario, haya o no anomalía y aunque sea festivo; y solo cuentan como hechos si su fuente está sana (MED-00): si no, «no comprobado». El filtro «¿es real?» solo se aplica a las anomalías estadísticas. Después: medición → cambios (con filtro de peso) → entrega → descomposición → validación (apartado 4.2) | D (hechos) · E (resto) | C | Diagnóstico con evidencia | R0 | 05 §4.3, 10 §4.5 · P04 · rev. R1 |
 | DIA-02 | **Descomposición del KPI** en factores | Impresiones, cuota, CTR, CPC, CR por periodo | Logarítmica (LMDI) cuando hay volumen; **aditiva sobre lo esperado** cuando las conversiones son cero. Un factor solo entra si su cambio supera su propio ruido; con menos de 30 conversiones en el periodo de comparación se enseña el **orden** de los factores, no porcentajes (apartado 4.3) | E | C | «Lo que más pesa es la cuota de impresiones» | R0 | 05 §4.2, 08 §4.1 · rev. R1 |
 | DIA-03 | **Mezcla frente a tasa** y búsqueda de la combinación culpable | Segmentos: campaña, red, dispositivo, zona, hora, término, origen del emparejamiento | Efecto mezcla y efecto tasa; bajar por la dimensión que concentra ≥60-70 % del cambio en ≤3 elementos | E | C | Señala dónde | R0 | 05 §4.2 |
 | DIA-04 ★ | **Demanda frente a subasta** | Impresiones orgánicas de Search Console de las consultas equivalentes; GBP; mismo sector en otras cuentas | Si baja también lo orgánico: mercado. Si solo baja Ads: es nuestro. Válido solo con volumen orgánico mínimo y posición estable (Search Console también llega con 2-3 días y en webs pequeñas es ruido); si no, se usa el sector, y si tampoco hay, se dice | E | C | Evita tocar la cuenta cuando es estacionalidad | R0 | 05, 06 §5.4, 08 §4.1 · rev. R1 |
 | DIA-05 ★ | **Cambios de Google como causa** | Calendario de plataforma (GOO-04) | ¿El inicio coincide con un cambio de Google fechado? Donde el efecto no está medido para leads (cambio del 17 ago 2026), la causa sale como **«posible»**, nunca con confianza alta | E | C | Explicación y palancas | R0 | 09b §5.3, 10 §1.5 · rev. R1 |
-| DIA-06 ★ | **Explicación en lenguaje llano**, con plantilla fija de cuatro líneas (qué pasa · por qué te lo digo ahora · qué creo que es y qué he descartado · qué haría yo) y «no concluyente» con la siguiente comprobación **guiada** | Salida de DIA-01 a 07 | La IA solo puede citar causas que el código haya calculado; cobertura de evidencia visible. Una sola voz hacia el usuario (apartado 6.4) | E | C → So | Hallazgo en la pantalla Hoy; Telegram solo si es interrupción | R0 | 03 §2.2 (claude-ads), 05 §4.4 · rev. R2 |
+| DIA-06 ★ | **Explicación en lenguaje llano**, con plantilla fija de cuatro líneas (qué pasa · por qué te lo digo ahora · qué creo que es y qué he descartado · qué haría yo) y «no concluyente» con la siguiente comprobación **guiada** | Salida de DIA-01 a 07 | La IA solo puede citar causas que el código haya calculado; cobertura de evidencia visible. Una sola voz hacia el usuario (apartado 6.4). Como rellena una plantilla fija sobre datos ya calculados, se examina primero con Haiku y solo sube a Sonnet si el examen del prompt no pasa (directiva de IA, pregunta 4) | E | C → Hk o So | Hallazgo en la pantalla Hoy; Telegram solo si es interrupción | R0 | 03 §2.2 (claude-ads), 05 §4.4 · rev. R2 |
 | DIA-07 | **¿Cambió otra cosa del marketing o del negocio del cliente?** | Memoria del cliente; calendario comercial (NEG-01); una pregunta al responsable de la cuenta | Campaña en Meta, radio, buzoneo, cambio de precio, feria, noticia, comercial nuevo. Sin esta rama el agente atribuye a la cuenta subidas y bajadas que vienen de fuera | E | C | Pregunta al responsable antes de cerrar el diagnóstico | R0 | R3 §4.5 |
 
 ### 3.F Términos de búsqueda y palabras clave
 
 | ID | Qué detecta o hace | Datos y fuente | Regla o método | Frec. | Motor | Acción propuesta | Riesgo | Fuente · PDF |
 |---|---|---|---|---|---|---|---|---|
-| TER-01 ★ | **Cascada de clasificación** de cada término nuevo, entregada como **lote por cuenta** agrupado por motivo, nunca como alertas sueltas | `search_term_view`, `campaign_search_term_view` (incluye PMax), `segments.search_term_match_source`; ficha (servicios, zona, lo que NO hace, términos protegidos, reglas del cliente); consultas orgánicas de Search Console | 1) reglas de sector y zona; 2) distancia de embeddings a servicios, palabras activas y consultas orgánicas; 3) IA pequeña solo en la zona gris, con la ficha y decisiones previas; 4) evidencia estadística; 5) comprobación de conflictos. Control diario aparte: término nuevo que se lleva más de X % del gasto del día | S (lote) · D (control de gasto) | C → E → Hk | Negativa, «término protegido» o «vigilar», con nivel y concordancia; salida lista para pegar (apartado 7.2) | R1 | 01 §2.4, 02 §3.3, 08 §1.4 · A02 · rev. R1, R2 |
-| TER-02 | **Término con gasto y sin resultado** | Coste, clics y conversiones (Ads y CRM) del término **en toda la ventana o en su vida**, no en una racha | Gasto ≥ k × CPA objetivo sin conversión: k = 3 por defecto, 2 en respuesta directa, 4-5 en ticket alto. Si el término convirtió alguna vez, se juzga por su CPA acumulado. La regla no se «vuelve a mirar cada semana hasta que salte» (apartado 5.2). La negativa estadística va **en exacta y con fecha de revisión** (TER-12); negativa de frase solo por intención o por n-grama con evidencia agregada | S | C | Negativa exacta con caducidad | R1 | 05 §5.1, 07 §4, 08 §2.5 · A03 · rev. R1 |
+| TER-01 ★ | **Cascada de clasificación** de cada término nuevo, entregada como **lote por cuenta** agrupado por motivo, nunca como alertas sueltas | `search_term_view`, `campaign_search_term_view` (incluye PMax), `segments.search_term_match_source`; ficha (servicios, zona, lo que NO hace, términos protegidos, reglas del cliente); consultas orgánicas de Search Console | 1) reglas de sector y zona; 2) distancia de embeddings a servicios, palabras activas y consultas orgánicas; 3) IA pequeña solo en la zona gris, con la ficha y decisiones previas; 4) evidencia estadística con la regla del apartado 5.3 (margen, gasto mínimo y simulada con miradas semanales); 5) comprobación de conflictos y de términos protegidos (TER-05, TER-06) **antes** de proponer. Control diario aparte: término nuevo que se lleva más de X % del gasto del día | S (lote) · D (control de gasto) | C → E → Hk | Negativa, «término protegido» o «vigilar», con nivel y concordancia; salida lista para pegar (apartado 7.2) | R1 | 01 §2.4, 02 §3.3, 08 §1.4 · A02 · rev. R1, R2 |
+| TER-02 | **Término con gasto y sin resultado** | Coste, clics y conversiones (Ads y CRM) del término **en toda la ventana o en su vida**, no en una racha | Regla de oficio: gasto ≥ k × CPA objetivo sin ninguna conversión, k = 3 por defecto, 2 en respuesta directa, 4-5 en ticket alto. Regla completa (apartado 5.3): con cero conversiones corta en torno a 3,4 × y, si el término convirtió alguna vez, lo juzga por su CPA acumulado con un umbral que sube con cada conversión (unas 5,5 × con una, 7,5 × con dos). Nunca sobre una racha (apartado 5.2). La negativa estadística va **en exacta y con fecha de revisión** (TER-12); negativa de frase solo por intención o por n-grama con evidencia agregada | S | C | Negativa exacta con caducidad | R1 | 05 §5.1, 07 §4, 08 §2.5 · A03 · rev. R1 |
 | TER-03 ★ | **N-gramas**, con evidencia agregada entre cuentas del mismo sector | Términos partidos en 1-3 palabras | Sumar coste y conversiones por fragmento («gratis», «curso», «empleo», «segunda mano»). La evidencia se agrega entre cuentas, pero la propuesta es **una sugerencia por cuenta**, validada contra la ficha de cada una y con vista previa de los términos con conversión que bloquearía. Nunca una lista compartida en la MCC: «curso» o «urgencias» son servicio para algún cliente | S | C | Negativa de frase en esa cuenta | R2 | 08 §1.1, 03 §4.1 · A02 · rev. R1, R2 |
 | TER-04 ★ | **Lugares fuera de la zona de servicio** | Términos; zona y locales de la ficha; lista de municipios | El término nombra un municipio o provincia que el cliente no atiende | S | C | Negativa de frase con el nombre del lugar | R1 | 02 §1.3 (Opteo lo hace sin ficha) |
 | TER-05 | **Término que merece protegerse o ser palabra clave** | Términos con conversiones; calidad en CRM | ≥2 conversiones en 90 días y CPA ≤ objetivo: se marca **«término protegido»** (ninguna negativa puede bloquearlo). Solo se añade como palabra exacta si hace falta controlar algo: anuncio o landing distintos, enviarlo a otro grupo, o no depender de un emparejamiento amplio que Google puede dejar de hacer [este último motivo es opinión propia]. Añadirlo sin motivo no trae tráfico y trocea los datos | S | C | Proteger; añadir en exacta solo con motivo | R1 | 02 §2.3, 10 §5.5 · D01 · rev. R1 |
@@ -451,7 +515,7 @@ Familia nueva en la v2 (crítica de R1, aceptada). En negocio local, entre la mi
 | ID | Qué detecta o hace | Datos y fuente | Regla o método | Frec. | Motor | Acción propuesta | Riesgo | Fuente · PDF |
 |---|---|---|---|---|---|---|---|---|
 | PUJ-01 | **Estado de Smart Bidding**, guardado a diario | `campaign.bidding_strategy_system_status` (aprendiendo y por qué, limitada por presupuesto, datos, inventario o calidad, conversiones mal configuradas) | Más de 21 días aprendiendo; cualquier «mal configurada»; «limitada por datos» | D | C | Contexto para todo lo demás; aviso | R0 | 04 §2.10, 10 §5.5 · E04 |
-| PUJ-02 | **Estrategia coherente con el volumen** | Conversiones de 30 días por **cuenta y cartera**, no por campaña | Umbrales, cada uno con su origen: Google pide ≥15 conversiones en 30 días para pujar a una acción y ≥30 para evaluar un CPA objetivo, y no recomienda objetivo con <7 (06, 10); que PMax de leads espere a 30 cualificados al mes es criterio de expertos (01). Con menos de 15 al mes en toda la cuenta: maximizar conversiones sin objetivo o cartera común; **no es alerta, es contexto**. Maximizar clics solo es hallazgo si la campaña lleva más de 30 días, tiene conversiones medidas y no es de marca | M | C | Cartera o estrategia menos exigente; fusionar solo si no hay motivo de negocio para la separación | R3 | 10 §1.6, 05 B3-B4 · E04 · rev. R1, R3 |
+| PUJ-02 | **Estrategia coherente con el volumen** | Conversiones de 30 días por **cuenta y cartera**, no por campaña | Umbrales, cada uno con su origen (rev. R4: los informes 06 y 10 no coinciden y el 10 es el que leyó la ayuda oficial). **Oficial de Google:** no recomienda objetivo con menos de 7 conversiones, y 30 es una recomendación para *evaluar* un CPA objetivo, no un requisito. **De practicantes, y de Google solo para metas de lead cualificado:** ≥15 conversiones en 30 días para pujar a una acción (06). Que PMax de leads espere a 30 cualificados al mes es criterio de expertos (01). Con menos de 15 al mes en toda la cuenta: maximizar conversiones sin objetivo o cartera común; **no es alerta, es contexto**. Maximizar clics solo es hallazgo si la campaña lleva más de 30 días, tiene conversiones medidas y no es de marca | M | C | Cartera o estrategia menos exigente; fusionar solo si no hay motivo de negocio para la separación | R3 | 10 §1.6, 05 B3-B4 · E04 · rev. R1, R3 |
 | PUJ-03 ★ | **«Efecto 17 de agosto»** | Estado «limitada por presupuesto», CPC, CPA real frente a objetivo | CPA objetivo o ROAS objetivo + limitada por presupuesto + CPC al alza: puede no ser un fallo sino el diseño nuevo. **En leads no hay cifras publicadas: la causa se presenta como «posible»** hasta medirla en nuestras cuentas | S | C → So | Acercar el objetivo al CPA real, redistribuir, o pasar a maximizar conversiones | R3 | 09b §5.3, 10 §1.5 · rev. R1 |
 | PUJ-04 | **Objetivo irreal y el error de «bajar el tCPA como pide Google»** | Historial de cambios; CPC y conversiones 7-14 días después | Cambio de objetivo seguido de CPC ↑ y conversiones ↓. Objetivo muy por debajo del CPA histórico | S | C | Receta de Rooijmans: CPA objetivo que el negocio acepta, tope de CPC en el percentil 90-95 de los términos que convierten, pasos de 10-20 % | R3 | 07 §3.1 |
 | PUJ-05 | **Reparto de presupuesto por retorno marginal** | `campaign_simulation` (puntos de presupuesto y objetivo), cuota perdida por presupuesto; valor del lead por servicio (NEG-01); capacidad (NEG-02) | Igualar el **retorno marginal** (valor del lead ÷ CPA marginal) entre campañas; igualar el CPA marginal solo vale si un lead vale lo mismo en todas (apartado 5.7). Siempre dentro de la banda de presupuesto y sin superar la capacidad del cliente | M | C | Mover presupuesto entre campañas | R2 | 08 §5.1 · A04, E06 · rev. R3 |
@@ -506,7 +570,7 @@ Familia nueva en la v2 (crítica de R1, aceptada). En negocio local, entre la mi
 | LEAD-02 ★ | **«Barata pero no cierra»** | LEAD-01 a 90 días; NEG-04 | CPL por debajo del objetivo y tasa de cualificación muy por debajo de la cuenta (con encogimiento bayesiano). Quincenal cuando el historial muestra un cambio de concordancia o la activación de AI Max. Antes de culpar a la campaña: si la mezcla de términos no cambió, la causa puede ser comercial (NEG-04) | M · quincenal tras cambio | C | Bajar peso, cambiar mensaje, o cambiar la conversión que se optimiza | R2-R3 | 07 §6, 06 §2.4 · rev. R1, R3 |
 | LEAD-03 ★ | **Spam por red y franja** | Leads marcados no válidos en el CRM; red, hora, dispositivo, zona | Proporción de no válidos por segmento frente al resto. Señal que no necesita CRM: conversiones de madrugada, concentradas en una zona, con tasa imposible | S | C | Excluir red, canal o franja; proteger el formulario | R1-R2 | 06 §2.1, §6 · rev. R1 |
 | LEAD-04 ★ | **Valor del lead por etapa**, recalculado cada trimestre | Ventas y etapas del CRM; economía por servicio del acuerdo (NEG-01) | Valor de la etapa = probabilidad de venta desde esa etapa × margen × recurrencia. Es el **punto de equilibrio**, no el máximo a pagar: el CPL máximo sale de la fórmula del apartado 2.2 | T | C | Alimenta el acuerdo de objetivos | R0 | 06 §1.6 · rev. R3 |
-| LEAD-05 | **Escalera de qué optimizar** | Volumen mensual de cualificados y ventas | <15 cualificados en 30 días (umbral de Google para pujar a una acción): pujar a lead válido y medir cualificados como secundaria; ≥15: cualificado como primaria; ≥15 ventas con valor variable: valor real. En la mayoría de estas cuentas el primer escalón será permanente: decirlo | M | C | Propuesta de cambio de conversión primaria | R3 | 06 §2.4 · rev. R3 |
+| LEAD-05 | **Escalera de qué optimizar** | Volumen mensual de cualificados y ventas | <15 cualificados en 30 días (criterio de practicantes y de Google para metas de lead cualificado, no un requisito oficial: ver PUJ-02): pujar a lead válido y medir cualificados como secundaria; ≥15: cualificado como primaria; ≥15 ventas con valor variable: valor real. En la mayoría de estas cuentas el primer escalón será permanente: decirlo | M | C | Propuesta de cambio de conversión primaria | R3 | 06 §2.4 · rev. R3 |
 | LEAD-06 | **Leads de fuera de zona** | Código postal o provincia del lead; zona de la ficha | >10 % de leads o de coste fuera de zona | M | C | Pasar a «presencia»; negativas de lugar | R1-R2 | 06 §5.1 |
 | LEAD-07 ★ | **Llamadas cualificadas por su contenido** (Google solo lo ofrece en EE. UU. y Canadá) | Grabaciones del CRM, si el cliente graba | Transcribir y clasificar si la llamada es un lead real. Exige aviso de grabación y base legal: decisión de Enric | D | Hk | Subir solo las cualificadas | R3 | 06 §1.2, §6 |
 | LEAD-08 | **Calidad por vía de entrada** | Formulario de Google, formulario web, llamada, WhatsApp | Tasa de cualificación por vía | M | C | Quitar o cualificar el formulario de Google | R1 | 09 §4.2 |
@@ -538,7 +602,7 @@ Familia nueva en la v2 (crítica de R1, aceptada). En negocio local, entre la mi
 | GOO-04 ★ | **Calendario de cambios de la plataforma** | Tabla propia con fecha, ámbito y efecto esperado (apartado 9.5); novedades | Lo mantiene el equipo con ayuda de un agente que lee las fuentes; el diagnóstico lo consulta | S | C + So | — | R0 | 01 (idea 11), 10 (idea 3) |
 | GOO-05 | **Prioridad de canal y expansión a Display (feb 2027)** | Aún no está en la API: segmento de red como sustituto | Campaña de leads con socios o Display que superan X % del gasto con peor coste por lead | M | C | Poner Display y socios en prioridad baja con tope | R2 | 10 §1.4 |
 | GOO-06 | **Recomendaciones de Google, cribadas** | `recommendation`; `metrics.optimization_score` | Separar higiene útil (conflictos, recursos que faltan) de lo que sirve al gasto (amplia, subir presupuesto sin base) | S | C | Aplicar las útiles; descartar el resto con motivo | R1-R3 | 01 §3, 04 §2.8 |
-| GOO-07 | **Vigía de la API** | Versión en uso; fechas de retirada | Aviso 60 días antes de la retirada de la versión; enumerados que cambian entre versiones | M | C | Tarea técnica | R0 | 04 §1.6 |
+| GOO-07 | **Vigía de la API** (va en el paso 1, con MED-00) | Versión en uso; fechas de retirada; días desde el último uso | Aviso 60 días antes de la retirada de la versión; enumerados que cambian entre versiones; uso diario para no llegar a los 90 días sin uso. **Pruebas de contrato:** respuestas reales de la API grabadas por versión, contra las que se pasa cada consulta del módulo, para saber qué se rompe antes de subir de versión | M | C | Tarea técnica | R0 | 04 §1.6 · rev. R4 |
 | GOO-08 | **Experimentos asistidos** (solo donde hay volumen para leerlos) | `experiment`, `experiment_arm` | Para AI Max y para decisiones grandes en las cuentas con más volumen, con criterio de éxito escrito, duración (2 ciclos o 2 semanas, lo mayor) y lectura automática. En cuentas pequeñas el sustituto es la prueba por semanas alternas (apartado 5.8) | E | C | Propuesta de experimento | R3 | 09 §3.1, 08 §2.6 · rev. R1 |
 
 ### 3.N Descubrimiento y escalado
@@ -572,7 +636,7 @@ línea de la v1 y absorbe ESC-07.
 
 | ID | Qué detecta o hace | Datos y fuente | Regla o método | Frec. | Motor | Acción propuesta | Riesgo | Fuente · PDF |
 |---|---|---|---|---|---|---|---|---|
-| INF-01 ★ | **Pantalla «Hoy»**: parte por excepción | Hallazgos abiertos de todas las cuentas | Orden por la prioridad del apartado 4.6; topes del apartado 7.3; arriba, «comprobadas 25 cuentas, 1.240 controles, 4 cosas para ti» | D | C → Hk | Pantalla de inicio y un único mensaje por la cola de avisos existente | R0 | 05 §6.2, 07 (idea 9) · rev. R2 |
+| INF-01 ★ | **Pantalla «Hoy»**: parte por excepción | Hallazgos abiertos de todas las cuentas | Orden por la prioridad del apartado 4.6; topes del apartado 7.3; arriba, la cobertura real que da MED-00: «comprobadas 23 de 25 cuentas; 2 sin datos de GoHighLevel desde las 06:00; 4 cosas para ti». La cabecera y el orden son código; no hace falta ningún modelo | D | C | Pantalla de inicio y un único mensaje por la cola de avisos existente | R0 | 05 §6.2, 07 (idea 9) · rev. R2 |
 | INF-02 | **Resumen del lunes** para el equipo | Semana cerrada. Gasto, clics y leads primarios se dan por cerrados donde la cuenta madura en horas (MED-06); los cualificados del CRM salen como «provisional» | Por cuenta: estado, lo que cambió y por qué, lo que se hizo, lo pendiente. Solo las cuentas con algo que decir; el resto, una línea | S | C → So | Bloque de la pantalla Cartera, no 25 textos | R0 | 01 §2.10 · rev. R2 |
 | INF-03 ★ | **Informe mensual al cliente** en lenguaje de negocio | Acuerdo de objetivos (NEG-01), LEAD-01, acciones del mes y su resultado, PLAN-01, pendientes del cliente | Una página, seis bloques: objetivo pactado frente a resultado · leads sin marca aparte de los de marca · qué hicimos y qué efecto tuvo (con su incertidumbre) · qué detectamos fuera de la cuenta · previsión del mes próximo · **lo que necesitamos de ti**. Donde solo hay «válido / no válido», se enseña eso y no «coste por cliente». Nunca cuota de impresiones ni CTR en la primera página | M | C → So | Borrador; lo revisa y envía una persona | R0 | 07 §5 · rev. R3 |
 | INF-04 | **Aviso proactivo al cliente** cuando algo suyo está roto | DIA-06 | Borrador. Nunca se envía sin aprobación (línea roja del proyecto) | E | So | Borrador | R0 | 10 §4.2 |
@@ -605,7 +669,7 @@ lo que toque cuota o margen de la agencia lo ven solo administradores.
 | APR-03 | **Experimentos dentro de una cuenta** | Entidades elegibles para una misma recomendación de riesgo bajo, **dentro de una misma cuenta** | Aplicar en una mitad al azar, la otra de control 2-4 semanas. No se hace entre cuentas: con 25 cuentas distintas no hay potencia estadística y no se puede explicar a un cliente por qué no recibió una mejora que se creía buena | E | C | — | R1 | 08 §4.3 · rev. R1, R2, R3 |
 | APR-04 | **Benchmark interno** por sector y tipo de campaña, **solo con tráfico de no marca** | Todas las cuentas | Medianas de CPC, CTR, CR, CPL y coste por cualificado. Solo se calcula en celdas con 3 o más cuentas; antes de construirlo se cuenta cuántos sectores las tienen (inventario). Con una o dos cuentas no hay benchmark y se dice | M | C | Comparar cada cuenta con sus pares, como evidencia | R0 | 06 §4.9, 09b §4 · rev. R2, R3 |
 | APR-05 ★ | **Referencia del sector** para decidir con pocos datos | APR-04 | Punto de partida bayesiano de cada término, campaña y cuenta nueva (apartado 5.3) | S | C | — | R0 | 08 §2 |
-| APR-06 | **Casos de oro y repetición del pasado** | Incidentes con **desenlace conocido** (no «lo que hizo Eury»), validados por el resultado o por alguien con más experiencia; los 26 casos semanales del apartado 4.8 | Antes de enviar un solo aviso: ¿habría detectado y explicado bien lo que ya sabemos que pasó? | E | C | Examen del agente | R0 | 08 §7.2 · rev. R1, R2 |
+| APR-06 | **Casos de oro y repetición del pasado** | Incidentes con **desenlace conocido** (no «lo que hizo Eury»), validados por el resultado o por alguien con más experiencia; los 27 casos del apartado 4.8, con su criterio de aprobado | Antes de enviar un solo aviso: ¿habría detectado y explicado bien lo que ya sabemos que pasó? | E | C | Examen del agente | R0 | 08 §7.2 · rev. R1, R2 |
 | APR-07 | **Tasa de alertas útiles** | Las ocho respuestas del apartado 7.4; descartes con motivo | Las respuestas ajustan **prioridad y presentación, nunca detección**. Ninguna respuesta de una sola persona cambia un umbral de forma automática: los ajustes se proponen en un resumen mensual que aprueba quien haga de sénior | M | C | Propuesta de ajuste | R0 | 08 §3.4, 10 §3.5 · rev. R2 |
 | APR-08 | **Conocimiento vivo de la plataforma** | Base de conocimiento del núcleo | Lista de lo obsoleto (posición media, audiencias similares, SKAG, anuncios de texto, CPC mejorado) para que la IA no repita sabiduría vieja: un estudio encontró un 20 % de respuestas erróneas de IA generalista sobre PPC | M | So | — | R0 | 03 §2.1 |
 
@@ -621,7 +685,7 @@ El PDF propone 35 auditorías. Todas quedan cubiertas, y en cada una añadimos e
 | A04 Reparto de presupuesto | PUJ-05 | Retorno marginal con simuladores, valor por servicio y capacidad |
 | A05 Zona, dispositivo, ubicaciones | EST-01, EST-02, PUJ-07, GOO-01 | Zona real de la ficha |
 | A06 Ritmo | PRO-07 | Reglas de 2026 (30,4×, días apagados) |
-| P01 Medición | MED-01 a MED-18, LLA-01 a 03 | Conciliación diaria con el CRM, madurez, fuga de identificadores |
+| P01 Medición | MED-00 a MED-18, LLA-01 a 03 | Conciliación diaria con el CRM, madurez, fuga de identificadores |
 | P02 Políticas | PRO-05, ANU-06 | Ley española además de la política de Google |
 | P03 Salud y acceso | MED-12, PRO-08 | — |
 | P04 Anomalías | PRO-01 a 04, PRO-09, DIA-01 | Poisson, causa común entre cuentas, una alerta por causa |
@@ -655,8 +719,10 @@ El PDF propone 35 auditorías. Todas quedan cubiertas, y en cada una añadimos e
 (PRO-03, MED-06, APR-05), los cambios de Google como causa (PUJ-03, GOO-03 a 05, DIA-05), la exclusión de datos calculada
 (PUJ-08), el cumplimiento de la ley española (ANU-06), el negocio local (TER-04, EST-02, LEAD-06, PUJ-07), el gobierno de
 alertas (PRO-12), la familia de aprendizaje (APR) y, desde la v2, el negocio del cliente (NEG), las llamadas (LLA), la
-previsión (PLAN) y el negocio de la agencia (AGE). Además, el PDF da precios desfasados (TrueClicks «desde 208 $»; es
-gratis hasta 50.000 $ de inversión mensual; 02) y propone BigQuery y Looker, que aquí no hacen falta.
+previsión (PLAN) y el negocio de la agencia (AGE). Además, según nuestras notas el PDF da precios desfasados (TrueClicks
+«desde 208 $»; es gratis hasta 50.000 $ de inversión mensual; 02) y propone BigQuery y Looker, que aquí no hacen falta.
+[Sin comprobar: 208 $ es el precio que el informe 02 da para Optmyzr, así que puede ser un cruce del PDF o de nuestras
+notas; el PDF no está en el repositorio y la auditoría no pudo volver a leerlo.]
 
 ---
 
@@ -689,8 +755,14 @@ Orden corregido:
 
 **A. Hechos duros: siempre, a diario, haya o no anomalía, y aunque sea festivo.**
 
+**Condición previa a toda la tabla (rev. R4): un hecho duro solo es un hecho si su fuente está sana (MED-00); si no, es
+«no comprobado».** Sin esta condición, cuando falla nuestra sincronización con el CRM el motor afirmaría «entrega rota» o
+«formulario roto» con confianza alta, y ese aviso acabaría como encargo a web o como mensaje al cliente por algo que se ha
+roto en nuestro lado. Lo primero que se mira cada vez es, por tanto, la primera fila.
+
 | Hecho | Comprobación | Capacidad |
 |---|---|---|
+| **Nuestras fuentes responden** | Hora del último dato bueno de cada fuente frente a su frescura esperada; consulta de control | MED-00 |
 | La cuenta no puede servir | Pago, suspensión, verificación del anunciante, presupuesto de cuenta, fecha de fin; impresiones de la cuenta a cero en horario de servicio | MED-12, MED-14 |
 | Anuncios rechazados o limitados | Política de anuncios y recursos con gasto | PRO-05 |
 | La página no responde | 404 o 5xx confirmado dos veces; certificado o dominio caducados | PRO-06 |
@@ -698,7 +770,7 @@ Orden corregido:
 | El lead no llega | Ads frente a CRM por tipo; formularios de Google sin entregar; latido de todos los canales; llamadas a cero | MED-02, MED-13, MED-17, LLA-03 |
 | Algo pausado que no debería | Entidad pausada que aportaba leads; cierre del cliente sin pausar | PRO-13, EST-10 |
 
-Un hecho duro da confianza alta por sí solo y no pasa por ningún filtro estadístico.
+Un hecho duro, con su fuente sana, da confianza alta por sí solo y no pasa por ningún filtro estadístico.
 
 **B. Anomalías estadísticas: el árbol.** El código ejecuta todas las ramas (es barato); el orden decide qué causa gana
 cuando varias encajan.
@@ -735,10 +807,10 @@ ln(CPA₁/CPA₀)   = ln(CPC₁/CPC₀) − ln(CR₁/CR₀)
 Contribución de un factor = su logaritmo / logaritmo del KPI
 ```
 
-**Ejemplo (cuenta con volumen).** Las conversiones bajan un 30 % (logaritmo −0,357). Búsquedas elegibles −5 % (−0,051),
-cuota −20 % (−0,223), CTR +2 % (+0,020), CR −10 % (−0,105). Reparto: 62 % de la caída es cuota de impresiones, 29 % tasa de
-conversión, 14 % demanda, y el CTR compensa un 6 %. La pregunta siguiente es mecánica: ¿la cuota se perdió por presupuesto o
-por ranking?
+**Ejemplo (cuenta con volumen).** Búsquedas elegibles −5 % (logaritmo −0,051), cuota −20 % (−0,223), CTR +2 % (+0,020),
+CR −10 % (−0,105). Multiplicados, las conversiones bajan un 30,2 % (logaritmo −0,360). Reparto: 62 % de la caída es cuota
+de impresiones, 29 % tasa de conversión, 14 % demanda, y el CTR compensa un 5,5 % (suma 100 % salvo redondeo). La pregunta
+siguiente es mecánica: ¿la cuota se perdió por presupuesto o por ranking?
 
 Es el método LMDI de economía; ninguna fuente de PPC leída lo nombra y Optmyzr no publica cómo calcula sus contribuciones (05).
 
@@ -844,14 +916,39 @@ por impacto de TrueClicks y Adalysis van en la misma dirección, pero ninguna pu
 Plantilla fija de cuatro líneas, siempre en este orden (R2). La segunda es la que faltaba en la v1: sin ella, toda alerta
 parece igual de urgente.
 
+La v2 traía aquí un solo ejemplo que contradecía la arquitectura (rev. R4): una página caída «desde el martes a las 10:40»
+se descubría días después, tras 212 clics, por la vía de «sin convertir», cuando PRO-06 la comprueba cada hora. Además
+decía «que sea casualidad tiene una probabilidad del 1 %», que confunde dos cosas (la probabilidad de ver esos datos si
+nada ha cambiado no es la probabilidad de que nada haya cambiado) y salía de Poisson, no de la binomial negativa que el
+documento pone por defecto. Son dos casos distintos y van por caminos distintos.
+
+**Ejemplo 1: hecho duro (interrupción, llega en la primera hora).**
+
 > **Reformas López · campaña «Cocinas»**
+> **Qué pasa.** Desde las 10:40 la página /reformas-cocina devuelve error 500 (comprobado dos veces, a las 10:40 y a las
+> 10:45).
+> **Por qué te lo digo ahora.** Desde entonces han entrado 31 clics y 57 € a una página que no carga, y sigue.
+> **Qué creo que es y qué he descartado.** Es un hecho, no una hipótesis: la página no responde. Nuestro rastreador está
+> sano (el resto de la web carga). No hace falta mirar nada más.
+> **Qué haría yo.** Avisar a web ahora (encargo creado, plazo: mismo día). Pausar la campaña hasta que la página vuelva: 2
+> minutos en Google Ads, enlace directo. Cuando vuelva, te propongo reactivarla y la exclusión de datos.
+
+**Ejemplo 2: anomalía estadística sin hecho duro (parte de la mañana).**
+
+> **Clínica Dental Sol · campaña «Implantes»**
 > **Qué pasa.** 212 clics desde el martes y ningún lead; con su tasa habitual se esperaban entre 4 y 5.
-> **Por qué te lo digo ahora.** Que sea casualidad tiene una probabilidad del 1 %, y cada día así son unos 57 € en clics.
-> **Qué creo que es y qué he descartado.** La página /reformas-cocina devuelve error 500 desde el martes a las 10:40
-> (hecho, confianza alta). Descartado: medición (el CRM tampoco recibe leads de esa página, ni de pago ni orgánicos),
-> presupuesto, cambios en la cuenta (ninguno con peso en 14 días). No he podido mirar: subastas (esta cuenta no tiene informe).
-> **Qué haría yo.** Avisar a web hoy (encargo creado, plazo: mismo día). Pausar la campaña hasta que la página vuelva: 2
-> minutos en Google Ads, enlace directo. Después propondré la exclusión de datos.
+> **Por qué te lo digo ahora.** Si nada hubiera cambiado, ver cero leads con este volumen pasaría menos de 1 vez de cada
+> 10. No es una prueba de que algo esté roto, pero cada día así son unos 57 € en clics.
+> **Qué creo que es y qué he descartado.** No lo sé todavía. Descartado con datos: la página carga y el formulario responde
+> (prueba de esta mañana), la medición (el CRM recibe leads de otros canales con normalidad), el presupuesto y los cambios
+> en la cuenta (ninguno con peso en 14 días). No he podido mirar: llamadas (esta cuenta no las tiene conectadas) ni
+> subastas (no tiene informe).
+> **Qué haría yo.** Nada en la cuenta todavía. Dos comprobaciones de 5 minutos: enviar tú un formulario de prueba desde el
+> móvil y preguntar a la clínica si ha cambiado algo esta semana (precio, quién atiende, horario). Te lo vuelvo a enseñar
+> el viernes con los datos de la semana cerrada.
+
+Ese «menos de 1 vez de cada 10» está calculado con binomial negativa y dispersión k = 2 (9,5 %); con Poisson saldría un
+1,1 %, que es la cifra que la v2 daba y que exagera la certeza (apartado 5.1).
 
 Cada hallazgo se puede abrir en tres capas (qué hacer · por qué en esta cuenta · el concepto en tres líneas, apartado 7.5).
 
@@ -888,6 +985,13 @@ media mañana, festivo local) se mantienen, con dos ajustes: el control del tér
 
 Que esté en el catálogo no es que esté resuelto: es que hay una capacidad que debe resolverlo, y el examen dirá si lo hace.
 
+**Dos añadidos de la v3 (rev. R4).** Un caso 27, que R1 no podía ver porque no es de la cuenta: **nuestra propia fuente
+se cae** (la API deja de responder o el CRM deja de sincronizar) y el agente tiene que decir «no comprobado», no «todo
+bien» ni «formulario roto» (MED-00). Y un **criterio de aprobado con números** [valores de partida]: el motor pasa si
+detecta al menos 25 de los 27 casos y explica bien al menos 21; un hecho duro se detecta en menos de una hora en horario
+de anuncios; y las falsas alarmas del modo sombra caben en los topes del apartado 7.3. Sin números, «pasa el examen»
+sería una opinión.
+
 ---
 
 ## 5. Estadística con pocos datos
@@ -897,10 +1001,13 @@ campaña (y muchas veces menos de uno), las técnicas de los grandes anunciantes
 herramientas («150 clics sin conversión») llegan tarde o dan falsas alarmas (08). Estos son los métodos concretos. Todo es
 cálculo en código: coste de IA, cero.
 
-Los tres revisores rehicieron los cálculos de este apartado y los dieron por correctos. Lo que corrigieron son **las
-consecuencias que la v1 no sacaba**: que en las cuentas más pequeñas la estadística llega tarde por diseño, que una regla
-evaluada cada semana no tiene el error que dice tener, y que el ejemplo bayesiano se vendía como rapidez cuando era
-prudencia. Cada subapartado lleva ahora su límite.
+**Quién ha comprobado qué** (rev. R4). R2 rehízo la tabla de Poisson y R3 los cálculos de la v1, y los dieron por
+correctos; lo que corrigieron son **las consecuencias que la v1 no sacaba**: que en las cuentas más pequeñas la
+estadística llega tarde por diseño y que una regla evaluada cada semana no tiene el error que dice tener. Los cálculos
+nuevos de la v2 (5.2 y 5.3) no los había revisado nadie; la auditoría R4 los rehízo y encontró que la regla bayesiana
+repetía el error de «mirar hasta que salte». En la v3, las tablas de 5.1 y 5.3 están **recalculadas con un programa**
+(binomial negativa en forma cerrada y, para la regla de términos, la probabilidad exacta semana a semana), y el programa
+reproduce antes las cifras de la auditoría (50 %, 18 % y 96 %). Cada subapartado lleva su límite.
 
 ### 5.1 «Sin convertir»: Poisson, y dónde deja de proteger
 
@@ -910,21 +1017,37 @@ Si una campaña espera λ conversiones al día, la probabilidad de pasar N días
 P(0 en N días) = e^(−λ × N)        →  avisar cuando sea menor que α:   N ≥ ln(1/α) / λ
 ```
 
-| Conversiones esperadas al día | P(0 en 2 días) | P(0 en 3 días) | Días a cero para avisar con α = 5 % | con α = 2 % |
-|---|---|---|---|---|
-| 3 | 0,2 % | ≈ 0 | 1 | 2 |
-| 2 | 1,8 % | 0,2 % | 2 | 2 |
-| 1,5 | 5 % | 1,1 % | 2 | 3 |
-| 1 | 13,5 % | 5 % | 3 | 4 |
-| 0,5 | 37 % | **22 %** | 6 | 8 |
-| 0,2 (unas 6 al mes) | 67 % | 55 % | 15 | 20 |
+Esa fórmula es Poisson, que supone que los leads llegan de uno en uno y sin rachas. Los leads reales llegan a rachas, y
+por eso el documento usa **binomial negativa por defecto**: con media μ en la ventana y dispersión k, `P(0) = (k / (k + μ))^k`
+(cuanto menor es k, más rachas; con k muy grande es Poisson). La v2 lo decía y luego daba todas las cifras con Poisson, que
+**subestima el problema** (rev. R4). La tabla lleva ahora las tres; k = 5 y k = 2 son **ilustrativos** hasta estimar el k de
+cada cuenta con su histórico.
 
-**Primera conclusión:** la regla «2-3 días sin convertir» solo es señal en campañas con 1,5 o más leads al día. En una de
-medio lead al día, tres días a cero pasan una de cada cinco veces.
+| Leads esperados al día | P(0 en 3 días): Poisson | con k = 5 | con k = 2 | Días a cero para avisar (α = 5 %): Poisson | con k = 5 | con k = 2 | Meses con alguna racha de 3 días a cero (Poisson) |
+|---|---|---|---|---|---|---|---|
+| 3 | ≈ 0 | 0,6 % | 3,3 % | 1 | 2 | 3 | 0,3 % |
+| 2 | 0,2 % | 1,9 % | 6,2 % | 2 | 3 | 4 | 6 % |
+| 1,5 | 1,1 % | 4,0 % | 9,5 % | 2 | 3 | 5 | 22 % |
+| 1 | 5 % | 9,5 % | 16 % | 3 | 5 | 7 | 64 % |
+| 0,5 | 22 % | 27 % | **33 %** | 6 | 9 | 14 | **98 %** |
+| 0,2 (unas 6 al mes) | 55 % | 57 % | 59 % | 15 | 21 | 35 | ≈ 100 % |
 
-**Segunda conclusión, que la v1 no sacaba (R2):** en una campaña de 6 leads al mes el aviso llega a los 15-20 días, es
-decir, después de perder más de medio mes. Para esas cuentas, que probablemente son muchas, **la estadística sobre leads no
-protege de nada**. Lo que protege es mirar más arriba en el embudo, donde hay volumen, y comprobar los hechos:
+Con α = 2 % los días son 2, 2, 3, 4, 8 y 20 con Poisson, y 5, 7, 9, 13, 25 y 61 con k = 2. Con k = 1 (rachas muy marcadas),
+una campaña de 6 leads al mes necesitaría 96 días a cero para avisar con α = 5 %.
+
+**Cómo leer la última columna.** Las tres primeras dan la probabilidad de **una** ventana de 3 días. Pero el gestor no mira
+una ventana: vive todas las del mes. La última columna es la probabilidad de que una campaña sana tenga **al menos una**
+racha de 3 días a cero en 30 días (calculada con Poisson y días independientes; con rachas es mayor).
+
+**Primera conclusión, corregida:** la regla «2-3 días sin convertir» no es señal limpia ni con 1,5 leads al día, que es
+donde la v2 ponía el corte: ahí una campaña sana da una racha así el 22 % de los meses, unas 2-3 falsas alarmas al año por
+campaña. Solo es fiable a partir de unos 3 leads al día. Con medio lead al día, **casi todos los meses (98 %) hay tres días
+seguidos a cero por puro azar**.
+
+**Segunda conclusión, que la v1 no sacaba (R2):** en una campaña de 6 leads al mes el aviso llega entre los 15 días
+(Poisson) y los 35 (k = 2), es decir, después de perder entre medio mes y un mes entero. Para esas cuentas, que
+probablemente son muchas, **la estadística sobre leads no protege de nada**. Lo que protege es mirar más arriba en el
+embudo, donde hay volumen, y comprobar los hechos:
 
 - prueba activa del formulario y de la landing cada día (MED-18);
 - sesiones e inicios de formulario de GA4 como señal adelantada (10-50 veces más volumen que los leads);
@@ -934,15 +1057,17 @@ protege de nada**. Lo que protege es mirar más arriba en el embudo, donde hay v
 Cómo se aplica la regla donde sí sirve:
 
 1. **Sobre clics, no sobre días** (regla principal, no un ajuste). Con n clics y una tasa de conversión esperada CR, lo
-   esperado es μ = n × CR y P(0) = e^(−μ). Así, si el gasto también cayó, la regla no acusa a la conversión: manda a la
+   esperado es μ = n × CR y P(0) = (k / (k + μ))^k (o e^(−μ) si la cuenta no muestra rachas). Así, si el gasto también cayó, la regla no acusa a la conversión: manda a la
    rama de entrega. Es la comprobación de Ani: sin clics suficientes no puede haber conversiones (10 §4.1).
-2. **Binomial negativa por defecto**, no Poisson: los leads llegan a rachas y Poisson se queda corto de ceros (08).
+2. **Binomial negativa por defecto**, no Poisson: los leads llegan a rachas y Poisson se queda corto de ceros (08). El k
+   se estima por cuenta con su histórico; con menos de unas 30 conversiones de histórico no se puede estimar, y se usa
+   k = 2 como valor prudente de partida [opinión, a calibrar].
 3. **λ y CR salen de la media de 8 semanas**, no de la mediana del mismo día de la semana: con recuentos bajos esa mediana
    es 0 o 1 y no sirve (R1).
 4. **A diario solo a nivel de cuenta; por campaña, semanal.** Resuelve la contradicción de la v1 entre «la rutina diaria no
    mira conversiones de ayer» y una alerta diaria de conversiones por campaña.
-5. **El umbral no es un α fijo.** Un 2 % por campaña y día, sobre unas 100 campañas, son varias falsas alarmas por semana
-   cuando los incidentes reales son menos que eso (R1, R2 y R3 coinciden). La corrección por pruebas múltiples hay que
+5. **El umbral no es un α fijo.** Un 2 % por campaña y día, sobre unas 100 campañas, son 2 falsas alarmas al día, unas 14
+   a la semana si se mira a diario, cuando los incidentes reales son muchos menos (R1, R2 y R3 coinciden; cifra de R4). La corrección por pruebas múltiples hay que
    aplicarla **también a lo largo del tiempo**, no solo entre cuentas. En la práctica: se repiten 90 días de histórico y
    se ajusta el umbral hasta que las falsas alarmas quepan en el presupuesto de atención (apartado 7.3). Hasta hacerlo, no
    se envía nada (modo sombra).
@@ -964,14 +1089,18 @@ clics (120 €, k = 3), 4,6 %.
 
 **La trampa (R1; error real de la v1).** Ese 5 % vale para **una sola mirada**. Si la regla se evalúa cada semana sobre
 cientos de términos y salta en cuanto aparece una racha, se comete el mismo error que el apartado 5.6 critica en los tests
-de anuncios: mirar hasta que algo cruce el umbral. Un término que convierte justo en objetivo 12 veces al año tiene un 46 %
-de probabilidad de sufrir al menos una racha de 3 × CPA sin conversión; con 30 conversiones al año, un 79 %. La v1 habría
-ido negativizando términos buenos con mala racha, y una negativa no caduca sola.
+de anuncios: mirar hasta que algo cruce el umbral. Un término que convierte justo en objetivo 12 veces al año tiene
+alrededor de un 45 % de probabilidad de sufrir al menos una racha de 3 × CPA sin conversión; con 30 conversiones al año,
+alrededor de un 80 % (recalculado en la v3: 44 % y 81 %). La v1 habría ido negativizando términos buenos con mala racha, y
+una negativa no caduca sola.
 
 Reglas corregidas:
 
-- La regla se aplica **al total del término en la ventana (o en su vida)**, nunca a una racha.
-- Si el término ha convertido alguna vez, se juzga por su **CPA acumulado**, no por el tramo malo.
+- La regla se aplica **al total del término en la ventana (o en su vida)**, nunca a una racha. Aplicada así, mirarla cada
+  semana ya no infla el error: un término justo en objetivo solo puede caer si sus **primeros** 3 × CPA no dan ninguna
+  conversión, y eso pasa el 4,6 % de las veces (0,95^60 en el ejemplo), se mire cuando se mire.
+- Si el término ha convertido alguna vez, se juzga por su **CPA acumulado**, no por el tramo malo, con el umbral del
+  apartado 5.3 (la regla e^(−k) no dice cuál).
 - La negativa estadística se pone **en exacta y con fecha de revisión** a 6 meses (TER-12). La negativa de frase solo por
   intención o por n-grama con evidencia agregada.
 - Solo prueba que el término es peor que «justo en objetivo». Uno al 60 % del objetivo también es malo y pide más datos.
@@ -986,39 +1115,115 @@ Punto de partida:  CR ~ Beta(α₀, β₀)   con  α₀ = m × μ ,  β₀ = m �
    μ = tasa del nivel superior ;  m = fuerza del punto de partida, en «clics equivalentes» (20-200)
 Tras c conversiones en n clics:  Beta(α₀ + c, β₀ + n − c)
 Estimación encogida:  (m × μ + c) / (m + n)
-Decisión:  P(CR ≥ CR*) , con  CR* = CPC / CPA objetivo
+Tasa objetivo:  CR* = CPC / CPL máximo
+Decisión (v3):  P(CR < CR* / 1,5)  — probabilidad de que el CPA real supere 1,5 × CPL máximo
 ```
 
 **Jerarquía:** término → palabra → grupo → campaña → cuenta → sector (varias cuentas). Condición: que las conversiones
 signifiquen lo mismo (una llamada de fontanero de urgencias no es un formulario de clínica), así que se normaliza por tipo
 de conversión (08 §2.3).
 
-**Qué da de verdad y qué no** (corregido; R1 y R2 tenían razón contra la v1):
+**Lo que estaba mal en la v2 (hallazgo grave de la auditoría, G1).** La v2 corregía la regla e^(−k) por «mirar hasta que
+salte» (5.2) y, tres párrafos después, proponía «actuar si P(cumple) < 10 %» evaluado en el lote **semanal**, sin
+corrección ninguna. Rehecho el cálculo con un término que convierte exactamente en objetivo (CR 5 %, CPA 40 €), 10 clics
+por semana y un año de miradas semanales, esa regla **negativizaba el 50 % de los términos buenos**, y el 18 % de los que
+eran un 40 % mejores que el objetivo. Además el texto se contradecía: decía que el método «da menos falsos positivos» y, a
+la vez, que «corta antes que k = 3». Con un punto de partida por debajo del objetivo, cortar antes es dar **más** falsos
+positivos. Todo lo que sigue sustituye a esa regla.
 
-- **No da rapidez.** En el ejemplo de la v1, con la media del sector como punto de partida, el agente esperaba hasta 180 €
-  (4,5 × CPA) donde la regla de oficio corta en 120 €, y se presentaba como ventaja. Lo que da es **menos falsos positivos**
-  y una probabilidad explícita. El corte rápido lo da el **juez de intención**: un término claramente ajeno se excluye a los
-  5 clics, sin esperar a ninguna estadística.
+**Qué da de verdad y qué no** (afirmaciones comprobadas con la simulación de más abajo):
+
+- **No da rapidez.** Con cero conversiones corta a los 134-140 € (unas 3,4 × CPA), algo **después** que la regla de oficio
+  k = 3 (120 €). El corte rápido lo da el **juez de intención**: un término claramente ajeno se excluye a los 5 clics, sin
+  esperar a ninguna estadística.
+- **No da menos falsos positivos que k = 3.** Da los mismos, dentro del margen: negativiza en un año el 5,7 % de los
+  términos que convierten justo en objetivo, frente al 4,6 % de k = 3.
+- **Lo que da es criterio para los términos que alguna vez convirtieron.** La regla k = 3 se queda muda en cuanto un
+  término tiene una conversión: uno que convierte al 2 % (CPA real de 100 €, dos veces y media el objetivo) se escapa el
+  70 % de las veces porque tuvo una conversión de suerte al principio. La regla nueva lo caza el 86 % de las veces. Y da
+  una probabilidad explícita, que se puede enseñar y combinar con la intención.
 - **El punto de partida de un término nuevo no es la media del sector.** Los términos nuevos que entran por concordancia
-  amplia son peores que la media: los buenos ya son palabras clave. Se parte de la tasa de **los términos nuevos** de la
-  cuenta o del sector.
-- **Se decide por pérdida esperada**, no solo por «P < 10 %»: euros que se seguirán gastando si el término es malo, frente a
-  leads que se pierden si era bueno y se corta.
+  amplia son peores que la media: los buenos ya son palabras clave. Pero ese punto de partida **decide el resultado**, así
+  que no puede ser una cifra a ojo: se estima con los datos de la cuenta y tiene suelo (regla 4).
 
-**Ejemplo recalculado.** CPC 2 €, CPA objetivo 40 € (CR* = 5 %). Las campañas del sector convierten al 8 %, pero sus términos
-nuevos solo al 4 % [cifra ilustrativa]; con m = 50, el punto de partida es Beta(2, 48).
+**Regla de decisión.** Una negativa estadística se propone solo si se cumplen las tres condiciones:
 
-| Caso | Tasa ingenua | Estimación encogida | P(cumple el objetivo) | Qué hace el agente |
+1. **Malo con margen:** P(CPA real > 1,5 × CPL máximo) > 0,9. No basta con «probablemente peor que el objetivo»: tiene que
+   ser probablemente **mucho** peor. Es el margen que ya proponía el informe 05 y que la v2 había perdido.
+2. **Gasto mínimo:** el término ha gastado al menos 2 × CPL máximo en toda su vida.
+3. **Pérdida esperada:** lo que se espera malgastar si se sigue 4 semanas más (euros de clics por encima de lo que valen sus
+   leads al CPL máximo) supera lo que se espera perder si se corta (el valor neto de los leads de los 6 meses que dura la
+   negativa). El horizonte es asimétrico a propósito: seguir se puede revisar la semana que viene; la negativa dura 6 meses.
+
+Y dos reglas sobre el punto de partida:
+
+4. **Se estima con los datos de la cuenta** (bayes empírico) y, mientras no haya al menos 200 términos nuevos con datos
+   para estimarlo, **no puede quedar por debajo del 80 % de la tasa objetivo**. La fuerza m no baja de 50 clics
+   equivalentes: con m = 20 la regla vuelve a negativizar el 16 % de los términos buenos.
+5. **Antes de activarla en una cuenta, se simula sobre sus 90 días de histórico con miradas semanales** y se publica el
+   porcentaje de términos en objetivo que habría negativizado. **Tope: no más del 10 % en un año.** Si lo supera, se sube
+   el umbral de la condición 1 (0,95) hasta que quepa.
+
+**Ejemplo.** CPC 2 €, CPL máximo 40 € (tasa objetivo 5 %; «1,5 × CPL máximo» equivale a una tasa por debajo del 3,3 %). Punto
+de partida en el suelo de la regla 4: 4 % (el 80 % de la tasa objetivo), con m = 50, es decir, Beta(2, 48).
+
+| Caso | Estimación encogida | P(cumple el objetivo) | P(CPA > 1,5 × máximo) | Qué hace el agente |
 |---|---|---|---|---|
-| Término nuevo, sin datos | — | 4,0 % | 29 % | Vigilar; si la intención es mala, fuera ya |
-| 0 conversiones en 30 clics (60 €) | 0 % | 2,5 % | 9 % | Candidato a negativa exacta con caducidad |
-| 0 en 45 clics (90 €) | 0 % | 2,1 % | 4,8 % | Negativa |
-| 1 en 30 clics | 3,3 % | 3,8 % | 24 % | Seguir: aún no se sabe |
-| 3 en 10 clics | 30 % | 8,3 % | 83 % | Bueno, pero no un 30 %: «término protegido» |
+| Término nuevo, sin datos | 4,0 % | 29 % | 49 % | Vigilar; si la intención es mala, fuera ya |
+| 0 conversiones en 30 clics (60 €) | 2,5 % | 9 % | 74 % | Seguir. **La v2 lo negativizaba aquí** |
+| 0 en 45 clics (90 €) | 2,1 % | 4,8 % | 83 % | Seguir |
+| 0 en 60 clics (120 €, k = 3) | 1,8 % | 2,5 % | 88 % | Seguir, en «vigilar» |
+| 0 en 70 clics (140 €) | 1,7 % | 1,6 % | 91 % | **Negativa exacta con caducidad** |
+| 1 en 30 clics | 3,8 % | 24 % | 49 % | Seguir: aún no se sabe |
+| 1 en 120 clics (240 €) | 1,8 % | 0,8 % | 92 % | **Negativa** (k = 3 no lo cortaría nunca) |
+| 3 en 10 clics | 8,3 % | 83 % | 5 % | Bueno, pero no un 30 %: «término protegido» |
 
-Con el punto de partida honesto, el método corta **antes** que k = 3 (120 €) en los términos nuevos sin conversiones, y
-protege a los que han dado alguna. Reglas de decisión de partida [opinión, a calibrar]: actuar si P(cumple) < 10 % y el
-gasto es material; «vigilar» entre 10 % y 30 %.
+En la práctica la regla se puede leer como una **escalera de gasto** que Eury entiende sin estadística: con este punto de
+partida, un término se propone como negativa cuando lleva gastado unas **3,4 veces el CPL máximo sin ninguna conversión,
+5,5 veces con una, 7,5 veces con dos o 9,5 veces con tres**. La pantalla enseña la escalera; la probabilidad queda detrás.
+
+**Simulación con miradas semanales** (un año, 52 miradas, 10 clics por semana; probabilidad exacta, no estimada; entre
+paréntesis, el gasto mediano en el momento del corte):
+
+| Tasa real del término | CPA real | Regla de la v2 (P < 10 %) | Regla de oficio k = 3, sobre la vida del término | **Regla de la v3** |
+|---|---|---|---|---|
+| 7 % (un 40 % mejor que el objetivo) | 28,6 € | 18 % | 1,3 % | **0,9 %** |
+| 5 % (justo en objetivo) | 40 € | **50 %** | 4,6 % | **5,7 %** (220 €) |
+| 4 % | 50 € | 78 % | 8,6 % | 16 % (220 €) |
+| 3 % | 66,7 € | 96 % | 16 % | 44 % (300 €) |
+| 2 % | 100 € | 99,9 % | 30 % | 86 % (300 €) |
+| 1 % | 200 € | 100 % | 55 % | 99,9 % (220 €) |
+| 0 % (no convierte nunca) | — | 100 % (60 €) | 100 % (120 €) | 100 % (140 €) |
+
+Con 5 clics por semana la regla de la v3 negativiza el 5,3 % de los términos en objetivo, y con 20, el 3,9 %: cumple el
+tope del 10 % en los tres ritmos. Las columnas primera y segunda reproducen las cifras de la auditoría.
+
+**Sensibilidad** (términos justo en objetivo negativizados en un año, 10 clics por semana):
+
+| Variante | Términos buenos negativizados | Términos al 3 % (CPA 67 €) detectados |
+|---|---|---|
+| Regla de la v3 (punto de partida 4 %, m = 50, umbral 0,9) | 5,7 % | 44 % |
+| Punto de partida en el objetivo (5 %) | 2,5 % | 34 % |
+| Punto de partida en la media del sector (8 %) | 0,2 % | 15 % |
+| Umbral 0,95 en vez de 0,9 | 1,4 % | 25 % |
+| Margen 2 × en vez de 1,5 × | 0,5 % | 11 % |
+| m = 20 (punto de partida débil) | **16,5 %** (no cumple) | 57 % |
+
+**Límites que hay que decir** (rev. R4):
+
+- **Detecta bien lo claramente malo y mal lo regular.** Un término que cuesta un 67 % más que el objetivo solo cae el 44 %
+  de las veces en un año. Es el precio de no negativizar los buenos, y es asumible porque el coste de ese término es
+  pequeño y el de una negativa equivocada dura 6 meses.
+- **La tercera condición no cambió ningún resultado** en estas simulaciones: cuando se cumplen las dos primeras, la pérdida
+  esperada ya favorece cortar. Se mantiene porque pasaría a mandar donde el lead vale mucho más que el CPL máximo (ticket
+  alto); ese caso no está simulado.
+- **La simulación es un modelo, no vuestras cuentas:** clics constantes por semana, tasa de conversión fija, un solo par de
+  CPC y CPL, y sin rachas (con rachas habrá más falsos positivos). Por eso la regla 5 obliga a repetirla con el histórico
+  real de cada cuenta antes de activar nada.
+- **El suelo del 80 % y el «al menos 200 términos» son criterio propio**, a calibrar.
+
+«Vigilar» es todo término con P(cumple el objetivo) por debajo del 30 % que aún no cumple las tres condiciones: aparece en
+el lote sin propuesta.
 
 **El último nivel (sector) hay que ganárselo.** La v1 lo anunciaba como «el sector entero como referencia». Con 25 cuentas
 repartidas en varios sectores, sector × provincia × tipo de campaña deja casi todas las celdas con una cuenta (R1, R2 y R3
@@ -1179,6 +1384,39 @@ tras las capas de reglas y embeddings, a la IA llega una fracción. El riesgo de
 enteras a un modelo caro (Rooijmans cita 10 $ por un solo análisis de términos mal planteado; 07). Todo pasa por la pasarela
 de IA existente, con su presupuesto y su registro.
 
+**Presupuesto de IA del módulo** (rev. R4; la v2 no lo dimensionaba). El vigía de IA de la herramienta trabaja con un
+presupuesto de unos **80 $ al mes para toda la agencia**. Estimación en régimen, con 25 cuentas [estimación propia: los
+volúmenes y los tamaños son supuestos sin medir; los precios son los de la tabla de la pasarela, `FALLBACK_PRICING` en
+`lib/ai/gateway.ts`, que dice ser la lista oficial a 3 nov 2026: Haiku 5.5 a 0,10 $ y 0,50 $ por millón de tokens de entrada
+y salida, Sonnet 5.5 a 2 $ y 10 $, Opus 5.5 a 4 $ y 20 $]:
+
+| Uso | Modelo | Supuesto al mes | Coste al mes |
+|---|---|---|---|
+| Juez de términos, vetos de texto, coherencia de anuncios, explicación de sintonía | Haiku | Unos 4.000 términos en zona gris, en lotes de 25 con la ficha en caché; 200-300 llamadas cortas más | < 1 $ |
+| Diagnósticos redactados (Hoy y modo sombra) | Sonnet (o Haiku si pasa el examen) | Hasta 300, de unos 3.000 tokens de entrada y 500 de salida | 3-4 $ |
+| Resumen del lunes, informe mensual al cliente, fichas de reunión | Sonnet | 4 resúmenes, 25 informes, unas 10 fichas | 1-2 $ |
+| Redactor de anuncios con juez de anclaje | Sonnet | Unos 20 anuncios, dos pasadas | 1-2 $ |
+| Agente que lee novedades de Google (GOO-04) | Sonnet | 4 lecturas de 60.000-200.000 tokens | 1-2 $ |
+| Preguntar a la cuenta (INF-06) | Sonnet | Unas 100 preguntas | 2-3 $ |
+| Reestructuras y revisión trimestral (unas 8 cuentas al mes) | Opus | Unos 50.000 tokens de entrada y 8.000 de salida por cuenta | 3-4 $ |
+| Embeddings y juez de la muestra ciega | Embeddings, Haiku | Miles de términos; 200 propuestas | < 1 $ |
+| **Total en régimen** | | | **10-20 $ al mes** |
+| Auditoría de entrada de las 25 cuentas (una sola vez) | Opus | 25 × 40.000 de entrada y 6.000 de salida, más razonamiento | 10-15 $, una vez |
+
+Tres cosas que esta cuenta **no** cubre: Fable (no está en la tabla de precios de la pasarela; mientras no se verifique su
+precio, la revisión trimestral se presupuesta con Opus), el razonamiento extendido si se activa en esfuerzo alto (puede
+multiplicar la salida por 2 o 3), y el gasto actual de los demás módulos, que no he mirado (está en Sistema → Gasto de IA).
+Propuesta: **tope de 25 $ al mes para Ads en la pasarela, que corta por encima**, y revisar la cifra real al cerrar el paso
+6. Si el resto de la agencia ya consume más de unos 55 $, el presupuesto total hay que subirlo antes de encender el
+diagnóstico, y eso es una decisión de Enric (subir un límite de gasto es línea roja).
+
+**Coste externo: DataForSEO** (CUO-05, ANU-05, ESC-05). Cobra por consulta; el precio vigente no está verificado aquí.
+Reglas para acotarlo: se reutilizan las páginas de resultados que el SEO ya descarga cuando la palabra coincide (por la
+fuente de resultados del núcleo, `registerSerpSource`, que ya devuelve el coste de cada tarea); CUO-05 solo consulta **por
+evento** (hay una señal de presión competitiva) y como mucho las 10 palabras con más gasto de esa cuenta, con caché de 7
+días; ESC-05 pide el volumen mensual una vez al mes por cuenta, con caché de 30 días. Con tope mensual de consultas en el
+panel.
+
 ### 6.2 El patrón de agente seguro
 
 Coinciden en él los practicantes (Rooijmans, Wenner, Vallaeys, Leake), el servidor oficial de Google (proponer y confirmar)
@@ -1241,8 +1479,8 @@ estimaciones de oficio del revisor, no mediciones: la línea base real hay que m
 
 | Pantalla | Qué es | Detalle que importa |
 |---|---|---|
-| **Hoy** | Bandeja única: urgente · por decidir · esperando a terceros · vencido | Es la página de inicio. Arriba: «comprobadas 25 cuentas, 1.240 controles, 4 cosas para ti» (enseña que se ha mirado) |
-| **Cartera** | Todas las cuentas en una tabla: nivel de cliente, ritmo de gasto, CPL frente a objetivo, estado de la medición, riesgo de baja, último toque humano, próxima revisión | Es la pantalla de Enric y la que sustituye a la sensación de «las he mirado todas». En rojo, las revisiones vencidas |
+| **Hoy** | Bandeja única: urgente · por decidir · esperando a terceros · vencido | Es la página de inicio. Arriba, la cobertura **real**: «comprobadas 23 de 25 cuentas; 2 sin datos de GoHighLevel desde las 06:00; 4 cosas para ti» (MED-00). Enseña que se ha mirado y, sobre todo, lo que **no** se ha podido mirar. La v2 copiaba de Opteo un «1.240 controles» que da tranquilidad aunque la fuente esté caída (rev. R4) |
+| **Cartera** | Todas las cuentas en una tabla: nivel de cliente, ritmo de gasto, CPL frente a objetivo (o «frente a su línea base, sin objetivo de negocio» si el objetivo es provisional, apartado 2.2), estado de la medición, riesgo de baja, último toque humano, próxima revisión | Es la pantalla de Enric y la que sustituye a la sensación de «las he mirado todas». En rojo, las revisiones vencidas; en gris, lo no comprobado |
 | **Cuenta** | Expediente: acuerdo de objetivos, guion de revisión, línea de tiempo (cambios nuestros, de Google, de la web; sucesos; notas), hallazgos, pendientes del cliente, decisiones y no-decisiones | Es también el documento de traspaso. Prueba de fuego: ¿podría otra persona llevar la cuenta mañana leyendo solo esto? |
 | **Lote de términos** | Por cuenta, agrupado por motivo («fuera de zona: 14», «empleo o curso: 9», «servicio que no ofrece: 6», «dudosos: 5») | Aprobar el grupo, sacar excepciones, y **salida lista para pegar** |
 | **Hallazgo** | El diagnóstico del apartado 4.7, con evidencia, lo descartado y los botones de respuesta | Con enlace directo a la entidad en Google Ads |
@@ -1252,9 +1490,33 @@ de cuota de impresiones, el nivel de calidad diario, el «gasto invisible», el 
 «preguntar a la cuenta». Un gestor que aún no domina la cuota de impresiones no necesita un tablero de cuota: necesita que
 le digan cuándo importa y por qué.
 
-**Regla de producto:** por dentro, unas 150 capacidades; a la vista, **no más de 12-15 tipos de hallazgo** en el
-lanzamiento. Y **una sola voz**: los agentes del apartado 6.4 son arquitectura interna; el usuario nunca recibe mensajes de
-«Vigía», «Diagnosticador» y «Juez» por separado.
+**Regla de producto:** por dentro, unas 150 capacidades; a la vista, **15 tipos de hallazgo** en el lanzamiento. Y **una
+sola voz**: los agentes del apartado 6.4 son arquitectura interna; el usuario nunca recibe mensajes de «Vigía»,
+«Diagnosticador» y «Juez» por separado.
+
+**Hallazgos visibles en el lanzamiento: lista cerrada** (rev. R4). La v2 repetía «12-15 tipos» en cinco sitios sin decir
+cuáles; sin lista, cada paso añade «solo uno más». **Un hallazgo nuevo sustituye a uno de esta lista: no se suma.**
+
+| # | Hallazgo visible | Canal (7.3) | Capacidades detrás | Paso |
+|---|---|---|---|---|
+| 1 | La cuenta no puede servir (pago, suspensión, verificación, sin impresiones) | Interrupción | MED-12, MED-14 | 2 |
+| 2 | Anuncio rechazado o limitado en algo con gasto | Interrupción si es lo que más gasta; si no, parte | PRO-05 | 2 |
+| 3 | Página de destino o formulario caídos con gasto | Interrupción | PRO-06, MED-18 | 2 y 5 |
+| 4 | Campaña parada o gasto desbocado | Interrupción | PRO-01 | 2 |
+| 5 | El lead no llega al cliente | Interrupción | MED-02, MED-13, MED-17 | 5 |
+| 6 | Algo pausado que aportaba leads, o cierre del cliente sin pausar | Parte | PRO-13, EST-10 | 2 y 5 |
+| 7 | Llamadas a cero o que nadie coge | Parte | LLA-01, LLA-03, NEG-03 | 5 |
+| 8 | Ritmo de gasto fuera de banda | Parte | PRO-07, INF-07 | 2 |
+| 9 | Un término nuevo se come el gasto del día | Parte | TER-01 (control diario) | 4 |
+| 10 | Lote de términos de la cuenta | Lote semanal | TER-01 a 06, TER-12 | 4 |
+| 11 | Cambio ajeno (del cliente o de Google) en algo con gasto | Parte | PRO-08, EST-06, GOO-03 | 2 y 3 |
+| 12 | Medición rota, con su arreglo | Parte | MED-01, MED-03, MED-04, MED-16 | 2 y 5 |
+| 13 | Caída de leads o subida de CPL, con su porqué | Parte | PRO-02, PRO-03, DIA-01 a 07 | 6 |
+| 14 | Lanzamiento de campaña que no arranca | Parte | EST-11 | 5 |
+| 15 | Nuestra fuente está sin datos | Interrupción al responsable técnico; línea en la cabecera de Hoy | MED-00, GOO-07 | 1 |
+
+Todo lo demás (higiene, cuota, calidad, landing, anuncios, planificación, calidad del lead) llega dentro de la revisión de
+cuenta, del lote o del informe, nunca como aviso suelto.
 
 **Guion de revisión de cuenta** (dentro de la pantalla Cuenta; lo que el gestor necesita el día de revisión profunda en
 vez de abrir ocho tableros):
@@ -1283,7 +1545,7 @@ la v1 le añadían lectura sin quitarle ni un minuto.
 | Momento | Qué hace | Tiempo objetivo [a medir] |
 |---|---|---|
 | Cada mañana | Pantalla Hoy: como mucho 5 decisiones y 3 «para que lo sepas» | 20 min |
-| Un día fijo por cuenta | Lote de términos de esa cuenta (5 cuentas al día cubren las 25 en la semana) | 5-10 min por cuenta |
+| Un día fijo por cuenta | Lote de términos de esa cuenta: **semanal en clientes A y B, quincenal en C** (la misma cadencia que 7.7). Son 5 cuentas al día si las 25 fueran A o B, y menos según cuántas sean C: lo dirá el inventario | 5-10 min por cuenta |
 | Según nivel de cliente | Revisión de cuenta con guion (A cada 7 días, B cada 14, C cada 30) | 20-30 min |
 | Cuando ocurre | Interrupción: como mucho 2 al día, en horario laboral | — |
 | Viernes | Caso de la semana (5 min) y, al principio, 30 min con Enric: qué sobró, qué faltó, qué no se entendió | — |
@@ -1300,7 +1562,8 @@ Cuatro piezas hacen que esto sea ahorro y no trabajo añadido:
   Cartera demuestra la cobertura. Es decisión de Enric (apartado 13.1).
 - **Dos decisiones adelantadas.** El primer ahorro grande llega cuando las negativas aprobadas se aplican con un clic, y los
   avisos de fin de semana solo sirven si existe una pausa de emergencia acotada. La v1 dejaba ambas para la última fase.
-  Siguen siendo línea roja del proyecto: las decide Enric, pero **al empezar**, no al final (apartado 13.1, decisiones 9 y 10).
+  Siguen siendo línea roja del proyecto: las decide Enric, pero **al empezar**, no al final (apartado 13.1, paquete C:
+  decisiones 9, 10a y 10b).
 
 **Ahorro esperado por paso** [estimación de R2, no medida]: la pantalla Cartera sustituye al «entrar en las 25 cuentas a
 ver si pasa algo»; el lote de términos en solo lectura baja esa tarea de 8-10 horas a la semana a 3-5; con aplicación en un
@@ -1311,6 +1574,12 @@ clic, a 1,5-2. El diagnóstico ahorra tiempo solo cuando hay incidente (1-2 hora
 La v1 hablaba de «unas 10 alertas por mañana» sin decir de quién. Diez diarias para una sola persona no es «informar por
 excepción» (R1 pedía 3 urgentes al día; R2, el reparto de abajo; se adopta el de R2, que es compatible con el de R1 y más
 completo). El tope es **por persona y sumando todos los módulos**: Eury ya recibe avisos de Operaciones y de SEO.
+
+Alcance (rev. R4): el tope **dentro de Ads** lo aplica el módulo y entra en el paso 2. El tope **sumando todos los
+módulos** cambia cómo funciona la cola de avisos de Operaciones (`ops_notifications`), que también usa el SEO: es tocar el
+núcleo. No se diseña aquí; pasa por el protocolo de decisión y, si afecta a lo que ve el SEO, se apunta en
+`docs/SEO-PUNTO-DE-RETORNO.md` (apartado 8.4). Hasta entonces, Ads respeta su tope propio y cuenta los avisos que ya salen
+de los otros módulos solo para informar.
 
 | Canal | Qué entra | Tope de partida |
 |---|---|---|
@@ -1436,7 +1705,8 @@ propuesta genera el **argumento para el cliente** (cuánto, qué se espera, con 
   días; página nueva, según acuerdo;
 - el hallazgo queda «esperando a web» y en silencio hasta el plazo; vencido, un recordatorio y entrada en el parte de Enric;
 - **verificación al cerrar:** cuando el encargo se marca hecho, el agente vuelve a medir, y si no se arregló lo reabre con
-  la evidencia;
+  la evidencia. El estado del encargo se lee del propio encargo y de la caché, nunca preguntando a ClickUp tarea a tarea
+  (regla de ClickUp del proyecto);
 - **un solo encargo** si el módulo SEO ya tiene uno por la misma página (vía núcleo, sin que Ads importe a SEO);
 - si el arreglo no está en el contrato (rehacer una landing), va al responsable de la cuenta como oportunidad comercial, no
   a la cola de web;
@@ -1494,7 +1764,7 @@ base de datos que de scripts» (01).
 | Grupo | Entidad | Granularidad | Qué guarda |
 |---|---|---|---|
 | **Cuentas** | Cuenta de Ads | Una por cuenta y **plataforma** | Enlace al cliente (la cuenta ya figura en «Webs y cuentas» de la ficha), MCC, moneda, zona horaria, estado, ajustes de medición |
-| | Estado de sincronización | Cuenta × recurso | Cursor, último éxito, errores, operaciones gastadas del cupo diario |
+| | Estado de sincronización | Cuenta × **fuente** (API de Ads por recurso, CRM, GA4, Search Console, GBP, rastreador, buzón) | Cursor, último éxito, **hora del último dato bueno**, resultado de la consulta de control, frescura esperada, errores, operaciones gastadas del cupo diario. No es solo un registro técnico: **lo lee MED-00** para suspender las reglas que dependen de una fuente atrasada (rev. R4) |
 | **Estructura** | Campaña, grupo, palabra, negativa, lista compartida, anuncio, recurso, grupo de recursos, presupuesto, estrategia de puja, acción de conversión, criterios (zona, horario, audiencia) | Una fila por entidad | Identidad y atributos actuales |
 | | **Versiones de configuración** | Entidad × periodo de validez | Foto de los ajustes que importan (objetivo, presupuesto, estrategia, redes, tipo de ubicación, AI Max, estado) con «válido desde / hasta» |
 | | Clasificación propia | Entidad | Marca, genérico o competidor; servicio de la ficha; zona; grupo de comparación |
@@ -1554,23 +1824,48 @@ base de datos que de scripts» (01).
 
 ### 8.4 Relación con el núcleo y con otros módulos
 
-Regla del proyecto: el módulo Ads no importa a otro módulo; todo pasa por el núcleo.
+Regla del proyecto: el módulo Ads (`lib/ads`, tablas `ads_*`) no importa a otro módulo; todo pasa por el núcleo. Lo
+comprueba `tests/arquitectura-guardrails.test.ts`, donde `ads` ya figura como módulo.
 
-| Necesidad de Ads | Lo que ya existe | Cómo se conecta |
+**Dos cosas que la v2 no tenía en cuenta** (rev. R4):
+
+1. **El SEO está congelado en la etiqueta `seo-v1`** (`docs/SEO-PUNTO-DE-RETORNO.md`). Ads **no importa nada de `lib/seo`**
+   y nunca se mezcla en una misma rama un cambio de SEO y uno de Ads. Si Ads necesita un dato que hoy solo vive dentro del
+   SEO (el registro de cambios de la web, la vigilancia de caídas), exponerlo es **un cambio en el SEO**: va en su propia
+   rama `feature/seo-…`, con el protocolo de decisión, pasando las pruebas `tests/seo-*`, y se apunta en la sección 6 de
+   ese documento. Las piezas del núcleo que comparten los dos (trabajos, intervenciones, ficha, capacidades, registro de
+   errores, gasto de IA) se pueden usar, con la línea «Afecta al SEO: …» en el documento de sesión si cambian.
+2. **Buena parte de lo que la v2 pedía «crear en el núcleo» ya existe.** La pregunta del protocolo de decisión «¿hay algo
+   que ya tenemos y no usamos?» no se había aplicado. La columna «¿Existe ya?» lo corrige; está comprobada contra el
+   código de `lib/core/` el 28 nov 2026, sin haber probado cada pieza con datos de Ads.
+
+| Necesidad de Ads | ¿Existe ya? | Cómo se conecta |
 |---|---|---|
-| Cliente, sector, zona, locales, servicios, competidores, contrato, memoria | Ficha del cliente en el núcleo | Lectura directa del núcleo. Son **dos campos distintos** (la v1 los confundía): la inversión mensual en medios, que el gestor tiene que ver para llevar el ritmo de gasto, y la cuota de agencia, que solo ven administradores |
-| Acuerdo de objetivos, nivel de cliente, riesgo de baja, horas por cuenta | No existe | Son de la agencia entera, no de Ads: candidato a vivir en el núcleo, con Ads como primer usuario (protocolo de decisión antes de crear tablas) |
-| Cuenta de Ads de cada cliente | «Webs y cuentas» ya admite el tipo Ads | Registrar un directorio de cuentas de Ads, como hace Agentes con Google |
-| Search Console, GA4 y GBP diarios | Módulo Rendimiento | Su proveedor de cifras para otros módulos y la fuente de métricas del núcleo |
-| Landing: texto, caídas, velocidad, registro de cambios | Módulo SEO | **Hace falta un contrato nuevo en el núcleo** («dime el estado de esta URL en esta fecha»); Ads no puede importar SEO. Solo cubre las landings que el rastreador ve: las que viven en embudos del CRM o en constructores aparte quedan fuera hasta darlas de alta |
-| Embeddings y mapa de palabras | Módulo SEO | Mismo criterio: una capacidad del núcleo para embeddings y similitud |
-| Leads | Conexión con GoHighLevel (hoy: fecha, formulario, página, canal y UTM, **sin identificador de contacto ni de clic**) | Ampliación necesaria para LEAD-01 y MED-10 (decisión de Enric, apartado 13) |
-| Festivos, actualizaciones de Google, incidencias | Calendario de la agencia | Ads aporta sus eventos de plataforma al mismo calendario |
-| Hallazgos, intervenciones y propuestas | Tablas y registros del núcleo (hallazgos, intervenciones, motor de propuestas) | Valorar reutilizarlos antes de crear equivalentes `ads_*` (protocolo de decisión) |
-| Trabajos periódicos | Cola de trabajos del núcleo | Tareas de sincronización y evaluación |
-| Avisos | Cola de avisos de Operaciones | Nunca Telegram directo |
-| IA | Pasarela con coste, prompts con examen | Igual que el resto |
-| Tareas para el equipo | Encargos y ClickUp | Un hallazgo R0 que pide trabajo humano se convierte en encargo |
+| Cliente, sector, zona, locales, servicios, competidores, contrato, memoria | **Sí:** ficha del cliente en el núcleo | Lectura directa del núcleo. Son **dos campos distintos** (la v1 los confundía): la inversión mensual en medios, que el gestor tiene que ver para llevar el ritmo de gasto, y la cuota de agencia, que solo ven administradores |
+| Salud de nuestras fuentes (MED-00) | **Sí:** `registerHealthCheck` en `lib/core/capabilities.ts` (ya lo usan Rendimiento, Estrategia y Plataforma) y el registro de errores `sys_error_*` con su Técnico de mantenimiento | Ads registra su comprobación de salud y manda sus fallos de sincronización al registro de errores. Lo nuevo es solo que las reglas de Ads lean ese estado antes de afirmar |
+| Acuerdo de objetivos, nivel de cliente, riesgo de baja, horas por cuenta | **No** | Son de la agencia entera, no de Ads: candidato a vivir en el núcleo, con Ads como primer usuario (protocolo de decisión antes de crear tablas) |
+| Cuenta de Ads de cada cliente | **Sí:** «Webs y cuentas» ya admite el tipo Ads | Registrar un directorio de cuentas de Ads, como hace Agentes con Google |
+| Search Console, GA4 y GBP diarios | **Sí:** módulo Rendimiento, por `registerMetricSource` | Su proveedor de cifras para otros módulos y la fuente de métricas del núcleo |
+| Leer una página: si responde, su código, su texto, sus enlaces | **Sí:** rastreador del núcleo (`lib/core/crawler.ts`, `lib/core/crawl-extract.ts`) | Ads lo usa directamente para PRO-06, MED-15, MED-16 y MED-18. **No hace falta el «contrato nuevo» que pedía la v2** para saber si una URL está viva hoy. Solo cubre lo que se le dé a rastrear: las landings en embudos del CRM o en constructores aparte hay que darlas de alta |
+| Velocidad de una página | **Sí:** `registerSpeedSource` (CrUX y PageSpeed) | Lectura por el núcleo |
+| Anuncios y resultados de una búsqueda | **Sí:** `registerSerpSource` (DataForSEO, con el coste de cada tarea) | Lectura por el núcleo, con los topes del apartado 6.1 |
+| Ficha de Google del negocio | **Sí:** `registerBusinessSource` | Lectura por el núcleo |
+| Sucesos fechados para la línea de tiempo y el diagnóstico (festivos, hitos, cambios) | **Sí:** `registerEventSource` (Estrategia ya publica así sus eventos para que Rendimiento los lea sin importarla) | Ads lee los eventos de un periodo y publica los suyos (cambios de plataforma, cambios en la cuenta) |
+| Historial de la web: «qué cambió en esta página y cuándo» y «desde cuándo está caída» | **En parte:** el dato lo guarda el módulo SEO, pero hoy no lo publica como fuente de eventos (solo lo hacen Estrategia y la base de conocimiento) | Publicarlo es un cambio en el SEO (punto 1 de arriba): rama propia y protocolo. Afecta a LAN-04 y a la rama «cambio en la web» del diagnóstico, que están en el paso 6, no antes |
+| Embeddings y similitud | **Sí, fuera del SEO:** `lib/ai/clustering` (capa de embeddings) | Se usa desde `lib/ai`, que no es un módulo. La v2 lo situaba dentro del SEO y pedía una capacidad nueva: no hace falta |
+| Leads | **En parte:** conexión con GoHighLevel (hoy: fecha, formulario, página, canal y UTM, **sin identificador de contacto ni de clic**) | Ampliación necesaria para LEAD-01 y MED-10 (paquete D, apartado 13.1) |
+| Festivos, actualizaciones de Google, incidencias | **Sí:** calendario de la agencia | Ads aporta sus eventos de plataforma al mismo calendario |
+| Hallazgos | **Sí:** `lib/core/findings.ts` (tipos de hallazgo registrables, aceptar o descartar con motivo, enlace a un encargo) | Usarlo antes de crear un equivalente `ads_*`. Falta comprobar si admite los estados y silencios del apartado 7.3; si no, ampliarlo es tocar el núcleo (protocolo) |
+| Intervenciones con hipótesis y su evaluación (APR-01, APR-02) | **Sí:** `lib/core/interventions.ts` | Mismo criterio |
+| Propuestas con aprobación | **Sí:** motor de propuestas, por `registerChangeExecutor` | Es el camino para la aplicación con un clic del paquete C |
+| Expediente del cliente | **Sí:** `registerProjectDossierProvider` | Ads aporta su sección al expediente común |
+| Trabajos periódicos | **Sí:** cola de trabajos del núcleo | Tareas de sincronización y evaluación |
+| Avisos | **Sí:** cola de avisos de Operaciones | Nunca Telegram directo. El tope global de atención es un cambio del núcleo (apartado 7.3) |
+| IA | **Sí:** pasarela con coste, prompts con examen | Igual que el resto, con tope propio (apartado 6.1) |
+| Tareas para el equipo | **Sí:** encargos y ClickUp | Un hallazgo R0 que pide trabajo humano se convierte en encargo |
+
+Consecuencia para el orden de construcción: el paso 1 no espera a ningún contrato nuevo del núcleo, y lo único que depende
+de tocar el SEO es el historial de la web, que entra en el paso 6.
 
 ---
 
@@ -1582,7 +1877,10 @@ Regla del proyecto: el módulo Ads no importa a otro módulo; todo pasa por el n
 informes 04 y 10. Ninguno de los tres revisores pudo confirmarlo ni desmentirlo, y nadie ha hecho todavía una consulta real.
 La v1 se lo presentaba a Enric como «bloqueo resuelto»; lo correcto es «según la documentación, parece resuelto». Se
 comprueba en media hora: crear el proyecto de Google Cloud, pedir el nivel y leer una cuenta. Hasta entonces, nada del
-calendario depende de ello.
+calendario depende de ello. **Esa media hora es el caso bueno** (rev. R4): el mismo informe 04 recoge dos problemas
+conocidos de alta, un error de autorización (`AUTHORIZATION_ERROR`) en proyectos ascendidos después del 9 sep 2026 y
+rechazos por la facturación del proyecto de Cloud. Si aparece alguno, son días, no minutos. La prueba debe leer también el
+**detalle de llamadas** de una cuenta, del que depende la familia LLA (apartado 3.C).
 
 - Según la documentación, **el token de desarrollador ya no existe** (retirado el 9 sep 2026). El nivel de acceso pertenece al **proyecto de Google
   Cloud** dueño de las credenciales. Lo apuntado en la memoria del proyecto («falta el token de la MCC») está obsoleto.
@@ -1593,7 +1891,7 @@ calendario depende de ello.
 |---|---|---|---|
 | Prueba | 0 (solo cuentas de prueba) | Automático | — |
 | **Explorer** | 2.880 | Automático casi siempre | Sin planificador de palabras, sin gestión de usuarios ni facturación |
-| **Basic** | 15.000 | Explorer + verificación de marca (minutos) | — |
+| **Basic** | 15.000 | Explorer + verificación de marca (la aprobación tarda minutos **una vez verificada** la marca) | — |
 | Standard | Ilimitadas | Auditoría manual, unos 10 días hábiles | — |
 
 - **Cupo:** cada consulta cuenta como una operación; paginar no gasta. Los informes dan dos estimaciones distintas: 25
@@ -1608,8 +1906,10 @@ calendario depende de ello.
 - **Sin librería oficial para Node.** Recomendación del informe 04: cliente REST propio con contador de operaciones,
   reintentos y versión configurable, como el de ClickUp.
 - **Versiones:** vigente la v26 (14 oct 2026), que se retira en nov 2027. Cada versión dura unos 13 meses: hay que subir de
-  versión al menos una vez al año. Google puede revocar el acceso tras 90 días sin uso.
-- **La API es gratuita** [conocimiento general del sector; la documentación no lo afirma de forma expresa].
+  versión al menos una vez al año, con unas 150 capacidades leyendo campos que pueden cambiar de nombre: por eso GOO-07
+  lleva pruebas de contrato con respuestas grabadas. Google puede revocar el acceso tras 90 días sin uso.
+- **La API es gratuita** [el informe 04 lo afirma sin matiz; aquí se deja como conocimiento general del sector, porque no
+  consta la frase expresa de la documentación].
 
 ### 9.2 Lo que la API no da
 
@@ -1618,6 +1918,7 @@ calendario depende de ello.
 | **Subastas (Auction Insights)** | Los campos existen en la v26 pero «no están disponibles públicamente». El informe 05 lo daba como posible; el 04 lo comprobó: **no** | Informe programado de la interfaz a un buzón u hoja (así lo hace TrueClicks); señales propias (CUO-05), que son la vía principal porque el informe no devuelve filas en campañas pequeñas; anuncios en los resultados vía DataForSEO |
 | **Prioridad de canal** (oct 2026) | «Próximamente» en API y Editor; no se configura desde la MCC | Segmento de red como aproximación |
 | Alertas de cuenta (pago fallido, suspensión) | No hay recurso | Inferir (MED-12) |
+| Facturación | Solo en cuentas con **factura mensual**; en las de pago con tarjeta no hay nada que leer (04). Cuántas cuentas hay de cada tipo lo dirá el inventario | El buzón de avisos (MED-14) es ahí el único aviso antes del corte |
 | Diagnóstico de etiqueta como en la interfaz | No confirmado | Inferir con conversiones por acción y día; cruzar con CRM |
 | Historial de cambios de más de 30 días, y los cambios hechos con Editor | No | Guardado propio. Sobre Editor: el informe 04 dice que sus cambios no aparecen; un revisor cree recordar que el tipo de cliente del historial sí tiene un valor para Editor. **Comprobar con una cuenta real**: de ello depende el cierre automático de propuestas (apartado 7.2) |
 | Conversiones modeladas por consentimiento, separadas | Van mezcladas en «Conversiones» | Comparar con el CRM |
@@ -1685,6 +1986,15 @@ No necesitan acceso de Cloud y son gratis, con límites (30 minutos y 50 cuentas
 llega el acceso (un script en la MCC que exporte cada noche a un punto de entrada nuestro; solución provisional) y **freno de
 emergencia** (PRO-11) (04 §6).
 
+Lo que la v2 no decía (rev. R4): **instalar un script en la MCC es poner código a correr dentro de cuentas reales**, y es
+línea roja en los dos usos (paquete C). Además:
+
+- **El puente** abre una ruta pública nueva que recibe datos de clientes. Tiene que ser una ruta de API con **secreto
+  propio** (en `.env`, nunca en el script versionado con su valor), guarda de permisos, límite de tamaño y de frecuencia, y
+  su prueba en `tests/seguridad.test.ts`. El script **solo lee** y solo envía a esa ruta. Si la prueba de acceso del
+  paquete A sale bien, el puente no se construye.
+- **El freno** pausa campañas: decisión 10b, con su tope escrito, aviso al pausar y reanudación manual.
+
 ---
 
 ## 10. Mercado y diferenciación
@@ -1709,7 +2019,8 @@ que quizá no haya; se han rebajado a lo que el apartado 5 permite sostener.
 | Subastas | Parcial | No | No | Sí (vía hoja) | Sí (es Google) | Parcial (señales propias y resultados de búsqueda; informe importado donde devuelva filas) |
 | Calidad real del lead (CRM) | Parcial (hojas a mano) | No | No | No | No | Donde el CRM tenga etapas: por campaña y servicio; por término, solo spam |
 | Web, SEO y ficha de Google del cliente | No | No (solo URL rotas) | No (solo enlaces rotos) | No | No | **Sí** |
-| Decide bien con pocos datos | No (umbrales fijos) | No | Parcial (ventana adaptativa) | No | — | Juez de intención y bayesiano dentro de la cuenta; el sector, solo con 3 o más cuentas |
+| Decide bien con pocos datos | No (umbrales fijos) | No | Parcial (ventana adaptativa) | No | — | **Por calibrar.** Juez de intención y regla bayesiana con margen dentro de la cuenta: simulada (apartado 5.3), sin probar con datos reales. El sector, solo con 3 o más cuentas |
+| Sabe cuándo le faltan sus propios datos | No documentado | No documentado | No documentado | No documentado | — | Objetivo: sí (MED-00), y aquí pesa más porque dependemos de más fuentes |
 | Corrige el retraso de conversión | No documentado | No documentado | **No (lo dice su ayuda)** | No | Google ofrece informes de retraso | Sí, donde la acción madura despacio |
 | IA que propone con aprobación | Sí | Sí | Sí | Beta | Sí | Sí |
 | Mide si sus recomendaciones funcionaron | No | No | No | No | No | Las R2 y R3, con «no concluyente» frecuente; las R1, en conjunto |
@@ -1729,7 +2040,7 @@ española equivalente (10 §5.4).
 | De | Qué copiar |
 |---|---|
 | **Adalysis** | La transparencia: cada control con su umbral por defecto, editable. El árbol de tres etapas (antes del clic, clic, conversión) con el historial de cambios encima. El nivel de calidad ponderado por impresiones y gasto. La pantalla inicial multicuenta con alertas y presupuesto. «Resolver solo» lo rutinario |
-| **Opteo** | La ventana de datos que se alarga hasta tener suficientes. El impacto anualizado en cada mejora. «Comprobaciones hechas: 1.240, nada que proponer» (enseña que se ha mirado). Supresiones de la alerta de cero conversiones (no repetir en 4 días, no avisar si la acción suele tener pocas). Segmentos y términos protegidos. Nombre de lugar como negativa |
+| **Opteo** | La ventana de datos que se alarga hasta tener suficientes. El impacto anualizado en cada mejora. La idea de «comprobaciones hechas, nada que proponer» (enseña que se ha mirado), pero diciendo también lo que no se pudo comprobar (MED-00), no una cifra que tranquiliza aunque la fuente esté caída. Supresiones de la alerta de cero conversiones (no repetir en 4 días, no avisar si la acción suele tener pocas). Segmentos y términos protegidos. Nombre de lugar como negativa |
 | **Optmyzr** | Excluir cambios recientes para que una regla no reaccione a sí misma. La similitud término ↔ palabra como filtro secundario (≥85 muy relevante, ≤20 no relevante). Las peticiones de cambio que otro compañero revisa. Los tres mayores contribuyentes positivos y negativos. Posponer alertas 1, 7 o 28 días |
 | **TrueClicks** | Separar monitorización diaria (cosas rotas) de recomendaciones semanales (buenas prácticas). «Días que lleva fallando». Aplicar higiene por patrón de nombre de campaña. El truco del informe de subastas a una hoja |
 | **Google** | Proponer y confirmar con simulación previa. El detector oficial que compara con el mismo día de la semana |
@@ -1740,7 +2051,7 @@ española equivalente (10 §5.4).
 
 | Queja | De quién | Cómo lo evitamos |
 |---|---|---|
-| «Encuentra tantos problemas que abruma; el reto es saber qué priorizar» | TrueClicks | Cola corta; presupuesto de atención por persona y sumando todos los módulos (apartado 7.3); como mucho 12-15 tipos de hallazgo |
+| «Encuentra tantos problemas que abruma; el reto es saber qué priorizar» | TrueClicks | Cola corta; presupuesto de atención por persona y sumando todos los módulos (apartado 7.3); 15 tipos de hallazgo en lista cerrada (apartado 7.1) |
 | «Para tener buena nota acabas haciendo cambios de los que no estás convencido» | TrueClicks | **Ninguna nota que penalice descartar**, y ninguna nota que obligue: por eso la medición tiene tres estados y no un aprobado (la v1 se contradecía aquí). Descartar con motivo es un dato valioso |
 | «No entiende el contexto»; recomendaciones redundantes o contradictorias | Opteo | Ficha del cliente en cada juicio; una propuesta por causa; deduplicar las que afectan al mismo gasto |
 | «Demasiado fácil hacer cambios masivos entre cuentas»; valores por defecto peligrosos | Optmyzr | Límites duros, tope de lote, ningún clic toca más de una cuenta y **ninguna lista de negativas compartida entre cuentas** (la v1 se contradecía con TER-03) |
@@ -1758,7 +2069,13 @@ estadística para cuentas pequeñas y la memoria de resultados. Sugerencia prác
 semanas como **vara de medir** (¿encuentra algo que nuestro catálogo no?), sin depender de ella. Mientras el módulo se
 construye puede servir además de **parche**, leído por Enric o por el agente y no como otra bandeja para Eury (R2). Dos
 comprobaciones antes: que la inversión total no supere su tramo gratuito, y que los contratos con los clientes permitan dar
-acceso a sus cuentas a un tercero.
+acceso a sus cuentas a un tercero. Dar ese acceso es entregar datos de clientes a un proveedor nuevo, que pasa a ser
+subencargado (apartado 12.2): **línea roja**, decisión 24 del paquete C (rev. R4).
+
+**Cómo se sabrá si de verdad somos mejores** (rev. R4). Hoy «superior al mercado» es una hipótesis. La forma de convertirla
+en un hecho es usar esa vara de medir en serio: **cuatro semanas en paralelo** al terminar el paso 5, y una tabla con lo
+que encontró cada uno, qué era real y con cuánto retraso. Si TrueClicks encuentra lo mismo antes y gratis, esa parte no se
+sigue construyendo.
 
 ---
 
@@ -1771,7 +2088,7 @@ locales, que partían de un error sobre para qué sirve ese ajuste) y añade cua
 
 | # | Innovación | Por qué nadie la tiene | Qué hace falta | Límite honesto |
 |---|---|---|---|---|
-| 1 | **Diagnóstico con causas de fuera de Google Ads**: web caída, formulario roto, cambio en la landing, demanda orgánica, reseñas, horario | Las herramientas solo ven la plataforma de anuncios | Un contrato nuevo en el núcleo para consultar el estado de una URL en una fecha | Solo en clientes con web rastreada y cuentas de Google conectadas |
+| 1 | **Diagnóstico con causas de fuera de Google Ads**: web caída, formulario roto, cambio en la landing, demanda orgánica, reseñas, horario | Las herramientas solo ven la plataforma de anuncios | Casi todo existe ya en el núcleo (rastreador, velocidad, eventos; apartado 8.4). Falta que el SEO publique el historial de cambios de la web, en rama propia | Solo en clientes con web rastreada y cuentas de Google conectadas |
 | 2 | **Coste por lead cualificado por campaña y servicio**, con conciliación por tipo de acción | Asumen que las conversiones son verdad; el CRM pequeño (GoHighLevel) no entra en sus paneles | Guardar identificador de clic y etapa del lead | Depende de que alguien marque la etapa en el CRM: es un proyecto de hábitos del cliente. Por término no habrá dato ni en un año |
 | 3 | **Referencia del sector entre cuentas** para decidir con pocos datos, con punto de partida semántico | Una herramienta de una cuenta no puede; las multicuenta no lo hacen | Sector y tipo de conversión normalizados en la ficha | Con 25 cuentas, casi todos los sectores tendrán una o dos: en la práctica empieza siendo referencia de la cuenta. Es una apuesta a medio plazo, no una ventaja de salida |
 | 4 | **Causa común**: si medio sector cae el mismo día, es el mercado o Google | Nadie compara cuentas entre sí | El almacén | — |
@@ -1779,7 +2096,7 @@ locales, que partían de un error sobre para qué sirve ese ajuste) y añade cua
 | 6 | **La demanda orgánica como grupo de control** y estacionalidad calculada con datos propios | No tienen Search Console del mismo cliente con histórico diario | Ya existe en Rendimiento | La equivalencia entre consultas de pago y orgánicas es aproximada |
 | 7 | **Negocio local de verdad**: zona de servicio real, horario frente a llamadas perdidas, municipios como negativas, coherencia con la ficha de Google | Las herramientas son para comercio electrónico de EE. UU. | Ficha completa (zona, horario) | Datos de llamadas según lo que el CRM ofrezca |
 | 8 | **Ley española en la revisión de anuncios**, incluidos los textos que genera Google | Google solo revisa sus políticas | Lista de vetos por sector, mantenida | No sustituye al criterio legal del cliente |
-| 9 | **Sintonía con el texto real de la página**, páginas elegidas por Google y cambios en la web | No tienen el rastreador | Capacidad de embeddings en el núcleo | — |
+| 9 | **Sintonía con el texto real de la página**, páginas elegidas por Google y cambios en la web | No tienen el rastreador | Nada nuevo: el rastreador del núcleo y los embeddings de `lib/ai/clustering` ya existen | — |
 | 10 | **Los cambios de Google como causa fechada** | Las alertas culpan al gestor de lo que cambió Google | Calendario mantenido | Requiere disciplina para mantenerlo |
 | 11 | **Puente Ads ↔ SEO en las dos direcciones** | Son herramientas distintas | Encargos entre módulos vía núcleo | La reducción de inversión por «ya somos primeros» hay que probarla, no asumirla |
 | 12 | **Benchmark español** por sector y provincia | No existe ninguno público | Tiempo y cuentas | 25 cuentas es poco: solo medianas, solo no marca, solo en sectores con 3 o más cuentas, y sin provincia |
@@ -1807,7 +2124,9 @@ viven la ficha, la web, el SEO y el CRM, y solo si esos datos existen de verdad 
 | Riesgo | Cómo se manifiesta | Mitigación |
 |---|---|---|
 | **La herramienta se abandona** (nuevo; el más probable según R2) | El equipo concluye «esto solo me da más avisos»; se revisa la cola y además se sigue con la rutina vieja | Orden de construcción por adopción (apartado 13.2); retirar el ritual L-X-V por escrito; modo sombra antes de avisar; medir horas antes y después |
-| **Fatiga de alertas** | El equipo deja de leer | Presupuesto de atención por persona y global, canales, silencios con fecha, sin recordatorios repetidos (apartado 7.3); como mucho 12-15 tipos de hallazgo; calibración con 90 días de histórico |
+| **El vigilante está ciego y no lo sabe** (nuevo en la v3) | Falla nuestra conexión con Google, con el CRM o con el rastreador y la pantalla dice «todo bien»; o peor, acusa a la web del cliente («formulario roto») de un fallo nuestro | MED-00 en el paso 1: frescura por fuente, consulta de control, reglas suspendidas y «no comprobado» a la vista; caso 27 del examen |
+| **El módulo cuesta más de lo que protege** (nuevo en la v3) | Unas 150 capacidades, una docena de pasos y varios niveles de todo, para un gestor y un director | Esfuerzo y coste recurrente estimados por paso, y punto de parada medido tras el paso 4 (apartado 13.2) |
+| **Fatiga de alertas** | El equipo deja de leer | Presupuesto de atención por persona y global, canales, silencios con fecha, sin recordatorios repetidos (apartado 7.3); 15 tipos de hallazgo en lista cerrada (apartado 7.1); calibración con 90 días de histórico |
 | **Aprobar sin pensar** (nuevo) | Con aprobación en un clic, se aprueba todo | Fricción proporcional al riesgo, tope de lote, muestra ciega, señales visibles para el propio gestor (apartado 7.6) |
 | **El agente aprende del aprendiz** (nuevo) | Calla lo que el gestor aún no domina | Las respuestas no tocan la detección; umbrales por resumen mensual aprobado; casos de oro con desenlace conocido (apartado 7.4) |
 | **Descualificación del gestor** (nuevo) | Nadie en la agencia sabe diagnosticar sin la herramienta | Tres capas de explicación, «primero tú» voluntario, una revisión al mes sin diagnóstico previo (apartado 7.5). O aceptarlo a sabiendas |
@@ -1819,7 +2138,7 @@ viven la ficha, la web, el SEO y el CRM, y solo si esos datos existen de verdad 
 | **Acciones peligrosas** | Cambio masivo; presupuesto × 100; pausar la marca; bajar un objetivo y hundir los leads; degradar la única conversión que alimenta la puja | Solo lectura primero; límites duros en código; simulación previa; aprobación según riesgo; etiqueta y registro; vuelta atrás; freno de emergencia fuera del servidor; nada R3 sin persona; nada entre cuentas |
 | **Sanear la medición asusta al cliente** (nuevo) | Al dejar de contar clics de teléfono, «caen» sus conversiones | Plan de saneamiento por tandas, series en paralelo y aviso previo (apartado 3.B) |
 | **Datos malos** | Medición rota; días inmaduros; conversiones fraccionarias redondeadas; zona horaria; cuota sumada entre niveles; CRM sin etapas; ficha desactualizada | Estados de medición; conciliador; principios del apartado 8.1; fecha de confirmación en los datos de la ficha (NEG-07) |
-| **Regresión a la media y mirar hasta que salte** | Se pausa lo peor de una muestra pequeña y «mejora» solo; una regla evaluada cada semana acaba saltando por azar | Encogimiento bayesiano; reglas sobre la ventana completa, no sobre rachas; negativas estadísticas con caducidad (apartado 5.2) |
+| **Regresión a la media y mirar hasta que salte** | Se pausa lo peor de una muestra pequeña y «mejora» solo; una regla evaluada cada semana acaba saltando por azar (le pasó a la propia regla bayesiana de la v2) | Reglas sobre la vida del término, no sobre rachas; margen de 1,5 × y gasto mínimo; **toda regla que se mire más de una vez se simula con miradas repetidas antes de activarse**, con tope del 10 % de términos buenos negativizados al año; negativas estadísticas con caducidad (apartados 5.2 y 5.3) |
 | **Memoria que se engaña** | El agente concluye que algo «nunca funciona» por un resultado ruidoso | Memoria de resultados medidos, con caducidad y exploración mínima |
 | **Cambios de Google** | Versión retirada; enumerados que cambian; función que desaparece; nuevos mandos fuera de la API | Vigía de la API (GOO-07); calendario de plataforma; cliente propio con versión configurable; no diseñar sobre lo retirado |
 | **Google absorbe lo que construimos** (nuevo) | Cada año se ven menos términos y hay menos mandos | Parte de términos delgada; invertir en lo defendible (apartado 2.6) |
@@ -1829,9 +2148,9 @@ viven la ficha, la web, el SEO y el CRM, y solo si esos datos existen de verdad 
 | **Marcas ajenas** (corregido) | La v1 decía «pujar por marcas ajenas (Ley de Marcas)». Pujar por la marca de un competidor es en general lícito en la UE; el riesgo está en **usar la marca en el texto del anuncio o inducir a confusión** | El agente no veta campañas de competencia; sí veta la marca ajena en los textos [validar con asesoría] |
 | **Dos clientes competidores** (nuevo) | El agente recomienda a uno pujar contra el otro usando información del otro | Regla explícita de conflicto: ningún término, anuncio ni cifra identificable cruza entre competidores directos (12.4) |
 | **Sector con pocos clientes** | Referencia del sector poco fiable | Solo con 3 o más cuentas; si no, referencia de la propia cuenta, y se dice |
-| **Coste de IA** | Tablas enteras a un modelo caro | Cascada; lotes; caché; presupuesto por agente en la pasarela |
+| **Coste de IA** | Tablas enteras a un modelo caro; el módulo se come el presupuesto de toda la agencia (unos 80 $ al mes) | Cascada; lotes; caché; estimación de 10-20 $ al mes y tope de 25 $ para Ads en la pasarela (apartado 6.1) |
 | **Responsabilidad** | Un error del agente lo paga la agencia | Traza de quién aprobó y por qué; cambios como «petición revisada», no como acción del modelo |
-| **Confianza del equipo** | El 40 % de los profesionales no automatiza porque no se fía con presupuestos de clientes (Optmyzr) | Explicar cada propuesta y lo que no se propone; empezar por lo que Eury ya hace; ningún control oculto sobre el gestor |
+| **Confianza del equipo** | El 40 % de los profesionales no automatiza porque no se fía con presupuestos de clientes (encuesta informal de Optmyzr a 64 personas: orienta, no mide) | Explicar cada propuesta y lo que no se propone; empezar por lo que Eury ya hace; ningún control oculto sobre el gestor |
 
 ### 12.2 Protección de datos al cruzar el CRM con la publicidad
 
@@ -1897,63 +2216,123 @@ sistemas de IA. No parece que obligue a etiquetar textos de anuncios.
 
 ## 13. Decisiones para Enric, orden de construcción y lo no verificado
 
-### 13.1 Decisiones y preguntas para Enric
+### 13.1 Decisiones para Enric, en cinco paquetes
 
 Todas las recomendaciones son **[opinión]** de quien firma. Las marcadas ⛔ tocan una línea roja del proyecto (efectos hacia
-fuera con clientes o cambios en cuentas reales): no se hace nada hasta tu respuesta.
+fuera con clientes, cambios o código en cuentas reales, datos de clientes a un tercero): no se hace nada hasta tu respuesta.
 
-**A. Antes de escribir código (no cuestan desarrollo y deciden todo lo demás)**
+**Por qué en paquetes** (rev. R4). La v2 traía 28 preguntas sueltas y un resumen con «las ocho que más pesan» que eran
+nueve y mezclaban cosas de esta semana con cosas de meses vista. Veintiocho preguntas no se contestan: se aplazan. Ahora
+son **cinco paquetes, con una sola pregunta cada uno** y una fecha. Los números de las decisiones se conservan (la 10 se
+parte en 10a y 10b) para que el registro de la revisión siga cuadrando.
+
+**Esta semana solo hace falta el paquete A.** Los demás no bloquean nada hasta la fecha de su columna.
+
+| Paquete | Decisiones | Pregunta única | Mi recomendación | Cuándo hace falta |
+|---|---|---|---|---|
+| **A. Arrancar** (sin código, sin tocar cuentas) | 1, 3, 4, 5, 6 | ¿Me das el visto bueno para la semana de arranque: probar el acceso a la API leyendo una cuenta, medir una semana real de Eury, rellenar el inventario de las 25 cuentas, fijar el nivel A, B o C de cada una y dejar un objetivo provisional congelado por cliente? | **Sí** | **Esta semana** |
+| **B. Rumbo** | 2, 7, 23 | ¿Qué número perseguimos primero (horas por cuenta, bajas o ingreso por cuenta) y cobramos por cuota fija o por porcentaje de la inversión? | Horas primero, bajas después; cuota fija | Antes del paso 2 |
+| **C. Escritura acotada** ⛔ | 9, 10a, 10b, 14, 24 | ¿Qué puede cambiar la herramienta en cuentas reales? Cinco casillas: negativas con un clic, pausa por página caída, tope de gasto en un script de la MCC, buzón de avisos en cada cuenta, acceso de TrueClicks | Sí a las cinco, cada una con su límite | Antes del paso 4 (la 14, antes del paso 2 si se quiere el aviso de pago desde el principio) |
+| **D. Datos de clientes** ⛔ | 20, 8, 11, 12, 13, 15, 21, 22 | ¿Encargo la consulta legal única y, cuando conteste, empezamos a capturar el identificador de clic y a pedir a los clientes que marquen sus leads? | Sí; es lo único que no se recupera después | La consulta, cuanto antes; el resto, tras ella |
+| **E. Personas** | 16, 17, 18, 19, 28 | ¿Quién hace de sénior, quién cubre a Eury, qué deja de hacer Eury, y lo hablamos con él antes de diseñarlo? | Tú de sénior a corto plazo; nombrar suplente; retirar el ritual L-X-V por escrito | Antes de encender avisos (paso 2) |
+| *Aparcadas* | 25, 26, 27 | No piden respuesta ahora | — | Revisión trimestral |
+
+#### Paquete A · Arrancar (esta semana; sin código y sin tocar ninguna cuenta)
+
+> **Pregunta:** ¿Me das el visto bueno para la semana de arranque: probar el acceso a la API leyendo una cuenta, medir una
+> semana real de Eury, rellenar el inventario de las 25 cuentas, fijar el nivel A, B o C de cada una y dejar un objetivo
+> provisional congelado por cliente?
+>
+> **Recomendación: sí.** No cuesta desarrollo, no toca ninguna cuenta ni habla con ningún cliente, y de sus resultados
+> depende el orden de todo lo demás.
+
+**Qué pasa si dices que sí.** Tú haces la prueba de acceso (yo te preparo los pasos y la consulta de prueba): el único
+cambio es añadir a la MCC una cuenta de servicio de **solo lectura**. Eury apunta una semana normal de trabajo. Entre los
+dos rellenáis el inventario en una tarde, con lo que la herramienta ya sabe precargado. Tú pones el nivel de cada cuenta.
+El objetivo provisional lo calculo yo en cuanto haya lectura, y queda congelado.
 
 | # | Decisión o pregunta | Por qué importa | Recomendación |
 |---|---|---|---|
-| 1 | **Probar el acceso con las manos:** crear el proyecto de Google Cloud, pedir el nivel, añadir la cuenta de servicio a la MCC y leer una cuenta | Todo el plan descansa en documentación de sep-oct 2026 que nadie ha probado. Media hora lo confirma o lo desmiente | Hacerlo esta semana. Pedir Basic directamente (con comprobaciones horarias, Explorer no basta) |
-| 2 | **¿Cuál de los cuatro números de la agencia persigue el módulo?** Horas por cuenta, cuentas por gestor, bajas o ingreso por cuenta (apartado 2.5) | Cambia el orden: horas → términos y Cartera primero; bajas → informe al cliente y riesgo de baja primero; ingreso → calidad del lead y niveles de servicio | Horas por cuenta primero (es lo que libera a Eury y lo que se puede medir antes), bajas después |
-| 3 | **Medir una semana real de Eury** (qué hace, en qué cuentas, cuánto tarda) y anotar las bajas del último año | Es la línea base del proyecto y hoy no existe. Las horas que cita este documento son estimaciones sin fuente | Sí, antes de construir nada |
-| 4 | **Inventario de cobertura**, una fila por cuenta: inversión y cuota; leads al mes por campaña; ¿CRM conectado, entran ahí los leads de Ads, alguien marca etapas?; ¿la landing de los anuncios está en la web rastreada?; ¿GA4, Search Console y GBP conectados?; ¿hay objetivo y presupuesto de medios pactados?; ¿quién tiene el acceso de administrador y la facturación?; ¿quién habla con el cliente? | Toda la diferenciación depende de datos que nadie ha contado. La apuesta de R2 es que menos de un tercio de las cuentas tiene etapas usables en el CRM | Sí. Lo rellenan Eury y Enric en una tarde; el agente puede precargar lo que ya está en la herramienta |
-| 5 | **Nivel de cliente (A, B, C)** para cada cuenta | Decide prioridad, frecuencia de revisión y techo de horas | Fijarlo al cerrar el inventario |
-| 6 | **Acuerdo de objetivos por cliente**: quién lo pacta y por cuáles se empieza | Sin él, todos los umbrales cuelgan de un número puesto a ojo | Quien hable con el cliente, empezando por los A. Para el resto, objetivo provisional (mediana del CPL de 90 días), marcado como provisional |
-| 7 | **¿Cómo cobra la agencia: cuota fija o porcentaje de la inversión?** | Si es porcentaje, proponer al cliente gastar menos va contra el ingreso de la agencia: conflicto de interés | Regla escrita: el agente propone reducciones igualmente. A medio plazo, cuota fija por nivel de servicio |
+| 1 | **Probar el acceso con las manos:** crear el proyecto de Google Cloud, pedir el nivel, añadir la cuenta de servicio a la MCC y leer una cuenta, **incluido el detalle de llamadas** | Todo el plan descansa en documentación de sep-oct 2026 que nadie ha probado. Media hora lo confirma o lo desmiente, si no aparece ninguno de los dos problemas de alta conocidos (apartado 9.1); si aparece, días. Del detalle de llamadas depende la familia LLA | Hacerlo esta semana. Pedir Basic directamente (con comprobaciones horarias, Explorer no basta) |
+| 3 | **Medir una semana real de Eury** (qué hace, en qué cuentas, cuánto tarda) y anotar las bajas del último año | Es la línea base del proyecto y hoy no existe. Las horas que cita este documento son estimaciones sin fuente, y los «3 días» del brief admiten dos lecturas (apartado 2.5). Es también la vara del punto de parada tras el paso 4 | Sí, antes de construir nada |
+| 4 | **Inventario de cobertura**, una fila por cuenta: inversión y cuota; leads al mes por campaña; ¿CRM conectado, entran ahí los leads de Ads, alguien marca etapas?; ¿la landing de los anuncios está en la web rastreada o en un embudo del CRM?; ¿GA4, Search Console y GBP conectados?; **¿quién da el número de seguimiento de llamadas: Google, GoHighLevel u otro?**; ¿paga con tarjeta o con factura mensual?; ¿hay objetivo y presupuesto de medios pactados?; ¿es de sector sensible?; ¿quién tiene el acceso de administrador y la facturación?; ¿quién habla con el cliente? | Toda la diferenciación depende de datos que nadie ha contado. La apuesta de R2 es que menos de un tercio de las cuentas tiene etapas usables en el CRM | Sí. Lo rellenan Eury y Enric en una tarde; el agente puede precargar lo que ya está en la herramienta |
+| 5 | **Nivel de cliente (A, B, C)** para cada cuenta | Decide prioridad, frecuencia de revisión y de lote, y techo de horas | Fijarlo al cerrar el inventario. Una cuenta con objetivo provisional no puede ser A |
+| 6 | **Acuerdo de objetivos por cliente**: quién lo pacta y por cuáles se empieza | Sin él, todos los umbrales cuelgan de un número puesto a ojo | Esta semana, solo el **provisional congelado** para todas (mediana del CPL de los 90 días previos; apartado 2.2), que no exige hablar con nadie. Los acuerdos reales los pacta quien hable con el cliente, empezando por los que vayan a ser A |
 
-**B. Líneas rojas que conviene decidir al empezar, no al final**
+#### Paquete B · Rumbo (antes del paso 2)
+
+> **Pregunta:** ¿Qué número perseguimos primero (horas por cuenta, bajas o ingreso por cuenta) y cobramos por cuota fija o
+> por porcentaje de la inversión?
+>
+> **Recomendación:** horas por cuenta primero y bajas después; cuota fija. Mejor contestarla con la semana de medición y el
+> inventario delante.
+
+| # | Decisión o pregunta | Por qué importa | Recomendación |
+|---|---|---|---|
+| 2 | **¿Cuál de los cuatro números de la agencia persigue el módulo?** Horas por cuenta, cuentas por gestor, bajas o ingreso por cuenta (apartado 2.5) | Cambia el orden: horas → términos y Cartera primero; bajas → informe al cliente y riesgo de baja primero; ingreso → calidad del lead y niveles de servicio | Horas por cuenta primero (es lo que libera a Eury y lo que se puede medir antes), bajas después. Si la semana de medición dice que la revisión son 3 días al mes y no por semana, pasar bajas delante |
+| 7 | **¿Cómo cobra la agencia: cuota fija o porcentaje de la inversión?** | Si es porcentaje, proponer al cliente gastar menos va contra el ingreso de la agencia: conflicto de interés | Regla escrita: el agente propone reducciones igualmente. A medio plazo, cuota fija por nivel de servicio |
+| 23 | **Niveles de servicio** (base y avanzado) y precio | Sin el coste por cuenta (IA, consultas externas y horas) no hay con qué ponerle precio | Decidir con el inventario, la línea base y el coste por cuenta medido tras el paso 4 delante; no ahora |
+
+#### Paquete C · Escritura acotada ⛔ (antes del paso 4)
+
+> **Pregunta:** ¿Qué puede cambiar la herramienta en cuentas reales? Casilla por casilla: (9) negativas con un clic, (10a)
+> pausa por página caída, (10b) tope de gasto en un script de la MCC, (14) buzón de avisos en cada cuenta, (24) acceso de
+> TrueClicks.
+>
+> **Recomendación:** sí a las cinco, cada una con el límite de su fila. Todo lo demás sigue en solo lectura.
+
+Las cinco son efectos hacia fuera en cuentas reales. La v2 solo marcaba dos como línea roja y presentaba la pausa de
+emergencia como «un solo caso» cuando en la misma celda añadía otro (rev. R4).
 
 | # | Decisión | Por qué importa | Recomendación |
 |---|---|---|---|
-| 8 ⛔ | **Capturar el identificador de clic y la etapa del lead desde ya** (ampliar la conexión con GoHighLevel y poner el script en webs y formularios) | No es retroactivo: cada mes sin capturar es un mes menos de histórico de calidad, el mismo argumento que para el almacén. Pero es dato personal: necesita autorización de cada cliente y contrato de encargo | Sí, tras una consulta legal única (decisión 20), empezando por clientes que no sean de sector sensible |
-| 9 ⛔ | **Aplicar con un clic las negativas aprobadas por Eury** (en exacta o en listas creadas por la herramienta dentro de una sola cuenta), con etiqueta y deshacer | Es el cambio más reversible que existe y el que convierte el lote de términos en ahorro grande. La v1 lo dejaba para la última fase | Sí, decidirlo al empezar el paso de términos. Todo lo demás sigue en solo lectura |
-| 10 ⛔ | **Pausa de emergencia automática y acotada** | Sin ella, un aviso de fin de semana es solo estrés | Sí, pero solo para un caso: URL final con error confirmado dos veces y gasto, con reanudación automática y aviso. El gasto desbocado se cubre con un tope en un script de la MCC (PRO-11). Avisar a los clientes de que existe |
+| 9 ⛔ | **Aplicar con un clic las negativas aprobadas por Eury** (en exacta o en listas creadas por la herramienta dentro de una sola cuenta), con etiqueta y deshacer | Es el cambio más reversible que existe y el que convierte el lote de términos en ahorro grande. La v1 lo dejaba para la última fase | Sí, al empezar el paso de términos. Nunca sin aprobación, nunca más de una cuenta por clic, nunca un término protegido |
+| 10a ⛔ | **Pausa de emergencia automática por página caída** | Sin ella, un aviso de fin de semana es solo estrés | Sí, para un único caso: URL final con error confirmado dos veces, con gasto y con nuestro rastreador sano (MED-00); con reanudación automática cuando la página vuelve, y aviso. Avisar antes a los clientes de que existe |
+| 10b ⛔ | **Tope de gasto en un script de la MCC** (PRO-11), y si acaso un script de ritmo de presupuesto | Cubre el gasto desbocado aunque nuestra herramienta esté caída. Pero es código que corre dentro de cuentas reales y **pausa campañas**: es un segundo caso de pausa automática, no un detalle del primero | Sí al tope, con el tope en euros al día escrito por cuenta, aviso al pausar y reanudación manual. El script de ritmo solo lee y avisa; si no aporta nada que no dé ya PRO-07, no se instala |
+| 14 ⛔ | **Buzón de la agencia como usuario con notificaciones en cada cuenta** (MED-14) | Es lo único que avisa de un pago rechazado o una verificación pendiente antes del corte. Pero da de alta un usuario nuevo en cuentas que muchas veces son del cliente | Sí, con el permiso del cliente donde la cuenta sea suya, y con el acceso mínimo que permita recibir avisos |
+| 24 ⛔ | **TrueClicks** como vara de medir y parche temporal | Es dar los datos de los clientes a un tercero, que pasa a ser subencargado, y es un servicio externo nuevo | Sí, si los contratos permiten dar acceso a un tercero y la inversión total cabe en su tramo gratuito. Cuatro semanas en paralelo al cerrar el paso 5, con tabla de resultados (apartado 10.4); después se retira o se justifica |
+
+#### Paquete D · Datos de clientes ⛔ (la consulta legal, cuanto antes; el resto, después de ella)
+
+> **Pregunta:** ¿Encargo la consulta legal única y, cuando conteste, empezamos a capturar el identificador de clic y a pedir
+> a los clientes que marquen sus leads?
+>
+> **Recomendación:** sí. Capturar el identificador es lo único del plan que no se puede recuperar después: cada mes sin
+> capturar es un mes menos de histórico de calidad.
+
+| # | Decisión | Por qué importa | Recomendación |
+|---|---|---|---|
+| 20 | **Una consulta de asesoría** que cubra: contrato de encargo con cada cliente y subencargados, cláusula de IA, uso cruzado de datos entre clientes, modo sector sensible, supresión de leads ya subidos, y publicidad sanitaria por comunidad autónoma | Todo el resto del paquete depende de ella | Hacerla una vez y primero. Es contratar un servicio: la encargas tú |
+| 8 ⛔ | **Capturar el identificador de clic y la etapa del lead** (ampliar la conexión con GoHighLevel y poner el script en webs y formularios) | No es retroactivo. Pero es dato personal: necesita autorización de cada cliente y contrato de encargo. Y tiene trabajo de campo que la v2 no nombraba: **alguien tiene que instalar el script en las 25 webs y en los embudos de GoHighLevel**, donde vive buena parte de las landings | Sí, tras la consulta, empezando por clientes que no sean de sector sensible. Lo instala el equipo de web con un encargo por cliente, y se comprueba con MED-15 (el identificador llega al CRM) antes de darlo por hecho |
 | 11 ⛔ | **Pedir al cliente que marque sus leads** (lista semanal «¿cuáles eran buenos?», borrador que envía una persona) | Sin ese dato, la calidad del lead es teoría en la mayoría de las cuentas | Sí, con 3-5 clientes A para empezar. Una versión con botones automáticos, más adelante y con diseño propio |
 | 12 ⛔ | **Subir leads cualificados y ventas a Google** (Data Manager API) | Es la palanca más potente en leads según las fuentes, y cambia lo que aprende el algoritmo | Sí, pero tarde y cliente a cliente: como conversión secundaria unas semanas, nunca por defecto en sector sensible, y después de la consulta legal |
 | 13 ⛔ | **Sanear la medición** de las cuentas en estado «dudosa» | Cambia lo que aprende la puja y hace «caer» las conversiones que ve el cliente | 2-3 cuentas por semana, por nivel de cliente, con series en paralelo y aviso previo al cliente |
-| 14 | **Buzón de la agencia como usuario con notificaciones en cada cuenta** (MED-14) | Es lo único que avisa de un pago rechazado o una verificación pendiente antes del corte | Sí |
-| 15 | **Prueba activa con envío real de un lead de prueba** | Crea un contacto en el CRM del cliente | Solo en clientes que lo acepten; en el resto, la prueba sin envío |
+| 15 ⛔ | **Prueba activa con envío real de un lead de prueba** | Crea un contacto en el CRM del cliente: es un efecto hacia fuera | Solo en clientes que lo acepten; en el resto, la prueba sin envío |
+| 21 | **Lista de clientes en modo sector sensible** | Límite duro en el código | Marcarlos en el inventario; ante la duda, sensible |
+| 22 | **Benchmark entre clientes:** ¿solo interno o también en informes? | Confidencialidad y competidores directos | Solo interno, agregado y con cláusula |
 
-**C. Personas**
+#### Paquete E · Personas (antes de encender avisos)
+
+> **Pregunta:** ¿Quién hace de sénior, quién cubre a Eury, qué deja de hacer Eury, y lo hablamos con él antes de diseñarlo?
+>
+> **Recomendación:** tú de sénior a corto plazo, sabiendo lo que cuesta de verdad; nombrar suplente; retirar el ritual
+> L-X-V por escrito cuando Cartera lleve dos semanas; y sí, hablarlo con Eury antes.
 
 | # | Pregunta | Por qué importa | Recomendación |
 |---|---|---|---|
 | 16 | **¿Qué deja de hacer Eury y a qué dedica el tiempo liberado?** ¿Se retira por escrito la revisión L-X-V? | Si el ritual viejo no se retira, el agente es trabajo añadido | Retirarlo con fecha cuando la pantalla Cartera lleve dos semanas funcionando |
-| 17 | **¿Quién hace de sénior?** (valida umbrales, casos de oro y la muestra ciega) | Si Eury es el único que sabe de Ads, el agente aprendería de quien aún está aprendiendo | Enric a corto plazo, 30 minutos a la semana. Valorar unas horas al mes de un consultor externo. Si no hay nadie, asumir que el agente es el sénior de hecho y no relajar ningún control del apartado 7.6 |
+| 17 | **¿Quién hace de sénior?** (valida umbrales, casos de oro y la muestra ciega) | Si Eury es el único que sabe de Ads, el agente aprendería de quien aún está aprendiendo. Y cuesta más de lo que decía la v2 (rev. R4): sumando modo sombra, desacuerdos de la muestra ciega, aprobaciones R3, resumen mensual de umbrales, retrospectiva y acuerdos de objetivos, son **3-4 horas a la semana los dos primeros meses y 1,5-2 después** [estimación], no 30 minutos | Enric a corto plazo, con esas horas reservadas. Valorar unas horas al mes de un consultor externo. Si no hay nadie, asumir que el agente es el sénior de hecho y no relajar ningún control del apartado 7.6 |
 | 18 | **¿Quién cubre a Eury** en vacaciones, bajas y fines de semana? ¿Quién habla con el cliente de Ads? | Un solo gestor es el mayor riesgo operativo del servicio | Nombrar suplente antes de encender las interrupciones |
 | 19 | **¿Queremos que Eury aprenda a diagnosticar o aceptamos depender de la herramienta?** | Si el agente diagnostica siempre, nadie aprende | Que aprenda: tres capas de explicación, «primero tú» voluntario y una revisión al mes sin diagnóstico previo. Hablarlo con él antes de diseñarlo |
+| 28 | **Plazos internos** (interrupción vista en 1 hora laboral, hallazgo decidido en 2 días) | Con un solo gestor, los fija quien manda | Valores de partida; ajustarlos tras el modo sombra |
 
-**D. Legal y contratos**
-
-| # | Decisión | Por qué importa | Recomendación |
-|---|---|---|---|
-| 20 | **Una consulta de asesoría** que cubra: contrato de encargo con cada cliente y subencargados, cláusula de IA, uso cruzado de datos entre clientes, modo sector sensible, supresión de leads ya subidos, y publicidad sanitaria por comunidad autónoma | Varias decisiones de arriba dependen de ella | Hacerla una vez, antes de la decisión 8 |
-| 21 | **Lista de clientes en modo sector sensible** | Límite duro en el código | Marcarlos en el inventario; ante la duda, sensible |
-| 22 | **Benchmark entre clientes:** ¿solo interno o también en informes? | Confidencialidad y competidores directos | Solo interno, agregado y con cláusula |
-
-**E. Más adelante o menores**
+#### Aparcadas (no piden respuesta ahora; se miran en la revisión trimestral)
 
 | # | Decisión | Recomendación |
 |---|---|---|
-| 23 | **Niveles de servicio** (base y avanzado) y precio | Decidir con el inventario y la línea base delante, no ahora |
-| 24 | **TrueClicks** como vara de medir y parche temporal, más un script de ritmo de presupuesto en la MCC | Sí, si los contratos permiten dar acceso a un tercero y la inversión total cabe en su tramo gratuito |
 | 25 | **Informe de subastas programado** | Probarlo en 3 cuentas con volumen; no merece un despliegue general |
 | 26 | **Llamadas: grabación y clasificación** | Aparcado. Antes, medir duración y llamadas perdidas |
 | 27 | **Comercio electrónico** (las pocas cuentas que hay) | Fuera del primer alcance: Shopping y feeds no se han investigado a fondo |
-| 28 | **Plazos internos** (interrupción vista en 1 hora laboral, hallazgo decidido en 2 días) | Valores de partida; ajustarlos tras el modo sombra |
 
 ### 13.2 Orden de construcción [opinión, para debatir]
 
@@ -1973,21 +2352,55 @@ decisiones y hábitos, y arrancan **en el paso 0, en paralelo a todo**. En desar
 semana (R2), con los hechos duros y la auditoría de R1 inmediatamente detrás. El diagnóstico fino, que era la fase 2 de la
 v1, baja; el bayesiano entre cuentas y el benchmark van al final.
 
-| Paso | Qué | Capacidades | Qué nota el equipo | ¿Defendible ante Google? |
-|---|---|---|---|---|
-| **0** | **Sin código.** Prueba de acceso; inventario de cobertura; semana real de Eury y bajas del último año; nivel de cliente; acuerdos de objetivos (provisionales donde haga falta); consulta legal; decisiones 8 a 10 | NEG-01 (en papel), AGE-01 (línea base) | Nada todavía. Decide el resto del orden | Sí: es el objetivo de negocio |
-| **0b** | **Captura del identificador de clic** y de la etapa del lead, en los clientes que lo autoricen. Empieza la lista semanal de leads al cliente | MED-05, MED-15, NEG-05 | Nada visible; cada día cuenta | **Lo más defendible** |
-| **1** | **Acceso, almacén y descarga del histórico** (métricas de hasta 37 meses; historial de cambios y fotos diarias desde ya) | Sincronización, PRO-08 | Nada todavía | Soporte |
-| **2** | **Pantalla Cartera y las cuatro interrupciones** (campaña parada o desbocada, rechazo, landing caída, pago), con ritmo de gasto, CPL frente a objetivo, estado de la medición y último cambio con su autor. Las ocho respuestas, activas | PRO-01, PRO-05, PRO-06, PRO-07, PRO-13, MED-01 (estados), MED-12, MED-14, INF-01 | **Deja de entrar en las 25 cuentas a ver si pasa algo** | Sí (cruza web y contrato) |
-| **3** | **Auditoría de higiene de las 25 cuentas**, una vez, y vigilancia de que no vuelva. Sale por tandas dentro de la revisión de cuenta, no como 25 listas de avisos | EST-07, EST-01, EST-02, EST-04, EST-06, TER-04, TER-11, GOO-01, GOO-06, LAN-06, LLA-02 | El mayor recorte de gasto inútil del primer mes | A medias: Google no audita contra el negocio |
-| **4** | **Lote de términos, versión delgada**: reglas, ficha, n-gramas, zona, embeddings y juez pequeño; salida lista para pegar y cierre por historial. Si se aprueba la decisión 9, aplicación con un clic | TER-01, TER-02, TER-03, TER-06, TER-12 | **Primer ahorro grande de horas** | No: es lo que antes caduca. Por eso, delgada |
-| **5** | **Lo que no se ve desde las métricas de campaña**: entrega del lead, llamadas, latido y prueba activa, cierres, lanzamientos, otra cuenta anunciando. Donde el inventario diga que hay CRM o GA4 | MED-02, MED-03, MED-13, MED-16 a 18, LLA-01, LLA-03, NEG-03, EST-10 a 12 | Se dejan de escapar los fallos más caros | Sí |
-| **6** | **Diagnóstico con el porqué, en modo sombra** al menos dos semanas: se guarda lo que habría avisado, Enric y Eury lo puntúan, se pasan los 26 casos y se calibra el tope con 90 días de histórico. Después se enciende | DIA-01, 03, 05, 06, 07; PRO-02, 03, 09, 12; PUJ-01, 03; CUO-01, 03, 05; GOO-04 | Responde a la petición del brief sin quemar la confianza | Sí |
-| **7** | **Guion de revisión, expediente de cuenta e informe al cliente** con objetivo frente a resultado; cierre de mes; previsión sencilla | INF-02, 03, 07, 08; PLAN-01; AGE-02, AGE-04; ESC-05 | Recorta los días de revisión profunda; es lo que el cliente ve | Sí |
-| **8** | **Saneamiento de la medición** por tandas (decisión 13) | MED-04, 07, 09, 11 | — | Sí |
-| **9** | **Calidad del lead**, en las cuentas donde el paso 0b haya dado datos. Subida a Google (decisión 12) | LEAD-01 a 06, NEG-04, NEG-06, MED-10 | El salto de valor, donde haya datos | **Lo más defendible** |
-| **10** | **Planificación, landing, anuncios y propuestas R2** | PLAN-02 a 05; PUJ-02, 04 a 08, 10, 11; CUO-02, 06; LAN; ANU; ESC; NEG-02; AGE-01, AGE-03 | Estrategia y venta adicional con evidencia | Sí (previsión y negocio); no (anuncios) |
-| **Final** | **Estadística entre cuentas y aprendizaje**: bayesiano jerárquico con sector, benchmark, descomposición fina, evaluación con control | APR-02, 04, 05; DIA-02 completa; PUJ-05 | Solo si el inventario dice que hay sectores con 3 o más cuentas | Sí, si hay datos |
+**Qué cambia en la v3** (rev. R4). La auditoría cruzó el catálogo con los pasos y encontró piezas sin paso de las que
+dependían otras que sí lo tenían. Están recolocadas y marcadas con «←»: MED-00, GOO-07 y MED-06 al paso 1; PRO-11 al 2 (si
+se aprueba la decisión 10b); GOO-03, NEG-07 y APR-01 al 3; TER-05 al 4; APR-06 al 5; DIA-04 al 6. Además, cada paso lleva
+ahora su **esfuerzo estimado** y hay un **punto de parada** medido.
+
+Cómo leer la columna de esfuerzo [estimación propia, sin medir]: una **jornada** es un día de desarrollo con sus pruebas,
+el revisor de código, el Mapa Visual y el despliegue. Las horas son de personas. No incluye esperas (decisiones, permisos de
+clientes, semanas en sombra), que son las que de verdad marcan el calendario.
+
+| Paso | Qué | Capacidades | Qué nota el equipo | ¿Defendible ante Google? | Esfuerzo estimado |
+|---|---|---|---|---|---|
+| **0** | **Sin código** (paquete A). Prueba de acceso; inventario de cobertura; semana real de Eury y bajas del último año; nivel de cliente; objetivo provisional congelado. En paralelo, la consulta legal (paquete D) | NEG-01 (en papel), AGE-01 (línea base) | Nada todavía. Decide el resto del orden | Sí: es el objetivo de negocio | 0 jornadas. Enric 6-8 h; Eury 4-6 h más apuntar su semana |
+| **0b** | **Captura del identificador de clic** y de la etapa del lead, en los clientes que lo autoricen (paquete D). Empieza la lista semanal de leads al cliente | MED-05, MED-15, NEG-05 | Nada visible; cada día cuenta | **Lo más defendible** | 1-2 jornadas. Equipo de web: de media a una hora por web o embudo. Enric: las autorizaciones |
+| **1** | **Acceso, almacén y descarga del histórico** (métricas de hasta 37 meses; historial de cambios y fotos diarias desde ya). **Salud de nuestras fuentes** desde el primer día. Empieza a recogerse la curva de madurez | Sincronización, PRO-08, ← **MED-00**, ← GOO-07 (con pruebas de contrato), ← MED-06 (solo recogida) | Nada todavía, salvo que la herramienta ya sabe decir «no tengo datos» | Soporte | 4 jornadas. Enric 1 h |
+| **2** | **Pantalla Cartera y las cuatro interrupciones** (campaña parada o desbocada, rechazo, landing caída, pago), con ritmo de gasto, CPL frente a objetivo o frente a su línea base, estado de la medición y último cambio con su autor. Las ocho respuestas, activas. Tope de atención propio del módulo. **Hasta el paso 5, la columna de medición distingue «rota» de «sin conciliar todavía»; nunca «dudosa» por defecto** | PRO-01, PRO-05, PRO-06, PRO-07, PRO-12, PRO-13, MED-01 (estados), MED-12, MED-14 (si se aprueba la decisión 14), INF-01, ← PRO-11 (si se aprueba la 10b) | **Deja de entrar en las 25 cuentas a ver si pasa algo** | Sí (cruza web y contrato) | 3-4 jornadas. Enric 2 h; Eury 2 h |
+| **3** | **Auditoría de higiene de las 25 cuentas**, una vez, y vigilancia de que no vuelva. Sale por tandas dentro de la revisión de cuenta, no como 25 listas de avisos. Incluye las migraciones a AI Max, que ya están ocurriendo, y la frescura de la ficha que usan TER-04 y EST-02. Sus propuestas R2 llevan ya predicción previa | EST-07, EST-01, EST-02, EST-04, EST-06, TER-04, TER-11, GOO-01, GOO-06, LAN-06, LLA-02, INF-05, ← GOO-03, ← NEG-07, ← APR-01 | El mayor recorte de gasto inútil del primer mes | A medias: Google no audita contra el negocio | 3 jornadas. Media hora por cuenta de Eury o Enric para leer su auditoría (unas 12 h repartidas) |
+| **4** | **Lote de términos, versión delgada**: reglas, ficha, n-gramas, zona, embeddings y juez pequeño; regla estadística del apartado 5.3, simulada antes con el histórico de cada cuenta; salida lista para pegar y cierre por historial. El término protegido va aquí: sin él, una negativa puede bloquear lo que convierte. Si se aprueba la decisión 9, aplicación con un clic | TER-01, TER-02, TER-03, TER-06, TER-12, ← TER-05 | **Primer ahorro grande de horas** | No: es lo que antes caduca. Por eso, delgada | 3-4 jornadas |
+| **Parada** | **Punto de parada.** Se mide a Eury otra semana y se compara con la del paso 0 | — | — | — | Eury, apuntar una semana |
+| **5** | **Lo que no se ve desde las métricas de campaña**: entrega del lead, llamadas, latido y prueba activa, cierres, lanzamientos, otra cuenta anunciando. Donde el inventario diga que hay CRM o GA4. Se empiezan a reunir los casos de oro. No necesita nada del SEO: usa el rastreador del núcleo (apartado 8.4). Al cerrarlo, las cuatro semanas de comparación con TrueClicks (decisión 24) | MED-02, MED-03, MED-08, MED-13, MED-16 a 18, LLA-01, LLA-03, NEG-03, EST-10 a 12, ← APR-06 | Se dejan de escapar los fallos más caros | Sí | 3-4 jornadas |
+| **6** | **Diagnóstico con el porqué, en modo sombra** al menos dos semanas: se guarda lo que habría avisado, Enric y Eury lo puntúan, se pasan los 27 casos con el criterio de aprobado del apartado 4.8 y se calibra el tope con 90 días de histórico. Después se enciende. Si se quiere la rama «cambió la web», antes hay que publicar el historial de la web desde el SEO, en rama propia | DIA-01, 03, 05, 06, 07, ← DIA-04; PRO-02, 03, 09; PUJ-01, 03; CUO-01, 03, 05, 07; GOO-04; APR-07, APR-08; LAN-04 (si el SEO publica el historial) | Responde a la petición del brief sin quemar la confianza | Sí | 4-5 jornadas. Dos semanas de sombra: 15 min al día de Enric y de Eury |
+| **7** | **Guion de revisión, expediente de cuenta e informe al cliente** con objetivo frente a resultado; cierre de mes; previsión sencilla | INF-02, 03, 04, 07, 08; PLAN-01; AGE-02, AGE-04; ESC-05 | Recorta los días de revisión profunda; es lo que el cliente ve | Sí | 3-4 jornadas |
+| **8** | **Saneamiento de la medición** por tandas (decisión 13) | MED-04, 07, 09, 11 | — | Sí | 1-2 jornadas. Lo largo es humano: 1-2 h por cuenta, 2-3 cuentas por semana, 8-12 semanas |
+| **9** | **Calidad del lead**, en las cuentas donde el paso 0b haya dado datos. Subida a Google (decisión 12) | LEAD-01 a 06, LEAD-08, NEG-04, NEG-06, MED-10 | El salto de valor, donde haya datos | **Lo más defendible** | 3-4 jornadas |
+| **10** | **Planificación, landing, anuncios y propuestas R2** | PLAN-02 a 05; PUJ-02, 04, 06 a 11; CUO-02, 06; LAN-01, 02, 03, 05, 07; ANU-01, 02, 04 a 07; ESC-01 a 06; NEG-02; AGE-01, AGE-03; TER-07, 09, 10; PRO-04, PRO-10; EST-03, 05, 09; GOO-02, 05; INF-06 | Estrategia y venta adicional con evidencia | Sí (previsión y negocio); no (anuncios) | 5-6 jornadas |
+| **Final** | **Estadística entre cuentas y aprendizaje**: bayesiano jerárquico con sector, benchmark, descomposición fina, evaluación con control | APR-02, 03, 04, 05; DIA-02 completa; PUJ-05 | Solo si el inventario dice que hay sectores con 3 o más cuentas | Sí, si hay datos | 3-4 jornadas |
+
+Sin paso a propósito: las **aparcadas** (TER-08, ANU-03, EST-08, ESC-08, LEAD-07, GOO-08 fuera de AI Max, y CUO-04, que
+depende de la decisión 25). ESC-07 quedó absorbida por PLAN-04 y PLAN-05, y AGE-05 no es una capacidad sino una decisión.
+Con esto, las 155 filas del catálogo tienen paso o están aparcadas (comprobado con un cruce automático del catálogo contra
+esta tabla).
+
+**Cuánto cuesta en total** [estimación propia, sin medir] (rev. R4; la v2 planteaba la pregunta en 2.5 y no la contestaba):
+
+| Concepto | Estimación | De qué depende |
+|---|---|---|
+| Desarrollo | **Entre 36 y 46 jornadas** en los 12 pasos con código; hasta el punto de parada (pasos 0b a 4), 14-17 | Que el acceso a la API funcione como dice la documentación y que las piezas del núcleo sirvan como están (apartado 8.4) |
+| Calendario | Tres o cuatro meses | Lo marcan tus decisiones, los permisos de los clientes, las dos semanas de sombra y el saneamiento, no el desarrollo |
+| Tu tiempo | 3-4 h a la semana los dos primeros meses; 1,5-2 h después | Sumando sombra, muestra ciega, aprobaciones R3, resumen mensual de umbrales, retrospectiva y acuerdos de objetivos |
+| IA, cada mes | 10-20 $, con tope de 25 $ para Ads; más 10-15 $ una sola vez por la auditoría de entrada | Supuestos del apartado 6.1; el presupuesto de toda la agencia es de unos 80 $ al mes |
+| DataForSEO, cada mes | Sin cifra: el precio por consulta no está verificado | Acotado por evento, caché y tope de consultas (apartado 6.1) |
+| API de Google | 0 $ | [La gratuidad no consta de forma expresa en la documentación] |
+| Mantenimiento | Alrededor de una jornada al mes, más 2-3 al año por la subida de versión de la API | Las pruebas de contrato (GOO-07) dicen qué se rompe antes de subir |
+| Coste por cuenta | Sin cifra todavía | Se calcula tras el paso 4 con el gasto real de IA, las consultas y las horas medidas. Lo necesita la decisión 23 (niveles de servicio) |
+
+**Punto de parada tras el paso 4.** Si, comparada con la semana medida en el paso 0, la suma de horas de Eury en «entrar en
+las cuentas a mirar» y «términos» **no baja al menos un 25 %** [valor de partida], no se construyen los pasos 6 a 10 hasta
+entender por qué. Siguen, porque no dependen de eso: la captura del identificador (0b), que no es retroactiva, y los hechos
+duros del paso 5. Es la respuesta a la pregunta del apartado 2.5: un módulo de este tamaño para proteger unos 5.000 € al
+mes se justifica solo si mueve un número, y este es el primero que se puede medir.
 
 **Calendario y Navidad.** Estamos a finales de noviembre. Si los pasos 0 y 1 ocupan diciembre, no se envía ningún aviso en
 plena campaña de Navidad. La línea base sale del histórico descargado, con Black Friday, Navidad y Reyes marcados como
@@ -1997,8 +2410,8 @@ periodos especiales; el modo sombra del diagnóstico no empieza antes de mediado
 
 1. **Cartera**: una fila por cuenta, cinco columnas, colores.
 2. **Como máximo 2 interrupciones al día**, de los cuatro tipos del paso 2.
-3. **Un lote de términos al día para 5 cuentas** (las 25 en la semana), con salida para pegar. Si el paso 4 aún no está,
-   la primera semana es solo Cartera.
+3. **Un lote de términos al día para un máximo de 5 cuentas** (semanal en A y B, quincenal en C), con salida para pegar. Si
+   el paso 4 aún no está, la primera semana es solo Cartera.
 4. Las ocho respuestas, activas desde el primer día.
 5. Diagnóstico y anomalías, **en sombra**: no se envían.
 6. Viernes, 30 minutos con Eury y Enric: qué sobró, qué faltó, qué no se entendió.
@@ -2046,6 +2459,17 @@ ratio Lin-Rodnitzky, experimentos entre cuentas, ajustes de estacionalidad, tran
 - El reparto de valor por niveles que da el consultor de cuentas (35 % en «que nada esté roto», 25 % en higiene, 15 % en
   términos…) es criterio de oficio: orienta el orden, no es una medición.
 - Cómo cobra la agencia (cuota fija o porcentaje).
+- Si los «3 días» de revisión del brief son por semana o al mes (apartado 2.5).
+- Quién da el número de seguimiento de llamadas en cada cuenta y cuántas pagan con tarjeta.
+
+**De coste (estimaciones propias de la v3, sin medir)**
+- Las jornadas de desarrollo por paso y las horas de Enric (apartado 13.2).
+- El coste de IA (apartado 6.1): los volúmenes y los tamaños de las llamadas son supuestos; los precios son los de la
+  tabla de la pasarela, no comprobados contra la lista vigente del proveedor; el precio de Fable no está en esa tabla; no
+  se ha mirado cuánto gastan hoy los demás módulos de los 80 $ al mes.
+- El precio por consulta de DataForSEO.
+- Lo que «ya existe» en el núcleo (apartado 8.4) está comprobado leyendo el código, no usándolo con datos de Ads: puede
+  que alguna pieza (hallazgos, intervenciones) necesite ampliarse.
 
 **Legal (validar con asesoría; nada de esto es asesoría)**
 - Roles de responsable y encargado, contrato de encargo y subencargados; base legal para subir datos a Google; supresión.
@@ -2062,8 +2486,14 @@ ratio Lin-Rodnitzky, experimentos entre cuentas, ajustes de estacionalidad, tran
 - Cifras de AI Max de fuentes secundarias (Monks, Mantica, Brainlabs). Volumen de Microsoft Ads en España.
 
 **De método (propuestas propias, a calibrar con vuestros datos antes de fiarse)**
-- Pesos de la confianza de causa; fórmula de prioridad y pesos por nivel de cliente; umbrales bayesianos (10 % y 30 %); la
-  fuerza m; el «punto de partida semántico»; la tasa de los términos nuevos frente a la del sector.
+- Pesos de la confianza de causa; fórmula de prioridad y pesos por nivel de cliente; la regla de términos del apartado 5.3
+  (margen de 1,5 ×, umbral de 0,9, suelo del 80 % de la tasa objetivo, m ≥ 50 y los 200 términos para estimar el punto de
+  partida); el «punto de partida semántico»; la tasa de los términos nuevos frente a la del sector.
+- **La simulación de 5.3 es un modelo**: clics constantes, tasa fija, sin rachas y un solo par de CPC y CPL. Dice que la
+  regla cumple el tope del 10 % en ese modelo, no en vuestras cuentas; hay que repetirla con el histórico real.
+- El valor de la dispersión k de la binomial negativa (k = 2 y k = 5 son ilustrativos) y el mínimo de conversiones para
+  estimarlo.
+- El criterio de aprobado del examen (25 de 27 detectados, 21 bien explicados) y el 25 % del punto de parada.
 - Todos los topes del presupuesto de atención (2 interrupciones, 5 + 3 en el parte) y los plazos internos.
 - La fórmula del nivel de calidad de Geddes (pesos 3,5 / 1,75 / 2 / 1) es ingeniería inversa de 2017.
 - La estacionalidad por sector en España y que los CPC españoles sean menores que los de EE. UU. son hipótesis sin datos.
@@ -2173,12 +2603,16 @@ El resto de fuentes está en el apartado final de cada informe de `docs/ads/inve
 
 ## 15. Registro de la revisión
 
-Tres revisores recibieron la v1 con el encargo de tirarla abajo. Aquí está cada crítica con su decisión y el motivo en una
-línea. Los números son los del propio revisor (sus archivos están en `docs/ads/investigacion/revision/`); cuando un revisor
+Tres revisores recibieron la v1 con el encargo de tirarla abajo, y una auditoría independiente con Opus (R4) recibió la v2
+con el mismo encargo. Aquí está cada crítica con su decisión y el motivo en una línea. Los números son los del propio revisor (sus archivos están en `docs/ads/investigacion/revision/`); cuando un revisor
 repite la misma crítica en dos sitios, va en una sola fila. Las referencias «v1 §» usan la numeración de la v1; «→» indica
 dónde queda en esta versión.
 
-**Balance.** De 174 críticas: 149 aceptadas, 23 aceptadas en parte, 1 rechazada y 1 que queda pendiente de una prueba. Que
+**Balance de R4 (sobre la v2).** 2 hallazgos graves, 10 importantes y 8 menores, más 7 afirmaciones con un matiz perdido,
+6 carencias y la propuesta de paquetes: 34 filas, 32 aceptadas y 2 en parte (apartado 15.5). Tres filas de R1 y R2 que la
+v2 daba por resueltas llevan ahora la nota «corregido en la v3».
+
+**Balance de R1 a R3 (sobre la v1).** De 174 críticas: 149 aceptadas, 23 aceptadas en parte, 1 rechazada y 1 que queda pendiente de una prueba. Que
 haya tan pocos rechazos no es cortesía: la mayoría de las críticas señalaban errores comprobables (un cálculo, una
 contradicción interna, un caso real que el diseño no veía) o huecos que la v1 ni planteaba. Donde no estoy de acuerdo, o
 solo lo estoy a medias, el motivo está escrito.
@@ -2210,8 +2644,8 @@ solo lo estoy a medias, el motivo está escrito.
 | R1-2.1 v1 §3.3 (2 y 3) | Cuota «< 10 %» y universo elegible estirado por amplia y AI Max | Aceptada | Límites añadidos → 4.3 |
 | R1-G4 · 2.1 v1 §3.2 | El paso «¿es real?» podía silenciar un pago rechazado en festivo | Aceptada | Hechos duros siempre y primero → 4.2 A |
 | R1-2.1 paso 3 | Siempre hay cambios en 14 días: hace falta filtro de peso | Aceptada | 20-30 % del gasto afectado y fecha ±2 días → 4.2 |
-| R1-G5 · 2.1 TER-02, TER-07, v1 §4.2 | Regla evaluada cada semana hasta que salte | Aceptada | Mismo error que criticaba en los tests; calculado: 46-79 % de falsos en un año → 5.2 |
-| R1-2.1 v1 §4.3 | Punto de partida optimista; se vendía gastar más como ventaja | Aceptada | Recalculado con la tasa de términos nuevos y pérdida esperada → 5.3 |
+| R1-G5 · 2.1 TER-02, TER-07, v1 §4.2 | Regla evaluada cada semana hasta que salte | Aceptada | Mismo error que criticaba en los tests; calculado: 46-79 % de falsos en un año (recalculado en la v3: 44-81 %) → 5.2 |
+| R1-2.1 v1 §4.3 | Punto de partida optimista; se vendía gastar más como ventaja | Aceptada | Recalculado con la tasa de términos nuevos y pérdida esperada → 5.3. **Corregido en la v3:** la v2 mencionaba la pérdida esperada y seguía usando «P < 10 %» mirado cada semana; ver R4-G1 |
 | R1-2.1 TER-03 | Lista de sector con riesgo R1 es un cambio masivo | Aceptada | Y con la versión más estricta de R2 → TER-03 |
 | R1-2.1 TER-05 | Añadir en exacta todo término con 2 conversiones trocea datos | En parte | «Término protegido» por defecto; añado un motivo propio para añadirlo (no depender del emparejamiento amplio) → TER-05 |
 | R1-G6 · 2.1 PUJ-02 | «<15 conversiones = riesgo» sería alerta permanente | Aceptada | A nivel de cuenta y cartera; contexto, no alerta → PUJ-02 |
@@ -2270,7 +2704,7 @@ solo lo estoy a medias, el motivo está escrito.
 | R1-5.3 «90 %» | «Exactamente el 90 % del trabajo manual» | Aceptada | Comprobado en 09b: es el 90 % de los *cambios manuales*; la frase venía del propio informe en bruto → 0 |
 | R1-5.3 Poisson | «Ninguna herramienta lo usa» | Aceptada | «Ninguna de las cuatro analizadas lo documenta» → 5.1 |
 | R1-5.3 madurez | No es problema central en local | En parte | Cierto para formulario y llamada; sigue importando en el lead cualificado. Se mide por cuenta → 5.4 |
-| R1-5.3 «120 capacidades» | Es un pasivo, no un activo | Aceptada | Apagadas por defecto, aparcadas y 12-15 tipos visibles → 3, 7.1 |
+| R1-5.3 «120 capacidades» | Es un pasivo, no un activo | Aceptada | Apagadas por defecto, aparcadas y 15 tipos visibles en lista cerrada → 3, 7.1 |
 | R1-5.3 Portent | Correlación de proveedor | Aceptada | No se usa para estimar euros → LAN-03 |
 | R1-5.3 ficha | Varias capacidades heredan una ficha sin mantener | Aceptada | Fecha de última confirmación → NEG-07 |
 
@@ -2295,7 +2729,7 @@ solo lo estoy a medias, el motivo está escrito.
 | R2-P1 | Cierre automático por historial de cambios | Aceptada | Depende de la cobertura de Editor, por comprobar → 7.2 |
 | R2-P2 | Salida lista para aplicar | Aceptada | 7.2 |
 | R2-P3 | Adelantar la decisión de aplicar negativas | Aceptada | Decisión 9, con recomendación de sí |
-| R2-P4 | Pausa de emergencia automática | En parte | Solo para landing caída (es un hecho); el gasto desbocado, por tope en script de la MCC → decisión 10 |
+| R2-P4 | Pausa de emergencia automática | En parte | Solo para landing caída (es un hecho); el gasto desbocado, por tope en script de la MCC. **Corregido en la v3:** ese tope también pausa campañas, así que son dos decisiones, cada una con su línea roja → decisiones 10a y 10b; ver R4-I5 |
 | R2-2.1 | Tabla de fallos típicos de adopción | Aceptada | Recogida en 12.1 |
 | R2-2.2 (topes) · 6.19 | Presupuesto de atención por persona y global | Aceptada | Como valores de partida, a calibrar en sombra → 7.3 |
 | R2-2.2 (agrupación, silencios, recordatorios) | Reglas que faltaban | Aceptada | 7.3 |
@@ -2328,7 +2762,7 @@ solo lo estoy a medias, el motivo está escrito.
 | R2-6.8 | Falsas alarmas repetidas en el tiempo | Aceptada | 5.1 |
 | R2-6.9 | Duda de que el historial no cubra Google Ads Editor | Pendiente de prueba | El informe 04 y el revisor se contradicen y ninguno lo ha probado → 9.2, 13.3 |
 | R2-6.10 | El «90 %» es de cambios, no de trabajo | Aceptada | Coincide con R1 y R3 |
-| R2-6.11 | El ejemplo bayesiano contradice el argumento de venta | Aceptada | El beneficio es menos falsos positivos, no rapidez → 5.3 |
+| R2-6.11 | El ejemplo bayesiano contradice el argumento de venta | Aceptada | El beneficio no es rapidez → 5.3. **Corregido en la v3:** tampoco es «menos falsos positivos» (da los mismos que k = 3); es criterio para los términos que ya convirtieron; ver R4-G1 |
 | R2-6.12 | Referencia de sector con 25 cuentas | Aceptada | Solo con 3 o más cuentas; fuera del resumen → 5.3, APR-04 |
 | R2-6.13 | Experimentos entre cuentas | Aceptada | Coincide con R1 y R3 |
 | R2-6.14 | «Cada acción se evalúa» es falso para R1 | Aceptada | R2 y R3; las R1 en conjunto → APR-01, 10.1 |
@@ -2386,3 +2820,69 @@ solo lo estoy a medias, el motivo está escrito.
 | R3-7.15 | El acceso descansa en hechos no probados | Aceptada | Coincide con R1 y R2 |
 | R3-7.16 | Servicios locales de Google sin verificar | Aceptada | Coincide con R1 |
 | R3 (cierre) | Lo que está bien y no hay que tocar | Mantenido | Solo lectura primero, «el código calcula y la IA redacta», la estadística del apartado 5, «no concluyente», no reimplementar lo que ya es gratis |
+
+### 15.5 R4 · Auditoría independiente con Opus (sobre la v2)
+
+Archivo: `docs/ads/investigacion/revision/R4-auditoria-opus.md`. Su veredicto: la dirección de diseño se sostiene, el
+muestreo de hechos sale limpio (35 de 42 coinciden con su fuente, 7 con un matiz perdido, ninguna contradicha) y los fallos
+están en el razonamiento estadístico y en la integración con el proyecto. Ninguno obliga a cambiar la decisión de fondo.
+La auditoría no consultó fuentes externas: «verificado» es «coincide con el informe en bruto».
+
+**Hallazgos graves**
+
+| Hallazgo | Qué señalaba | Decisión | Motivo y dónde queda |
+|---|---|---|---|
+| R4-G1 | La regla bayesiana de términos («P < 10 %»), mirada cada semana, negativiza el 50 % de los términos que convierten justo en objetivo; el texto dice «menos falsos positivos» y a la vez «corta antes»; la pérdida esperada se menciona y no se aplica; se perdió el margen de 1,5 × del informe 05; todo cuelga de una cifra ilustrativa | Aceptada | Reproduje sus cifras (50 %, 18 %, 96 %) y rehíce la regla: margen de 1,5 ×, gasto mínimo, pérdida esperada, punto de partida con suelo y simulación obligatoria con miradas semanales. Resultado calculado: 5,7 % de términos buenos negativizados al año (tope: 10 %). Al calcular salieron dos cosas que la auditoría no decía y que están escritas: la regla nueva no da menos falsos positivos que k = 3 (da los mismos; su ventaja es juzgar a los términos que ya convirtieron), y la condición de pérdida esperada no cambia ningún resultado con estos números → 5.3, 5.2, TER-01, TER-02, 10.1, 12.1 |
+| R4-G2 | Ninguna capacidad avisa de que nuestros propios datos no están al día: con la API, el CRM o el rastreador caídos, Hoy diría «0 cosas para ti» o afirmaría «formulario roto» con confianza alta | Aceptada | Capacidad nueva MED-00 en el paso 1, apoyada en `registerHealthCheck` y `sys_error_*`, que ya existen. Los hechos duros llevan condición previa («si su fuente no está sana, no comprobado») y las reglas que dependen de una fuente atrasada se suspenden. La cabecera de Hoy deja de copiar el «1.240 controles» → 3.B, 4.2 A, 4.8 (caso 27), 7.1, 8.2, 8.4, 12.1, 13.2 |
+
+**Hallazgos importantes**
+
+| Hallazgo | Qué señalaba | Decisión | Motivo y dónde queda |
+|---|---|---|---|
+| R4-I1 | El ejemplo estrella contradice la arquitectura: una página caída se descubría a los 212 clics; «probabilidad del 1 % de que sea casualidad» es la falacia del fiscal y sale de Poisson | Aceptada | Dos ejemplos: un hecho duro que llega en la primera hora y una anomalía sin hecho duro, con la frase correcta y binomial negativa (9,5 %) → 4.7 |
+| R4-I2 | Binomial negativa «por defecto», pero todas las cifras para Enric eran de Poisson; falta la probabilidad de racha en un mes; «varias falsas alarmas por semana» son unas 14 | Aceptada | Tabla rehecha con Poisson, k = 5 y k = 2 (ilustrativos) y la columna de racha mensual. El resumen dice ahora «casi todos los meses verás tres días a cero por azar». La conclusión sale reforzada → 0, 5.1 |
+| R4-I3 | El orden de construcción deja sin paso piezas de las que dependen otras; la columna de medición saldría «dudosa» en las 25 cuentas durante semanas | Aceptada | Recolocadas las ocho que señalaba y, de paso, todas las demás: las 155 filas del catálogo tienen paso o están aparcadas (cruce automático). «Rota» frente a «sin conciliar todavía» hasta el paso 5 → 13.2, 3.B |
+| R4-I4 | El objetivo provisional (mediana del CPL de la propia cuenta) es circular | Aceptada | Congelado a la fecha del acuerdo; Cartera enseña «frente a su línea base, sin objetivo de negocio»; no puede ser nivel A; pendiente a los 90 días → 2.2, 7.1, decisiones 5 y 6 |
+| R4-I5 | Efectos hacia fuera sin marcar como línea roja (decisiones 10, 14, 15 y 24; el script puente de 9.6) | Aceptada | ⛔ en 14, 15 y 24; la 10 partida en 10a y 10b; el puente, con secreto propio, guarda y prueba de seguridad, y solo si falla la prueba de acceso → 13.1 (paquetes C y D), PRO-11, MED-14, MED-18, 9.6, 10.4 |
+| R4-I6 | No se usa lo que el núcleo ya tiene; no se menciona que el SEO está congelado en `seo-v1`; el tope de atención global toca el núcleo | Aceptada | Columna «¿Existe ya?» comprobada contra `lib/core/` (y con más piezas de las que citaba la auditoría: velocidad, resultados de búsqueda, ficha de Google, expediente). El «contrato nuevo» de la v2 no hace falta. Regla del SEO congelado y de la rama aparte, escrita. El tope global, por protocolo de decisión → 8.4, 7.3, 11 |
+| R4-I7 | No se dice cuánto cuesta construir y mantener el módulo, ni cuánta IA gasta, ni DataForSEO, ni hay pruebas de contrato de la API; el tiempo de Enric está infravalorado | En parte | Esfuerzo por paso, coste recurrente, coste de IA frente a los 80 $ al mes con tope de 25 $, topes de DataForSEO y pruebas de contrato: hecho, todo marcado como estimación. Lo que no adopto tal cual: un criterio de parada **por paso**. Pongo uno solo, tras el paso 4, porque es el primer punto donde hay algo que medir contra la línea base; uno por paso serían umbrales inventados → 0, 6.1, 13.2, GOO-07, decisión 17 |
+| R4-I8 | Los «12-15 tipos de hallazgo visibles» no están enumerados | Aceptada | Lista cerrada de 15, con canal, capacidades y paso. Respecto a la que proponía la auditoría, junto «cierre del cliente sin pausar» con «algo pausado» y añado «lanzamiento que no arranca» → 7.1 |
+| R4-I9 | La familia de llamadas descansa en un recurso sin verificar, y muchos negocios usan números de seguimiento de fuera de Google | Aceptada | La prueba de acceso lee el detalle de llamadas; el inventario pregunta quién da el número; si no hay recurso, la familia se apoya en el CRM o no existe en esa cuenta, y se dice → 3.C, decisiones 1 y 4 |
+| R4-I10 | Contradicciones internas al integrar las revisiones (cadencia del lote; «ocho decisiones» que eran nueve; «umbral de Google» de 15 conversiones; doble lectura de los «3 días»; «los tres revisores rehicieron los cálculos») | Aceptada | Semanal en A y B y quincenal en C en los dos sitios; paquetes; el 15 queda como criterio de practicantes y el oficial es «menos de 7» y «30 para evaluar»; las dos lecturas, escritas; quién rehízo qué, corregido → 7.2, 0, PUJ-02, LEAD-05, 2.5, 5 |
+
+**Hallazgos menores**
+
+| Hallazgo | Qué señalaba | Decisión | Motivo y dónde queda |
+|---|---|---|---|
+| R4-M1 | El 46 % y el 79 % de 5.2 salen 44 % y 81 % | Aceptada | Recalculado con el mismo resultado: «alrededor del 45 % y del 80 %» → 5.2 |
+| R4-M2 | El ejemplo de descomposición suma 101 % | Aceptada | Los factores dan −30,2 %; porcentajes corregidos → 4.3 |
+| R4-M3 | Contexto perdido en tres cifras (smec es retail; el 40 % es una encuesta informal de 64 personas; Fluency es de EE. UU.) | Aceptada | Matiz añadido en cada una → 1.2, 12.1, 1.4 |
+| R4-M4 | «Media hora lo confirma» es optimista | Aceptada | Media hora si no aparece ninguno de los dos problemas de alta conocidos; si aparece, días → 0, 9.1, decisión 1 |
+| R4-M5 | IA donde basta código (MED-14, INF-01, DIA-06) | Aceptada | MED-14 con reglas y Haiku solo para lo que no encaje; la cabecera de Hoy es código; DIA-06 se examina primero con Haiku → catálogo |
+| R4-M6 | La verificación al cerrar un encargo no puede consultar ClickUp tarea a tarea | Aceptada | Lee el encargo y la caché → 7.7 |
+| R4-M7 | La facturación por API solo existe en cuentas con factura mensual | Aceptada | Fila nueva; refuerza por qué hace falta el buzón → 9.2, MED-14 |
+| R4-M8 | «TrueClicks desde 208 $» puede ser un error al citar el PDF | En parte | No se puede comprobar (el PDF no está en el repositorio): la frase se mantiene con el aviso de que 208 $ es el precio de Optmyzr en el informe 02 → 3.S |
+
+**Afirmaciones con un matiz perdido (muestreo de 42)**
+
+| Hallazgo | Qué señalaba | Decisión | Motivo y dónde queda |
+|---|---|---|---|
+| R4-1.1 | El «90 % de los cambios manuales» es de segmentación (palabras y negativas); la tarea más repetida es el presupuesto; pausas y CPL no entran | Aceptada | Frase rehecha → 0 |
+| R4-1.5 | El estudio de AI Max de smec es de retail | Aceptada | Va con R4-M3 → 1.2 |
+| R4-1.18 | «Google pide ≥15 conversiones» contradice al informe 10, que leyó la ayuda oficial | Aceptada | Va con R4-I10 → PUJ-02, LEAD-05 |
+| R4-1.25 | «Minutos» es la aprobación tras verificar la marca; hay dos problemas de alta conocidos | Aceptada | Va con R4-M4 → 9.1 |
+| R4-1.30 | La v2 es más prudente que su fuente sobre la gratuidad de la API (no es un fallo) | Aceptada | Se mantiene la prudencia y se dice de dónde sale → 9.1 |
+| R4-1.40 | El «40 % que no se fía» es una encuesta informal | Aceptada | Va con R4-M3 → 12.1 |
+| R4-1 (cierre) | «Los tres revisores rehicieron los cálculos» no es exacto, y los cálculos nuevos de la v2 no los había revisado nadie | Aceptada | Corregido; los de la v3 están hechos con un programa que antes reproduce las cifras de la auditoría → 5 |
+
+**Lo que seguía faltando para ser superior al mercado, y la claridad para Enric**
+
+| Hallazgo | Qué señalaba | Decisión | Motivo y dónde queda |
+|---|---|---|---|
+| R4-5.1 | Saber cuándo se está ciego | Aceptada | R4-G2 → MED-00; fila nueva en la tabla comparativa → 10.1 |
+| R4-5.2 | Un criterio de aceptación con números | Aceptada | 25 de 27 casos detectados y 21 bien explicados; hecho duro en menos de una hora; falsas alarmas dentro de los topes; horas de Eury antes y después. Son valores de partida → 4.8, 13.2 |
+| R4-5.3 | Una comparación seria con TrueClicks | Aceptada | Cuatro semanas en paralelo al cerrar el paso 5, con tabla de resultados; es línea roja (decisión 24) → 10.4, 13.2 |
+| R4-5.4 | El plan de captura del identificador en los embudos de GoHighLevel: quién lo instala y cómo se comprueba | Aceptada | Lo instala el equipo de web con un encargo por cliente y se comprueba con MED-15 → decisión 8, paso 0b |
+| R4-5.5 | Pruebas de contrato de la API por versión | Aceptada | Dentro de GOO-07, en el paso 1 → catálogo, 9.1, 13.2 |
+| R4-5.6 | El coste unitario por cuenta | Aceptada | No hay cifra todavía y se dice: se calcula tras el paso 4 con el gasto real → 13.2, decisión 23 |
+| R4-6 | 28 decisiones son demasiadas: cinco paquetes con una pregunta cada uno | Aceptada | Adoptados los cinco paquetes y las aparcadas, conservando los números de las decisiones. Esta semana solo hace falta el paquete A → 0, 13.1 |
