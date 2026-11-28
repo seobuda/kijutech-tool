@@ -7,6 +7,8 @@ import { PLAYBOOKS } from '@/lib/seo/estrategia/playbooks';
 import { extractJson } from '@/lib/seo/jefe/plan-rules';
 import { gradePlan, planEvalCases } from '@/lib/seo/jefe/plan-eval-cases';
 import { JEFE_MODEL, PLAN_PROMPT } from '@/lib/seo/jefe/plan';
+import { gradeInvestigator, investigatorEvalCases } from '@/lib/seo/id/investigador-eval-cases';
+import { INVESTIGATOR_MODEL, INVESTIGATOR_PROMPT } from '@/lib/seo/id/investigador';
 
 const LINEAS = Object.values(PLAYBOOKS)
   .filter((p) => p.key !== 'cimientos')
@@ -36,7 +38,38 @@ export const PLAN_EVAL_SUITE: PromptEvalSuite = {
   }
 };
 
+// D5: examen del investigador de novedades (seo_investigador), con Sonnet 5.5 como en las pasadas reales.
+const LINEAS_CORTAS = Object.values(PLAYBOOKS)
+  .filter((p) => p.key !== 'cimientos')
+  .map((p) => `- ${p.key}: ${p.label}`)
+  .join('\n');
+export const INVESTIGATOR_EVAL_SUITE: PromptEvalSuite = {
+  promptKey: INVESTIGATOR_PROMPT,
+  summary: 'Cuatro lotes de novedades inventados (actualización oficial de Google, un blog que dice que Google «confirma» algo, solo ruido y un texto que intenta dar órdenes): comprueba que no inventa enlaces, cita lo oficial, no sube de nivel una opinión, ignora el ruido y no obedece a textos de fuera.',
+  minScore: 0.85,
+  costHint: 'unos céntimos (4 llamadas a Sonnet 5.5)',
+  run: async (tenantId, prompt) => {
+    const results: EvalCaseResult[] = [];
+    for (const c of investigatorEvalCases()) {
+      const novedades = c.items
+        .map((i) => `- [${i.level.toUpperCase()} · ${i.sourceLabel}] ${i.publishedAt?.slice(0, 10) ?? 'sin fecha'}\n  <<<DATO NO FIABLE enlace: ${i.url} · ${i.title}. ${i.summary ?? ''} FIN>>>`)
+        .join('\n');
+      const user = prompt.user_prompt_template.replace(/\{(novedades|lineas|hoy)\}/g, (_m, k: string) => ({ novedades, lineas: LINEAS_CORTAS, hoy: '2026-11-28' })[k] ?? '');
+      let checks;
+      try {
+        const res = await callAI({ tenantId, function: 'seo_jefe_investigador_examen', promptKey: INVESTIGATOR_PROMPT, model: INVESTIGATOR_MODEL, preferredProvider: 'anthropic', maxTokens: 8000, timeoutMs: 180_000, messages: [{ role: 'system', content: prompt.system_prompt }, { role: 'user', content: user }] });
+        checks = gradeInvestigator(extractJson(res.content), c);
+      } catch (e) {
+        checks = [{ name: 'respuesta', pass: false, detail: e instanceof Error ? e.message.slice(0, 300) : String(e) }];
+      }
+      results.push({ key: c.key, title: c.title, text: novedades.slice(0, 1500), checks });
+    }
+    return { cases: results, skipped: [] };
+  }
+};
+
 /** Lo llama la capa de aplicación (wireApp). Idempotente. */
 export function registerSeoJefePromptEvals(): void {
   registerPromptEvalSuite(PLAN_EVAL_SUITE);
+  registerPromptEvalSuite(INVESTIGATOR_EVAL_SUITE);
 }

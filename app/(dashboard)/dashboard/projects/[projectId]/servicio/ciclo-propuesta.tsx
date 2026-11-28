@@ -19,7 +19,7 @@ const paramText = (p: Record<string, unknown>) =>
     .map(([k, v]) => `${k}: ${String(v)}`)
     .join(' · ');
 
-export function CycleProposal({ projectId, proposals, hasApprovedPlan }: { projectId: string; proposals: CycleProposalView[]; hasApprovedPlan: boolean }) {
+export function CycleProposal({ projectId, proposals, hasApprovedPlan, canPropose = true }: { projectId: string; proposals: CycleProposalView[]; hasApprovedPlan: boolean; canPropose?: boolean }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [reason, setReason] = useState('');
@@ -46,7 +46,7 @@ export function CycleProposal({ projectId, proposals, hasApprovedPlan }: { proje
       description="Las líneas del trimestre que toca, sacadas del plan aprobado por código (sin coste de IA): por prioridad, como mucho 3 y solo si caben en las horas. Al aprobarla se crea la estrategia en Trabajo → Estrategia, como si la hicieras a mano. El siguiente trimestre se propone solo 21 días antes de que acabe el actual."
     >
       <div className="flex flex-col gap-3 p-5">
-        {!open && (
+        {!open && canPropose && (
           <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" disabled={pending || !hasApprovedPlan} onClick={() => run(() => proposeCycleAction(projectId))}>
               {pending ? <Loader2 className="size-4 animate-spin" /> : <CalendarRange className="size-4" />} Proponer la estrategia del trimestre

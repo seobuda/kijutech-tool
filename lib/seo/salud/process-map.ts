@@ -486,6 +486,18 @@ export const SEO_SALUD_PROCESS_MAP: ProcessStep[] = [
     tables: ['seo_jefe_proposals', 'seo_master_plans', 'seo_master_plan_items', 'seo_cycles', 'seo_cycle_lines']
   },
   {
+    id: 'jefe-revision',
+    lane: 'Plan de mejora',
+    name: 'Jefe SEO: revisión del plan y aprendizaje',
+    description: 'Revisión n+1: cuando hay motivo, Plan de servicio enseña «El Jefe SEO propone revisar el plan» y un administrador decide «Generar la revisión» (versión nueva en sombra con los topes de siempre) o «No hace falta» con motivo. Ajustes → Rendimiento del Jefe SEO: cómo se decide lo que propone (planes, nota en sombra, evidencias inventadas, cambios y estrategias aceptados), coste, días hasta el primer plan aprobado y lo observado al medir el trabajo hecho por línea y por sector, con etiqueta honesta («pocos casos», «tendencia», «aprendizaje»). Autonomía graduada: con más del 70 % de 10 estrategias aprobadas sin editar, también las aprueba el responsable SEO (permiso de edición).',
+    status: 'built',
+    file: 'lib/seo/jefe/revision.ts',
+    when: 'Una pasada al día por cuenta, dentro de «seo: encargar las tareas de las estrategias» (tras proponer los ciclos). La pantalla de rendimiento, al abrirla.',
+    ai: 'Ninguna al proponer (0 $). Solo si un administrador pide la revisión: el plan de siempre con Opus 5.5.',
+    code: 'lib/seo/jefe/revision-rules.ts (puro): motivos por orden (actualización del núcleo de Google terminada tras aprobar el plan, estrategia cerrada, 28 y 90 días de datos); un motivo ya tratado para ese plan no se repite; una revisión pendiente a la vez y ninguna si ya hay una versión nueva en marcha; al aprobarse otra versión, caduca. Métricas y tendencias por código (lib/seo/jefe/metricas.ts, tendencias del núcleo por técnica con efectos aleatorios): se describe lo observado, nunca se afirma la causa.',
+    tables: ['seo_jefe_proposals', 'seo_master_plans', 'seo_cycles', 'kb_feed_items', 'interventions', 'ai_jobs']
+  },
+  {
     id: 'estrategia-ciclos',
     lane: 'Plan de mejora',
     name: 'Estrategia por ciclos (trabajo planificado)',

@@ -13,6 +13,8 @@ import { agentChat, type AgentChatMessage } from '@/lib/core/capabilities';
 import { approvePlan, approvedPlan, jefeBudget, jefeSpentThisMonth, PLAN_COST_ESTIMATE_USD, PlanError, rejectPlan, requestMasterPlan, scorePlanShadow } from '@/lib/seo/jefe/plan';
 import { decidePlanChange } from '@/lib/seo/jefe/cambios';
 import { decideCycleProposal, proposeCycleFromPlan } from '@/lib/seo/jefe/ciclos';
+import { decideRevision } from '@/lib/seo/jefe/revision';
+import { accountCycleAutonomy } from '@/lib/seo/jefe/metricas';
 import { JEFE_AGENT_KEY, JEFE_CHAT_MAX_TOKENS, jefeThread } from '@/lib/seo/jefe/chat';
 
 type Ok = { ok: true; message?: string } | { ok: false; error: string };
@@ -153,13 +155,30 @@ export async function proposeCycleAction(projectId: string): Promise<Ok> {
 
 export async function decideCycleAction(projectId: string, proposalId: string, accept: boolean, reason: string): Promise<Ok> {
   try {
-    const user = await requirePermission('admin');
+    // D6, autonomía graduada (decisión 3 de Enric): con más del 70 % de 10 estrategias aprobadas sin editar, también las
+    // decide un editor (responsable SEO). Antes, solo administradores.
+    const user = await requirePermission('edit');
+    if (!(await checkPermission('admin')).ok && !(await accountCycleAutonomy(user.tenantId)).enabled) return { ok: false, error: 'De momento las estrategias del Jefe las aprueba un administrador (cuando acierte en más del 70 % de 10, podrá hacerlo el responsable SEO).' };
     if (!(await ownProject(user.tenantId, projectId)) || !UUID.test(proposalId)) return { ok: false, error: 'Propuesta no encontrada' };
     const r = await decideCycleProposal(user.tenantId, projectId, proposalId, Boolean(accept), user.name || user.email, String(reason ?? '').slice(0, 2000) || null);
     paths(projectId);
     revalidatePath(`/dashboard/projects/${projectId}/estrategia`);
     if (!accept) return { ok: true, message: 'Descartada. El motivo queda apuntado.' };
     return { ok: true, message: r.cycleId ? 'Estrategia creada y activa: aprueba el lote del primer mes en Trabajo → Estrategia.' : 'Aprobada. Se creará sola en cuanto se cierre la estrategia activa.' };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+// --- D6: revisión del plan propuesta por el Jefe ---------------------------------------------------------------------
+
+export async function decideRevisionAction(projectId: string, proposalId: string, accept: boolean, reason: string): Promise<Ok> {
+  try {
+    const user = await requirePermission('admin');
+    if (!(await ownProject(user.tenantId, projectId)) || !UUID.test(proposalId)) return { ok: false, error: 'Propuesta no encontrada' };
+    const r = await decideRevision(user.tenantId, projectId, proposalId, Boolean(accept), user.name || user.email, String(reason ?? '').slice(0, 2000) || null);
+    paths(projectId);
+    return { ok: true, message: accept ? `Preparando la versión ${r.version} (unos minutos). Quedará en sombra para que la revises.` : 'Anotado: no se revisa por este motivo.' };
   } catch (e) {
     return fail(e);
   }
