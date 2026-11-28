@@ -160,6 +160,13 @@ if (adsJobKinds.length < 5) fail('No se encuentran los tipos de trabajo de Googl
 for (const k of adsJobKinds) if (!adsSrc.includes(`«${k}»`)) fail(`El trabajo «${k}» de la cola no aparece en el mapa de Google Ads.`);
 if (!/registerScheduled\(ADS_SCHEDULED_TASK/.test(read('lib/ads/register.ts')) || !/ADS_SCHEDULED_TASK = 'google ads'/.test(read('lib/ads/register.ts'))) fail('La tarea del planificador de Google Ads no está registrada (lib/ads/register.ts).');
 if (!adsSrc.includes('planificador «google ads»')) fail('La tarea del planificador «google ads» no aparece en el mapa de Google Ads.');
+// Paso 2 (28 nov 2026): la tarea de avisos, las piezas de los hallazgos y cada regla de la lista cerrada en el mapa.
+if (!/registerScheduled\(ADS_ALERTS_TASK/.test(read('lib/ads/register.ts')) || !/ADS_ALERTS_TASK = 'ads avisos'/.test(read('lib/ads/alerts.ts'))) fail('La tarea de avisos de Google Ads no está registrada (lib/ads/register.ts y lib/ads/alerts.ts).');
+if (!adsSrc.includes('planificador «ads avisos»')) fail('La tarea del planificador «ads avisos» no aparece en el mapa de Google Ads.');
+for (const f of ['lib/ads/finding-rules.ts', 'lib/ads/findings.ts', 'lib/ads/alerts.ts', 'lib/ads/landing.ts', 'lib/ads/views.ts', 'lib/ads/decisions.ts']) if (!adsSrc.includes(`'${f}'`)) fail(`La pieza ${f} (paso 2 de Google Ads) no aparece en el mapa de Google Ads.`);
+const adsRuleKinds = uniq(all(/kind: '([a-z_]+)', sources:/g, read('lib/ads/finding-rules.ts')));
+if (adsRuleKinds.length < 8) fail('No se encuentran las reglas de los hallazgos de Google Ads (ruleDefs en lib/ads/finding-rules.ts).');
+for (const k of [...adsRuleKinds, 'fuente_sin_datos']) if (!adsSrc.includes(`«${k}»`)) fail(`La regla «${k}» de Google Ads no aparece en el mapa de Google Ads.`);
 if (!/registerAdsCapabilities\(\)/.test(read('lib/app-wiring.ts'))) fail('El módulo Google Ads no se conecta en wireApp() (lib/app-wiring.ts).');
 
 function schemaSrcForAgt() {

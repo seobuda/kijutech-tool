@@ -202,7 +202,8 @@ export function sourceHealth(
   if (state.consecutiveFailures >= 3) return { health: 'caida', critical, ageMinutes: age };
   // El latido solo se pide en horario de servicio: fuera de él, basta con que haya funcionado en las últimas 12 h.
   let limit = expected * 2;
-  if (state.source === 'latido' && opts.localHour !== undefined && (opts.localHour < SERVICE_HOURS.from + 2 || opts.localHour >= SERVICE_HOURS.to)) limit = 12 * 60;
+  // Lo mismo para las páginas de destino (paso 2: se comprueban solo en ese horario).
+  if ((state.source === 'latido' || state.source === 'landing') && opts.localHour !== undefined && (opts.localHour < SERVICE_HOURS.from + 2 || opts.localHour >= SERVICE_HOURS.to)) limit = 12 * 60;
   if (state.source === 'historico') return { health: 'sana', critical, ageMinutes: age };
   if (age > limit) return { health: state.consecutiveFailures > 0 ? 'caida' : 'atrasada', critical, ageMinutes: age };
   return { health: 'sana', critical, ageMinutes: age };

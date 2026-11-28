@@ -34,6 +34,7 @@ import {
 } from '@/lib/ads/queries';
 import { AdsApiError, runQuery, type AdsConnection } from '@/lib/ads/client';
 import { connectionFor } from '@/lib/ads/settings';
+import { checkLandings } from '@/lib/ads/landing';
 import * as store from '@/lib/ads/store';
 import { reportError } from '@/lib/core/errors';
 import { disableSchedule, enqueueJob, ensureScheduleIfMissing, listSchedulesForScope, pauseSchedule, stableOffsetMinutes } from '@/lib/core/jobs';
@@ -45,7 +46,10 @@ export const ADS_JOB = {
   sincronizar: 'ads.sincronizar',
   cambios: 'ads.cambios',
   latido: 'ads.latido',
-  historico: 'ads.historico'
+  historico: 'ads.historico',
+  // Paso 2: evaluación de las reglas (encolada al terminar métricas, latido y páginas) y comprobación de páginas de destino.
+  evaluar: 'ads.evaluar',
+  landing: 'ads.landing'
 } as const;
 
 /** Procesos periódicos por cuenta de Ads (scopeType «cuenta», scopeId = id de ads_accounts) y su frecuencia. */
@@ -53,7 +57,8 @@ export const ACCOUNT_PROCESSES: { key: string; every: number; label: string }[] 
   { key: ADS_JOB.estructura, every: 1440, label: 'Google Ads: estructura, configuración, políticas y URL (diaria)' },
   { key: ADS_JOB.sincronizar, every: 360, label: 'Google Ads: métricas de 10 días, cobertura y foto de estado' },
   { key: ADS_JOB.cambios, every: 360, label: 'Google Ads: historial de cambios' },
-  { key: ADS_JOB.latido, every: 60, label: 'Google Ads: latido horario (07:00-23:00 de la cuenta)' }
+  { key: ADS_JOB.latido, every: 60, label: 'Google Ads: latido horario (07:00-23:00 de la cuenta)' },
+  { key: ADS_JOB.landing, every: 60, label: 'Google Ads: páginas de destino con gasto (07:00-23:00 de la cuenta)' }
 ];
 
 export type SyncCtx = { now?: Date; signal?: AbortSignal; heartbeat?: () => Promise<void> };
@@ -75,7 +80,8 @@ async function needAccount(tenantId: string, accountId: string): Promise<AdsAcco
 
 /**
  * Envoltorio de cada fuente: anota éxito o fallo en ads_sync_state. El cupo agotado no es un fallo del proceso (se para
- * hasta mañana y MED-00 lo dice). A partir del tercer fallo seguido, el error va al registro central (área ads).
+ * hasta mañana y MED-00 lo dice). Un error interno va al registro central (área ads); los de Google los
+ * avisa el hallazgo 15 (paso 2).
  */
 async function tracked<T>(tenantId: string, accountId: string | null, source: AdsSource, fn: () => Promise<T>): Promise<T | { skipped: string }> {
   try {
@@ -90,8 +96,9 @@ async function tracked<T>(tenantId: string, accountId: string | null, source: Ad
       await store.markSyncNote(tenantId, accountId, source, msg);
       return { skipped: msg };
     }
-    const failures = await store.markSyncFail(tenantId, accountId, source, msg);
-    if (failures >= 3 && e instanceof AdsApiError) reportError({ source: 'ads', area: source, tenantId, message: `Google Ads: falla la descarga de ${source} (${failures} veces seguidas)`, error: msg, severity: 'aviso' });
+    // Paso 2: los fallos repetidos de Google ya no van al registro de errores: los avisa el hallazgo 15 («nuestra fuente
+    // está sin datos») para no avisar dos veces de la misma causa (diseño §5).
+    await store.markSyncFail(tenantId, accountId, source, msg);
     throw e;
   }
 }
@@ -435,7 +442,9 @@ export async function runFullSync(tenantId: string, ctx: SyncCtx = {}): Promise<
       ['estructura', () => syncStructure(tenantId, a.id, ctx)],
       ['metricas', () => syncMetrics(tenantId, a.id, ctx)],
       ['cambios', () => syncChanges(tenantId, a.id, ctx)],
-      ['latido', () => syncHourly(tenantId, a.id, { ...ctx, force: true })]
+      ['latido', () => syncHourly(tenantId, a.id, { ...ctx, force: true })],
+      // Paso 2: páginas de destino (las simuladas nunca salen a internet).
+      ['landing', () => checkLandings(tenantId, a.id, { force: true, now: ctx.now })]
     ] as const) {
       await (fn as () => Promise<unknown>)().catch((e) => errors.push(`${a.name ?? a.customerId} · ${name}: ${e instanceof Error ? e.message : e}`));
     }

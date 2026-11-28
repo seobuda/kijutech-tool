@@ -6,6 +6,10 @@
 // Responde a las consultas de queries.ts por su clave, con filas con la forma de la API (JSON de REST), para que la
 // traducción y la descarga se ejerciten igual que con Google. Sirve para desarrollo, pruebas y pantallas mientras no hay
 // acceso real. Las cuentas simuladas se marcan `simulated` y nunca se vinculan a clientes ni generan avisos (diseño §3.4).
+// Escenarios deterministas del paso 2 (para que Hoy no salga vacía y las pruebas lo comprueben): «PMax · Reformas» parada
+// desde ayer, un grupo de «Urgencias» sin anuncios aprobados (rechazo con gasto), el formulario de Fontanería sin contar
+// desde hace 8 días (medición rota), un cambio del dueño de Abogados ayer y una recomendación aplicada por Google en la
+// clínica hace 2 días (cambios ajenos). Los demás cambios del historial son de la agencia.
 import { createHash } from 'node:crypto';
 import { addDays, zonedParts } from '@/lib/ads/rules';
 import type { AdsQuery, ApiRow } from '@/lib/ads/queries';
@@ -24,8 +28,20 @@ type SimCampaign = {
   removedDaysAgo?: number; // campaña eliminada hace N días (sigue en el histórico)
   sharedBudget?: string;
   limited?: boolean;
+  /** Paso 2 (escenario «campaña parada»): sin impresiones desde hace N días (ayer y hoy si N = 1), aunque sigue activa. */
+  stoppedDaysAgo?: number;
 };
-type SimAccount = { id: string; name: string; status: string; startDaysAgo: number; autoTagging: boolean; mccAction?: boolean; campaigns: SimCampaign[] };
+type SimAccount = {
+  id: string;
+  name: string;
+  status: string;
+  startDaysAgo: number;
+  autoTagging: boolean;
+  mccAction?: boolean;
+  /** Paso 2 (escenario «medición rota»): la acción «Formulario» deja de contar desde hace N días con los clics de siempre. */
+  brokenFormDaysAgo?: number;
+  campaigns: SimCampaign[];
+};
 
 const ACCOUNTS: SimAccount[] = [
   {
@@ -46,6 +62,7 @@ const ACCOUNTS: SimAccount[] = [
     status: 'ENABLED',
     startDaysAgo: 500,
     autoTagging: true,
+    brokenFormDaysAgo: 8,
     campaigns: [
       { id: '2200001', name: 'Búsqueda · Urgencias', type: 'SEARCH', daily: 60, cpc: 2.6, cr: 0.11 },
       { id: '2200002', name: 'Búsqueda · Reformas de baño', type: 'SEARCH', daily: 25, cpc: 1.7, cr: 0.05 }
@@ -70,7 +87,7 @@ const ACCOUNTS: SimAccount[] = [
     autoTagging: false,
     campaigns: [
       { id: '4400001', name: 'Búsqueda · Reformas', type: 'SEARCH', daily: 40, cpc: 1.4, cr: 0.03 },
-      { id: '4400002', name: 'PMax · Reformas', type: 'PERFORMANCE_MAX', daily: 25, cpc: 0.7, cr: 0.02 }
+      { id: '4400002', name: 'PMax · Reformas', type: 'PERFORMANCE_MAX', daily: 25, cpc: 0.7, cr: 0.02, stoppedDaysAgo: 1 }
     ]
   },
   {
@@ -137,6 +154,7 @@ function fullDay(acc: SimAccount, c: SimCampaign, day: string, today: string): D
   if (day > today) return null;
   if (day < addDays(today, -acc.startDaysAgo)) return null;
   if (c.removedDaysAgo !== undefined && day > addDays(today, -c.removedDaysAgo)) return null;
+  if (c.stoppedDaysAgo !== undefined && day >= addDays(today, -c.stoppedDaysAgo)) return null;
   const wd = weekday(day);
   if (c.weekdaysOnly && (wd === 0 || wd === 6)) return null;
   const rnd = seeded('sim', acc.id, c.id, day);
@@ -147,9 +165,11 @@ function fullDay(acc: SimAccount, c: SimCampaign, day: string, today: string): D
   const conv = poisson(clicks * c.cr, rnd);
   const call = Math.floor(conv * 0.4);
   const mcc = acc.mccAction && conv > 0 ? 1 : 0;
-  const form = conv - call - mcc;
+  // Medición rota: el formulario deja de contar (las llamadas siguen); los clics no cambian.
+  const broken = acc.brokenFormDaysAgo !== undefined && day >= addDays(today, -acc.brokenFormDaysAgo);
+  const form = broken ? 0 : conv - call - mcc;
   const whatsapp = poisson(clicks * 0.02, rnd);
-  return { cost, impressions, clicks, form, call, whatsapp, mcc, conv };
+  return { cost, impressions, clicks, form, call, whatsapp, mcc, conv: form + call + mcc };
 }
 
 /** Lo que se ve de un día: hoy, solo las horas ya pasadas. */
@@ -373,7 +393,8 @@ function rowsFor(acc: SimAccount, query: AdsQuery, now: Date): ApiRow[] {
         const rnd = seeded('cambios', acc.id, d);
         if (rnd() > 0.45) continue;
         const c = live[Math.floor(rnd() * live.length)] ?? acc.campaigns[0];
-        const who = Math.floor(rnd() * 3);
+        // Los cambios de cada día los hace la agencia; los ajenos son los escenarios fijos de abajo (paso 2).
+        rnd();
         const local = `${d} ${String(9 + Math.floor(rnd() * 9)).padStart(2, '0')}:${String(Math.floor(rnd() * 60)).padStart(2, '0')}:00.000000`;
         if (local.slice(0, 19) < String(p.from) || local.slice(0, 19) > String(p.to)) continue;
         const stamp = Date.parse(`${d}T00:00:00Z`) * 1000 + i;
@@ -381,8 +402,8 @@ function rowsFor(acc: SimAccount, query: AdsQuery, now: Date): ApiRow[] {
           changeEvent: {
             resourceName: `customers/${acc.id}/changeEvents/${stamp}~0~0`,
             changeDateTime: local,
-            userEmail: who === 0 ? 'gestor@kijutech.com' : who === 1 ? 'dueno.cliente@gmail.com' : '',
-            clientType: who === 2 ? 'GOOGLE_ADS_RECOMMENDATIONS_SUBSCRIPTION' : 'GOOGLE_ADS_WEB_CLIENT',
+            userEmail: 'gestor@kijutech.com',
+            clientType: 'GOOGLE_ADS_WEB_CLIENT',
             changeResourceType: 'CAMPAIGN_BUDGET',
             changeResourceName: `customers/${acc.id}/campaignBudgets/${c.sharedBudget ?? `${c.id}9`}`,
             campaign: `customers/${acc.id}/campaigns/${c.id}`,
@@ -390,6 +411,32 @@ function rowsFor(acc: SimAccount, query: AdsQuery, now: Date): ApiRow[] {
             changedFields: 'amountMicros',
             oldResource: { campaignBudget: { amountMicros: micros(c.daily) } },
             newResource: { campaignBudget: { amountMicros: micros(c.daily * 1.2) } }
+          }
+        });
+      }
+      // Escenarios del paso 2 («cambio ajeno»): el dueño de Abogados cambia un presupuesto ayer y Google aplica una
+      // recomendación en la clínica hace 2 días. Deterministas y sobre campañas con gasto en 14 días.
+      const foreign: { acc: string; days: number; email: string; clientType: string; campaign: string; budget: string }[] = [
+        { acc: '9990000003', days: 1, email: 'dueno.cliente@gmail.com', clientType: 'GOOGLE_ADS_WEB_CLIENT', campaign: '3300001', budget: '3309999' },
+        { acc: '9990000001', days: 2, email: '', clientType: 'GOOGLE_ADS_RECOMMENDATIONS_SUBSCRIPTION', campaign: '1100002', budget: '11000029' }
+      ];
+      for (const f of foreign.filter((x) => x.acc === acc.id)) {
+        const d = addDays(today, -f.days);
+        const local = `${d} 11:00:00.000000`;
+        if (local.slice(0, 19) < String(p.from) || local.slice(0, 19) > String(p.to)) continue;
+        out.push({
+          changeEvent: {
+            resourceName: `customers/${acc.id}/changeEvents/${Date.parse(`${d}T00:00:00Z`) * 1000 + 999}~0~0`,
+            changeDateTime: local,
+            userEmail: f.email,
+            clientType: f.clientType,
+            changeResourceType: 'CAMPAIGN_BUDGET',
+            changeResourceName: `customers/${acc.id}/campaignBudgets/${f.budget}`,
+            campaign: `customers/${acc.id}/campaigns/${f.campaign}`,
+            resourceChangeOperation: 'UPDATE',
+            changedFields: 'amountMicros',
+            oldResource: { campaignBudget: { amountMicros: micros(40) } },
+            newResource: { campaignBudget: { amountMicros: micros(70) } }
           }
         });
       }

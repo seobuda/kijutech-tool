@@ -11,7 +11,11 @@ import 'server-only';
 import { registerHealthCheck, registerScheduled } from '@/lib/core/capabilities';
 import { enqueueJob, registerJobKind, registerProcess } from '@/lib/core/jobs';
 import { adsHealth } from '@/lib/ads/health';
-import { getSettingsRow, upsertSettings } from '@/lib/ads/store';
+import { ADS_ALERTS_TASK, runAdsAlerts } from '@/lib/ads/alerts';
+import { evaluateAccount, evaluateAgency } from '@/lib/ads/findings';
+import { checkLandings } from '@/lib/ads/landing';
+import { patchSettingsState } from '@/lib/ads/findings-store';
+import { getSettingsRow } from '@/lib/ads/store';
 import { zonedParts } from '@/lib/ads/rules';
 import { ACCOUNT_PROCESSES, ADS_JOB, discoverAccounts, enqueueAccountSyncs, syncChanges, syncHistoryChunk, syncHourly, syncMetrics, syncSchedules, syncStructure } from '@/lib/ads/sync';
 
@@ -29,9 +33,20 @@ export function registerAdsCapabilities(): void {
 
   registerJobKind({ kind: ADS_JOB.descubrir, timeoutS: 180, maxConcurrent: 1, maxAttempts: 2, run: async (ctx) => summary(await discoverAccounts(ctx.tenantId, { signal: ctx.signal, heartbeat: ctx.heartbeat })) });
   registerJobKind({ kind: ADS_JOB.estructura, timeoutS: 300, maxConcurrent: 2, maxAttempts: 2, run: async (ctx, p) => summary(await syncStructure(ctx.tenantId, accountOf(p), { signal: ctx.signal, heartbeat: ctx.heartbeat })) });
-  registerJobKind({ kind: ADS_JOB.sincronizar, timeoutS: 300, maxConcurrent: 2, maxAttempts: 3, run: async (ctx, p) => summary(await syncMetrics(ctx.tenantId, accountOf(p), { signal: ctx.signal, heartbeat: ctx.heartbeat })) });
+  // Paso 2: al terminar métricas, latido o páginas, se evalúan las reglas de esa cuenta (también si la descarga falló:
+  // así el hallazgo 15 y los «no comprobado» salen a tiempo). Una sola evaluación abierta por cuenta (dedupeKey).
+  const thenEvaluate = async <T,>(tenantId: string, accountId: string, fn: () => Promise<T>): Promise<T> => {
+    try {
+      return await fn();
+    } finally {
+      await enqueueJob({ tenantId, kind: ADS_JOB.evaluar, payload: { accountId }, scopeType: 'cuenta', scopeId: accountId, priority: 5, dedupeKey: `${ADS_JOB.evaluar}:${accountId}` }).catch(() => undefined);
+    }
+  };
+  registerJobKind({ kind: ADS_JOB.sincronizar, timeoutS: 300, maxConcurrent: 2, maxAttempts: 3, run: async (ctx, p) => summary(await thenEvaluate(ctx.tenantId, accountOf(p), () => syncMetrics(ctx.tenantId, accountOf(p), { signal: ctx.signal, heartbeat: ctx.heartbeat }))) });
   registerJobKind({ kind: ADS_JOB.cambios, timeoutS: 300, maxConcurrent: 2, maxAttempts: 3, run: async (ctx, p) => summary(await syncChanges(ctx.tenantId, accountOf(p), { signal: ctx.signal, heartbeat: ctx.heartbeat })) });
-  registerJobKind({ kind: ADS_JOB.latido, timeoutS: 120, maxConcurrent: 3, maxAttempts: 2, run: async (ctx, p) => summary(await syncHourly(ctx.tenantId, accountOf(p), { signal: ctx.signal, heartbeat: ctx.heartbeat })) });
+  registerJobKind({ kind: ADS_JOB.latido, timeoutS: 120, maxConcurrent: 3, maxAttempts: 2, run: async (ctx, p) => summary(await thenEvaluate(ctx.tenantId, accountOf(p), () => syncHourly(ctx.tenantId, accountOf(p), { signal: ctx.signal, heartbeat: ctx.heartbeat }))) });
+  registerJobKind({ kind: ADS_JOB.landing, timeoutS: 300, maxConcurrent: 2, maxAttempts: 1, run: async (ctx, p) => summary(await thenEvaluate(ctx.tenantId, accountOf(p), () => checkLandings(ctx.tenantId, accountOf(p)))) });
+  registerJobKind({ kind: ADS_JOB.evaluar, timeoutS: 180, maxConcurrent: 2, maxAttempts: 2, run: async (ctx, p) => summary(await evaluateAccount(ctx.tenantId, accountOf(p), { mode: p.mode === 'todas' ? 'todas' : 'auto' })) });
   // Histórico: tramos de 90 días mientras quede tiempo; si no termina, se encola la continuación.
   registerJobKind({
     kind: ADS_JOB.historico,
@@ -68,14 +83,21 @@ export function registerAdsCapabilities(): void {
     if (seen.get(tenantId) !== hour) {
       seen.set(tenantId, hour);
       await syncSchedules(tenantId);
+      // Paso 2: la MCC entera (hallazgo 15 de ámbito agencia), una vez por hora.
+      await evaluateAgency(tenantId);
     }
     if (!settings.syncEnabled || settings.authMode === 'none') return;
     // Descarga de las 06:30 de Madrid (con comprobación de reloj, una vez al día).
     const madrid = zonedParts(new Date(), 'Europe/Madrid');
     if ((madrid.hour > 6 || (madrid.hour === 6 && madrid.minute >= 30)) && settings.state?.lastMorningSync !== madrid.date) {
-      await upsertSettings(tenantId, { state: { ...(settings.state ?? {}), lastMorningSync: madrid.date } });
+      await patchSettingsState(tenantId, { lastMorningSync: madrid.date });
       await enqueueAccountSyncs(tenantId, [ADS_JOB.sincronizar, ADS_JOB.cambios], `manana:${madrid.date}`);
     }
+  });
+
+  // Paso 2: avisos (modo sombra por defecto: sin encender en Ajustes no sale nada). Cada 30 s, solo el líder.
+  registerScheduled(ADS_ALERTS_TASK, async (tenantId) => {
+    await runAdsAlerts(tenantId);
   });
 
   registerHealthCheck('ads', adsHealth);

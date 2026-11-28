@@ -82,7 +82,7 @@ import { pinMoneyPageAction, unpinMoneyPageAction } from '@/lib/seo/cambios-acti
 import { generateIdeasAction, runDemandNowAction, setIdeaStatusAction } from '@/lib/seo/demanda-actions';
 import { briefToTaskAction, markBriefUsedAction, requestBriefAction, retryBriefAction, setBriefStatusAction } from '@/lib/seo/contenido-actions';
 import { checkOldPhonesNowAction } from '@/lib/seo/local-actions';
-import { linkAdsAccountAction, removeAdsCredentialsAction, saveAdsCredentialsAction, saveAdsDeveloperTokenAction, saveAdsSettingsAction, setAdsAccountTrackedAction, setAdsClientLevelAction, startAdsSyncNowAction, testAdsConnectionAction } from '@/lib/ads/actions';
+import { evaluateAdsNowAction, linkAdsAccountAction, removeAdsCredentialsAction, respondAdsFindingAction, reviewAdsAccountAction, saveAdsAlertSettingsAction, saveAdsCredentialsAction, saveAdsDeveloperTokenAction, saveAdsSettingsAction, setAdsAccountTrackedAction, setAdsClientLevelAction, setAdsProvisionalGoalAction, startAdsSyncNowAction, testAdsConnectionAction } from '@/lib/ads/actions';
 import ProjectsPage from '@/app/(dashboard)/dashboard/projects/page';
 import ArchivedProjectsPage from '@/app/(dashboard)/dashboard/projects/archived/page';
 import NewProjectPage from '@/app/(dashboard)/dashboard/projects/new/page';
@@ -207,6 +207,9 @@ const ACCIONES_ADMIN: [string, () => unknown][] = [
   ['linkAdsAccountAction (Google Ads: vincular cuenta)', () => linkAdsAccountAction(ZERO, null)],
   ['setAdsAccountTrackedAction (Google Ads: seguir cuenta)', () => setAdsAccountTrackedAction(ZERO, false)],
   ['setAdsClientLevelAction (Google Ads: nivel del cliente)', () => setAdsClientLevelAction(ZERO, 'A')],
+  // Google Ads (paso 2): encender los avisos, umbrales y «Evaluar ahora», de administración.
+  ['saveAdsAlertSettingsAction (Google Ads: avisos y umbrales)', () => saveAdsAlertSettingsAction({ alertsEnabled: true })],
+  ['evaluateAdsNowAction (Google Ads: evaluar ahora)', () => evaluateAdsNowAction()],
   ['setClientPlanAction (estrategia: plan del cliente)', () => setClientPlanAction(ZERO, null)],
   ['saveClientOverrideAction (estrategia: frecuencias del cliente)', () => saveClientOverrideAction(ZERO, 'salud', null)],
   ['pauseClientAction (estrategia: pausa)', () => pauseClientAction(ZERO, null)],
@@ -353,7 +356,11 @@ const ACCIONES_EDITOR: [string, () => unknown][] = [
   ['setProfileActive (fichas)', () => setProfileActive(ZERO, false)],
   ['saveKickoffAnswers (SEO)', () => saveKickoffAnswers(fx.kijutechProjectId, [])],
   ['generateShareToken (SEO)', () => generateShareToken(ZERO)],
-  ['deleteKwCluster (SEO)', () => deleteKwCluster(ZERO)]
+  ['deleteKwCluster (SEO)', () => deleteKwCluster(ZERO)],
+  // Google Ads (paso 2): responder a un hallazgo, marcar revisada y fijar objetivo provisional, de edición.
+  ['respondAdsFindingAction (Google Ads: responder hallazgo)', () => respondAdsFindingAction(ZERO, 'hecho')],
+  ['reviewAdsAccountAction (Google Ads: marcar revisada)', () => reviewAdsAccountAction(ZERO, 'nota')],
+  ['setAdsProvisionalGoalAction (Google Ads: objetivo provisional)', () => setAdsProvisionalGoalAction(ZERO)]
 ];
 
 describe('sin sesión no se accede a nada privado', () => {

@@ -9,6 +9,8 @@ import { forgetAdsToken, type AdsConnection } from '@/lib/ads/client';
 import { SIM_MCC } from '@/lib/ads/sim';
 import { keyHint, normalizeCustomerId, parseServiceAccountKey, type ServiceAccountKey } from '@/lib/ads/rules';
 import { countRealAccounts, getSettingsRow, hideSimulatedAccounts, upsertSettings } from '@/lib/ads/store';
+import { mergeThresholds, parseAlertDays, THRESHOLD_LIMITS, type Thresholds } from '@/lib/ads/finding-rules';
+import { patchSettingsState } from '@/lib/ads/findings-store';
 import type { AdsSettingsRow } from '@/lib/db/schema';
 
 export class AdsSettingsError extends Error {
@@ -34,6 +36,11 @@ export type PublicAdsSettings = {
   dailyOpsBudget: number;
   historyMonths: number;
   alertsEnabled: boolean;
+  /** Paso 2: horario y días de los avisos, tope de interrupciones al día y umbrales de las reglas. */
+  alertHours: string;
+  alertDays: string;
+  maxInterruptionsPerDay: number;
+  thresholds: Thresholds;
   agencyEmailDomains: string[];
   agencyUserEmails: string[];
   lastTest: { at: string; ok: boolean; message: string; accounts?: number } | null;
@@ -54,6 +61,10 @@ export function publicSettings(row: AdsSettingsRow | null): PublicAdsSettings {
     dailyOpsBudget: row?.dailyOpsBudget ?? 2500,
     historyMonths: row?.historyMonths ?? 37,
     alertsEnabled: row?.alertsEnabled ?? false,
+    alertHours: row?.alertHours ?? '09:00-19:00',
+    alertDays: row?.alertDays ?? '1,2,3,4,5',
+    maxInterruptionsPerDay: row?.maxInterruptionsPerDay ?? 2,
+    thresholds: mergeThresholds((row?.state as { thresholds?: unknown } | undefined)?.thresholds),
     agencyEmailDomains: row?.agencyEmailDomains ?? [],
     agencyUserEmails: row?.agencyUserEmails ?? [],
     lastTest: row?.state?.lastTest ?? null
@@ -161,6 +172,57 @@ export async function saveGeneral(tenantId: string, input: GeneralInput, by: str
     patch.syncEnabled = input.syncEnabled;
   }
   await upsertSettings(tenantId, patch);
+}
+
+// --- Paso 2: avisos y umbrales -----------------------------------------------------------------------------------------
+
+export type AlertInput = { alertsEnabled?: boolean; alertHours?: string; alertDays?: number[] | string; maxInterruptionsPerDay?: number; thresholds?: Partial<Record<keyof Thresholds, number>> };
+export const MAX_INTERRUPTIONS = { min: 0, max: 10 };
+
+/**
+ * Guarda horario, días, tope y umbrales (admin). Encender los avisos (`alertsEnabled`) saca la herramienta del modo
+ * sombra; en modo simulado no se puede (las cuentas simuladas nunca avisan). Un umbral fuera de sus límites se rechaza.
+ */
+export async function saveAlertSettings(tenantId: string, input: AlertInput, by: string): Promise<void> {
+  const row = await getSettingsRow(tenantId);
+  if (!row) throw new AdsSettingsError('Conecta antes Google Ads (credencial o «SIM»).');
+  const patch: Parameters<typeof upsertSettings>[1] = { updatedBy: by };
+  if (input.alertsEnabled !== undefined) {
+    if (input.alertsEnabled && row.authMode === 'sim') throw new AdsSettingsError('En modo simulado los avisos no se encienden: las cuentas son inventadas.');
+    patch.alertsEnabled = Boolean(input.alertsEnabled);
+  }
+  if (input.alertHours !== undefined) {
+    const m = String(input.alertHours).trim().match(/^(\d{2}):(\d{2})-(\d{2}):(\d{2})$/);
+    const from = m ? Number(m[1]) * 60 + Number(m[2]) : -1;
+    const to = m ? Number(m[3]) * 60 + Number(m[4]) : -1;
+    if (!m || Number(m[2]) > 59 || Number(m[4]) > 59 || from < 0 || to > 24 * 60 || from >= to) throw new AdsSettingsError('El horario va como «09:00-19:00» (inicio antes que fin).');
+    patch.alertHours = String(input.alertHours).trim();
+  }
+  if (input.alertDays !== undefined) {
+    const raw = Array.isArray(input.alertDays) ? input.alertDays.join(',') : String(input.alertDays);
+    const days = parseAlertDays(raw);
+    if (!raw.trim() || raw.split(',').some((x) => !/^[1-7]$/.test(x.trim()))) throw new AdsSettingsError('Elige al menos un día (1 = lunes … 7 = domingo).');
+    patch.alertDays = days.join(',');
+  }
+  if (input.maxInterruptionsPerDay !== undefined) {
+    const v = Math.round(Number(input.maxInterruptionsPerDay));
+    if (!Number.isFinite(v) || v < MAX_INTERRUPTIONS.min || v > MAX_INTERRUPTIONS.max) throw new AdsSettingsError(`El tope de interrupciones va de ${MAX_INTERRUPTIONS.min} a ${MAX_INTERRUPTIONS.max} al día.`);
+    patch.maxInterruptionsPerDay = v;
+  }
+  let thresholds: Thresholds | null = null;
+  if (input.thresholds && typeof input.thresholds === 'object') {
+    thresholds = mergeThresholds((row.state as { thresholds?: unknown }).thresholds);
+    for (const [k, v] of Object.entries(input.thresholds)) {
+      if (!(k in THRESHOLD_LIMITS)) continue;
+      const key = k as keyof Thresholds;
+      const num = Number(v);
+      const lim = THRESHOLD_LIMITS[key];
+      if (!Number.isFinite(num) || num < lim.min || num > lim.max) throw new AdsSettingsError(`«${lim.label}» va de ${lim.min} a ${lim.max}.`);
+      thresholds[key] = num;
+    }
+  }
+  await upsertSettings(tenantId, patch);
+  if (thresholds) await patchSettingsState(tenantId, { thresholds });
 }
 
 /** Conexión lista para usar (descifra la clave). null + motivo si falta algo. Solo servidor. */

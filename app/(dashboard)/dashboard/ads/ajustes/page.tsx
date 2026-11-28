@@ -5,6 +5,7 @@ import { PageContainer, PageHeader } from '@/components/ui/page';
 import { requirePagePermission } from '@/lib/auth/permissions';
 import { settingsView } from '@/lib/ads/access';
 import { AjustesView } from './ajustes-view';
+import { AlertasView } from './alertas-view';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,7 +20,7 @@ export default async function AdsAjustesPage() {
       <PageHeader
         icon={Settings}
         title="Ajustes de Google Ads"
-        description="Conexión con la MCC de la agencia (solo lectura), descarga de los datos y cuentas que se siguen. La herramienta no cambia nada en Google Ads."
+        description="Conexión con la MCC de la agencia (solo lectura), descarga de los datos, cuentas que se siguen, avisos y umbrales de las reglas. La herramienta no cambia nada en Google Ads."
         actions={
           <Button asChild variant="outline" size="sm">
             <Link href="/dashboard/ads">
@@ -29,6 +30,7 @@ export default async function AdsAjustesPage() {
         }
       />
       <AjustesView settings={view.settings} accounts={view.accounts} clients={view.clients} />
+      <AlertasView settings={view.settings} />
     </PageContainer>
   );
 }

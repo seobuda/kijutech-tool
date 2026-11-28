@@ -8,7 +8,10 @@ import { requirePermission } from '@/lib/auth/permissions';
 import { publicError } from '@/lib/errors';
 import { AdsApiError } from '@/lib/ads/client';
 import { testConnection } from '@/lib/ads/access';
-import { AdsSettingsError, connectionFor, removeCredentials, saveCredentials, saveDeveloperToken, saveGeneral, type GeneralInput } from '@/lib/ads/settings';
+import { AdsSettingsError, connectionFor, removeCredentials, saveAlertSettings, saveCredentials, saveDeveloperToken, saveGeneral, type AlertInput, type GeneralInput } from '@/lib/ads/settings';
+import { AdsDecisionError, respondToFinding, reviewAccount, setProvisionalGoal } from '@/lib/ads/decisions';
+import { evaluateAll } from '@/lib/ads/findings';
+import { latestGoal } from '@/lib/ads/findings-store';
 import { clientBelongs, getAccount, setClientLevel, updateAccount } from '@/lib/ads/store';
 import { ADS_JOB, enqueueAccountSyncs, syncSchedules } from '@/lib/ads/sync';
 import { enqueueJob } from '@/lib/core/jobs';
@@ -152,10 +155,90 @@ export async function setAdsClientLevelAction(clientId: string, level: string | 
     const l = level === 'A' || level === 'B' || level === 'C' ? level : null;
     if (level && !l) return { ok: false, error: 'El nivel es A, B o C.' };
     if (!(await clientBelongs(user.tenantId, String(clientId ?? '')))) return { ok: false, error: 'Ese cliente no existe.' };
+    // Paso 2: un cliente con objetivo provisional no puede ser nivel A (necesita un objetivo acordado).
+    if (l === 'A' && (await latestGoal(user.tenantId, String(clientId)))?.kind === 'provisional') return { ok: false, error: 'Este cliente tiene un objetivo provisional: para nivel A hace falta un objetivo acordado.' };
     await setClientLevel(user.tenantId, String(clientId), l, who(user));
     refresh();
     return { ok: true };
   } catch (e) {
     return fail(e, 'No se pudo guardar el nivel');
+  }
+}
+
+// --- Paso 2: hallazgos, revisiones, objetivo provisional y avisos ---------------------------------------------------
+// Responder, revisar y fijar objetivo: «edit». Ajustes de avisos y «Evaluar ahora»: «admin». Nada escribe en Google Ads.
+
+const fail2 = (e: unknown, fallback: string): { ok: false; error: string } => (e instanceof AdsDecisionError ? { ok: false, error: e.userMessage } : fail(e, fallback));
+const refresh2 = (accountId?: string | null) => {
+  for (const p of ['/dashboard/ads', '/dashboard/ads/cartera', '/dashboard/ads/ajustes']) revalidatePath(p);
+  if (accountId) revalidatePath(`/dashboard/ads/cuentas/${accountId}`);
+};
+
+/** Respuesta del gestor a un hallazgo (las ocho de 7.4; motivo o fecha cuando toca; posponer como mucho 2 veces). */
+export async function respondAdsFindingAction(findingId: string, response: string, input: { reason?: string | null; until?: string | null; days?: number | null } = {}): Promise<Ok<{ message: string; taskUrl: string | null }>> {
+  try {
+    const user = await requirePermission('edit');
+    const clean = { reason: input?.reason === undefined || input?.reason === null ? null : String(input.reason).slice(0, 500), until: input?.until ? String(input.until).slice(0, 10) : null, days: input?.days === undefined || input?.days === null ? null : Number(input.days) };
+    const r = await respondToFinding(user.tenantId, user, String(findingId ?? ''), String(response ?? ''), clean);
+    refresh2();
+    return { ok: true, message: r.message, taskUrl: r.taskUrl ?? null };
+  } catch (e) {
+    return fail2(e, 'No se pudo guardar la respuesta');
+  }
+}
+
+/** «Marcar revisada»: nota de una línea; la próxima según el nivel (A 7, B 14, C 30 días). */
+export async function reviewAdsAccountAction(accountId: string, note: string): Promise<Ok<{ next: string }>> {
+  try {
+    const user = await requirePermission('edit');
+    const r = await reviewAccount(user.tenantId, user, String(accountId ?? ''), String(note ?? ''));
+    refresh2(String(accountId));
+    return { ok: true, next: r.next };
+  } catch (e) {
+    return fail2(e, 'No se pudo marcar la revisión');
+  }
+}
+
+/** «Fijar objetivo provisional» del cliente de esta cuenta (congelado; nunca en nivel A). */
+export async function setAdsProvisionalGoalAction(accountId: string): Promise<Ok<{ cpl: number; monthly: number; conversions: number; currency: string | null }>> {
+  try {
+    const user = await requirePermission('edit');
+    const r = await setProvisionalGoal(user.tenantId, user, String(accountId ?? ''));
+    refresh2(String(accountId));
+    return { ok: true, ...r };
+  } catch (e) {
+    return fail2(e, 'No se pudo fijar el objetivo');
+  }
+}
+
+/** Ajustes del paso 2: encender los avisos (salir del modo sombra), horario, días, tope y umbrales. */
+export async function saveAdsAlertSettingsAction(input: AlertInput): Promise<Ok> {
+  try {
+    const user = await requirePermission('admin');
+    const clean: AlertInput = {};
+    if (input && typeof input === 'object') {
+      if ('alertsEnabled' in input) clean.alertsEnabled = Boolean(input.alertsEnabled);
+      if ('alertHours' in input) clean.alertHours = String(input.alertHours ?? '');
+      if ('alertDays' in input) clean.alertDays = Array.isArray(input.alertDays) ? input.alertDays.map(Number) : String(input.alertDays ?? '');
+      if ('maxInterruptionsPerDay' in input) clean.maxInterruptionsPerDay = Number(input.maxInterruptionsPerDay);
+      if (input.thresholds && typeof input.thresholds === 'object') clean.thresholds = Object.fromEntries(Object.entries(input.thresholds).map(([k, v]) => [k, Number(v)]));
+    }
+    await saveAlertSettings(user.tenantId, clean, who(user));
+    refresh2();
+    return { ok: true };
+  } catch (e) {
+    return fail(e, 'No se pudieron guardar los avisos');
+  }
+}
+
+/** «Evaluar ahora»: pasa todas las reglas de todas las cuentas con lo ya descargado (sin llamar a Google). */
+export async function evaluateAdsNowAction(): Promise<Ok<{ accounts: number; opened: number; resolved: number }>> {
+  try {
+    const user = await requirePermission('admin');
+    const r = await evaluateAll(user.tenantId, { mode: 'todas' });
+    refresh2();
+    return { ok: true, accounts: r.length, opened: r.reduce((s, x) => s + x.opened, 0), resolved: r.reduce((s, x) => s + x.resolved, 0) };
+  } catch (e) {
+    return fail(e, 'No se pudo evaluar');
   }
 }

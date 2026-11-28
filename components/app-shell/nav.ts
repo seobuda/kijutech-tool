@@ -297,6 +297,8 @@ const SEGMENT_LABELS: Record<string, string> = {
   estrategia: 'Estrategia',
   projects: 'Proyectos SEO',
   ads: 'Google Ads',
+  cartera: 'Cartera',
+  cuentas: 'Cuentas',
   ajustes: 'Ajustes',
   preguntas: 'Banco de preguntas',
   // Pestañas SEO del proyecto (Hito 1 y 2).

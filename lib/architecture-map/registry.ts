@@ -273,7 +273,7 @@ const CORE_NODES: SystemNode[] = [
     id: 'ads',
     name: 'Google Ads',
     description:
-      'Vigilancia de las cuentas de Google Ads de los clientes desde la MCC de la agencia, solo lectura. Paso 1 construido (28 nov 2026): conexión con cuenta de servicio (o modo simulado), descarga de cuentas, estructura, métricas con cobertura por día, histórico de 37 meses, historial de cambios con su autor, latido horario y salud de nuestras fuentes (MED-00). Paso 2 (Cartera, Hoy con hallazgos y avisos en sombra) diseñado.',
+      'Vigilancia de las cuentas de Google Ads de los clientes desde la MCC de la agencia, solo lectura. Paso 1 construido (28 nov 2026): conexión con cuenta de servicio (o modo simulado), descarga de cuentas, estructura, métricas con cobertura por día, histórico de 37 meses, historial de cambios con su autor, latido horario y salud de nuestras fuentes (MED-00). Paso 2 construido (28 nov 2026): reglas de la lista cerrada (1, 2, 3, 4, 6, 8, 11, 12 y 15) con «no comprobado» si las fuentes no están sanas, pantallas Hoy, Cartera y Cuenta, respuestas del gestor, revisiones, objetivo provisional y avisos en modo sombra por defecto.',
     status: 'in_progress',
     icon: 'Megaphone',
     detailMapId: 'ads',

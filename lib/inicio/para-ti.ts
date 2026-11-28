@@ -6,14 +6,14 @@
 import 'server-only';
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { agtDepartments, agtTeamQuestions, clientMemory, clients, estSuggestions, findings, kbArticles, opsAgentActions, opsInboundEmails, projects, seoLocalPlaces, seoPlanItems, type AgtTeamQuestion } from '@/lib/db/schema';
+import { adsAccounts, adsFindings, agtDepartments, agtTeamQuestions, clientMemory, clients, estSuggestions, findings, kbArticles, opsAgentActions, opsInboundEmails, projects, seoLocalPlaces, seoPlanItems, type AgtTeamQuestion } from '@/lib/db/schema';
 import { listErrorGroups } from '@/lib/core/errors';
 import { getInbox, type InboxItem } from '@/lib/operaciones/inbox';
 import { getPendingEmailProposals, type PendingEmail } from '@/lib/operaciones/owner-queue';
 import { pendingEmailProposal } from '@/lib/operaciones/email-agent';
 import { pendingClientMessages, type PendingMessage } from '@/lib/core/comms';
 
-export type KindKey = 'bloqueos' | 'revisiones' | 'correos' | 'mensajes' | 'dudas' | 'agente' | 'estratega' | 'seo' | 'fichas' | 'base' | 'errores';
+export type KindKey = 'bloqueos' | 'revisiones' | 'correos' | 'mensajes' | 'dudas' | 'agente' | 'estratega' | 'seo' | 'ads' | 'fichas' | 'base' | 'errores';
 export type DeptKey = 'operaciones' | 'cuentas' | 'sistema';
 
 export const KINDS: Record<KindKey, { label: string; dept: DeptKey; urgent: boolean; ownerOnly: boolean }> = {
@@ -28,6 +28,8 @@ export const KINDS: Record<KindKey, { label: string; dept: DeptKey; urgent: bool
   estratega: { label: 'Propuestas del estratega', dept: 'cuentas', urgent: false, ownerOnly: false },
   // Hito 1 SEO (23 nov 2026): propuestas del plan de mejora de un proyecto (una entrada por proyecto).
   seo: { label: 'Plan de mejora SEO por aprobar', dept: 'cuentas', urgent: false, ownerOnly: false },
+  // Google Ads paso 2 (28 nov 2026): interrupciones abiertas y hallazgos vencidos de cuentas reales (nunca las simuladas).
+  ads: { label: 'Google Ads: urgente o vencido', dept: 'cuentas', urgent: true, ownerOnly: false },
   fichas: { label: 'Cambios propuestos en fichas', dept: 'cuentas', urgent: false, ownerOnly: false },
   base: { label: 'Entradas de la base por revisar', dept: 'operaciones', urgent: false, ownerOnly: false }
 };
@@ -143,6 +145,7 @@ export async function getParaTi(tenantId: string): Promise<ParaTi> {
     if (Number(e.drop) > 0) push({ key: `se-${e.projectId}-caida`, kind: 'seo', title: `Caída de visitas en ${e.project}`, detail: 'Diagnóstico por capas en Salud', clientName: e.client, since: new Date(e.since), href: `/dashboard/projects/${e.projectId}/salud`, urgent: true });
     if (Number(e.crit) > 0) push({ key: `se-${e.projectId}-critico`, kind: 'seo', title: `${Number(e.crit)} problema(s) crítico(s) en ${e.project}`, detail: 'Mira el Resumen del proyecto', clientName: e.client, since: new Date(e.since), href: `/dashboard/projects/${e.projectId}/resumen`, urgent: true });
   }
+  for (const a of await adsAttention(tenantId)) push({ key: `ads-${a.accountId}`, kind: 'ads', title: `${Number(a.n)} hallazgo(s) de Google Ads en ${a.account ?? 'una cuenta'}`, detail: clip(a.title, 140), clientName: a.client, since: new Date(a.since), href: `/dashboard/ads/cuentas/${a.accountId}` });
   for (const pl of seoPlaces) push({ key: `sf-${pl.clientId}`, kind: 'seo', title: `Confirmar su ficha de Google: ${pl.title}`, detail: 'Sin confirmar no se vigila la ficha ni se mide el mapa', clientName: pl.client, since: pl.since, href: pl.projectId ? `/dashboard/projects/${pl.projectId}/local` : '/dashboard/projects' });
   for (const m of memory) push({ key: `m-${m.id}`, kind: 'fichas', title: clip(m.text, 140) ?? '', detail: m.kind, clientName: m.client, since: m.createdAt, href: `/dashboard/clientes/${m.clientId}?tab=memoria` });
   for (const g of errors) push({ key: `e-${g.id}`, kind: 'errores', title: g.title, detail: `${g.source}${g.area ? ` · ${g.area}` : ''} · ${g.occurrences} vez/veces`, clientName: null, since: g.firstSeen, href: `/dashboard/errores?id=${g.id}` });
@@ -271,4 +274,17 @@ export async function getParaTiDecisions(tenantId: string, emails: PendingEmail[
     };
   });
   return { emails: emailDecisions, tools, questions, messages };
+}
+
+/** Google Ads (paso 2): por cuenta real, las interrupciones abiertas y lo vencido (lectura de ads_findings; capa de aplicación). */
+async function adsAttention(tenantId: string): Promise<{ accountId: string; account: string | null; client: string | null; n: number; title: string; since: Date }[]> {
+  const rows = await db
+    .select({ accountId: adsAccounts.id, account: adsAccounts.name, client: clients.name, n: sql<number>`count(*)::int`, title: sql<string>`min(${adsFindings.title})`, since: sql<Date>`min(${adsFindings.firstSeenAt})` })
+    .from(adsFindings)
+    .innerJoin(adsAccounts, eq(adsAccounts.id, adsFindings.accountId))
+    .leftJoin(clients, eq(clients.id, adsAccounts.clientId))
+    .where(and(eq(adsFindings.tenantId, tenantId), eq(adsAccounts.simulated, false), inArray(adsFindings.status, ['abierto', 'silenciado']), sql`((${adsFindings.status} = 'abierto' AND ${adsFindings.channel} = 'interrupcion') OR ${adsFindings.silencedUntil} < now())`))
+    .groupBy(adsAccounts.id, adsAccounts.name, clients.name)
+    .limit(LIMIT);
+  return rows.map((r) => ({ ...r, n: Number(r.n), since: new Date(r.since) }));
 }

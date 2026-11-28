@@ -7,7 +7,8 @@ import { coverageSummary, type CoverageSummary } from '@/lib/ads/health';
 import { followableAccounts, parseCustomerClients, Q } from '@/lib/ads/queries';
 import { formatCustomerId } from '@/lib/ads/rules';
 import { connectionFor, loadPublicSettings, type PublicAdsSettings } from '@/lib/ads/settings';
-import { accountTotals, clientLevels, clientNames, getSettingsRow, lastChangeEvents, listAccounts, listClientsForLink, upsertSettings } from '@/lib/ads/store';
+import { accountTotals, clientLevels, clientNames, getSettingsRow, lastChangeEvents, listAccounts, listClientsForLink } from '@/lib/ads/store';
+import { patchSettingsState } from '@/lib/ads/findings-store';
 
 export type AdsAccountView = {
   id: string;
@@ -97,7 +98,7 @@ export async function testConnection(tenantId: string): Promise<{ ok: boolean; m
       result = { ok: false, message: msg, accounts: [] };
     }
   }
-  const row = await getSettingsRow(tenantId);
-  await upsertSettings(tenantId, { state: { ...(row?.state ?? {}), lastTest: { at: new Date().toISOString(), ok: result.ok, message: result.message.slice(0, 500), accounts: result.accounts.length } } });
+  // Fusiona en el estado (jsonb ||) para no pisar otras claves (umbrales, avisos) escritas a la vez.
+  if (await getSettingsRow(tenantId)) await patchSettingsState(tenantId, { lastTest: { at: new Date().toISOString(), ok: result.ok, message: result.message.slice(0, 500), accounts: result.accounts.length } });
   return result;
 }

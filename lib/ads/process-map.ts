@@ -103,32 +103,85 @@ export const ADS_PROCESS_MAP: ProcessStep[] = [
     file: 'lib/ads/health.ts',
     when: 'Al abrir Google Ads y en cada revisión de Salud del sistema.',
     ai: 'Nada.',
-    code: 'Sana si el último dato bueno tiene menos del doble de su frescura (latido 1 h en horario de servicio, métricas y cambios 6 h, estructura 24 h); caída con 3 fallos seguidos. Las reglas del paso 2 preguntan aquí antes de afirmar y, si no está sana o falta un día de su ventana, dicen «no comprobado». Tres fallos seguidos van al registro central de errores.',
+    code: 'Sana si el último dato bueno tiene menos del doble de su frescura (latido y páginas 1 h en horario de servicio, métricas y cambios 6 h, estructura 24 h); caída con 3 fallos seguidos. Las reglas del paso 2 preguntan aquí antes de afirmar y, si no está sana o falta un día de su ventana, dicen «no comprobado». Los fallos de Google ya no van al registro de errores: los avisa el hallazgo 15 (los errores internos, sí).',
     tables: ['ads_sync_state', 'ads_daily_coverage', 'ads_api_usage']
+  },
+  {
+    id: 'ads-landing',
+    lane: 'Vigilar',
+    name: 'Páginas de destino con gasto',
+    description:
+      'Trabajo «ads.landing»: pide cada URL de destino con gasto en 7 días (las 20 que más gastan) con el rastreador seguro del núcleo, como un visitante. Caída = DNS, TLS, conexión, 404, 410 o 5xx; 403/429 = «no comprobable» (cortafuegos ante un bot). Las cuentas simuladas nunca salen a internet.',
+    status: 'built',
+    file: 'lib/ads/landing.ts',
+    when: 'Cada hora por cuenta, de 07:00 a 23:00 de la zona de la cuenta; al terminar encola la evaluación.',
+    ai: 'Nada.',
+    code: 'Un fallo suelto no avisa: hacen falta dos seguidos con al menos 10 minutos entre ellos (un fallo a menos de 10 min del anterior no suma). Solo lectura (GET, sin seguir redirecciones, solo direcciones públicas).',
+    tables: ['ads_landing_urls', 'ads_sync_state']
+  },
+  {
+    id: 'ads-reglas',
+    lane: 'Vigilar',
+    name: 'Reglas de los hallazgos (lista cerrada)',
+    description:
+      'Cálculos puros, uno por hallazgo de la lista cerrada: «cuenta_no_sirve» (1: estado o 0 impresiones en 3 horas de servicio), «rechazo_con_gasto» (2: grupo sin anuncio aprobado o palabras rechazadas en campaña con gasto de 14 días), «landing_caida» (3), «campana_parada_desbocada» (4: parada por horas o ayer −70 %, desbocada frente a lo típico y a su presupuesto), «pausado_aportaba» (6: pausada que daba > 10 % de los leads, con quién la pausó), «ritmo_gasto» (8: proyección del mes ±10 % y presupuesto agotado antes de las 14:00), «cambio_ajeno» (11: del cliente o de Google en algo con gasto), «medicion_rota» (12: binomial negativa por acción primaria) y «fuente_sin_datos» (15: MED-00).',
+    status: 'built',
+    file: 'lib/ads/finding-rules.ts',
+    when: 'Dentro de cada evaluación.',
+    ai: 'Nada (son cálculos).',
+    code: 'Cada regla declara fuentes y ventana de días: si una fuente no está sana o falta un día completo, dice «no comprobado» y no afirma nada. Un día cubierto sin fila es 0; uno sin cubrir, «sin dato». Nunca acusa fuera de la programación de anuncios. Medición: μ = clics × tasa de las 8 semanas previas por fecha de conversión, P(0) = (k/(k+μ))^k con k estimada de la cuenta, α = 0,1 %, solo con ≥ 30 conversiones y clics en su banda; si no, «sin datos para afirmar». Ritmo sin acuerdo: solo avisa de pasarse (la suma de presupuestos es un techo). Umbrales editables en Ajustes.',
+    tables: ['ads_settings']
+  },
+  {
+    id: 'ads-evaluar',
+    lane: 'Vigilar',
+    name: 'Evaluación y ciclo de vida de los hallazgos',
+    description:
+      'Trabajo «ads.evaluar» por cuenta: foto de lo descargado, salud de sus fuentes y reglas. Las horarias (1, 2, 3, 4 y 15) en cada evaluación; las diarias (6, 8, 11 y 12) una vez al día tras la descarga de la mañana o si la última vez no se pudieron comprobar. Guarda el resultado de cada regla (la cabecera de Hoy cuenta los «no comprobado») y los hallazgos.',
+    status: 'built',
+    file: 'lib/ads/findings.ts',
+    when: 'Al terminar cada descarga de métricas, latido o páginas (encolada, una abierta por cuenta); «Evaluar ahora» en Ajustes. La MCC entera (hallazgo 15 de agencia), cada hora desde el planificador «google ads».',
+    ai: 'Nada.',
+    code: 'Una causa = un hallazgo vivo (índice único); cada aparición nueva es un episodio. Precedencia 15 > 1 > 4 > 3 > 2 > 12 > 8/6/11: lo inferior sobre la misma cuenta o campaña queda como evidencia del superior. Solo se resuelve si la regla se evaluó con fuentes sanas y ya no lo ve; con «no comprobado» queda «sin comprobar desde…». Un descarte vigente no reabre la causa; un silencio vencido vuelve como «vencido». Las cuentas simuladas se evalúan (para Hoy) pero nunca avisan.',
+    tables: ['ads_findings', 'ads_rule_runs', 'ads_goals']
+  },
+  {
+    id: 'ads-avisos',
+    lane: 'Avisar',
+    name: 'Avisos (modo sombra por defecto)',
+    description:
+      'Tarea del planificador «ads avisos»: con los avisos apagados (modo sombra, por defecto) no envía nada. Encendidos en Ajustes, manda las interrupciones abiertas no avisadas por la cola de avisos del núcleo (al dueño), solo en horario laboral, con un tope de interrupciones al día (las demás, juntas en un mensaje), y un parte de la mañana con 5 decisiones + 3 «para que lo sepas» y «N más por debajo del corte».',
+    status: 'built',
+    file: 'lib/ads/alerts.ts',
+    when: 'Cada 30 s (solo el proceso líder); solo actúa en el horario y los días de Ajustes (hora de Madrid).',
+    ai: 'Nada.',
+    code: 'Solo telegramOutbound().notifyOwner (nunca Telegram directo); clave con el episodio (ads:<tipo>:<causa>:<inicio>), estado «encolado». «Nuestra fuente sin datos» con el bot de Sistema y fuera del tope del gestor. Nunca en modo simulado. Un hallazgo abierto no se reenvía. Pendiente: avisar a Eury necesita notifyMember en el núcleo (decisión de Enric) y descontar los festivos de la agencia.',
+    tables: ['ads_findings', 'ads_settings']
+  },
+  {
+    id: 'ads-decisiones',
+    lane: 'Decidir',
+    name: 'Respuestas, revisiones y objetivo provisional',
+    description:
+      'Las ocho respuestas del gestor a un hallazgo (hecho, lo hago yo, esperando al cliente con fecha, el cliente lo quiere así con motivo, ya lo sabía, no es un problema con motivo, posponer 1/7/28 días como mucho 2 veces, encargar), «Marcar revisada» con nota de una línea (próxima según el nivel: A 7, B 14, C 30 días) y «Fijar objetivo provisional» (coste / conversiones primarias de los 90 días previos sin los 7 últimos; mínimo 15; congelado; nunca en nivel A).',
+    status: 'built',
+    file: 'lib/ads/decisions.ts',
+    when: 'Al pulsar los botones de Hoy y del expediente de la cuenta.',
+    ai: 'Nada.',
+    code: 'Las respuestas ajustan presentación y silencios, nunca la detección ni los umbrales (investigación 7.4). «Encargar» crea el encargo por la fuente de trabajo del núcleo si la cuenta tiene cliente. Permisos: responder, revisar y fijar objetivo con «edit»; avisos, umbrales y «Evaluar ahora» con «admin». Nada escribe en Google Ads.',
+    tables: ['ads_finding_responses', 'ads_account_reviews', 'ads_goals', 'ads_clients']
   },
   {
     id: 'ads-pantallas',
     lane: 'Ver',
-    name: 'Pantallas: Google Ads y Ajustes',
-    description: 'Google Ads (Clientes → Google Ads): la cobertura real, el estado de cada fuente por cuenta y los últimos cambios con su autor. Ajustes (solo admin): conexión, descarga y cuentas con su cliente y su nivel.',
+    name: 'Pantallas: Hoy, Cartera, Cuenta y Ajustes',
+    description:
+      'Hoy (Clientes → Google Ads): cobertura real, modo sombra, bandejas urgente / vencido / por decidir (5 + 3 y «N más por debajo del corte») / esperando a terceros / en seguimiento, con evidencia, días abierto y respuestas; descarga por cuenta y últimos cambios. Cartera: una fila por cuenta (cliente y nivel, gasto y ritmo, CPL 30 días frente a objetivo o línea base, conversiones 7 días, medición, hallazgos, último cambio, revisiones), gris lo no comprobado, ordenable. Cuenta: expediente mínimo. Ajustes (admin): conexión, descarga, cuentas, avisos y umbrales. Los hallazgos urgentes y vencidos de cuentas reales salen también en «Para ti».',
     status: 'built',
-    file: 'app/(dashboard)/dashboard/ads/page.tsx',
+    file: 'lib/ads/views.ts',
     when: 'Al abrirlas.',
     ai: 'Nada.',
-    code: 'Sin llamadas a Google para pintarse (todo sale de lo guardado), salvo «Probar conexión» (1 operación). Permisos: ver con «view»; todo lo de Ajustes con «admin».',
-    tables: ['ads_accounts', 'ads_settings', 'ads_change_events']
-  },
-  {
-    id: 'ads-paso2',
-    lane: 'Paso 2 (diseñado)',
-    name: 'Hallazgos, Cartera y avisos',
-    description:
-      'Tablas ya creadas y vacías: objetivos por cliente (provisional congelado o acordado), hallazgos de la lista cerrada de 15 con su episodio y su canal, respuestas del gestor, resultado de cada regla (para la cabecera «no comprobado») y revisiones de cuenta. Las reglas (cuenta que no sirve, rechazo con gasto, landing caída, campaña parada o desbocada, ritmo, medición rota con binomial negativa, cambio ajeno, pausado que aportaba) llegan con la pantalla Cartera, en modo sombra.',
-    status: 'planned',
-    file: 'docs/ads/DISENO-TECNICO-ADS.md',
-    when: 'Paso 2.',
-    ai: 'Nada en las reglas (son cálculos).',
-    code: 'Ver diseño §6: precedencia de causas, ciclo de vida que no resuelve con «no comprobado», avisos solo a Enric (notifyOwner) hasta que exista notifyMember en el núcleo.',
-    tables: ['ads_goals', 'ads_findings', 'ads_finding_responses', 'ads_rule_runs', 'ads_account_reviews']
+    code: 'Sin llamadas a Google para pintarse (todo sale de lo guardado), salvo «Probar conexión» (1 operación). Las cifras en la moneda de cada cuenta, sin sumar monedas. Permisos: ver con «view».',
+    tables: ['ads_accounts', 'ads_settings', 'ads_change_events', 'ads_findings', 'ads_rule_runs', 'ads_account_reviews']
   }
 ];
