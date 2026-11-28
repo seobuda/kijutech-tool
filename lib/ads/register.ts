@@ -14,6 +14,7 @@ import { adsHealth } from '@/lib/ads/health';
 import { ADS_ALERTS_TASK, runAdsAlerts } from '@/lib/ads/alerts';
 import { evaluateAccount, evaluateAgency } from '@/lib/ads/findings';
 import { checkLandings } from '@/lib/ads/landing';
+import { runAudit } from '@/lib/ads/audit';
 import { patchSettingsState } from '@/lib/ads/findings-store';
 import { getSettingsRow } from '@/lib/ads/store';
 import { zonedParts } from '@/lib/ads/rules';
@@ -46,6 +47,8 @@ export function registerAdsCapabilities(): void {
   registerJobKind({ kind: ADS_JOB.cambios, timeoutS: 300, maxConcurrent: 2, maxAttempts: 3, run: async (ctx, p) => summary(await syncChanges(ctx.tenantId, accountOf(p), { signal: ctx.signal, heartbeat: ctx.heartbeat })) });
   registerJobKind({ kind: ADS_JOB.latido, timeoutS: 120, maxConcurrent: 3, maxAttempts: 2, run: async (ctx, p) => summary(await thenEvaluate(ctx.tenantId, accountOf(p), () => syncHourly(ctx.tenantId, accountOf(p), { signal: ctx.signal, heartbeat: ctx.heartbeat }))) });
   registerJobKind({ kind: ADS_JOB.landing, timeoutS: 300, maxConcurrent: 2, maxAttempts: 1, run: async (ctx, p) => summary(await thenEvaluate(ctx.tenantId, accountOf(p), () => checkLandings(ctx.tenantId, accountOf(p)))) });
+  // Paso 3: auditoría de higiene (la primera vez crea la de entrada; después, vigilancia diaria). `fresh` = «Repetir».
+  registerJobKind({ kind: ADS_JOB.auditar, timeoutS: 300, maxConcurrent: 2, maxAttempts: 2, run: async (ctx, p) => summary(await runAudit(ctx.tenantId, accountOf(p), { fresh: p.fresh === true, userId: typeof p.userId === 'number' ? p.userId : null, signal: ctx.signal })) });
   registerJobKind({ kind: ADS_JOB.evaluar, timeoutS: 180, maxConcurrent: 2, maxAttempts: 2, run: async (ctx, p) => summary(await evaluateAccount(ctx.tenantId, accountOf(p), { mode: p.mode === 'todas' ? 'todas' : 'auto' })) });
   // Histórico: tramos de 90 días mientras quede tiempo; si no termina, se encola la continuación.
   registerJobKind({
@@ -62,6 +65,8 @@ export function registerAdsCapabilities(): void {
         await ctx.heartbeat();
         if (last.done || last.skipped) break;
       }
+      // Paso 3: con el histórico completo, la auditoría de entrada ya tiene su línea base de 90 días.
+      if (last.done) await enqueueJob({ tenantId: ctx.tenantId, kind: ADS_JOB.auditar, payload: { accountId }, scopeType: 'cuenta', scopeId: accountId, priority: 7, dedupeKey: `${ADS_JOB.auditar}:${accountId}:historico` }).catch(() => undefined);
       if (!last.done && !last.skipped) {
         await enqueueJob({ tenantId: ctx.tenantId, kind: ADS_JOB.historico, payload: { accountId }, scopeType: 'cuenta', scopeId: accountId, priority: 8, dedupeKey: `${ADS_JOB.historico}:${accountId}:${String(last.chunks ?? '')}` });
       }

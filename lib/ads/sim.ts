@@ -444,7 +444,189 @@ function rowsFor(acc: SimAccount, query: AdsQuery, now: Date): ApiRow[] {
       return out.slice(0, Number(p.limit ?? 10_000));
     }
     default:
+      return auditRows(acc, query, now) ?? [];
+  }
+}
+
+// --- Paso 3: auditoría de higiene (un caso de cada control; diseño §13.3) ---------------------------------------------
+//
+// Clínica: Display dentro de Búsqueda en «Implantes», textos automáticos y AI Max en sector sanitario, recomendaciones
+// que se aplican solas, marca y competidor dentro de lo genérico; con exclusiones y llamada correctas.
+// Fontanería: socios de búsqueda sin conversiones, anuncio solo de llamada, teléfono distinto del de la ficha e informes
+// de llamada apagados, término con Barcelona (atiende Madrid), recomendaciones útiles pendientes.
+// Abogados: «presencia o interés» y 22 % del gasto fuera de la zona, un grupo DSA, término con Málaga (atiende Sevilla) y
+// la zona de la ficha confirmada hace 200 días (NEG-07).
+// Reformas: PMax con Display y vídeo desproporcionados y sin exclusiones de contenido (y el autoetiquetado apagado del
+// paso 1). Academia: migrada a AI Max por Google hace 40 días, sin recurso de llamada y la ficha nunca confirmada.
+
+/** Ficha simulada de cada cuenta (las simuladas nunca se vinculan a clientes reales), con fechas de confirmación. */
+export type SimFicha = { brands: string[]; competitors: string[]; zoneText: string; phones: string[]; hours: string; sector: string; services: string; confirmedDaysAgo: Partial<Record<'marca' | 'zona' | 'telefono' | 'horario' | 'competidores' | 'sector' | 'servicios', number>> };
+const all = (d: number) => ({ marca: d, zona: d, telefono: d, horario: d, competidores: d, sector: d, servicios: d });
+export const SIM_FICHAS: Record<string, SimFicha> = {
+  '9990000001': { brands: ['Clínica Dental Norte', 'Dental Norte'], competitors: ['Sonrisas Bilbao'], zoneText: 'Bilbao, Getxo y Barakaldo (Bizkaia)', phones: ['944 000 001'], hours: 'L-V 9:00-20:00', sector: 'Clínica dental (sanidad)', services: 'Implantes, ortodoncia, limpieza', confirmedDaysAgo: all(40) },
+  '9990000002': { brands: ['Fontanería Rápida'], competitors: ['Fontaneros Express'], zoneText: 'Madrid capital y Alcobendas', phones: ['910 000 002'], hours: 'Todos los días, 24 h', sector: 'Fontanería', services: 'Urgencias, desatascos, reformas de baño', confirmedDaysAgo: all(20) },
+  '9990000003': { brands: ['Abogados Laboral'], competitors: [], zoneText: 'Sevilla y provincia', phones: ['954 000 003'], hours: 'L-V 9:00-18:00', sector: 'Abogados (laboral)', services: 'Despidos, accidentes laborales', confirmedDaysAgo: { ...all(60), zona: 200 } },
+  '9990000004': { brands: ['Reformas Integrales Levante'], competitors: [], zoneText: 'Valencia y área metropolitana', phones: ['960 000 004'], hours: 'L-S 8:00-20:00', sector: 'Reformas', services: 'Reformas de cocina y baño', confirmedDaysAgo: all(10) },
+  '9990000005': { brands: ['Academia Centro'], competitors: [], zoneText: 'Zaragoza', phones: ['976 000 005'], hours: 'L-V 10:00-21:00', sector: 'Academia de idiomas', services: 'Inglés para adultos y niños', confirmedDaysAgo: {} }
+};
+
+/** Coste, clics y conversiones de una campaña en un periodo. */
+function periodSum(acc: SimAccount, c: SimCampaign, from: string, to: string, now: Date): { cost: number; clicks: number; conv: number } {
+  let cost = 0;
+  let clicks = 0;
+  let conv = 0;
+  for (const d of eachDay(from, to)) {
+    const m = observedDay(acc, c, d, now);
+    if (m) {
+      cost += m.cost;
+      clicks += m.clicks;
+      conv += m.form + m.call + m.mcc;
+    }
+  }
+  return { cost, clicks, conv };
+}
+
+/** Reparto por redes de cada campaña: [red, parte del gasto, parte de las conversiones]. */
+function networkSplit(acc: SimAccount, c: SimCampaign): [string, number, number][] {
+  if (acc.id === '9990000002' && c.type === 'SEARCH') return [['SEARCH', 0.88, 1], ['SEARCH_PARTNERS', 0.12, 0]];
+  if (acc.id === '9990000001' && c.id === '1100001') return [['SEARCH', 0.9, 0.95], ['CONTENT', 0.1, 0.05]];
+  if (acc.id === '9990000004' && c.type === 'PERFORMANCE_MAX') return [['SEARCH', 0.55, 0.95], ['CONTENT', 0.3, 0.03], ['YOUTUBE', 0.15, 0.02]];
+  if (c.type === 'PERFORMANCE_MAX') return [['SEARCH', 0.85, 0.9], ['CONTENT', 0.1, 0.07], ['YOUTUBE', 0.05, 0.03]];
+  return [['SEARCH', 1, 1]];
+}
+
+/** Términos de búsqueda simulados: [término, parte del gasto de la campaña, parte de sus conversiones]. */
+function simTerms(acc: SimAccount, c: SimCampaign): [string, number, number][] {
+  switch (c.id) {
+    case '1100001':
+      return [['implantes dentales bilbao', 0.45, 0.6], ['clinica dental norte', 0.12, 0.2], ['dental norte opiniones', 0.06, 0.05], ['sonrisas bilbao implantes', 0.05, 0], ['precio implante dental', 0.32, 0.15]];
+    case '2200001':
+      return [['fontanero urgente madrid', 0.5, 0.6], ['fontanero alcobendas', 0.12, 0.15], ['fontanero barcelona', 0.08, 0], ['desatascos 24 horas', 0.28, 0.25], ['fontaneria rapida telefono', 0.02, 0]];
+    case '2200002':
+      return [['reforma baño madrid', 0.7, 0.8], ['plato de ducha precio', 0.3, 0.2]];
+    case '3300001':
+      return [['abogado despido sevilla', 0.6, 0.7], ['abogado laboral malaga', 0.1, 0], ['indemnizacion por despido', 0.3, 0.3]];
+    case '3300002':
+      return [['abogado accidente laboral', 0.8, 0.9], ['abogados laboral sevilla opiniones', 0.2, 0.1]];
+    case '4400001':
+      return [['reformas valencia', 0.6, 0.7], ['reforma cocina precio', 0.4, 0.3]];
+    case '5500001':
+      return [['academia ingles zaragoza', 0.7, 0.8], ['clases de ingles online', 0.3, 0.2]];
+    default:
       return [];
+  }
+}
+
+const GEO: Record<string, { id: string; name: string; type: string }[]> = {
+  '9990000001': [{ id: '9000001', name: 'Bilbao', type: 'City' }, { id: '9000002', name: 'Getxo', type: 'City' }],
+  '9990000002': [{ id: '9000010', name: 'Madrid', type: 'City' }],
+  '9990000003': [{ id: '9000020', name: 'Andalucía', type: 'Region' }],
+  '9990000005': [{ id: '9000030', name: 'Zaragoza', type: 'City' }]
+};
+const GEO_NAMES = new Map(Object.values(GEO).flat().map((g) => [g.id, g]));
+
+function auditRows(acc: SimAccount, query: AdsQuery, now: Date): ApiRow[] | null {
+  const today = zonedParts(now, TZ).date;
+  const live = acc.campaigns.filter((c) => c.removedDaysAgo === undefined);
+  const p = query.params;
+  const search = live.filter((c) => c.type === 'SEARCH');
+  switch (query.key) {
+    case 'audit_campaigns':
+      return live.map((c) => ({
+        campaign: {
+          id: c.id,
+          name: c.name,
+          status: 'ENABLED',
+          advertisingChannelType: c.type,
+          networkSettings: { targetGoogleSearch: true, targetSearchNetwork: c.type === 'SEARCH' && acc.id === '9990000002', targetContentNetwork: c.id === '1100001' },
+          geoTargetTypeSetting: { positiveGeoTargetType: acc.id === '9990000003' ? 'PRESENCE_OR_INTEREST' : 'PRESENCE', negativeGeoTargetType: 'PRESENCE' }
+        }
+      }));
+    case 'audit_automation':
+      return live.map((c) => ({
+        campaign: {
+          id: c.id,
+          aiMaxSetting: { enableAiMax: c.id === '5500001' || c.id === '1100001' },
+          assetAutomationSettings: [{ assetAutomationType: 'TEXT_ASSET_AUTOMATION', assetAutomationStatus: acc.id === '9990000001' && c.type === 'SEARCH' ? 'OPTED_IN' : 'OPTED_OUT' }]
+        }
+      }));
+    case 'audit_migrations':
+      return live.map((c) => ({ campaign: { id: c.id, ...(c.id === '5500001' ? { acaMigrationDateTime: `${addDays(today, -40)} 00:00:00` } : {}) } }));
+    case 'audit_ad_types':
+      return search.flatMap((c) => [
+        ...[1, 2].flatMap((g) => [1, 2].map((n) => ({ campaign: { id: c.id }, adGroup: { id: `${c.id}${g}`, name: `Grupo ${g} · ${c.name}`, type: 'SEARCH_STANDARD' }, adGroupAd: { ad: { type: c.id === '2200001' && g === 1 && n === 2 ? 'CALL_AD' : 'RESPONSIVE_SEARCH_AD' } } }))),
+        ...(c.id === '3300002' ? [{ campaign: { id: c.id }, adGroup: { id: `${c.id}3`, name: 'Dinámicos · Accidentes', type: 'SEARCH_DYNAMIC_ADS' }, adGroupAd: { ad: { type: 'EXPANDED_DYNAMIC_SEARCH_AD' } } }] : [])
+      ]);
+    case 'audit_rec_subscriptions':
+      return acc.id === '9990000001' ? [{ recommendationSubscription: { type: 'CAMPAIGN_BUDGET', status: 'ENABLED' } }] : acc.id === '9990000003' ? [{ recommendationSubscription: { type: 'SITELINK_ASSET', status: 'PAUSED' } }] : [];
+    case 'audit_exclusions':
+      return acc.id === '9990000001'
+        ? [
+            { customerNegativeCriterion: { id: '1', type: 'CONTENT_LABEL', contentLabel: { type: 'SEXUALLY_SUGGESTIVE' } } },
+            { customerNegativeCriterion: { id: '2', type: 'MOBILE_APP_CATEGORY', mobileAppCategory: { mobileAppCategoryConstant: 'mobileAppCategoryConstants/60008' } } }
+          ]
+        : [];
+    case 'audit_call_assets_campaign':
+      return acc.id === '9990000002' ? [{ campaign: { id: '2200001' }, asset: { id: '8800002', callAsset: { phoneNumber: '+34 910 999 999', countryCode: 'ES', callConversionReportingState: 'DISABLED', adScheduleTargets: [] } }, campaignAsset: { status: 'ENABLED' } }] : [];
+    case 'audit_call_assets_customer': {
+      const phone: Record<string, string> = { '9990000001': '+34944000001', '9990000003': '+34954000003', '9990000004': '+34960000004' };
+      const ph = phone[acc.id];
+      return ph ? [{ asset: { id: `88${acc.id.slice(-4)}`, callAsset: { phoneNumber: ph, countryCode: 'ES', callConversionReportingState: 'USE_ACCOUNT_LEVEL_CALL_CONVERSION_ACTION', adScheduleTargets: [{ dayOfWeek: 'MONDAY', startHour: 9, endHour: 20 }] } }, customerAsset: { status: 'ENABLED' } }] : [];
+    }
+    case 'audit_networks':
+      return live.flatMap((c) => {
+        const s = periodSum(acc, c, String(p.from), String(p.to), now);
+        if (s.cost <= 0) return [];
+        return networkSplit(acc, c).map(([network, costShare, convShare]) => ({
+          campaign: { id: c.id, advertisingChannelType: c.type },
+          segments: { adNetworkType: network },
+          metrics: { costMicros: micros(s.cost * costShare), clicks: String(Math.round(s.clicks * costShare)), conversions: Math.round(s.conv * convShare * 100) / 100 }
+        }));
+      });
+    case 'audit_user_location': {
+      const outside = acc.id === '9990000003' ? 0.22 : 0.03;
+      return live.flatMap((c) => {
+        const s = periodSum(acc, c, String(p.from), String(p.to), now);
+        if (s.cost <= 0) return [];
+        return [
+          { campaign: { id: c.id }, userLocationView: { countryCriterionId: '2724', targetingLocation: true }, metrics: { costMicros: micros(s.cost * (1 - outside)), clicks: String(Math.round(s.clicks * (1 - outside))), conversions: Math.round(s.conv * (1 - outside / 2) * 100) / 100 } },
+          { campaign: { id: c.id }, userLocationView: { countryCriterionId: '2724', targetingLocation: false }, metrics: { costMicros: micros(s.cost * outside), clicks: String(Math.round(s.clicks * outside)), conversions: Math.round(((s.conv * outside) / 2) * 100) / 100 } }
+        ];
+      });
+    }
+    case 'audit_geo_targets':
+      return live.flatMap((c): ApiRow[] =>
+        acc.id === '9990000004'
+          ? [{ campaign: { id: c.id }, campaignCriterion: { criterionId: '1', type: 'PROXIMITY', negative: false, proximity: { radius: 30, radiusUnits: 'KILOMETERS', address: { cityName: 'Valencia' } } } }]
+          : (GEO[acc.id] ?? []).map((g) => ({ campaign: { id: c.id }, campaignCriterion: { criterionId: g.id, type: 'LOCATION', negative: false, location: { geoTargetConstant: `geoTargetConstants/${g.id}` } } }))
+      );
+    case 'audit_geo_names':
+      return String(p.ids ?? '')
+        .split(',')
+        .map((id) => GEO_NAMES.get(id))
+        .filter((g): g is { id: string; name: string; type: string } => Boolean(g))
+        .map((g) => ({ geoTargetConstant: { id: g.id, name: g.name, canonicalName: `${g.name},Spain`, targetType: g.type } }));
+    case 'audit_search_terms':
+      return search
+        .flatMap((c) => {
+          const s = periodSum(acc, c, String(p.from), String(p.to), now);
+          return simTerms(acc, c).map(([term, costShare, convShare]) => ({ searchTermView: { searchTerm: term }, campaign: { id: c.id }, metrics: { costMicros: micros(s.cost * costShare), clicks: String(Math.round(s.clicks * costShare)), conversions: Math.round(s.conv * convShare * 100) / 100 } }));
+        })
+        .filter((r) => Number((r.metrics as { costMicros: string }).costMicros) > 0)
+        .slice(0, Number(p.limit ?? 1000));
+    case 'audit_recommendations':
+      return acc.id === '9990000002'
+        ? [
+            { recommendation: { resourceName: `customers/${acc.id}/recommendations/1`, type: 'SITELINK_ASSET', campaign: `customers/${acc.id}/campaigns/2200001` } },
+            { recommendation: { resourceName: `customers/${acc.id}/recommendations/2`, type: 'CAMPAIGN_BUDGET', campaign: `customers/${acc.id}/campaigns/2200001` } }
+          ]
+        : acc.id === '9990000003'
+          ? [{ recommendation: { resourceName: `customers/${acc.id}/recommendations/3`, type: 'USE_BROAD_MATCH_KEYWORD', campaign: `customers/${acc.id}/campaigns/3300001` } }]
+          : [];
+    case 'audit_optimization_score':
+      return [{ customer: { id: acc.id, optimizationScore: acc.id === '9990000002' ? 0.64 : 0.81 } }];
+    default:
+      return null;
   }
 }
 

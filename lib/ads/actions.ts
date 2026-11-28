@@ -11,6 +11,7 @@ import { testConnection } from '@/lib/ads/access';
 import { AdsSettingsError, connectionFor, removeCredentials, saveAlertSettings, saveCredentials, saveDeveloperToken, saveGeneral, type AlertInput, type GeneralInput } from '@/lib/ads/settings';
 import { AdsDecisionError, respondToFinding, reviewAccount, setProvisionalGoal } from '@/lib/ads/decisions';
 import { evaluateAll } from '@/lib/ads/findings';
+import { AdsAuditError, confirmFichaFact, markAuditRead, respondToAuditItem, runAudit } from '@/lib/ads/audit';
 import { closeAccountFindings, latestGoal } from '@/lib/ads/findings-store';
 import { clientBelongs, getAccount, setClientLevel, updateAccount } from '@/lib/ads/store';
 import { ADS_JOB, enqueueAccountSyncs, syncSchedules } from '@/lib/ads/sync';
@@ -242,5 +243,70 @@ export async function evaluateAdsNowAction(): Promise<Ok<{ accounts: number; ope
     return { ok: true, accounts: r.length, opened: r.reduce((s, x) => s + x.opened, 0), resolved: r.reduce((s, x) => s + x.resolved, 0) };
   } catch (e) {
     return fail(e, 'No se pudo evaluar');
+  }
+}
+
+// --- Paso 3: auditoría de higiene ------------------------------------------------------------------------------------
+// Responder a un control, confirmar un dato de la ficha (NEG-07), marcar la auditoría leída y pasarla ahora: «edit».
+// Nada escribe en Google Ads: «qué hacer» se aplica a mano.
+
+const fail3 = (e: unknown, fallback: string): { ok: false; error: string } => (e instanceof AdsAuditError ? { ok: false, error: e.userMessage } : fail(e, fallback));
+
+/** Respuesta a un control de la auditoría (hecho, el cliente lo quiere así y no aplica con motivo, más tarde). */
+export async function respondAdsAuditItemAction(itemId: string, response: string, reason: string | null = null): Promise<Ok<{ message: string }>> {
+  try {
+    const user = await requirePermission('edit');
+    const r = await respondToAuditItem(user.tenantId, user, String(itemId ?? ''), String(response ?? ''), reason === null || reason === undefined ? null : String(reason).slice(0, 500));
+    refresh2();
+    return { ok: true, message: r.message };
+  } catch (e) {
+    return fail3(e, 'No se pudo guardar la respuesta');
+  }
+}
+
+/** «Confirmar» un dato de la ficha del cliente que usa la auditoría (fecha, quién y lo que decía). */
+export async function confirmAdsFichaFactAction(accountId: string, fact: string): Promise<Ok<{ message: string }>> {
+  try {
+    const user = await requirePermission('edit');
+    const r = await confirmFichaFact(user.tenantId, user, String(accountId ?? ''), String(fact ?? ''));
+    refresh2(String(accountId));
+    return { ok: true, message: r.message };
+  } catch (e) {
+    return fail3(e, 'No se pudo confirmar el dato');
+  }
+}
+
+/** «Marcar auditoría leída» (la media hora por cuenta de la investigación 13.2). */
+export async function markAdsAuditReadAction(auditId: string): Promise<Ok> {
+  try {
+    const user = await requirePermission('edit');
+    await markAuditRead(user.tenantId, user, String(auditId ?? ''));
+    refresh2();
+    return { ok: true };
+  } catch (e) {
+    return fail3(e, 'No se pudo marcar la auditoría');
+  }
+}
+
+/**
+ * «Pasar la auditoría ahora» o «Repetir» (`fresh`: crea una auditoría nueva y deja la anterior como sustituida). En modo
+ * simulado se hace al momento; con la cuenta real se encola (unas 14 operaciones de lectura).
+ */
+export async function runAdsAuditNowAction(accountId: string, fresh = false): Promise<Ok<{ message: string }>> {
+  try {
+    const user = await requirePermission('edit');
+    const acc = await getAccount(user.tenantId, String(accountId ?? ''));
+    if (!acc) return { ok: false, error: 'Esa cuenta no existe.' };
+    if (acc.simulated) {
+      const r = await runAudit(user.tenantId, acc.id, { fresh: Boolean(fresh), userId: user.id });
+      refresh2(acc.id);
+      if ('skipped' in r) return { ok: false, error: `No se pudo auditar: ${r.skipped}.` };
+      return { ok: true, message: r.mode === 'entrada' ? `Auditoría hecha: ${r.summary.mal} mal, ${r.summary.confirmar} por confirmar, ${r.summary.bien} bien, ${r.summary.no_comprobado} sin comprobar.` : `Vigilancia al día: ${r.fixed.length} corregidos, ${r.regressed.length} reaparecidos.` };
+    }
+    await enqueueJob({ tenantId: user.tenantId, kind: ADS_JOB.auditar, payload: { accountId: acc.id, fresh: Boolean(fresh), userId: user.id }, scopeType: 'cuenta', scopeId: acc.id, priority: 4, dedupeKey: `${ADS_JOB.auditar}:${acc.id}:ahora:${fresh ? 'nueva' : 'vigilar'}` });
+    refresh2(acc.id);
+    return { ok: true, message: 'Auditoría en marcha: recarga la página en un par de minutos.' };
+  } catch (e) {
+    return fail3(e, 'No se pudo pasar la auditoría');
   }
 }

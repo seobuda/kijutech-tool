@@ -12,6 +12,7 @@ import { KIND_INFO, MAX_POSTPONES, monthPace, morningCut, nextReviewDate, RESPON
 import * as fs from '@/lib/ads/findings-store';
 import { addDays, zonedParts } from '@/lib/ads/rules';
 import { getSettingsRow, lastChangeEvents } from '@/lib/ads/store';
+import { auditStatusByAccount } from '@/lib/ads/audit-store';
 
 const DEFAULT_TZ = 'Europe/Madrid';
 const round2 = (v: number) => Math.round(v * 100) / 100;
@@ -190,6 +191,8 @@ export type PortfolioRow = {
   nextReview: string | null;
   reviewOverdue: boolean;
   goalKind: 'acordado' | 'provisional' | null;
+  /** Paso 3: auditoría de higiene. «pendiente» = sin auditar o sin leer; «hecha» = leída. */
+  audit: { state: 'sin_auditar' | 'por_leer' | 'leida'; at: string | null; mal: number; confirmar: number; regressed: number; pending: number };
 };
 
 export async function portfolioView(tenantId: string, now: Date = new Date(), onlyAccountId?: string): Promise<{ rows: PortfolioRow[]; coverage: CoverageSummary; currencies: string[] }> {
@@ -208,6 +211,7 @@ export async function portfolioView(tenantId: string, now: Date = new Date(), on
   const findings = await findingViews(tenantId, {}, sim, now);
   const changes = await fs.lastChangeByAccount(tenantId);
   const reviews = await fs.lastReviews(tenantId);
+  const audits = await auditStatusByAccount(tenantId, ids);
   const rows: PortfolioRow[] = accounts.map((a) => {
     const acc = coverage.accounts.find((c) => c.accountId === a.id) as AccountCoverage | undefined;
     // El día y el mes en la zona de cada cuenta, como las reglas (revisor, 28 nov).
@@ -265,7 +269,12 @@ export async function portfolioView(tenantId: string, now: Date = new Date(), on
       lastReview: rv ? { at: rv.reviewedAt.toISOString(), by: rv.reviewer, note: rv.note } : null,
       nextReview,
       reviewOverdue: !rv || (nextReview !== null && nextReview < today),
-      goalKind: goal ? (goal.kind as 'acordado' | 'provisional') : null
+      goalKind: goal ? (goal.kind as 'acordado' | 'provisional') : null,
+      audit: (() => {
+        const au = audits.get(a.id);
+        if (!au) return { state: 'sin_auditar' as const, at: null, mal: 0, confirmar: 0, regressed: 0, pending: 0 };
+        return { state: au.readAt ? ('leida' as const) : ('por_leer' as const), at: au.createdAt.toISOString(), mal: au.mal, confirmar: au.confirmar, regressed: au.regressed, pending: au.pending };
+      })()
     };
   });
   return { rows, coverage, currencies: [...new Set(rows.map((r) => r.currency).filter((c): c is string => Boolean(c)))] };

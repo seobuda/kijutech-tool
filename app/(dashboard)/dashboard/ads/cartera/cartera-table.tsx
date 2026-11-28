@@ -8,7 +8,7 @@ import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
 import { Badge } from '@/components/ui/page';
 import type { PortfolioRow } from '@/lib/ads/views';
 
-type Key = 'name' | 'client' | 'spent' | 'pace' | 'cpl' | 'conv7' | 'measurement' | 'findings' | 'change' | 'review' | 'next';
+type Key = 'name' | 'client' | 'spent' | 'pace' | 'cpl' | 'conv7' | 'measurement' | 'findings' | 'audit' | 'change' | 'review' | 'next';
 
 const ACTOR: Record<string, string> = { agencia: 'agencia', cliente: 'cliente', google: 'Google', herramienta: 'herramienta', desconocido: '—' };
 const MEAS: Record<PortfolioRow['measurement'], { label: string; tone: 'success' | 'danger' | 'neutral' | 'warning' }> = {
@@ -47,6 +47,9 @@ function value(r: PortfolioRow, k: Key): string | number {
       return MEAS_ORDER[r.measurement];
     case 'findings':
       return r.urgentFindings * 1000 + r.openFindings;
+    case 'audit':
+      // Primero lo que reapareció, luego lo pendiente (sin auditar o por leer) con más «mal».
+      return r.audit.regressed * 10_000 + (r.audit.state === 'leida' ? 0 : 1000) + (r.audit.state === 'sin_auditar' ? 500 : 0) + r.audit.pending;
     case 'change':
       return r.lastChange?.at ?? '';
     case 'review':
@@ -77,7 +80,7 @@ export function CarteraTable({ rows }: { rows: PortfolioRow[] }) {
 
   return (
     <div className="-m-5 overflow-x-auto">
-      <table className="w-full min-w-[1100px] text-sm">
+      <table className="w-full min-w-[1220px] text-sm">
         <thead className="text-left text-xs text-muted-foreground">
           <tr className="border-b">
             {th('name', 'Cuenta')}
@@ -88,6 +91,7 @@ export function CarteraTable({ rows }: { rows: PortfolioRow[] }) {
             {th('conv7', 'Conv. 7 días', true)}
             {th('measurement', 'Medición')}
             {th('findings', 'Hallazgos', true)}
+            {th('audit', 'Auditoría')}
             {th('change', 'Último cambio')}
             {th('review', 'Última revisión')}
             {th('next', 'Próxima')}
@@ -141,6 +145,17 @@ export function CarteraTable({ rows }: { rows: PortfolioRow[] }) {
                       {r.urgentFindings > 0 && <Badge className="ml-1" tone="danger">{r.urgentFindings} urgente{r.urgentFindings > 1 ? 's' : ''}</Badge>}
                     </span>
                   )}
+                </td>
+                <td className="px-3 py-2.5 text-xs">
+                  {r.audit.state === 'sin_auditar' ? (
+                    <Badge tone="neutral" title="La auditoría de higiene se hace sola cuando la cuenta tiene sus datos; también desde la cuenta.">pendiente · sin auditar</Badge>
+                  ) : r.audit.state === 'por_leer' ? (
+                    <Badge tone="warning" title={`Auditoría del ${day(r.audit.at)}: falta leerla`}>pendiente · {r.audit.pending} mal</Badge>
+                  ) : (
+                    <Badge tone={r.audit.pending ? 'outline' : 'success'} title={`Auditoría del ${day(r.audit.at)}, leída`}>hecha{r.audit.pending ? ` · ${r.audit.pending} abiertos` : ''}</Badge>
+                  )}
+                  {r.audit.regressed > 0 && <Badge className="ml-1" tone="danger">{r.audit.regressed} reapareció</Badge>}
+                  {r.audit.confirmar > 0 && <div className="mt-0.5 text-muted-foreground">{r.audit.confirmar} por confirmar en la ficha</div>}
                 </td>
                 <td className="px-3 py-2.5 text-xs">{r.lastChange ? `${day(r.lastChange.at)} · ${ACTOR[r.lastChange.actor] ?? r.lastChange.actor}${r.lastChange.email ? ` (${r.lastChange.email})` : ''}` : '—'}</td>
                 <td className="px-3 py-2.5 text-xs">{r.lastReview ? `${day(r.lastReview.at)}${r.lastReview.by ? ` · ${r.lastReview.by}` : ''}` : <span className="text-muted-foreground">nunca</span>}</td>

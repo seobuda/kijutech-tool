@@ -5,9 +5,11 @@ import { Button } from '@/components/ui/button';
 import { Badge, EmptyState, PageContainer, PageHeader, Section, StatCard } from '@/components/ui/page';
 import { checkPermission, requirePagePermission } from '@/lib/auth/permissions';
 import { accountDetail } from '@/lib/ads/views';
+import { auditView } from '@/lib/ads/audit-views';
 import { REVIEW_DAYS, REVIEW_DAYS_NO_LEVEL } from '@/lib/ads/finding-rules';
 import { FindingCard } from '../../finding-card';
 import { ProvisionalGoalButton, ReviewForm } from './account-actions';
+import { AuditSection } from './audit-section';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,12 +27,13 @@ const money = (v: number | null, cur: string | null) => {
 
 // Google Ads · Cuenta (paso 2; diseño §2 y §7): expediente mínimo de una cuenta. Objetivo (provisional congelado o
 // acordado), resumen de la cartera, hallazgos (vivos y cerrados en 30 días), estado de cada regla, línea de tiempo de
-// cambios con su autor y revisiones con «Marcar revisada». Sin llamadas a Google.
+// cambios con su autor y revisiones con «Marcar revisada». Paso 3: auditoría de higiene como paso 4 del guion («¿dónde se
+// va el dinero sin resultado?»). Sin llamadas a Google.
 export default async function AdsAccountPage({ params }: { params: Promise<{ accountId: string }> }) {
   const user = await requirePagePermission('view');
   const { accountId } = await params;
-  const [d, canEdit] = await Promise.all([accountDetail(user.tenantId, accountId), checkPermission('edit').then((r) => r.ok)]);
-  if (!d) notFound();
+  const [d, audit, canEdit] = await Promise.all([accountDetail(user.tenantId, accountId), auditView(user.tenantId, accountId), checkPermission('edit').then((r) => r.ok)]);
+  if (!d || !audit) notFound();
   const a = d.account;
   const r = d.row;
   const live = d.findings.filter((f) => f.status === 'abierto' || f.status === 'silenciado');
@@ -121,6 +124,13 @@ export default async function AdsAccountPage({ params }: { params: Promise<{ acc
           </div>
         </Section>
       </div>
+
+      <Section
+        title="4 · ¿Dónde se va el dinero sin resultado?"
+        description="Auditoría de higiene de la cuenta (paso 4 del guion de revisión): los 3 primeros, y debajo la auditoría completa por tandas. Nada cambia solo en Google Ads: cada corrección se aplica a mano."
+      >
+        <AuditSection accountId={a.id} view={audit} canEdit={canEdit} />
+      </Section>
 
       <Section title={`Hallazgos abiertos (${live.length})`} description="Los vivos de esta cuenta, con su evidencia y las respuestas del gestor.">
         {live.length ? (

@@ -28,6 +28,21 @@ export type Thresholds = {
   medicionMinConversiones: number;
   medicionAlfa: number;
   medicionKDefecto: number;
+  /** Paso 3 (auditoría de higiene, diseño §13.2): socios de búsqueda avalados (conversiones y CPL frente a Google). */
+  auditSociosMinConv: number;
+  auditSociosFactorCpl: number;
+  /** Paso 3: coste de personas fuera de la zona segmentada (EST-02) y marca dentro de lo genérico (TER-11). */
+  auditZonaFueraPct: number;
+  auditMarcaPct: number;
+  /** Paso 3: Display y vídeo dentro de PMax (GOO-01) y gasto en páginas que nadie eligió (LAN-06). */
+  auditPmaxRedesPct: number;
+  auditPaginasPct: number;
+  /** Paso 3: CPL después de una migración a AI Max frente al de antes (GOO-03). */
+  auditAiMaxFactorCpl: number;
+  /** Paso 3: días cubiertos mínimos (de 90) para congelar la línea base. */
+  auditLineaBaseMinDias: number;
+  /** NEG-07: meses desde la última confirmación de un dato de la ficha para darlo por bueno. */
+  fichaMesesFrescura: number;
 };
 
 export const DEFAULT_THRESHOLDS: Thresholds = {
@@ -47,7 +62,16 @@ export const DEFAULT_THRESHOLDS: Thresholds = {
   cambioDias: 7,
   medicionMinConversiones: 30,
   medicionAlfa: 0.001,
-  medicionKDefecto: 2
+  medicionKDefecto: 2,
+  auditSociosMinConv: 3,
+  auditSociosFactorCpl: 1.2,
+  auditZonaFueraPct: 0.1,
+  auditMarcaPct: 0.1,
+  auditPmaxRedesPct: 0.33,
+  auditPaginasPct: 0.2,
+  auditAiMaxFactorCpl: 1.3,
+  auditLineaBaseMinDias: 80,
+  fichaMesesFrescura: 6
 };
 
 /** Límites de cada umbral editable en Ajustes (min, max) y su texto. */
@@ -68,7 +92,16 @@ export const THRESHOLD_LIMITS: Record<keyof Thresholds, { min: number; max: numb
   cambioDias: { min: 1, max: 29, label: 'Cambio ajeno: días hacia atrás' },
   medicionMinConversiones: { min: 5, max: 1000, label: 'Medición: conversiones mínimas en 8 semanas' },
   medicionAlfa: { min: 0.00001, max: 0.05, label: 'Medición: umbral α (probabilidad de un cero así en una cuenta sana)' },
-  medicionKDefecto: { min: 0.5, max: 50, label: 'Medición: k por defecto (dispersión)' }
+  medicionKDefecto: { min: 0.5, max: 50, label: 'Medición: k por defecto (dispersión)' },
+  auditSociosMinConv: { min: 1, max: 100, label: 'Auditoría · socios: conversiones mínimas de socios en 30 días para avalarlos' },
+  auditSociosFactorCpl: { min: 1, max: 5, label: 'Auditoría · socios: CPL de socios como mucho estas veces el de Google' },
+  auditZonaFueraPct: { min: 0.01, max: 1, label: 'Auditoría · zona: parte del gasto fuera de la zona segmentada (0,10 = 10 %)' },
+  auditMarcaPct: { min: 0.01, max: 1, label: 'Auditoría · marca: parte del gasto de lo genérico que va a la marca' },
+  auditPmaxRedesPct: { min: 0.05, max: 1, label: 'Auditoría · PMax: parte del gasto en Display y vídeo' },
+  auditPaginasPct: { min: 0.01, max: 1, label: 'Auditoría · páginas: parte del gasto en páginas que nadie eligió' },
+  auditAiMaxFactorCpl: { min: 1, max: 5, label: 'Auditoría · AI Max: CPL después de la migración frente al de antes' },
+  auditLineaBaseMinDias: { min: 30, max: 90, label: 'Auditoría · línea base: días cubiertos mínimos de 90' },
+  fichaMesesFrescura: { min: 1, max: 24, label: 'Ficha: meses desde la última confirmación de un dato (NEG-07)' }
 };
 
 /** Umbrales guardados (parciales y quizá mal formados) → umbrales completos dentro de sus límites. */

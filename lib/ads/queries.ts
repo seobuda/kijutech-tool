@@ -25,13 +25,34 @@ export type QueryKey =
   | 'customer_daily'
   | 'campaign_status'
   | 'campaign_hourly'
-  | 'change_events';
+  | 'change_events'
+  // Paso 3: auditoría de higiene (consultas aisladas, lib/ads/audit-queries.ts).
+  | AuditQueryKey;
+
+export type AuditQueryKey =
+  | 'audit_campaigns'
+  | 'audit_automation'
+  | 'audit_migrations'
+  | 'audit_ad_types'
+  | 'audit_rec_subscriptions'
+  | 'audit_exclusions'
+  | 'audit_call_assets_campaign'
+  | 'audit_call_assets_customer'
+  | 'audit_networks'
+  | 'audit_user_location'
+  | 'audit_geo_targets'
+  | 'audit_geo_names'
+  | 'audit_search_terms'
+  | 'audit_recommendations'
+  | 'audit_optimization_score';
 
 export type AdsQuery = { key: QueryKey; gaql: string; params: Record<string, string | number> };
 /** Una fila de la API tal cual (objeto JSON anidado). */
 export type ApiRow = Record<string, unknown>;
 
 const q = (key: QueryKey, gaql: string, params: Record<string, string | number> = {}): AdsQuery => ({ key, gaql: gaql.replace(/\s+/g, ' ').trim(), params });
+/** Constructor para las consultas de la auditoría (paso 3), que viven en audit-queries.ts. */
+export const audq = (key: AuditQueryKey, gaql: string, params: Record<string, string | number> = {}): AdsQuery => q(key, gaql, params);
 const assertYmd = (v: string) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) throw new Error(`Fecha no válida para GAQL: ${v}`);
   return v;
@@ -187,7 +208,7 @@ export const Q = {
 };
 
 /** Qué fuente de MED-00 alimenta cada consulta (para el Mapa Visual y la documentación). */
-export const QUERY_SOURCE: Record<QueryKey, AdsSource> = {
+export const QUERY_SOURCE: Record<Exclude<QueryKey, AuditQueryKey>, AdsSource> = {
   customer_clients: 'descubrir',
   customer: 'estructura',
   campaigns: 'estructura',

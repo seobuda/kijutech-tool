@@ -131,6 +131,8 @@ export type AccountInput = {
   sourceDetail?: Partial<Record<AdsSource, { lastOkAt: string | null; lastError: string | null; critical: boolean }>>;
   /** Desde cuándo se ve la cuenta (una recién dada de alta aún no tiene datos: no es «fuente caída»). */
   firstSeenAt?: Date | null;
+  /** Paso 3 (EST-06): controles de la auditoría de higiene que reaparecieron hace poco, con el autor del cambio que lo explica. */
+  auditRegressions?: { control: string; title: string; actor: string | null; at: Date }[];
   t: Thresholds;
 };
 
@@ -881,9 +883,11 @@ export function ruleForeignChange(a: AccountInput, changeDayOf: (d: Date) => str
           ...(list.length > 6 ? [`…y ${list.length - 6} más.`] : []),
           ...(burst ? ['Ráfaga: 10 o más cambios en un mismo día.'] : []),
           ...(!google && !older ? ['Usuario nuevo: no aparece en el historial anterior.'] : []),
+          // Paso 3 (EST-06): lo que este autor deshizo de la auditoría de higiene va aquí como evidencia, no como aviso aparte.
+          ...(a.auditRegressions ?? []).filter((r) => r.actor === key && r.at >= since).map((r) => `Deshace una corrección de la auditoría de higiene: «${r.title}» volvió a fallar.`),
           google ? 'Revisa si encajan con la estrategia; si no, desactiva la aplicación automática de recomendaciones.' : 'Pregunta al cliente qué buscaba antes de deshacer nada.'
         ],
-        data: { actor: key, changes: list.length, burst, newUser: !google && !older },
+        data: { actor: key, changes: list.length, burst, newUser: !google && !older, auditRegressions: (a.auditRegressions ?? []).filter((r) => r.actor === key && r.at >= since).map((r) => r.control) },
         exposure: null
       })
     );

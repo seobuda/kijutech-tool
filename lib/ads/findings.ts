@@ -16,6 +16,7 @@ import { addDays, CORE_SOURCES, SOURCES, sourceHealth, zonedParts, type AdsSourc
 import { applyPrecedence, mergeThresholds, ruleDefs, runRule, ruleAccountCannotServe, ruleSourceHealth, type AccountInput, type FindingDraft, type FindingKind, type RuleResult } from '@/lib/ads/finding-rules';
 import * as fs from '@/lib/ads/findings-store';
 import { getSettingsRow, listAccounts, listSyncStates } from '@/lib/ads/store';
+import { recentRegressions } from '@/lib/ads/audit-store';
 import type { AdsAccount, AdsSettingsRow, AdsSyncStateRow } from '@/lib/db/schema';
 
 const DEFAULT_TZ = 'Europe/Madrid';
@@ -58,6 +59,9 @@ export async function buildAccountInput(tenantId: string, acc: AdsAccount, now: 
     if (p.date === today && p.hour - HOURLY_LAG_HOURS >= 0) hourlyThrough = p.hour - HOURLY_LAG_HOURS;
   }
   const goal = acc.clientId ? await fs.latestGoal(tenantId, acc.clientId) : null;
+  const t = thresholdsOf(settings);
+  // Paso 3: lo que reapareció de la auditoría de higiene en los días que mira el hallazgo 11 (evidencia dentro de él).
+  const regressions = await recentRegressions(acc.id, new Date(now.getTime() - t.cambioDias * 86_400_000));
   return {
     accountId: acc.id,
     name: acc.name ?? acc.customerId,
@@ -73,7 +77,8 @@ export async function buildAccountInput(tenantId: string, acc: AdsAccount, now: 
     health,
     sourceDetail: detail,
     firstSeenAt: acc.firstSeenAt,
-    t: thresholdsOf(settings)
+    auditRegressions: regressions.map((r) => ({ control: r.control, title: r.title, actor: r.actor, at: r.at })),
+    t
   };
 }
 

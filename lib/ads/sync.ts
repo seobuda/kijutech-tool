@@ -49,7 +49,9 @@ export const ADS_JOB = {
   historico: 'ads.historico',
   // Paso 2: evaluación de las reglas (encolada al terminar métricas, latido y páginas) y comprobación de páginas de destino.
   evaluar: 'ads.evaluar',
-  landing: 'ads.landing'
+  landing: 'ads.landing',
+  // Paso 3: auditoría de higiene de entrada y su vigilancia diaria (lib/ads/audit.ts).
+  auditar: 'ads.auditar'
 } as const;
 
 /** Procesos periódicos por cuenta de Ads (scopeType «cuenta», scopeId = id de ads_accounts) y su frecuencia. */
@@ -58,7 +60,8 @@ export const ACCOUNT_PROCESSES: { key: string; every: number; label: string }[] 
   { key: ADS_JOB.sincronizar, every: 360, label: 'Google Ads: métricas de 10 días, cobertura y foto de estado' },
   { key: ADS_JOB.cambios, every: 360, label: 'Google Ads: historial de cambios' },
   { key: ADS_JOB.latido, every: 60, label: 'Google Ads: latido horario (07:00-23:00 de la cuenta)' },
-  { key: ADS_JOB.landing, every: 60, label: 'Google Ads: páginas de destino con gasto (07:00-23:00 de la cuenta)' }
+  { key: ADS_JOB.landing, every: 60, label: 'Google Ads: páginas de destino con gasto (07:00-23:00 de la cuenta)' },
+  { key: ADS_JOB.auditar, every: 1440, label: 'Google Ads: auditoría de higiene (la de entrada y su vigilancia diaria)' }
 ];
 
 export type SyncCtx = { now?: Date; signal?: AbortSignal; heartbeat?: () => Promise<void> };
