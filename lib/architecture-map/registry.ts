@@ -273,20 +273,22 @@ const CORE_NODES: SystemNode[] = [
     id: 'ads',
     name: 'Google Ads',
     description:
-      'Vigilancia de las cuentas de Google Ads de los clientes desde la MCC de la agencia, solo lectura. Paso 1 construido (28 nov 2026): conexión con cuenta de servicio (o modo simulado), descarga de cuentas, estructura, métricas con cobertura por día, histórico de 37 meses, historial de cambios con su autor, latido horario y salud de nuestras fuentes (MED-00). Paso 2 construido (28 nov 2026): reglas de la lista cerrada (1, 2, 3, 4, 6, 8, 11, 12 y 15) con «no comprobado» si las fuentes no están sanas, pantallas Hoy, Cartera y Cuenta, respuestas del gestor, revisiones, objetivo provisional y avisos en modo sombra por defecto.',
+      'Vigilancia de las cuentas de Google Ads de los clientes desde la MCC de la agencia, solo lectura. Paso 1 construido (28 nov 2026): conexión con cuenta de servicio (o modo simulado), descarga de cuentas, estructura, métricas con cobertura por día, histórico de 37 meses, historial de cambios con su autor, latido horario y salud de nuestras fuentes (MED-00). Paso 2 construido (28 nov 2026): reglas de la lista cerrada (1, 2, 3, 4, 6, 8, 11, 12 y 15) con «no comprobado» si las fuentes no están sanas, pantallas Hoy, Cartera y Cuenta, respuestas del gestor, revisiones, objetivo provisional y avisos en modo sombra por defecto. Paso 3 construido (28 nov 2026): auditoría de higiene de entrada por cuenta (18 controles por tandas, con la frescura de la ficha y la predicción previa en R2/R3) y su vigilancia diaria, dentro del guion de revisión de la cuenta, sin hallazgos visibles nuevos.',
     status: 'in_progress',
     icon: 'Megaphone',
     detailMapId: 'ads',
     group: 'infrastructure',
     technicalDetail: {
       summary:
-        'Módulo propio (lib/ads, tablas ads_*, migración 0084). No importa ningún otro módulo: la cola de trabajos, el registro de errores, Salud y la ficha del cliente los da el núcleo. Un solo archivo habla con la API de Google Ads y no tiene ninguna función de escritura.',
+        'Módulo propio (lib/ads, tablas ads_*, migraciones 0084 y 0085). No importa ningún otro módulo: la cola de trabajos, el registro de errores, Salud y la ficha del cliente los da el núcleo. Un solo archivo habla con la API de Google Ads y no tiene ninguna función de escritura.',
       stack: ['API de Google Ads (searchStream, GAQL) con cuenta de servicio y JWT propio', 'Cola de trabajos y planificador del núcleo', 'Cifrado AES-256-GCM de las credenciales'],
       keyDecisions: [
         'Cero frente a «sin dato»: un día solo cuenta si cerró y el total de la cuenta cuadra con la suma de campañas',
         'MED-00 antes que cualquier regla: lo no comprobado se dice, nunca pasa por «bien»',
         'Latido horario para que las interrupciones lleguen en horas, no al día siguiente',
-        'Todo lectura: la escritura en cuentas reales es línea roja (otra cuenta de servicio, decisión aparte)'
+        'Todo lectura: la escritura en cuentas reales es línea roja (otra cuenta de servicio, decisión aparte)',
+        'La auditoría de higiene vive en el guion de revisión, no como avisos: la lista cerrada de 15 hallazgos no crece',
+        'Campos de la API sin probar en consultas aisladas: si fallan, solo sus controles quedan «sin comprobar»'
       ]
     }
   },

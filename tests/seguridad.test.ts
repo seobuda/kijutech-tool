@@ -82,7 +82,7 @@ import { pinMoneyPageAction, unpinMoneyPageAction } from '@/lib/seo/cambios-acti
 import { generateIdeasAction, runDemandNowAction, setIdeaStatusAction } from '@/lib/seo/demanda-actions';
 import { briefToTaskAction, markBriefUsedAction, requestBriefAction, retryBriefAction, setBriefStatusAction } from '@/lib/seo/contenido-actions';
 import { checkOldPhonesNowAction } from '@/lib/seo/local-actions';
-import { evaluateAdsNowAction, linkAdsAccountAction, removeAdsCredentialsAction, respondAdsFindingAction, reviewAdsAccountAction, saveAdsAlertSettingsAction, saveAdsCredentialsAction, saveAdsDeveloperTokenAction, saveAdsSettingsAction, setAdsAccountTrackedAction, setAdsClientLevelAction, setAdsProvisionalGoalAction, startAdsSyncNowAction, testAdsConnectionAction } from '@/lib/ads/actions';
+import { confirmAdsFichaFactAction, markAdsAuditReadAction, respondAdsAuditItemAction, runAdsAuditNowAction, evaluateAdsNowAction, linkAdsAccountAction, removeAdsCredentialsAction, respondAdsFindingAction, reviewAdsAccountAction, saveAdsAlertSettingsAction, saveAdsCredentialsAction, saveAdsDeveloperTokenAction, saveAdsSettingsAction, setAdsAccountTrackedAction, setAdsClientLevelAction, setAdsProvisionalGoalAction, startAdsSyncNowAction, testAdsConnectionAction } from '@/lib/ads/actions';
 import ProjectsPage from '@/app/(dashboard)/dashboard/projects/page';
 import ArchivedProjectsPage from '@/app/(dashboard)/dashboard/projects/archived/page';
 import NewProjectPage from '@/app/(dashboard)/dashboard/projects/new/page';
@@ -360,7 +360,12 @@ const ACCIONES_EDITOR: [string, () => unknown][] = [
   // Google Ads (paso 2): responder a un hallazgo, marcar revisada y fijar objetivo provisional, de edición.
   ['respondAdsFindingAction (Google Ads: responder hallazgo)', () => respondAdsFindingAction(ZERO, 'hecho')],
   ['reviewAdsAccountAction (Google Ads: marcar revisada)', () => reviewAdsAccountAction(ZERO, 'nota')],
-  ['setAdsProvisionalGoalAction (Google Ads: objetivo provisional)', () => setAdsProvisionalGoalAction(ZERO)]
+  ['setAdsProvisionalGoalAction (Google Ads: objetivo provisional)', () => setAdsProvisionalGoalAction(ZERO)],
+  // Google Ads (paso 3): auditoría de higiene (responder, confirmar la ficha, marcarla leída y pasarla), de edición.
+  ['respondAdsAuditItemAction (Google Ads: responder a un control)', () => respondAdsAuditItemAction(ZERO, 'hecho')],
+  ['confirmAdsFichaFactAction (Google Ads: confirmar dato de la ficha)', () => confirmAdsFichaFactAction(ZERO, 'zona')],
+  ['markAdsAuditReadAction (Google Ads: auditoría leída)', () => markAdsAuditReadAction(ZERO)],
+  ['runAdsAuditNowAction (Google Ads: pasar la auditoría)', () => runAdsAuditNowAction(ZERO)]
 ];
 
 describe('sin sesión no se accede a nada privado', () => {

@@ -1,6 +1,6 @@
 // Mapa Visual del módulo Google Ads (nivel 3): cómo se conecta con la MCC, qué se descarga, cada cuánto, dónde se guarda y
 // cómo sabe la herramienta si está ciega (MED-00). Se registra en lib/architecture-map/registry.ts (detailMapId «ads»).
-// Diseño: docs/ads/DISENO-TECNICO-ADS.md v2. Todo es lectura de Google Ads.
+// Diseño: docs/ads/DISENO-TECNICO-ADS.md v3 (paso 3 en §13). Todo es lectura de Google Ads.
 import type { ProcessStep } from '@/lib/ai/clustering/pipeline';
 
 export const ADS_PROCESS_MAP: ProcessStep[] = [
@@ -170,6 +170,45 @@ export const ADS_PROCESS_MAP: ProcessStep[] = [
     ai: 'Nada.',
     code: 'Las respuestas ajustan presentación y silencios, nunca la detección ni los umbrales (investigación 7.4). «Encargar» crea el encargo por la fuente de trabajo del núcleo si la cuenta tiene cliente. Permisos: responder, revisar y fijar objetivo con «edit»; avisos, umbrales y «Evaluar ahora» con «admin». Nada escribe en Google Ads.',
     tables: ['ads_finding_responses', 'ads_account_reviews', 'ads_goals', 'ads_clients']
+  },
+  {
+    id: 'ads-auditoria-datos',
+    lane: 'Descargar',
+    name: 'Datos de la auditoría de higiene (consultas aisladas)',
+    description:
+      'Trabajo «ads.auditar» (paso 3), primera parte: pide aparte lo que necesitan los controles de higiene, en grupos con su propio error: configuración de red, zona y DSA de cada campaña, AI Max y automatización de recursos, fechas de migración de Google, tipos de grupo y de anuncio, suscripciones de recomendaciones, exclusiones de la cuenta, recursos de llamada (diarios); reparto por redes, ubicación del usuario, zonas segmentadas con sus nombres, términos de búsqueda (los 1.000 de más gasto) y recomendaciones con el nivel de optimización (semanales). Si un campo no existe en la v26, solo sus controles quedan «sin comprobar» con el error literal de Google; la estructura diaria y las interrupciones no se tocan.',
+    status: 'built',
+    file: 'lib/ads/audit-queries.ts',
+    when: 'Cada 24 h por cuenta (cada grupo cuando le toca por edad: 1 o 7 días), al terminar el histórico de una cuenta nueva y con «Pasar la auditoría ahora».',
+    ai: 'Nada.',
+    code: 'Unas 14 operaciones la primera vez y ~7 al día después (≈ 200 al día con 25 cuentas). El cupo agotado para sin contarlo como fallo. Solo lectura (consultas GAQL). Campos marcados «no verificados» en el diseño §13.9. En simulado, un caso de cada control y una ficha simulada por cuenta.',
+    tables: ['ads_audit_data']
+  },
+  {
+    id: 'ads-auditoria',
+    lane: 'Vigilar',
+    name: 'Auditoría de higiene de entrada y vigilancia (EST-07, EST-06)',
+    description:
+      'Trabajo «ads.auditar», segunda parte: 18 controles puros por tandas (0 propiedad, accesos y línea base congelada de 90 días; 1 conversiones, lo que caduca en febrero de 2027, AI Max y textos automáticos; 2 socios de búsqueda, Display en Búsqueda, «presencia o interés», exclusiones de contenido, zona real, lugares fuera de zona en los términos, marca y competencia, redes de PMax y páginas elegidas por Google; 3 recomendaciones que se aplican solas, recomendaciones cribadas y recurso de llamada), cada uno bien / mal / no comprobado con su evidencia, qué hacer a mano y el gasto expuesto. La primera vez crea la auditoría de entrada con su fecha; después, vigilancia diaria: mal → bien = corregido, bien → mal = reapareció, con el cambio del cliente o de Google que lo explica (va como evidencia del hallazgo 11 «cambio_ajeno»). No crea hallazgos visibles: la lista cerrada de 15 no crece.',
+    status: 'built',
+    file: 'lib/ads/audit.ts',
+    when: 'Con los datos de la auditoría (arriba). «Repetir la auditoría» crea otra y deja la anterior como sustituida.',
+    ai: 'Nada (son reglas y una prueba de Poisson para el CPL antes y después de AI Max).',
+    code: 'Reglas en lib/ads/audit-rules.ts con umbrales editables en Ajustes (socios avalados con 3 conversiones y CPL ≤ 1,2 ×; fuera de zona 10 %; marca 10 %; PMax un tercio; páginas 20 %; AI Max 1,3 ×; frescura de la ficha 6 meses). Un «mal» que depende de un dato de la ficha sin confirmar o viejo (NEG-07) queda «confirmar con el responsable» y no entra en los 3 del guion. Las R2/R3 en «mal» llevan predicción previa (hipótesis, métrica, efecto esperado con intervalo, 28 días y vuelta atrás; APR-01), que se aprueba al responder «hecho». «No comprobado» no corrige ni acusa. Lista de lugares provisional (lib/ads/places-es.ts).',
+    tables: ['ads_audits', 'ads_audit_items', 'ads_audit_data', 'ads_client_facts', 'clients', 'client_locations', 'client_competitors']
+  },
+  {
+    id: 'ads-auditoria-revision',
+    lane: 'Decidir',
+    name: 'Paso 4 del guion: «¿dónde se va el dinero sin resultado?»',
+    description:
+      'En la cuenta, los 3 primeros controles en «mal» (primero lo que reapareció, luego por tanda y gasto) con su evidencia, qué hacer y la predicción; la auditoría completa por tandas (también lo que está bien y lo no comprobado); los datos de la ficha que usa con su fecha y «Confirmar»; «Marcar auditoría leída», «Repetir» y «Copiar informe» (INF-05, por tandas con el gasto expuesto; no se envía a nadie). Respuestas: hecho, el cliente lo quiere así y no aplica (con motivo: no-acción registrada) y más tarde. En Cartera, columna «Auditoría»: pendiente (sin auditar o por leer) / hecha, y «reapareció».',
+    status: 'built',
+    file: 'lib/ads/audit-views.ts',
+    when: 'Al abrir la cuenta y al pulsar los botones.',
+    ai: 'Nada.',
+    code: 'Permiso «edit» para responder, confirmar, marcar leída y pasar la auditoría; «view» para verla. Nada escribe en Google Ads: «qué hacer» es texto para aplicarlo a mano. Las cuentas simuladas tienen ficha simulada (no se confirma).',
+    tables: ['ads_audits', 'ads_audit_items', 'ads_client_facts']
   },
   {
     id: 'ads-pantallas',

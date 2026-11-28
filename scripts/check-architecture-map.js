@@ -167,6 +167,13 @@ for (const f of ['lib/ads/finding-rules.ts', 'lib/ads/findings.ts', 'lib/ads/ale
 const adsRuleKinds = uniq(all(/kind: '([a-z_]+)', sources:/g, read('lib/ads/finding-rules.ts')));
 if (adsRuleKinds.length < 8) fail('No se encuentran las reglas de los hallazgos de Google Ads (ruleDefs en lib/ads/finding-rules.ts).');
 for (const k of [...adsRuleKinds, 'fuente_sin_datos']) if (!adsSrc.includes(`«${k}»`)) fail(`La regla «${k}» de Google Ads no aparece en el mapa de Google Ads.`);
+// Paso 3 (auditoría de higiene, 28 nov 2026): sus piezas y todos sus controles (AUDIT_CONTROLS) en el mapa.
+for (const f of ['lib/ads/audit.ts', 'lib/ads/audit-queries.ts', 'lib/ads/audit-views.ts']) if (!adsSrc.includes(`'${f}'`)) fail(`La pieza ${f} (paso 3 de Google Ads) no aparece en el mapa de Google Ads.`);
+const auditLabels = read('lib/ads/audit-labels.ts');
+const auditControls = listOf(/AUDIT_CONTROLS = \[([^\]]*)\]/g, auditLabels);
+if (auditControls.length < 15) fail('No se encuentran los controles de la auditoría de Google Ads (AUDIT_CONTROLS en lib/ads/audit-labels.ts).');
+const controlLabels = uniq(all(/^\s+(\w+): \{ tanda: \d, label: '([^']+)'/gm, auditLabels));
+for (const c of auditControls) if (!controlLabels.includes(c)) fail(`El control «${c}» de la auditoría no tiene su texto en CONTROL_INFO.`);
 if (!/registerAdsCapabilities\(\)/.test(read('lib/app-wiring.ts'))) fail('El módulo Google Ads no se conecta en wireApp() (lib/app-wiring.ts).');
 
 function schemaSrcForAgt() {
