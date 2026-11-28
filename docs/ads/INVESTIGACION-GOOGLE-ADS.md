@@ -116,7 +116,7 @@ mejor en lo que ellas ya hacen bien y barato: por eso la parte de términos se c
 | **B. Rumbo** | ¿Qué número perseguimos primero (horas por cuenta, bajas o ingreso por cuenta) y cobramos por cuota fija o por porcentaje de la inversión? | Horas primero, bajas después; cuota fija | Antes del paso 2 |
 | **C. Escritura acotada** ⛔ | ¿Qué puede cambiar la herramienta en cuentas reales? Cinco casillas: negativas con un clic, pausa por página caída, tope de gasto en un script de la MCC, buzón de avisos en cada cuenta, acceso de TrueClicks | Sí a las cinco, cada una con su límite | Antes del paso 4 |
 | **D. Datos de clientes** ⛔ | ¿Encargo la consulta legal única y, cuando conteste, empezamos a capturar el identificador de clic y a pedir a los clientes que marquen sus leads? | Sí; es lo único que no se recupera después | La consulta, cuanto antes; el resto, tras ella |
-| **E. Personas** | ¿Quién hace de sénior, quién cubre a Eury, qué deja de hacer Eury, y lo hablamos con él antes de diseñarlo? | Tú de sénior a corto plazo; nombrar suplente; retirar el ritual L-X-V por escrito | Antes de encender avisos |
+| **E. Personas** | ¿Quién hace de sénior, quién cubre a Eury, qué deja de hacer Eury, y lo hablamos con Eury antes de diseñarlo? | Tú de sénior a corto plazo; nombrar suplente; retirar el ritual L-X-V por escrito | Antes de encender avisos |
 
 **Lo que necesito de ti esta semana: solo el paquete A.** Una respuesta, no veintiocho. Los demás no bloquean nada hasta
 la fecha de su columna.
@@ -2234,7 +2234,7 @@ parte en 10a y 10b) para que el registro de la revisión siga cuadrando.
 | **B. Rumbo** | 2, 7, 23 | ¿Qué número perseguimos primero (horas por cuenta, bajas o ingreso por cuenta) y cobramos por cuota fija o por porcentaje de la inversión? | Horas primero, bajas después; cuota fija | Antes del paso 2 |
 | **C. Escritura acotada** ⛔ | 9, 10a, 10b, 14, 24 | ¿Qué puede cambiar la herramienta en cuentas reales? Cinco casillas: negativas con un clic, pausa por página caída, tope de gasto en un script de la MCC, buzón de avisos en cada cuenta, acceso de TrueClicks | Sí a las cinco, cada una con su límite | Antes del paso 4 (la 14, antes del paso 2 si se quiere el aviso de pago desde el principio) |
 | **D. Datos de clientes** ⛔ | 20, 8, 11, 12, 13, 15, 21, 22 | ¿Encargo la consulta legal única y, cuando conteste, empezamos a capturar el identificador de clic y a pedir a los clientes que marquen sus leads? | Sí; es lo único que no se recupera después | La consulta, cuanto antes; el resto, tras ella |
-| **E. Personas** | 16, 17, 18, 19, 28 | ¿Quién hace de sénior, quién cubre a Eury, qué deja de hacer Eury, y lo hablamos con él antes de diseñarlo? | Tú de sénior a corto plazo; nombrar suplente; retirar el ritual L-X-V por escrito | Antes de encender avisos (paso 2) |
+| **E. Personas** | 16, 17, 18, 19, 28 | ¿Quién hace de sénior, quién cubre a Eury, qué deja de hacer Eury, y lo hablamos con Eury antes de diseñarlo? | Tú de sénior a corto plazo; nombrar suplente; retirar el ritual L-X-V por escrito | Antes de encender avisos (paso 2) |
 | *Aparcadas* | 25, 26, 27 | No piden respuesta ahora | — | Revisión trimestral |
 
 #### Paquete A · Arrancar (esta semana; sin código y sin tocar ninguna cuenta)
@@ -2313,7 +2313,7 @@ emergencia como «un solo caso» cuando en la misma celda añadía otro (rev. R4
 
 #### Paquete E · Personas (antes de encender avisos)
 
-> **Pregunta:** ¿Quién hace de sénior, quién cubre a Eury, qué deja de hacer Eury, y lo hablamos con él antes de diseñarlo?
+> **Pregunta:** ¿Quién hace de sénior, quién cubre a Eury, qué deja de hacer Eury, y lo hablamos con Eury antes de diseñarlo?
 >
 > **Recomendación:** tú de sénior a corto plazo, sabiendo lo que cuesta de verdad; nombrar suplente; retirar el ritual
 > L-X-V por escrito cuando Cartera lleve dos semanas; y sí, hablarlo con Eury antes.
@@ -2323,7 +2323,7 @@ emergencia como «un solo caso» cuando en la misma celda añadía otro (rev. R4
 | 16 | **¿Qué deja de hacer Eury y a qué dedica el tiempo liberado?** ¿Se retira por escrito la revisión L-X-V? | Si el ritual viejo no se retira, el agente es trabajo añadido | Retirarlo con fecha cuando la pantalla Cartera lleve dos semanas funcionando |
 | 17 | **¿Quién hace de sénior?** (valida umbrales, casos de oro y la muestra ciega) | Si Eury es el único que sabe de Ads, el agente aprendería de quien aún está aprendiendo. Y cuesta más de lo que decía la v2 (rev. R4): sumando modo sombra, desacuerdos de la muestra ciega, aprobaciones R3, resumen mensual de umbrales, retrospectiva y acuerdos de objetivos, son **3-4 horas a la semana los dos primeros meses y 1,5-2 después** [estimación], no 30 minutos | Enric a corto plazo, con esas horas reservadas. Valorar unas horas al mes de un consultor externo. Si no hay nadie, asumir que el agente es el sénior de hecho y no relajar ningún control del apartado 7.6 |
 | 18 | **¿Quién cubre a Eury** en vacaciones, bajas y fines de semana? ¿Quién habla con el cliente de Ads? | Un solo gestor es el mayor riesgo operativo del servicio | Nombrar suplente antes de encender las interrupciones |
-| 19 | **¿Queremos que Eury aprenda a diagnosticar o aceptamos depender de la herramienta?** | Si el agente diagnostica siempre, nadie aprende | Que aprenda: tres capas de explicación, «primero tú» voluntario y una revisión al mes sin diagnóstico previo. Hablarlo con él antes de diseñarlo |
+| 19 | **¿Queremos que Eury aprenda a diagnosticar o aceptamos depender de la herramienta?** | Si el agente diagnostica siempre, nadie aprende | Que aprenda: tres capas de explicación, «primero tú» voluntario y una revisión al mes sin diagnóstico previo. Hablarlo con Eury antes de diseñarlo |
 | 28 | **Plazos internos** (interrupción vista en 1 hora laboral, hallazgo decidido en 2 días) | Con un solo gestor, los fija quien manda | Valores de partida; ajustarlos tras el modo sombra |
 
 #### Aparcadas (no piden respuesta ahora; se miran en la revisión trimestral)
